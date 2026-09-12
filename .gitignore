@@ -1,3 +1,10 @@
-.egg
-__pycache__
-*.pyc
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging artifacts
+*.egg
+*.egg-info/
+build/
+dist/
