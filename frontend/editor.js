@@ -4,48 +4,373 @@ function clone(value) {
   );
 }
 
-function selectedValues(select) {
-  return Array.from(
-    select.selectedOptions,
-  ).map(
-    (option) => option.value,
-  );
-}
-
-function fillSelect(
-  select,
-  items,
-  selected,
-  labelGetter,
-  valueGetter,
+function createRecipientPicker(
+  registries,
+  target,
+  markDirty,
 ) {
-  select.replaceChildren();
+  const typeLabels = {
+    device_id: "Devices",
+    area_id: "Areas",
+    floor_id: "Floors",
+    label_id: "Labels",
+    entity_id: "Notification entities",
+  };
 
-  const selectedSet = new Set(
-    selected || [],
-  );
+  const items = [
+    ...(registries.devices || []).map(
+      (item) => ({
+        type: "device_id",
+        id: item.id,
+        label:
+          item.name_by_user ||
+          item.name ||
+          item.id,
+      }),
+    ),
+    ...(registries.areas || []).map(
+      (item) => ({
+        type: "area_id",
+        id: item.area_id || item.id,
+        label: item.name || item.id,
+      }),
+    ),
+    ...(registries.floors || []).map(
+      (item) => ({
+        type: "floor_id",
+        id: item.floor_id || item.id,
+        label: item.name || item.id,
+      }),
+    ),
+    ...(registries.labels || []).map(
+      (item) => ({
+        type: "label_id",
+        id: item.label_id || item.id,
+        label: item.name || item.id,
+      }),
+    ),
+    ...(registries.entities || [])
+      .filter(
+        (item) =>
+          item.entity_id?.startsWith(
+            "notify.",
+          ),
+      )
+      .map(
+        (item) => ({
+          type: "entity_id",
+          id: item.entity_id,
+          label:
+            item.name || item.entity_id,
+        }),
+      ),
+  ];
+
+  const selected = new Set();
 
   for (const item of items) {
+    if (
+      (target[item.type] || []).some(
+        (value) =>
+          String(value) === String(item.id),
+      )
+    ) {
+      selected.add(
+        `${item.type}:${item.id}`,
+      );
+    }
+  }
+
+  const wrapper =
+    document.createElement(
+      "div",
+    );
+
+  wrapper.className =
+    "nc-target-picker";
+
+  const toolbar =
+    document.createElement(
+      "div",
+    );
+
+  toolbar.className =
+    "nc-recipient-toolbar";
+
+  const search =
+    document.createElement(
+      "input",
+    );
+
+  search.type = "search";
+  search.placeholder =
+    "Search devices, labels, or notification services";
+
+  const filter =
+    document.createElement(
+      "div",
+    );
+
+  filter.className =
+    "nc-recipient-filters";
+
+  let selectedType = "all";
+
+  const filterOptions = [
+    ["all", "All"],
+    ...Object.entries(typeLabels),
+  ];
+
+  for (const [value, label] of filterOptions) {
     const option =
       document.createElement(
-        "option",
+        "button",
       );
 
-    option.value =
-      valueGetter(item);
+    option.type = "button";
+    option.className =
+      "nc-recipient-filter";
+    option.textContent = label;
 
-    option.textContent =
-      labelGetter(item);
-
-    option.selected =
-      selectedSet.has(
-        option.value,
-      );
-
-    select.appendChild(
-      option,
+    option.addEventListener(
+      "click",
+      () => {
+        selectedType = value;
+        isOpen = true;
+        render();
+      },
     );
+
+    filter.appendChild(option);
   }
+
+  const results =
+    document.createElement(
+      "div",
+    );
+
+  results.className =
+    "nc-recipient-results";
+
+  let isOpen = false;
+
+  const selectedWrap =
+    document.createElement(
+      "div",
+    );
+
+  selectedWrap.className =
+    "nc-target-chips";
+
+  const selectedHeading =
+    document.createElement(
+      "div",
+    );
+
+  selectedHeading.className =
+    "nc-target-selection-label";
+  selectedHeading.textContent =
+    "Selected recipients";
+
+  const render = () => {
+    selectedWrap.replaceChildren();
+
+    for (const selectedKey of selected) {
+      const [type, ...idParts] =
+        selectedKey.split(":");
+      const id = idParts.join(":");
+      const item = items.find(
+        (candidate) =>
+          candidate.type === type &&
+          String(candidate.id) === id,
+      );
+
+      const chip =
+        document.createElement(
+          "span",
+        );
+
+      chip.className =
+        "nc-target-chip";
+
+      chip.append(
+        document.createTextNode(
+          item?.label || id,
+        ),
+      );
+
+      chip.title =
+        typeLabels[type] || type;
+
+      const remove =
+        actionButton(
+          "Remove",
+          "nc-chip-remove",
+        );
+
+      remove.addEventListener(
+        "click",
+        () => {
+          selected.delete(
+            selectedKey,
+          );
+          markDirty();
+          render();
+        },
+      );
+
+      chip.append(remove);
+      selectedWrap.append(chip);
+    }
+
+    const query =
+      search.value.trim().toLowerCase();
+    results.replaceChildren();
+    results.hidden = !isOpen;
+
+    for (const [index, option] of Array.from(
+      filter.children,
+    ).entries()) {
+      option.classList.toggle(
+        "active",
+        filterOptions[index][0] === selectedType,
+      );
+    }
+
+    const matchingItems = items.filter(
+      (item) =>
+        !selected.has(
+          `${item.type}:${item.id}`,
+        ) &&
+        (selectedType === "all" ||
+          item.type === selectedType) &&
+        (!query ||
+          item.label.toLowerCase().includes(query)),
+    );
+
+    if (!matchingItems.length) {
+      const empty =
+        document.createElement(
+          "div",
+        );
+
+      empty.className =
+        "nc-recipient-empty";
+      empty.textContent = query
+        ? "No matching recipients"
+        : "No recipients available";
+      results.append(empty);
+    }
+
+    for (const item of matchingItems) {
+      const option =
+        document.createElement(
+          "button",
+        );
+
+      option.type = "button";
+      option.className =
+        "nc-recipient-option";
+      option.textContent = item.label;
+      option.title = typeLabels[item.type];
+
+      option.addEventListener(
+        "mousedown",
+        (event) => event.preventDefault(),
+      );
+
+      option.addEventListener(
+        "click",
+        () => {
+          selected.add(
+            `${item.type}:${item.id}`,
+          );
+          markDirty();
+          isOpen = false;
+          render();
+        },
+      );
+
+      results.append(option);
+    }
+  };
+
+  search.addEventListener(
+    "input",
+    () => {
+      isOpen = true;
+      render();
+    },
+  );
+
+  search.addEventListener(
+    "focus",
+    () => {
+      isOpen = true;
+      render();
+    },
+  );
+
+  wrapper.addEventListener(
+    "focusout",
+    (event) => {
+      if (
+        !wrapper.contains(
+          event.relatedTarget,
+        )
+      ) {
+        isOpen = false;
+        render();
+      }
+    },
+  );
+
+  const inputArea =
+    document.createElement(
+      "div",
+    );
+
+  inputArea.className =
+    "nc-recipient-input";
+
+  toolbar.append(
+    search,
+    filter,
+  );
+
+  inputArea.append(
+    toolbar,
+    results,
+  );
+
+  wrapper.append(
+    selectedHeading,
+    selectedWrap,
+    inputArea,
+  );
+  render();
+
+  return {
+    element: wrapper,
+    target: () => {
+      const result = {};
+
+      for (const selectedKey of selected) {
+        const [type, ...idParts] =
+          selectedKey.split(":");
+
+        if (!result[type]) {
+          result[type] = [];
+        }
+
+        result[type].push(
+          idParts.join(":"),
+        );
+      }
+
+      return result;
+    },
+  };
 }
 
 function defaultAlert() {
@@ -84,6 +409,17 @@ function targetFromAlert(alert) {
   return (
     alert?.notification?.target ||
     {}
+  );
+}
+
+function conditionFromAlert(alert) {
+  return (
+    alert?.condition ||
+    alert?.conditions?.find(
+      (condition) =>
+        condition.type === "template",
+    )?.template ||
+    "{{ false }}"
   );
 }
 
@@ -189,6 +525,261 @@ function actionButton(
   return button;
 }
 
+function visualConditionBuilder(
+  container,
+  registries,
+  conditions,
+  markDirty,
+) {
+  const supported = new Set([
+    "state",
+    "numeric",
+    "attribute",
+  ]);
+
+  const state = (conditions || [])
+    .filter(
+      (condition) =>
+        supported.has(condition.type),
+    )
+    .map(
+      (condition) => ({
+        ...condition,
+      }),
+    );
+
+  if (!state.length) {
+    state.push({
+      type: "state",
+      entity_id: "",
+      state: "on",
+    });
+  }
+
+  const entities = (
+    registries.entities || []
+  ).filter(
+    (item) =>
+      !item.entity_id?.startsWith(
+        "notify.",
+      ),
+  );
+
+  const rows =
+    document.createElement(
+      "div",
+    );
+
+  rows.className =
+    "nc-condition-rows";
+
+  const render = () => {
+    rows.replaceChildren();
+
+    state.forEach(
+      (condition, index) => {
+        const row =
+          document.createElement(
+            "div",
+          );
+
+        row.className =
+          "nc-condition-row";
+
+        const type =
+          document.createElement(
+            "select",
+          );
+
+        for (const [value, label] of [
+          ["state", "State"],
+          ["numeric", "Numeric state"],
+          ["attribute", "Attribute"],
+        ]) {
+          const option =
+            document.createElement(
+              "option",
+            );
+          option.value = value;
+          option.textContent = label;
+          option.selected =
+            condition.type === value;
+          type.append(option);
+        }
+
+        const entity =
+          document.createElement(
+            "select",
+          );
+
+        const empty =
+          document.createElement(
+            "option",
+          );
+        empty.value = "";
+        empty.textContent =
+          "Choose an entity";
+        entity.append(empty);
+
+        for (const item of entities) {
+          const option =
+            document.createElement(
+              "option",
+            );
+          option.value = item.entity_id;
+          option.textContent =
+            item.name || item.entity_id;
+          option.selected =
+            condition.entity_id ===
+            item.entity_id;
+          entity.append(option);
+        }
+
+        const stateInput = input(
+          "text",
+          condition.state || "",
+          "on",
+        );
+        const aboveInput = input(
+          "number",
+          condition.above ?? "",
+          "Above",
+        );
+        const belowInput = input(
+          "number",
+          condition.below ?? "",
+          "Below",
+        );
+        const attributeInput = input(
+          "text",
+          condition.attribute || "",
+          "Attribute name",
+        );
+        const valueInput = input(
+          "text",
+          condition.value ?? "",
+          "Expected value",
+        );
+        const forInput = input(
+          "time",
+          condition.for || "",
+          "For",
+        );
+        forInput.step = "1";
+
+        const fields = [
+          createField("Type", type),
+          createField("Entity", entity),
+          createField("State", stateInput),
+          createField("Above", aboveInput),
+          createField("Below", belowInput),
+          createField("Attribute", attributeInput),
+          createField("Expected value", valueInput),
+          createField("For", forInput),
+        ];
+
+        const updateVisibility = () => {
+          const selected = type.value;
+          fields[2].hidden = selected !== "state";
+          fields[3].hidden = selected !== "numeric";
+          fields[4].hidden = selected !== "numeric";
+          fields[5].hidden = selected !== "attribute";
+          fields[6].hidden = selected !== "attribute";
+        };
+
+        type.addEventListener("change", () => {
+          condition.type = type.value;
+          markDirty();
+          updateVisibility();
+        });
+        entity.addEventListener("change", () => {
+          condition.entity_id = entity.value;
+          markDirty();
+        });
+
+        for (const [control, key] of [
+          [stateInput, "state"],
+          [aboveInput, "above"],
+          [belowInput, "below"],
+          [attributeInput, "attribute"],
+          [valueInput, "value"],
+          [forInput, "for"],
+        ]) {
+          control.addEventListener("input", () => {
+            condition[key] = control.value;
+            markDirty();
+          });
+        }
+
+        const remove = actionButton(
+          "Remove condition",
+          "nc-button danger",
+        );
+        remove.disabled = state.length === 1;
+        remove.addEventListener("click", () => {
+          state.splice(index, 1);
+          markDirty();
+          render();
+        });
+
+        row.append(
+          ...fields,
+          remove,
+        );
+        rows.append(row);
+        updateVisibility();
+      },
+    );
+  };
+
+  const add = actionButton(
+    "Add condition",
+    "nc-button secondary",
+  );
+  add.addEventListener("click", () => {
+    state.push({
+      type: "state",
+      entity_id: "",
+      state: "on",
+    });
+    markDirty();
+    render();
+  });
+
+  container.append(rows, add);
+  render();
+
+  return () => state.filter(
+    (condition) => condition.entity_id,
+  );
+}
+
+function sectionPanel(
+  _title,
+  content,
+  _open = true,
+  _active = false,
+) {
+  const wrapper =
+    document.createElement(
+      "section",
+    );
+
+  wrapper.className =
+    "nc-section";
+  wrapper.dataset.title = _title;
+
+  content.classList.add(
+    "nc-section-content",
+  );
+
+  wrapper.append(
+    content,
+  );
+
+  return wrapper;
+}
+
 export function openEditor({
   root,
   alert,
@@ -200,13 +791,31 @@ export function openEditor({
     alert || defaultAlert(),
   );
 
+  value.notification = {
+    ...(value.notifications?.[0] || {}),
+    ...(value.notification || {}),
+  };
+
+  value.notification.confirmation = {
+    ...(value.confirmation || {}),
+    ...(value.notification.confirmation || {}),
+  };
+
   const backdrop =
     document.createElement(
       "div",
     );
 
   backdrop.className =
-    "nc-modal-backdrop";
+    "nc-editor-view";
+
+  const page = root.querySelector(
+    ".nc-page",
+  );
+
+  if (page) {
+    page.hidden = true;
+  }
 
   const modal =
     document.createElement(
@@ -214,7 +823,7 @@ export function openEditor({
     );
 
   modal.className =
-    "nc-modal";
+    "nc-editor-shell";
 
   const header =
     document.createElement(
@@ -236,7 +845,7 @@ export function openEditor({
 
   const close =
     actionButton(
-      "Close",
+      "Back to alerts",
     );
 
   header.append(
@@ -251,6 +860,12 @@ export function openEditor({
 
   body.className =
     "nc-modal-body";
+
+  let dirty = false;
+
+  const markDirty = () => {
+    dirty = true;
+  };
 
   const footer =
     document.createElement(
@@ -294,17 +909,6 @@ export function openEditor({
   // Basic
   // ---------------------------------------------------------
 
-  const basic =
-    document.createElement(
-      "section",
-    );
-
-  basic.className =
-    "nc-section";
-
-  basic.innerHTML =
-    "<h3>Basic</h3>";
-
   const basicGrid =
     document.createElement(
       "div",
@@ -320,39 +924,25 @@ export function openEditor({
       "Alert name",
     );
 
-  const enabledInput =
-    checkbox(
-      value.enabled !== false,
-    );
-
-  const enabledWrap =
-    document.createElement(
-      "div",
-    );
-
-  enabledWrap.className =
-    "nc-check";
-
-  enabledWrap.append(
-    enabledInput,
-    document.createTextNode(
-      "Enabled",
-    ),
-  );
-
   const descriptionInput =
     textarea(
       value.description,
     );
 
+  nameInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
+  descriptionInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
   basicGrid.append(
     createField(
       "Name",
       nameInput,
-    ),
-    createField(
-      "Status",
-      enabledWrap,
     ),
     createField(
       "Description",
@@ -361,28 +951,17 @@ export function openEditor({
     ),
   );
 
-  basic.append(
-    basicGrid,
-  );
-
   body.append(
-    basic,
+    sectionPanel(
+      "Basic",
+      basicGrid,
+      true,
+    ),
   );
 
   // ---------------------------------------------------------
   // Check
   // ---------------------------------------------------------
-
-  const check =
-    document.createElement(
-      "section",
-    );
-
-  check.className =
-    "nc-section";
-
-  check.innerHTML =
-    "<h3>Check</h3>";
 
   const checkGrid =
     document.createElement(
@@ -412,6 +991,26 @@ export function openEditor({
     ),
   );
 
+  const startup =
+    checkbox(
+      value.monitor?.startup !== false,
+    );
+
+  const startupWrap =
+    document.createElement(
+      "div",
+    );
+
+  startupWrap.className =
+    "nc-check";
+
+  startupWrap.append(
+    startup,
+    document.createTextNode(
+      "Check when Home Assistant starts",
+    ),
+  );
+
   const intervalEnabled =
     Boolean(
       value.monitor?.interval,
@@ -424,11 +1023,13 @@ export function openEditor({
 
   const intervalInput =
     input(
-      "text",
+      "time",
       value.monitor?.interval ||
-        "12:00:00",
-      "12:00:00",
+        "12:00",
+      "12:00",
     );
+
+  intervalInput.step = "1";
 
   const intervalWrap =
     document.createElement(
@@ -477,6 +1078,10 @@ export function openEditor({
       onChangeWrap,
     ),
     intervalField,
+    createField(
+      "Startup",
+      startupWrap,
+    ),
   );
 
   const checkHelp =
@@ -492,37 +1097,83 @@ export function openEditor({
     "For example, use changes for immediate detection " +
     "and an interval as a safety check.";
 
-  check.append(
-    checkGrid,
-    checkHelp,
-  );
-
   body.append(
-    check,
+    sectionPanel(
+      "Check",
+      (() => {
+        const wrap =
+          document.createElement(
+            "div",
+          );
+        wrap.append(
+          checkGrid,
+          checkHelp,
+        );
+        return wrap;
+      })(),
+      true,
+    ),
   );
 
   // ---------------------------------------------------------
   // Condition
   // ---------------------------------------------------------
 
-  const condition =
-    document.createElement(
-      "section",
-    );
-
-  condition.className =
-    "nc-section";
-
-  condition.innerHTML =
-    "<h3>Condition</h3>";
-
   const conditionInput =
     textarea(
-      value.condition,
+      conditionFromAlert(value),
       true,
     );
 
-  condition.append(
+  conditionInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
+  const conditionMode =
+    document.createElement(
+      "div",
+    );
+
+  conditionMode.className =
+    "nc-condition-mode";
+
+  const visualButton = actionButton(
+    "Visual conditions",
+    "nc-condition-mode-button",
+  );
+  const jinjaButton = actionButton(
+    "Advanced Jinja",
+    "nc-condition-mode-button",
+  );
+
+  conditionMode.append(
+    visualButton,
+    jinjaButton,
+  );
+
+  const visualWrap =
+    document.createElement(
+      "div",
+    );
+
+  visualWrap.className =
+    "nc-condition-visual";
+
+  const getVisualConditions =
+    visualConditionBuilder(
+      visualWrap,
+      registries,
+      value.conditions,
+      markDirty,
+    );
+
+  const jinjaWrap =
+    document.createElement(
+      "div",
+    );
+
+  jinjaWrap.append(
     createField(
       "Jinja condition",
       conditionInput,
@@ -542,151 +1193,96 @@ export function openEditor({
     "The condition should evaluate to true or false. " +
     "Home Assistant automatically tracks entities referenced by the template.";
 
-  condition.append(
+  jinjaWrap.append(
     conditionHelp,
   );
 
+  let conditionModeValue =
+    value.conditions?.some(
+      (condition) =>
+        ["state", "numeric", "attribute"].includes(
+          condition.type,
+        ),
+    )
+      ? "visual"
+      : "jinja";
+
+  const updateConditionMode = () => {
+    const visual =
+      conditionModeValue === "visual";
+    visualWrap.hidden = !visual;
+    jinjaWrap.hidden = visual;
+    visualButton.classList.toggle(
+      "active",
+      visual,
+    );
+    jinjaButton.classList.toggle(
+      "active",
+      !visual,
+    );
+  };
+
+  visualButton.addEventListener(
+    "click",
+    () => {
+      conditionModeValue = "visual";
+      markDirty();
+      updateConditionMode();
+    },
+  );
+  jinjaButton.addEventListener(
+    "click",
+    () => {
+      conditionModeValue = "jinja";
+      markDirty();
+      updateConditionMode();
+    },
+  );
+
+  const conditionWrap =
+    document.createElement(
+      "div",
+    );
+
+  conditionWrap.append(
+    conditionMode,
+    visualWrap,
+    jinjaWrap,
+  );
+
+  updateConditionMode();
+
   body.append(
-    condition,
+    sectionPanel(
+      "Condition",
+      conditionWrap,
+      true,
+    ),
   );
 
   // ---------------------------------------------------------
   // Recipients
   // ---------------------------------------------------------
 
-  const recipients =
-    document.createElement(
-      "section",
-    );
-
-  recipients.className =
-    "nc-section";
-
-  recipients.innerHTML =
-    "<h3>Recipients</h3>";
-
   const target =
     targetFromAlert(
       value,
     );
 
-  const recipientGrid =
+  const recipientPicker =
+    createRecipientPicker(
+      registries,
+      target,
+      markDirty,
+    );
+
+  const recipientWrap =
     document.createElement(
       "div",
     );
 
-  recipientGrid.className =
-    "nc-grid";
-
-  const deviceSelect =
-    document.createElement(
-      "select",
-    );
-
-  deviceSelect.multiple = true;
-  deviceSelect.className =
-    "nc-target-select";
-
-  fillSelect(
-    deviceSelect,
-    registries.devices || [],
-    target.device_id,
-    (item) =>
-      item.name_by_user ||
-      item.name ||
-      item.id,
-    (item) =>
-      item.id,
-  );
-
-  const areaSelect =
-    document.createElement(
-      "select",
-    );
-
-  areaSelect.multiple = true;
-  areaSelect.className =
-    "nc-target-select";
-
-  fillSelect(
-    areaSelect,
-    registries.areas || [],
-    target.area_id,
-    (item) =>
-      item.name || item.id,
-    (item) =>
-      item.area_id || item.id,
-  );
-
-  const labelSelect =
-    document.createElement(
-      "select",
-    );
-
-  labelSelect.multiple = true;
-  labelSelect.className =
-    "nc-target-select";
-
-  fillSelect(
-    labelSelect,
-    registries.labels || [],
-    target.label_id,
-    (item) =>
-      item.name || item.label_id,
-    (item) =>
-      item.label_id || item.id,
-  );
-
-  const notifyEntities =
-    (registries.entities || [])
-      .filter(
-        (item) =>
-          item.entity_id?.startsWith(
-            "notify.",
-          ),
-      );
-
-  const entitySelect =
-    document.createElement(
-      "select",
-    );
-
-  entitySelect.multiple = true;
-  entitySelect.className =
-    "nc-target-select";
-
-  fillSelect(
-    entitySelect,
-    notifyEntities,
-    target.entity_id,
-    (item) =>
-      item.name ||
-      item.entity_id,
-    (item) =>
-      item.entity_id,
-  );
-
-  recipientGrid.append(
-    createField(
-      "Devices",
-      deviceSelect,
-    ),
-    createField(
-      "Areas",
-      areaSelect,
-    ),
-    createField(
-      "Labels",
-      labelSelect,
-    ),
-    createField(
-      "Notification entities",
-      entitySelect,
-    ),
-  );
-
-  recipients.append(
-    recipientGrid,
+  recipientWrap.append(
+    recipientPicker.element,
   );
 
   const recipientHelp =
@@ -698,30 +1294,30 @@ export function openEditor({
     "nc-help";
 
   recipientHelp.textContent =
-    "Targets can be mixed. A label, area, device and specific notification entity can all be selected together.";
+    "Search for a recipient, choose a type when needed, then select it. You can mix devices, areas, labels, floors, and notification services.";
 
-  recipients.append(
+  recipientWrap.append(
     recipientHelp,
   );
 
+  const recipientSection =
+    sectionPanel(
+      "Recipients",
+      recipientWrap,
+      true,
+    );
+
+  recipientSection.classList.add(
+    "nc-section-recipient",
+  );
+
   body.append(
-    recipients,
+    recipientSection,
   );
 
   // ---------------------------------------------------------
   // Notification
   // ---------------------------------------------------------
-
-  const notification =
-    document.createElement(
-      "section",
-    );
-
-  notification.className =
-    "nc-section";
-
-  notification.innerHTML =
-    "<h3>Notification</h3>";
 
   const notificationGrid =
     document.createElement(
@@ -738,12 +1334,39 @@ export function openEditor({
       "Reminder",
     );
 
+  titleInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
   const messageInput =
     textarea(
       value.notification?.message,
     );
 
+  messageInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
+  const actionInput =
+    input(
+      "text",
+      value.notification?.action ||
+        "notify.send_message",
+      "notify.send_message",
+    );
+
+  actionInput.addEventListener(
+    "input",
+    markDirty,
+  );
+
   notificationGrid.append(
+    createField(
+      "Notification service",
+      actionInput,
+    ),
     createField(
       "Title",
       titleInput,
@@ -755,28 +1378,17 @@ export function openEditor({
     ),
   );
 
-  notification.append(
-    notificationGrid,
-  );
-
   body.append(
-    notification,
+    sectionPanel(
+      "Notification",
+      notificationGrid,
+      true,
+    ),
   );
 
   // ---------------------------------------------------------
   // Repeat
   // ---------------------------------------------------------
-
-  const repeat =
-    document.createElement(
-      "section",
-    );
-
-  repeat.className =
-    "nc-section";
-
-  repeat.innerHTML =
-    "<h3>Repeat notification</h3>";
 
   const repeatConfig =
     value.notification?.repeat;
@@ -786,13 +1398,24 @@ export function openEditor({
       Boolean(repeatConfig),
     );
 
+  repeatToggle.addEventListener(
+    "change",
+    markDirty,
+  );
+
   const repeatInterval =
     input(
-      "text",
+      "time",
       repeatConfig?.interval ||
-        "00:30:00",
-      "00:30:00",
+        "00:30",
+      "00:30",
     );
+
+  repeatInterval.step = "1";
+  repeatInterval.addEventListener(
+    "input",
+    markDirty,
+  );
 
   const repeatAttempts =
     input(
@@ -801,6 +1424,11 @@ export function openEditor({
         5,
       "5",
     );
+
+  repeatAttempts.addEventListener(
+    "input",
+    markDirty,
+  );
 
   const repeatGrid =
     document.createElement(
@@ -840,28 +1468,17 @@ export function openEditor({
     ),
   );
 
-  repeat.append(
-    repeatGrid,
-  );
-
   body.append(
-    repeat,
+    sectionPanel(
+      "Repeat notification",
+      repeatGrid,
+      false,
+    ),
   );
 
   // ---------------------------------------------------------
   // Confirmation
   // ---------------------------------------------------------
-
-  const confirmation =
-    document.createElement(
-      "section",
-    );
-
-  confirmation.className =
-    "nc-section";
-
-  confirmation.innerHTML =
-    "<h3>Confirmation</h3>";
 
   const confirmationConfig =
     value.notification?.confirmation ||
@@ -872,6 +1489,11 @@ export function openEditor({
       confirmationConfig.enabled,
     );
 
+  confirmationToggle.addEventListener(
+    "change",
+    markDirty,
+  );
+
   const confirmationButton =
     input(
       "text",
@@ -879,11 +1501,50 @@ export function openEditor({
         "Activity completed",
     );
 
+  confirmationButton.addEventListener(
+    "input",
+    markDirty,
+  );
+
   const completionMessage =
     textarea(
       confirmationConfig.completion_message ||
         "",
     );
+
+  completionMessage.addEventListener(
+    "input",
+    markDirty,
+  );
+
+  const resendInterval =
+    input(
+      "time",
+      confirmationConfig.resend_interval ||
+        "00:30:00",
+      "00:30:00",
+    );
+
+  resendInterval.step = "1";
+  resendInterval.addEventListener(
+    "input",
+    markDirty,
+  );
+
+  const confirmationAttempts =
+    input(
+      "number",
+      confirmationConfig.max_attempts ||
+        5,
+      "5",
+    );
+
+  confirmationAttempts.min = "1";
+  confirmationAttempts.max = "20";
+  confirmationAttempts.addEventListener(
+    "input",
+    markDirty,
+  );
 
   const actionsText =
     textarea(
@@ -896,6 +1557,11 @@ export function openEditor({
         : "[]",
       true,
     );
+
+  actionsText.addEventListener(
+    "input",
+    markDirty,
+  );
 
   const confirmationGrid =
     document.createElement(
@@ -935,13 +1601,26 @@ export function openEditor({
       true,
     ),
     createField(
+      "Reminder interval",
+      resendInterval,
+    ),
+    createField(
+      "Maximum reminders",
+      confirmationAttempts,
+    ),
+    createField(
       "Actions after confirmation",
       actionsText,
       true,
     ),
   );
 
-  confirmation.append(
+  const confirmationWrap =
+    document.createElement(
+      "div",
+    );
+
+  confirmationWrap.append(
     confirmationGrid,
   );
 
@@ -956,13 +1635,146 @@ export function openEditor({
   confirmationHelp.textContent =
     "Advanced actions use JSON here. JSON is also valid YAML, so the same structure can be copied into the YAML editor.";
 
-  confirmation.append(
+  confirmationWrap.append(
     confirmationHelp,
   );
 
   body.append(
-    confirmation,
+    sectionPanel(
+      "Confirmation",
+      confirmationWrap,
+      Boolean(confirmationConfig.enabled),
+    ),
   );
+
+  const sectionNav =
+    document.createElement(
+      "nav",
+    );
+
+  sectionNav.className =
+    "nc-section-nav";
+  sectionNav.setAttribute(
+    "aria-label",
+    "Alert sections",
+  );
+
+  const sections = [
+    ...body.querySelectorAll(
+    ".nc-section",
+    ),
+  ];
+
+  const targetConfigured = Object.values(
+    target,
+  ).some(
+    (values) =>
+      Array.isArray(values) &&
+      values.length > 0,
+  );
+
+  const sectionConfigured = [
+    value.enabled !== false,
+    Boolean(
+      value.monitor?.on_change ||
+      value.monitor?.interval,
+    ),
+    Boolean(
+      conditionFromAlert(value).trim(),
+    ),
+    targetConfigured,
+    Boolean(
+      value.notification?.action ||
+      value.notification?.message,
+    ),
+    Boolean(value.notification?.repeat),
+    Boolean(
+      value.notification?.confirmation?.enabled,
+    ),
+  ];
+
+  let activeSection = 0;
+  const sectionButtons = [];
+
+  const showSection = (index) => {
+    activeSection = index;
+
+    for (const [sectionIndex, section] of sections.entries()) {
+      section.hidden =
+        sectionIndex !== activeSection;
+    }
+
+    for (const [buttonIndex, button] of sectionButtons.entries()) {
+      const active =
+        buttonIndex === activeSection;
+
+      button.classList.toggle(
+        "active",
+        active,
+      );
+
+      if (active) {
+        button.setAttribute(
+          "aria-current",
+          "step",
+        );
+      } else {
+        button.removeAttribute(
+          "aria-current",
+        );
+      }
+    }
+  };
+
+  for (const [index, section] of sections.entries()) {
+    const sectionButton =
+      actionButton(
+        "",
+        "nc-section-nav-button",
+      );
+
+    const status =
+      document.createElement(
+        "span",
+      );
+
+    status.className =
+      "nc-section-status";
+    status.textContent = "●";
+    status.classList.toggle(
+      "active",
+      sectionConfigured[index],
+    );
+    status.setAttribute(
+      "aria-label",
+      sectionConfigured[index]
+        ? "Configured"
+        : "Not configured",
+    );
+
+    const label =
+      document.createElement(
+        "span",
+      );
+
+    label.textContent =
+      section.dataset.title;
+
+    sectionButton.append(status, label);
+
+    sectionButton.addEventListener(
+      "click",
+      () => {
+          showSection(index);
+      },
+    );
+
+      sectionButtons.push(sectionButton);
+    sectionNav.append(sectionButton);
+  }
+
+  body.prepend(sectionNav);
+    showSection(0);
 
   // ---------------------------------------------------------
   // Buttons
@@ -970,7 +1782,20 @@ export function openEditor({
 
   const closeEditor =
     () => {
+      if (
+        dirty &&
+        !window.confirm(
+          "Discard unsaved changes?",
+        )
+      ) {
+        return;
+      }
+
       backdrop.remove();
+
+      if (page) {
+        page.hidden = false;
+      }
     };
 
   close.addEventListener(
@@ -1032,56 +1857,10 @@ export function openEditor({
         }
 
         const newTarget = {};
-
-        const devices =
-          selectedValues(
-            deviceSelect,
-          );
-
-        const areas =
-          selectedValues(
-            areaSelect,
-          );
-
-        const labels =
-          selectedValues(
-            labelSelect,
-          );
-
-        const entities =
-          selectedValues(
-            entitySelect,
-          );
-
-        if (devices.length) {
-          newTarget.device_id =
-            devices;
-        }
-
-        if (areas.length) {
-          newTarget.area_id =
-            areas;
-        }
-
-        if (labels.length) {
-          newTarget.label_id =
-            labels;
-        }
-
-        if (entities.length) {
-          newTarget.entity_id =
-            entities;
-        }
-
-        if (
-          !Object.keys(
-            newTarget,
-          ).length
-        ) {
-          throw new Error(
-            "Select at least one notification target.",
-          );
-        }
+        Object.assign(
+          newTarget,
+          recipientPicker.target(),
+        );
 
         let actions = [];
 
@@ -1097,14 +1876,23 @@ export function openEditor({
           );
         }
 
+        const visualConditions =
+          getVisualConditions();
+
+        if (
+          conditionModeValue === "visual" &&
+          !visualConditions.length
+        ) {
+          throw new Error(
+            "Add an entity to at least one condition.",
+          );
+        }
+
         const result =
           clone(value);
 
         result.name =
           nameInput.value.trim();
-
-        result.enabled =
-          enabledInput.checked;
 
         result.description =
           descriptionInput.value;
@@ -1112,10 +1900,26 @@ export function openEditor({
         result.condition =
           conditionInput.value;
 
+        result.conditions =
+          conditionModeValue === "visual"
+            ? visualConditions
+            : [
+                {
+                  type: "template",
+                  template:
+                    conditionInput.value,
+                },
+              ];
+
         result.monitor = {
           on_change:
             onChange.checked,
+          startup:
+            startup.checked,
         };
+
+        result.notify_on_start =
+          startup.checked;
 
         if (
           intervalToggle.checked
@@ -1128,7 +1932,8 @@ export function openEditor({
           ...(result.notification ||
             {}),
           action:
-            "notify.send_message",
+            actionInput.value.trim() ||
+              "notify.send_message",
           target:
             newTarget,
           title:
@@ -1156,12 +1961,31 @@ export function openEditor({
               confirmationButton.value,
             completion_message:
               completionMessage.value,
+            resend_interval:
+              resendInterval.value.trim(),
+            max_attempts:
+              Math.min(
+                20,
+                Math.max(
+                  1,
+                  Number(
+                    confirmationAttempts.value,
+                  ) || 5,
+                ),
+              ),
             actions,
           },
         };
 
+        result.confirmation =
+          clone(
+            result.notification.confirmation,
+          );
+
         save.disabled =
           true;
+
+        dirty = false;
 
         await onSave(
           result,

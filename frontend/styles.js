@@ -128,6 +128,28 @@ select {
   box-shadow: var(--ha-box-shadow);
 }
 
+.nc-section {
+  background: var(--card-background-color);
+  border-radius: 14px;
+  border: 1px solid var(--divider-color);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.nc-section-content {
+  padding: 0 16px 16px;
+}
+
+.nc-section-status {
+  color: var(--error-color);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.nc-section-status.active {
+  color: var(--success-color, #4caf50);
+}
+
 .nc-alert {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -279,6 +301,20 @@ select {
   padding: 20px;
 }
 
+.nc-editor-view {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.nc-editor-shell {
+  background: var(--card-background-color);
+  color: var(--primary-text-color);
+  border-radius: 14px;
+  box-shadow: var(--ha-box-shadow);
+  overflow: hidden;
+}
+
 .nc-modal {
   width: min(900px, 100%);
   max-height: 92vh;
@@ -306,6 +342,52 @@ select {
   padding: 20px;
   display: grid;
   gap: 18px;
+}
+
+.nc-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  background: var(--card-background-color);
+  box-shadow: var(--ha-box-shadow);
+}
+
+.nc-section-nav-button {
+  flex: 1 0 auto;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.nc-section-nav-button:hover {
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+
+.nc-section-nav-button.active {
+  background: var(--card-background-color);
+  color: var(--primary-text-color);
+  box-shadow: var(--ha-box-shadow);
+}
+
+.nc-section[hidden] {
+  display: none;
 }
 
 .nc-modal-footer {
@@ -368,8 +450,147 @@ select {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.nc-target-select {
-  min-height: 130px;
+.nc-target-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.nc-recipient-input {
+  position: relative;
+  z-index: 10;
+}
+
+.nc-section-recipient {
+  position: relative;
+  z-index: 3;
+  overflow: visible;
+}
+
+.nc-recipient-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.nc-recipient-toolbar input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--divider-color);
+  border-radius: 9px;
+  padding: 10px;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+
+.nc-recipient-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  grid-column: 1 / -1;
+}
+
+.nc-recipient-filter {
+  border: 1px solid var(--divider-color);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.nc-recipient-filter.active,
+.nc-recipient-filter:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: var(--text-primary-color, white);
+}
+
+.nc-recipient-results {
+  display: grid;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 20;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 2px;
+  border: 1px solid var(--divider-color);
+  border-radius: 9px;
+  background: var(--card-background-color);
+  box-shadow: var(--ha-box-shadow);
+}
+
+.nc-recipient-results[hidden] {
+  display: none;
+}
+
+.nc-recipient-option {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--divider-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+  cursor: pointer;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-recipient-option:hover {
+  border-color: var(--primary-color);
+}
+
+.nc-recipient-empty {
+  grid-column: 1 / -1;
+  padding: 12px;
+  color: var(--secondary-text-color);
+  text-align: center;
+}
+
+.nc-target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.nc-target-selection-label {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nc-target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 7px 5px 10px;
+  border-radius: 999px;
+  background: var(--secondary-background-color);
+  color: var(--primary-text-color);
+  font-size: 13px;
+}
+
+.nc-chip-remove {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 0;
+}
+
+.nc-chip-remove::after {
+  content: "×";
+  font-size: 18px;
+  line-height: 1;
 }
 
 .nc-check {
@@ -386,6 +607,50 @@ select {
   color: var(--secondary-text-color);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.nc-condition-mode {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.nc-condition-mode-button {
+  border: 1px solid var(--divider-color);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nc-condition-mode-button.active,
+.nc-condition-mode-button:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: var(--text-primary-color, white);
+}
+
+.nc-condition-rows {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.nc-condition-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--divider-color);
+  border-radius: 10px;
+  background: var(--secondary-background-color);
+}
+
+.nc-condition-row .nc-button {
+  justify-self: start;
 }
 
 .nc-error {
@@ -428,6 +693,14 @@ select {
   }
 
   .nc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nc-condition-row {
+    grid-template-columns: 1fr;
+  }
+
+  .nc-recipient-toolbar {
     grid-template-columns: 1fr;
   }
 

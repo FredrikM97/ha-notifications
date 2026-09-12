@@ -95,6 +95,12 @@ export async function getYaml(hass) {
   return call(hass, "get_yaml");
 }
 
+export async function validateYaml(hass, yaml) {
+  return call(hass, "validate_yaml", {
+    yaml,
+  });
+}
+
 export async function saveYaml(hass, yaml) {
   return call(hass, "save_yaml", {
     yaml,

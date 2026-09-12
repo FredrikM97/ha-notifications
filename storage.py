@@ -220,18 +220,28 @@ class NotificationStorage:
             self.yaml_path,
         )
 
+    async def async_validate_yaml_text(
+        self,
+        text: str,
+    ) -> dict[str, Any]:
+        """Validate raw YAML text without writing it."""
+
+        config = _parse_yaml(
+            text
+        )
+
+        return normalize_config(
+            config
+        )
+
     async def async_save_yaml_text(
         self,
         text: str,
     ) -> dict[str, Any]:
         """Validate and save raw YAML text."""
 
-        config = _parse_yaml(
+        normalized = await self.async_validate_yaml_text(
             text
-        )
-
-        normalized = normalize_config(
-            config
         )
 
         normalized_text = yaml.safe_dump(

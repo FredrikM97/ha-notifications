@@ -215,6 +215,33 @@ async def async_setup(
     @websocket_api.websocket_command(
         {
             vol.Required("type"):
+                f"{DOMAIN}/validate_yaml",
+            vol.Required("yaml"):
+                str,
+        }
+    )
+    @websocket_api.async_response
+    async def handle_validate_yaml(
+        _hass: HomeAssistant,
+        connection,
+        msg: dict[str, Any],
+    ) -> None:
+        """Validate YAML without writing it."""
+
+        await _manager(
+            hass
+        ).async_validate_yaml(
+            msg["yaml"]
+        )
+
+        connection.send_result(
+            msg["id"],
+            True,
+        )
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"):
                 f"{DOMAIN}/save_yaml",
             vol.Required("yaml"):
                 str,
@@ -268,8 +295,11 @@ async def async_setup(
     )
 
     websocket_api.async_register_command(
-        hass,
-        handle_save,
+        hass,        handle_validate_yaml,
+    )
+
+    websocket_api.async_register_command(
+        hass,        handle_save,
     )
 
     websocket_api.async_register_command(

@@ -36,7 +36,7 @@ from .const import (
     MAX_HISTORY,
 )
 from .models import (
-    duration_to_string,
+    compile_condition,
     normalize_config,
     parse_duration,
 )
@@ -583,7 +583,7 @@ class NotificationCenter:
         alert_id = alert["id"]
 
         template = Template(
-            alert["condition"],
+            compile_condition(alert),
             self.hass,
         )
 
@@ -662,9 +662,27 @@ class NotificationCenter:
                 template_callback,
             )
 
+        confirmation = alert[
+            "notification"
+        ].get(
+            "confirmation",
+            {},
+        )
+
         interval = monitor.get(
             "interval"
         )
+
+        if (
+            not interval
+            and confirmation.get(
+                "enabled",
+                False,
+            )
+        ):
+            interval = confirmation.get(
+                "resend_interval"
+            )
 
         if interval:
             interval_delta = parse_duration(
@@ -944,11 +962,37 @@ class NotificationCenter:
     ) -> bool:
         """Determine if a repeated notification is due."""
 
-        repeat = alert[
+        notification = alert[
             "notification"
-        ].get(
+        ]
+        repeat = notification.get(
             "repeat"
         )
+
+        confirmation = notification.get(
+            "confirmation",
+            {},
+        )
+
+        confirmation_pending = bool(
+            state.get(
+                "confirmation_action_id"
+            )
+        )
+
+        if confirmation_pending and confirmation.get(
+            "enabled",
+            False,
+        ):
+            repeat = {
+                "interval": confirmation.get(
+                    "resend_interval"
+                ),
+                "max_attempts": confirmation.get(
+                    "max_attempts",
+                    5,
+                ),
+            }
 
         if not repeat:
             return False
@@ -1579,6 +1623,16 @@ class NotificationCenter:
 
         self.storage.async_delay_save_state(
             self.state
+        )
+
+    async def async_validate_yaml(
+        self,
+        text: str,
+    ) -> dict[str, Any]:
+        """Validate raw YAML without changing the saved config."""
+
+        return await self.storage.async_validate_yaml_text(
+            text
         )
 
     async def async_save_yaml(

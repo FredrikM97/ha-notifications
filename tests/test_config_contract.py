@@ -1,0 +1,50 @@
+import unittest
+from datetime import timedelta
+
+from test_support import load_const_and_models
+
+
+const, models = load_const_and_models()
+
+
+class ConfigContractTests(unittest.TestCase):
+    def test_config_version_defined(self):
+        self.assertEqual(const.CONFIG_VERSION, 1)
+
+    def test_normalize_config_has_monitor_and_compat_trigger(self):
+        config = {
+            "version": 1,
+            "alerts": [
+                {
+                    "id": "demo",
+                    "name": "Demo",
+                    "enabled": True,
+                    "condition": "{{ true }}",
+                    "monitor": {"on_change": True, "interval": "00:30"},
+                    "notification": {
+                        "action": "notify.test",
+                        "target": {"entity_id": ["notify.a"]},
+                        "title": "Hi",
+                        "message": "Hey",
+                    },
+                }
+            ],
+        }
+
+        normalized = models.normalize_config(config)
+        alert = normalized["alerts"][0]
+
+        self.assertEqual(normalized["version"], 1)
+        self.assertTrue(alert["monitor"]["on_change"])
+        self.assertEqual(alert["monitor"]["interval"], "00:30")
+        self.assertEqual(alert["trigger"]["interval"], "00:30")
+
+    def test_parse_duration_time_strings(self):
+        self.assertEqual(models.parse_duration("12:00"), timedelta(hours=12))
+        self.assertEqual(models.parse_duration("00:30"), timedelta(minutes=30))
+        self.assertEqual(models.parse_duration("12:00:00"), timedelta(hours=12))
+        self.assertEqual(models.parse_duration("00:30:00"), timedelta(minutes=30))
+
+
+if __name__ == "__main__":
+    unittest.main()

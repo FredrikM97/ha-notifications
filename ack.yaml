@@ -1,0 +1,329 @@
+alias: Global Multi-Device Actionable Notifier
+description: Global notifier using a flat state machine.
+icon: mdi:bell-action
+mode: parallel
+max: 10
+fields:
+  target:
+    name: Notification Targets
+    required: true
+    selector:
+      target: {}
+  title:
+    name: Title
+    required: true
+    default: Reminder
+    selector:
+      text: {}
+  message:
+    name: Message
+    required: true
+    default: Has this task been completed?
+    selector:
+      text: {}
+  confirmation_button:
+    name: Confirmation Button
+    required: false
+    selector:
+      text: {}
+  resend_interval:
+    name: Resend Interval
+    default:
+      minutes: 30
+    selector:
+      duration: {}
+  max_attempts:
+    name: Maximum Attempts
+    default: 5
+    selector:
+      number:
+        min: 1
+        max: 20
+        mode: box
+  completion_message:
+    name: Completion Message
+    required: false
+    selector:
+      text: {}
+  confirmation_actions:
+    name: Actions After Confirmation
+    required: false
+    selector:
+      action: {}
+variables:
+  notification_id: |
+    task_{{ range(10000) | random }}_{{ now().strftime('%H%M%S') }}
+  action_id: |
+    {{ notification_id }}_CONFIRM
+  has_confirmation: |
+    {{ confirmation_button | default('') | trim != '' }}
+  has_feedback: |
+    {{ completion_message | default('') | trim != '' }}
+  notification_services: |
+
+    {% set ns = namespace(services=[]) %}
+
+
+    {# Devices #}
+
+    {% set devices = target.device_id | default([]) %}
+
+    {% if devices is string %}
+      {% set devices = [devices] %}
+    {% endif %}
+
+
+    {% for device in devices %}
+
+      {% set name = device_attr(device, 'name') %}
+
+      {% if name %}
+
+        {% set ns.services = ns.services + [
+          'notify.mobile_app_' ~
+          name | lower | replace(' ','_') | replace('-','_')
+        ] %}
+
+      {% endif %}
+
+    {% endfor %}
+
+
+    {# Areas #}
+
+    {% set areas = target.area_id | default([]) %}
+
+    {% if areas is string %}
+      {% set areas = [areas] %}
+    {% endif %}
+
+
+    {% for area in areas %}
+
+      {% for device in area_devices(area) %}
+
+        {% set name = device_attr(device, 'name') %}
+
+        {% if name %}
+
+          {% set ns.services = ns.services + [
+            'notify.mobile_app_' ~
+            name | lower | replace(' ','_') | replace('-','_')
+          ] %}
+
+        {% endif %}
+
+      {% endfor %}
+
+    {% endfor %}
+    {# Labels #}
+
+    {% set labels = target.label_id | default([]) %}
+
+    {% if labels is string %}
+      {% set labels = [labels] %}
+    {% endif %}
+
+
+    {% for label in labels %}
+
+      {% for device in label_devices(label) %}
+
+        {% set name = device_attr(device, 'name') %}
+
+        {% if name %}
+
+          {% set ns.services = ns.services + [
+            'notify.mobile_app_' ~
+            name | lower | replace(' ','_') | replace('-','_')
+          ] %}
+
+        {% endif %}
+
+      {% endfor %}
+
+    {% endfor %}
+
+
+    {{ ns.services | unique | list }}
+sequence:
+  - variables:
+      state: INIT
+      attempt: 0
+      confirmed_by: Unknown user
+  - repeat:
+      while:
+        - condition: template
+          value_template: '{{ state != ''DONE'' }}'
+      sequence:
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: '{{ state == ''INIT'' }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: |
+                        {{ notification_services | length == 0 }}
+                  then:
+                    - stop: No notification services found
+                - variables:
+                    state: SEND
+            - conditions:
+                - condition: template
+                  value_template: '{{ state == ''SEND'' }}'
+              sequence:
+                - variables:
+                    attempt: '{{ attempt + 1 }}'
+                - repeat:
+                    for_each: '{{ notification_services }}'
+                    sequence:
+                      - choose:
+                          - conditions:
+                              - condition: template
+                                value_template: '{{ has_confirmation }}'
+                            sequence:
+                              - action: '{{ repeat.item }}'
+                                data:
+                                  title: |
+
+                                    {{ title }}
+                                    {% if attempt > 1 %}
+
+                                      ({{ attempt }}/{{ max_attempts }})
+
+                                    {% endif %}
+                                  message: '{{ message }}'
+                                  data:
+                                    tag: '{{ notification_id }}'
+                                    actions:
+                                      - action: '{{ action_id }}'
+                                        title: '{{ confirmation_button }}'
+                        default:
+                          - action: '{{ repeat.item }}'
+                            data:
+                              title: '{{ title }}'
+                              message: '{{ message }}'
+                              data:
+                                tag: '{{ notification_id }}'
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: '{{ has_confirmation }}'
+                      sequence:
+                        - variables:
+                            state: WAIT
+                  default:
+                    - variables:
+                        state: DONE
+            - conditions:
+                - condition: template
+                  value_template: '{{ state == ''WAIT'' }}'
+              sequence:
+                - wait_for_trigger:
+                    - trigger: event
+                      event_type: mobile_app_notification_action
+                  timeout: '{{ resend_interval }}'
+                  continue_on_timeout: true
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: |
+
+                            {{ wait.trigger is not none and
+                               wait.trigger.event.data.action == action_id }}
+                      sequence:
+                        - variables:
+                            confirmed_by: |
+
+
+                              {% set user_id =
+                                 wait.trigger.event.context.user_id
+                                 | default(none) %}
+
+
+                              {% if user_id %}
+
+
+                                {{ states.person
+                                   | selectattr(
+                                       'attributes.user_id',
+                                       'eq',
+                                       user_id
+                                     )
+                                   | map(attribute='name')
+                                   | first
+                                   | default('Unknown user') }}
+
+
+                              {% else %}
+
+
+                                Unknown user
+
+
+                              {% endif %}
+                            state: CONFIRMED
+                    - conditions:
+                        - condition: template
+                          value_template: '{{ wait.trigger is none }}'
+                      sequence:
+                        - choose:
+                            - conditions:
+                                - condition: template
+                                  value_template: |
+
+                                    {{ attempt >= max_attempts }}
+                              sequence:
+                                - variables:
+                                    state: DONE
+                          default:
+                            - variables:
+                                state: SEND
+            - conditions:
+                - condition: template
+                  value_template: '{{ state == ''CONFIRMED'' }}'
+              sequence:
+                - repeat:
+                    for_each: '{{ notification_services }}'
+                    sequence:
+                      - action: '{{ repeat.item }}'
+                        data:
+                          message: clear_notification
+                          data:
+                            tag: '{{ notification_id }}'
+                - if:
+                    - condition: template
+                      value_template: '{{ has_feedback }}'
+                  then:
+                    - repeat:
+                        for_each: '{{ notification_services }}'
+                        sequence:
+                          - action: '{{ repeat.item }}'
+                            data:
+                              title: '{{ title }}'
+                              message: |
+
+                                {{ completion_message }} ({{ confirmed_by }})
+                - if:
+                    - condition: template
+                      value_template: |
+
+                        {{ confirmation_actions | default([]) | length > 0 }}
+                  then:
+                    - repeat:
+                        for_each: '{{ confirmation_actions }}'
+                        sequence:
+                          - action: '{{ repeat.item.action }}'
+                            target: |
+
+                              {{ repeat.item.target
+                                 if repeat.item.target is defined
+                                 else omit }}
+                            data: |
+
+                              {{ repeat.item.data
+                                 if repeat.item.data is defined
+                                 else omit }}
+                - variables:
+                    state: DONE

@@ -7,6 +7,7 @@ import {
   saveAlert,
   saveYaml,
   testAlert,
+  validateYaml,
 } from "./api.js";
 
 import {
@@ -35,6 +36,8 @@ class NotificationCenterPanel
     this.history = [];
     this.tab = "alerts";
     this.loading = false;
+    this._registries = null;
+    this._registriesPromise = null;
   }
 
   set hass(value) {
@@ -51,6 +54,23 @@ class NotificationCenterPanel
 
   get hass() {
     return this._hass;
+  }
+
+  async getRegistries() {
+    if (this._registries) {
+      return this._registries;
+    }
+
+    if (!this._registriesPromise) {
+      this._registriesPromise = loadRegistries(
+        this._hass,
+      ).then((registries) => {
+        this._registries = registries;
+        return registries;
+      });
+    }
+
+    return this._registriesPromise;
   }
 
   connectedCallback() {
@@ -176,29 +196,8 @@ class NotificationCenterPanel
       () => this.addAlert(),
     );
 
-    const yaml =
-      document.createElement(
-        "button",
-      );
-
-    yaml.className =
-      "nc-button secondary";
-
-    yaml.textContent =
-      "YAML";
-
-    yaml.addEventListener(
-      "click",
-      () => {
-        this.tab = "yaml";
-        this.render();
-        this.loadYaml();
-      },
-    );
-
     actions.append(
       add,
-      yaml,
     );
 
     header.append(
@@ -545,6 +544,50 @@ class NotificationCenterPanel
       },
     );
 
+    const toggle =
+      document.createElement(
+        "button",
+      );
+
+    toggle.className =
+      "nc-button secondary";
+
+    toggle.textContent =
+      alert.enabled
+        ? "Disable"
+        : "Enable";
+
+    toggle.addEventListener(
+      "click",
+      async () => {
+        try {
+          await saveAlert(
+            this._hass,
+            {
+              ...alert,
+              enabled:
+                !alert.enabled,
+            },
+          );
+
+          this.showToast(
+            alert.enabled
+              ? "Alert disabled."
+              : "Alert enabled.",
+          );
+
+          await this.refresh();
+
+        } catch (err) {
+          this.showToast(
+            err?.message ||
+              String(err),
+            true,
+          );
+        }
+      },
+    );
+
     const edit =
       document.createElement(
         "button",
@@ -585,6 +628,7 @@ class NotificationCenterPanel
 
     actions.append(
       test,
+      toggle,
       edit,
       remove,
     );
@@ -630,9 +674,7 @@ class NotificationCenterPanel
 
   async addAlert() {
     const registries =
-      await loadRegistries(
-        this._hass,
-      );
+      await this.getRegistries();
 
     openEditor({
       root: this.shadowRoot,
@@ -657,9 +699,7 @@ class NotificationCenterPanel
 
   async editAlert(alert) {
     const registries =
-      await loadRegistries(
-        this._hass,
-      );
+      await this.getRegistries();
 
     openEditor({
       root: this.shadowRoot,
@@ -747,6 +787,39 @@ class NotificationCenterPanel
     buttons.className =
       "nc-actions";
 
+    const copy =
+      document.createElement(
+        "button",
+      );
+
+    copy.className =
+      "nc-button secondary";
+
+    copy.textContent =
+      "Copy";
+
+    const paste =
+      document.createElement(
+        "button",
+      );
+
+    paste.className =
+      "nc-button secondary";
+
+    paste.textContent =
+      "Paste";
+
+    const validate =
+      document.createElement(
+        "button",
+      );
+
+    validate.className =
+      "nc-button secondary";
+
+    validate.textContent =
+      "Validate";
+
     const reload =
       document.createElement(
         "button",
@@ -756,7 +829,7 @@ class NotificationCenterPanel
       "nc-button secondary";
 
     reload.textContent =
-      "Reload file";
+      "Reload";
 
     const save =
       document.createElement(
@@ -770,6 +843,9 @@ class NotificationCenterPanel
       "Save YAML";
 
     buttons.append(
+      copy,
+      paste,
+      validate,
       reload,
       save,
     );
@@ -793,6 +869,67 @@ class NotificationCenterPanel
     wrapper.append(
       toolbar,
       textarea,
+    );
+
+    copy.addEventListener(
+      "click",
+      async () => {
+        try {
+          await navigator.clipboard.writeText(
+            textarea.value,
+          );
+          this.showToast(
+            "YAML copied to clipboard.",
+          );
+        } catch (err) {
+          this.showToast(
+            err?.message || String(err),
+            true,
+          );
+        }
+      },
+    );
+
+    paste.addEventListener(
+      "click",
+      async () => {
+        try {
+          const text =
+            await navigator.clipboard.readText();
+          textarea.value = text;
+          this.showToast(
+            "YAML pasted from clipboard.",
+          );
+        } catch (err) {
+          this.showToast(
+            err?.message || String(err),
+            true,
+          );
+        }
+      },
+    );
+
+    validate.addEventListener(
+      "click",
+      async () => {
+        try {
+          validate.disabled = true;
+          await validateYaml(
+            this._hass,
+            textarea.value,
+          );
+          this.showToast(
+            "YAML is valid.",
+          );
+        } catch (err) {
+          this.showToast(
+            err?.message || String(err),
+            true,
+          );
+        } finally {
+          validate.disabled = false;
+        }
+      },
     );
 
     reload.addEventListener(

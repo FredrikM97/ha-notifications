@@ -86,8 +86,8 @@ def parse_duration(
 
             if len(parts) == 2:
                 return timedelta(
-                    minutes=float(parts[0]),
-                    seconds=float(parts[1]),
+                    hours=float(parts[0]),
+                    minutes=float(parts[1]),
                 )
 
             return timedelta(
@@ -149,6 +149,27 @@ def duration_to_mapping(
         )
 
     return result or {"seconds": 0}
+
+
+def duration_to_string(
+    value: Any,
+    default: str = "00:00:00",
+) -> str:
+    """Convert a duration to an HTML time-input compatible string."""
+    duration = parse_duration(value)
+
+    if duration is None:
+        return default
+
+    total_seconds = max(
+        0,
+        int(duration.total_seconds()),
+    )
+
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def _slug(value: str) -> str:
@@ -273,6 +294,46 @@ def normalize_notification(
         {},
     )
 
+    legacy_confirmation = {}
+
+    if "confirmation_button" in legacy_data:
+        legacy_confirmation["button"] = legacy_data[
+            "confirmation_button"
+        ]
+
+    for key in (
+        "completion_message",
+        "resend_interval",
+        "max_attempts",
+    ):
+        if key in legacy_data:
+            legacy_confirmation[key] = legacy_data[key]
+
+    if "confirmation_actions" in legacy_data:
+        legacy_confirmation["actions"] = legacy_data[
+            "confirmation_actions"
+        ]
+
+    confirmation = deepcopy(
+        merged.get(
+            "confirmation",
+            {},
+        )
+    )
+
+    if not isinstance(confirmation, dict):
+        confirmation = {}
+
+    confirmation = _merge(
+        legacy_confirmation,
+        confirmation,
+    )
+
+    confirmation.setdefault(
+        "enabled",
+        bool(confirmation.get("button")),
+    )
+
     if not extra_data:
         extra_data = {
             key: value
@@ -296,6 +357,10 @@ def normalize_notification(
         "title": str(title or ""),
         "message": str(message or ""),
         "data": deepcopy(extra_data),
+        "repeat": deepcopy(
+            merged.get("repeat")
+        ),
+        "confirmation": confirmation,
     }
 
 
@@ -330,33 +395,49 @@ def normalize_alert(
         )
     )
 
-    trigger = deepcopy(
+    monitor = deepcopy(
+        source.get(
+            "monitor",
+            {},
+        )
+    )
+
+    if not isinstance(
+        monitor,
+        dict,
+    ):
+        monitor = {}
+
+    legacy_trigger = deepcopy(
         source.get(
             "trigger",
             {},
         )
     )
 
-    if not isinstance(
-        trigger,
+    if isinstance(
+        legacy_trigger,
         dict,
     ):
-        trigger = {}
+        monitor = _merge(
+            monitor,
+            legacy_trigger,
+        )
 
     if (
         "recheck_interval" in source
-        and "interval" not in trigger
+        and "interval" not in monitor
     ):
-        trigger["interval"] = source[
+        monitor["interval"] = source[
             "recheck_interval"
         ]
 
-    trigger.setdefault(
+    monitor.setdefault(
         "on_change",
         True,
     )
 
-    trigger.setdefault(
+    monitor.setdefault(
         "startup",
         True,
     )
@@ -535,6 +616,19 @@ def normalize_alert(
         ),
     }
 
+    for notification in notifications:
+        notification["confirmation"] = _merge(
+            confirmation,
+            notification.get(
+                "confirmation",
+                {},
+            ),
+        )
+
+    primary_notification = deepcopy(
+        notifications[0]
+    )
+
     return {
         "id": alert_id,
         "name": name,
@@ -547,19 +641,21 @@ def normalize_alert(
         "notify_on_start": bool(
             source.get(
                 "notify_on_start",
-                trigger.get(
+                monitor.get(
                     "startup",
                     True,
                 ),
             )
         ),
-        "trigger": trigger,
+        "monitor": monitor,
+        "trigger": deepcopy(monitor),
         "logic": source.get(
             "logic",
             "all",
         ),
         "conditions": conditions,
         "notifications": notifications,
+        "notification": primary_notification,
         "confirmation": confirmation,
     }
 
