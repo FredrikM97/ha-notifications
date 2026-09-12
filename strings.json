@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Notification Center",
+        "description": "Notification Center manages condition-based notifications and actionable reminders."
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Notification Center",
+  "config": {
+    "flow_title": "Notification Center",
+    "step": {
+      "user": {
+        "title": "Notification Center",
+        "description": "Install Notification Center. Alerts are managed from its dashboard.",
+        "data": {},
+        "data_description": {}
+      }
+    },
+    "abort": {
+      "already_configured": "Notification Center is already configured."
+    }
+  },
+  "services": {
+    "reload": {
+      "name": "Reload",
+      "description": "Reload Notification Center configuration from the managed YAML file."
+    },
+    "test": {
+      "name": "Test alert",
+      "description": "Send a test notification for a Notification Center alert.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "The ID of the alert to test."
+        }
+      }
+    }
+  }
+}
