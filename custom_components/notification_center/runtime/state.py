@@ -18,6 +18,7 @@ def new_alert_state() -> dict[str, Any]:
         "attempts": 0,
         "notification_id": None,
         "confirmation_action_id": None,
+        "flow_id": None,
         "started_at": None,
         "last_evaluated": None,
         "last_notified": None,
@@ -34,7 +35,10 @@ def ensure_alert_state(
 ) -> dict[str, Any]:
     """Return existing runtime state for an alert or create defaults."""
 
-    return state["alerts"].setdefault(alert["id"], new_alert_state())
+    alert_state = state["alerts"].setdefault(alert["id"], new_alert_state())
+    for key, value in new_alert_state().items():
+        alert_state.setdefault(key, value)
+    return alert_state
 
 
 def notification_due(
@@ -46,7 +50,11 @@ def notification_due(
     repeat = notification.get("repeat")
     confirmation = notification.get("confirmation", {})
 
-    if state.get("confirmation_action_id") and confirmation.get("enabled", False):
+    if (
+        not repeat
+        and state.get("confirmation_action_id")
+        and confirmation.get("enabled", False)
+    ):
         repeat = {
             "interval": confirmation.get("resend_interval"),
             "max_attempts": confirmation.get("max_attempts", 5),

@@ -39,6 +39,8 @@ class AlertHistory:
     ) -> None:
         """Record an event and schedule its persistence."""
 
+        runtime_state = self._get_runtime_state(alert)
+        flow_id = runtime_state.get("flow_id")
         event = {
             "id": uuid.uuid4().hex,
             "timestamp": dt_util.utcnow().isoformat(),
@@ -48,10 +50,12 @@ class AlertHistory:
             "message": message,
             "details": deepcopy(details),
         }
+        if flow_id:
+            event["flow_id"] = flow_id
 
         self._state["history"].append(event)
         self._state["history"] = self._state["history"][-MAX_HISTORY:]
-        self._get_runtime_state(alert)["last_event"] = event
+        runtime_state["last_event"] = event
         self._storage.async_delay_save_state(self._state)
 
     async def list(

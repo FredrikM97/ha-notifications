@@ -85,6 +85,7 @@ export interface Alert {
 
 export interface HistoryEntry {
   alert_id?: string;
+  flow_id?: string;
   timestamp?: string;
   alert_name?: string;
   type?: string;

@@ -573,6 +573,15 @@ class NotificationCenter:
         state["confirmation_action_id"] = action_id
         self._pending_actions[action_id] = alert["id"]
 
+    def _ensure_flow_id(self, alert: dict[str, Any], state: dict[str, Any]) -> str:
+        """Ensure the current active episode has a traceable flow ID."""
+
+        flow_id = state.get("flow_id")
+        if not flow_id:
+            flow_id = f"flow_{alert['id']}_{uuid.uuid4().hex[:8]}"
+            state["flow_id"] = flow_id
+        return str(flow_id)
+
     async def _process_condition(
         self,
         alert: dict[str, Any],
@@ -623,6 +632,8 @@ class NotificationCenter:
                     },
                 )
 
+                state["flow_id"] = None
+
                 self._save_state()
 
             return
@@ -640,6 +651,7 @@ class NotificationCenter:
             state["notification_id"] = (
                 f"notification_center_{alert['id']}_{uuid.uuid4().hex[:10]}"
             )
+            self._ensure_flow_id(alert, state)
 
             self._ensure_confirmation_action(alert, state)
 
@@ -674,6 +686,7 @@ class NotificationCenter:
             and alert.get("monitor", {}).get("startup", True)
             and not has_sent
         ):
+            self._ensure_flow_id(alert, state)
             self._ensure_confirmation_action(alert, state)
             await self._send_notification(
                 alert,
@@ -682,6 +695,7 @@ class NotificationCenter:
             return
 
         if source == "enabled" and not has_sent:
+            self._ensure_flow_id(alert, state)
             self._ensure_confirmation_action(alert, state)
             await self._send_notification(
                 alert,
@@ -696,6 +710,7 @@ class NotificationCenter:
             "interval",
         ):
             if notification_due(alert["notification"], state):
+                self._ensure_flow_id(alert, state)
                 self._ensure_confirmation_action(alert, state)
                 await self._send_notification(
                     alert,
@@ -725,6 +740,7 @@ class NotificationCenter:
         )
 
         action_id = state.get("confirmation_action_id")
+        self._ensure_flow_id(alert, state)
 
         try:
             if replace_existing:

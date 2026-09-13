@@ -81,6 +81,8 @@ class NotificationCenterPanel extends HTMLElement {
   private historyAlertName: string | null = null;
   private tab: PanelTab = "alerts";
   private loading = false;
+  private refreshing = false;
+  private refreshTimer: number | null = null;
   private _registries: Registries | null = null;
   private _registriesPromise: Promise<Registries> | null = null;
   private _initialized = false;
@@ -99,6 +101,8 @@ class NotificationCenterPanel extends HTMLElement {
     this.historyAlertName = null;
     this.tab = "alerts";
     this.loading = false;
+    this.refreshing = false;
+    this.refreshTimer = null;
     this._registries = null;
     this._registriesPromise = null;
   }
@@ -142,6 +146,7 @@ class NotificationCenterPanel extends HTMLElement {
 
   connectedCallback() {
     this.render();
+    this.startAutoRefresh();
 
     if (this._hass) {
       this._initialized = true;
@@ -150,12 +155,46 @@ class NotificationCenterPanel extends HTMLElement {
     }
   }
 
-  async refresh() {
-    if (!this._hass || !this.isAdmin()) {
+  disconnectedCallback() {
+    this.stopAutoRefresh();
+  }
+
+  private startAutoRefresh(): void {
+    if (this.refreshTimer !== null) {
       return;
     }
 
-    this.loading = true;
+    this.refreshTimer = window.setInterval(() => {
+      void this.refresh({ silent: true });
+    }, 5000);
+  }
+
+  private stopAutoRefresh(): void {
+    if (this.refreshTimer === null) {
+      return;
+    }
+
+    window.clearInterval(this.refreshTimer);
+    this.refreshTimer = null;
+  }
+
+  private editorOpen(): boolean {
+    return Boolean(this.shadowRoot?.querySelector(".nc-editor-view"));
+  }
+
+  async refresh({ silent = false }: { silent?: boolean } = {}) {
+    if (!this._hass || !this.isAdmin() || this.refreshing) {
+      return;
+    }
+
+    if (silent && this.editorOpen()) {
+      return;
+    }
+
+    this.refreshing = true;
+    if (!silent) {
+      this.loading = true;
+    }
 
     try {
       [this.alerts, this.history] = await Promise.all([
@@ -168,9 +207,14 @@ class NotificationCenterPanel extends HTMLElement {
           this.historyAlertName;
       }
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      if (!silent) {
+        this.showToast(errorMessage(err), true);
+      }
     } finally {
-      this.loading = false;
+      this.refreshing = false;
+      if (!silent) {
+        this.loading = false;
+      }
       this.render();
     }
   }
@@ -559,19 +603,14 @@ if (!customElements.get("notification-center-panel")) {
 }
 
 interface NotificationCenterCardConfig {
-  type: "custom:ha-notifications-card" | "custom:notification-center-card";
+  type: "custom:ha-notifications-card";
 }
 
 class NotificationCenterCard extends NotificationCenterPanel {
   private config: NotificationCenterCardConfig | null = null;
 
   setConfig(config: NotificationCenterCardConfig): void {
-    if (
-      !config ||
-      !["custom:ha-notifications-card", "custom:notification-center-card"].includes(
-        config.type,
-      )
-    ) {
+    if (!config || config.type !== "custom:ha-notifications-card") {
       throw new Error("Card type must be custom:ha-notifications-card.");
     }
     this.config = config;
@@ -591,10 +630,6 @@ if (!customElements.get("ha-notifications-card")) {
   customElements.define("ha-notifications-card", NotificationCenterCard);
 }
 
-if (!customElements.get("notification-center-card")) {
-  customElements.define("notification-center-card", NotificationCenterCard);
-}
-
 const customCardWindow = window as Window & {
   customCards?: Array<{
     type: string;
@@ -603,19 +638,10 @@ const customCardWindow = window as Window & {
   }>;
 };
 customCardWindow.customCards = customCardWindow.customCards || [];
-for (const card of [
-  {
+if (!customCardWindow.customCards.some((card) => card.type === "ha-notifications-card")) {
+  customCardWindow.customCards.push({
     type: "ha-notifications-card",
     name: "HA Notifications",
     description: "Manage HA Notifications alerts, history, and YAML.",
-  },
-  {
-    type: "notification-center-card",
-    name: "HA Notifications (legacy alias)",
-    description: "Legacy alias for HA Notifications.",
-  },
-]) {
-  if (!customCardWindow.customCards.some((item) => item.type === card.type)) {
-    customCardWindow.customCards.push(card);
-  }
+  });
 }

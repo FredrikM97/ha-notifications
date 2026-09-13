@@ -1457,6 +1457,11 @@ class NotificationPayloadTests(unittest.TestCase):
 
         self.assertEqual(len(sends), 1)
         self.assertTrue(
+            manager.state["alerts"]["enabled-active"]["flow_id"].startswith(
+                "flow_enabled-active_"
+            )
+        )
+        self.assertTrue(
             manager.state["alerts"]["enabled-active"][
                 "confirmation_action_id"
             ].startswith("NC_CONFIRM_enabled-active_")
@@ -1524,6 +1529,73 @@ class NotificationPayloadTests(unittest.TestCase):
 
         self.assertEqual([call[0] for call in calls], ["clear", "send"])
         self.assertEqual(calls[1][2]["attempt"], 2)
+
+    def test_confirmation_pending_uses_notification_repeat_first(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        calls = []
+
+        class Dispatcher:
+            async def async_clear(self, alert, **kwargs):
+                calls.append(("clear", alert, kwargs))
+
+            async def async_send(self, alert, **kwargs):
+                calls.append(("send", alert, kwargs))
+
+        manager.dispatcher = Dispatcher()
+        manager.history = type(
+            "History",
+            (),
+            {"record": lambda *_args, **_kwargs: asyncio.sleep(0)},
+        )()
+        manager._pending_actions = {"NC_CONFIRM_resend": "confirmation-repeat"}
+        manager._save_state = lambda: None
+        manager.state = {
+            "alerts": {
+                "confirmation-repeat": {
+                    "active": True,
+                    "acknowledged": False,
+                    "attempts": 1,
+                    "last_notified": "2026-01-01T00:00:00+00:00",
+                    "confirmation_action_id": "NC_CONFIRM_resend",
+                }
+            },
+            "history": [],
+        }
+        alert = {
+            "id": "confirmation-repeat",
+            "name": "Confirmation repeat",
+            "monitor": {"startup": True},
+            "notification": {
+                "actions_enabled": False,
+                "repeat": {
+                    "enabled": True,
+                    "interval": "00:00:10",
+                    "max_attempts": 5,
+                },
+                "confirmation": {
+                    "enabled": True,
+                    "resend_interval": "01:00:00",
+                    "max_attempts": 5,
+                },
+            },
+        }
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, 0, 0, 11, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._process_condition(
+                alert,
+                True,
+                source="interval",
+                context=None,
+            )
+        )
+
+        self.assertEqual([call[0] for call in calls], ["clear", "send"])
+        self.assertEqual(calls[1][2]["confirmation_action_id"], "NC_CONFIRM_resend")
 
     def test_save_alert_replaces_existing_alert_instead_of_merging(self):
         manager = notifications.NotificationCenter.__new__(

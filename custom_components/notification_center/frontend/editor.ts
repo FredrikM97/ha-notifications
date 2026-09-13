@@ -1081,7 +1081,7 @@ export function openEditor({
                       !optionalSettings.confirmation)
                   }
                 >
-                  ${title}
+                  ${parent ? `${parent} / ${title}` : title}
                 </option>`,
               )}
             </select>

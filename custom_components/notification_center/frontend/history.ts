@@ -34,6 +34,11 @@ function formatType(value: string | undefined): string {
   return String(value || "event").replaceAll("_", " ");
 }
 
+function shortFlowId(value: string | undefined): string {
+  if (!value) return "";
+  return value.length > 18 ? value.slice(-12) : value;
+}
+
 function detailSummary(details: Record<string, unknown> | undefined): string {
   if (!details || !Object.keys(details).length) return "";
   if (typeof details.error === "string") return details.error;
@@ -87,6 +92,11 @@ export function renderHistory(
                     <span class=${`nc-history-badge ${historySeverity(item.type)}`}
                       >${formatType(item.type)}</span
                     >
+                    ${item.flow_id
+                      ? html`<span class="nc-history-flow">
+                          Flow ${shortFlowId(item.flow_id)}
+                        </span>`
+                      : ""}
                   </div>
                   <div class="nc-history-message">${item.message || ""}</div>
                   ${summary

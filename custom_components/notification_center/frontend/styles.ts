@@ -271,6 +271,7 @@ select {
 .nc-code-editor {
   box-sizing: border-box;
   max-width: 100%;
+  min-width: 0;
   background: var(--card-background-color);
   color: var(--primary-text-color);
   border: 1px solid var(--divider-color);
@@ -401,6 +402,21 @@ ha-code-editor.nc-code-editor .cm-scroller {
   color: var(--secondary-text-color);
 }
 
+.nc-history-flow {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid var(--divider-color);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--secondary-text-color);
+  font-family: monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .nc-details {
   margin-top: 6px;
   color: var(--secondary-text-color);
@@ -427,7 +443,7 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-yaml textarea,
 .nc-code-editor {
   width: 100%;
-  min-height: 650px;
+  min-height: min(650px, 70vh);
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
@@ -605,6 +621,8 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-section-select {
   display: none;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--divider-color);
   border-radius: 8px;
   padding: 10px;
@@ -1099,6 +1117,22 @@ ha-code-editor.nc-action-editor {
     margin-bottom: 12px;
   }
 
+  .nc-toolbar,
+  .nc-yaml .nc-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .nc-yaml .nc-actions .nc-button {
+    width: 100%;
+  }
+
+  .nc-code-editor,
+  ha-code-editor.nc-alert-yaml-editor {
+    min-height: min(420px, 62vh);
+  }
+
   .nc-history-item {
     grid-template-columns: 1fr;
     gap: 4px;
@@ -1145,6 +1179,22 @@ ha-code-editor.nc-action-editor {
     margin-bottom: 12px;
   }
 
+  .nc-toolbar,
+  .nc-yaml .nc-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .nc-yaml .nc-actions .nc-button {
+    width: 100%;
+  }
+
+  .nc-code-editor,
+  ha-code-editor.nc-alert-yaml-editor {
+    min-height: min(420px, 62vh);
+  }
+
   .nc-condition-row {
     grid-template-columns: 1fr;
   }
@@ -1172,6 +1222,6 @@ ha-code-editor.nc-alert-yaml-editor {
   --code-editor-background-color: var(--secondary-background-color);
   --code-editor-gutter-color: var(--secondary-background-color);
   display: block;
-  min-height: 650px;
+  min-height: min(650px, 70vh);
 }
 `;

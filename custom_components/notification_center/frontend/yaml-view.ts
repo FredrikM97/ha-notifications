@@ -49,6 +49,7 @@ export function renderYamlView(
       </div>
       <ha-code-editor
         id="nc-yaml-editor"
+        class="nc-code-editor nc-yaml-editor"
         mode="yaml"
         language="yaml"
         aria-label="HA Notifications YAML"

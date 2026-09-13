@@ -24,13 +24,24 @@ const editor = readFileSync(
   ),
   "utf8",
 );
+const yamlView = readFileSync(
+  join(
+    root,
+    "custom_components",
+    "notification_center",
+    "frontend",
+    "yaml-view.ts",
+  ),
+  "utf8",
+);
 assert.match(panel, /customElements\.define/);
 assert.match(panel, /ha-notifications-card/);
-assert.match(panel, /notification-center-card/);
+assert.doesNotMatch(panel, /customElements\.define\(["']notification-center-card/);
+assert.doesNotMatch(panel, /LegacyNotificationCenterCard/);
 assert.match(panel, /window\.customCards|customCards/);
 assert.match(panel, /getCardSize/);
 assert.match(panel, /Administrator access required/);
-assert.match(panel, /custom:notification-center-card/);
+assert.doesNotMatch(panel, /custom:notification-center-card/);
 assert.match(panel, /custom:ha-notifications-card/);
 assert.match(panel, /HA Notifications/);
 assert.doesNotMatch(panel, /from ["']lit["']/);
@@ -54,11 +65,15 @@ assert.match(panel, /YAML list of Home Assistant/);
 assert.doesNotMatch(panel, /YAML lists like/);
 assert.doesNotMatch(panel, /if \(!conditionTemplate\(value\)\.trim\(\)\)/);
 assert.match(panel, /nc-history-badge/);
+assert.match(panel, /nc-history-flow/);
 assert.match(panel, /Details/);
 assert.match(panel, /History for/);
 assert.match(panel, /Show all/);
 assert.match(panel, /nc-history-alert-link/);
 assert.match(panel, /overflow-x: auto/);
+assert.match(panel, /setInterval/);
+assert.match(panel, /editorOpen/);
+assert.match(panel, /min-height: min\(420px, 62vh\)/);
 assert.match(panel, /mdi:check-circle/);
 assert.match(panel, /mdi:alert-circle/);
 assert.match(panel, /must be a valid YAML list/);
@@ -77,6 +92,8 @@ assert.match(
   editor,
   /function defaultAlert\(\)[\s\S]*?confirmation:\s*\{\s*enabled: true,/,
 );
+assert.match(editor, /parent \? `\$\{parent\} \/ \$\{title\}` : title/);
+assert.match(yamlView, /class="nc-code-editor nc-yaml-editor"/);
 assert.match(
   editor,
   /confirmation: !alert \|\| Boolean\(alert\.notification\.confirmation\),[\s\S]*?postConfirmationActions: !alert \|\| Boolean\(alert\.notification\.confirmation\),/,
