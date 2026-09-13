@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository_owner == 'FredrikM97'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release version
+        id: version
+        run: |
+          last_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          base=${last_tag#v}
+          base=${base:-0.0.0}
+          IFS='.' read -r major minor patch <<EOF
+          $base
+          EOF
+          case "${{ inputs.bump }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            *) patch=$((patch + 1)) ;;
+          esac
+          echo "tag=v$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+          echo "version=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Build HACS package
+        run: |
+          npm ci
+          npm run export:hacs
+          package_dir=hacs-export/custom_components/notification_center
+          node -e 'const fs = require("fs"); const file = process.argv[1]; const manifest = JSON.parse(fs.readFileSync(file, "utf8")); manifest.version = process.argv[2]; fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);' "$package_dir/manifest.json" "${{ steps.version.outputs.version }}"
+          cd "$package_dir"
+          zip -r ../../../notification_center.zip . -x '*.pyc' '*__pycache__/*'
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+          gh release create "${{ steps.version.outputs.tag }}" notification_center.zip \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes \
+            --latest
