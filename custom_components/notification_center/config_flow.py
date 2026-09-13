@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from homeassistant import config_entries
 
-from .const import DOMAIN
+from .const import CONF_SHOW_SIDEBAR, DOMAIN
 
 
 class NotificationCenterConfigFlow(
@@ -32,9 +33,19 @@ class NotificationCenterConfigFlow(
         if user_input is not None:
             return self.async_create_entry(
                 title="Notification Center",
-                data={},
+                data={
+                    CONF_SHOW_SIDEBAR: user_input[CONF_SHOW_SIDEBAR],
+                },
             )
 
         return self.async_show_form(
             step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SHOW_SIDEBAR,
+                        default=False,
+                    ): bool,
+                }
+            ),
         )

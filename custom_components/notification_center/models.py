@@ -296,6 +296,9 @@ def normalize_notification(
         "confirmation_message": str(
             confirmation.get("confirmation_message") or ""
         ),
+        "clear_on_confirmation": bool(
+            confirmation.get("clear_on_confirmation", True)
+        ),
         "actions_enabled": actions_enabled,
     }
 

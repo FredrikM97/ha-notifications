@@ -20,10 +20,12 @@ STORAGE_KEY = "notification_center"
 MAX_HISTORY = 500
 PANEL_TITLE = "Notification Center"
 PANEL_ICON = "mdi:bell-cog"
+CONF_SHOW_SIDEBAR = "show_sidebar"
 FRONTEND_STATIC_URL = f"/{DOMAIN}_static"
 FRONTEND_BUILD_DIR = "dist"
 PANEL_MODULE = f"{FRONTEND_STATIC_URL}/panel.js"
 FRONTEND_REGISTERED_KEY = f"{DOMAIN}_frontend_static_registered"
+FRONTEND_MODULE_REGISTERED_KEY = f"{DOMAIN}_frontend_module_registered"
 
 DEFAULT_CONFIRMATION_INTERVAL = "00:30:00"
 DEFAULT_MAX_ATTEMPTS = 5

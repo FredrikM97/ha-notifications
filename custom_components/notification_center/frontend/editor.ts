@@ -7,7 +7,11 @@ import type { TemplateResult } from "lit";
 import type { Alert, Registries } from "./types.js";
 
 type FormControl = HTMLInputElement | HTMLTextAreaElement;
-type CodeEditor = HTMLElement & { value: string };
+type CodeEditor = HTMLElement & {
+  value: string;
+  updateComplete?: Promise<unknown>;
+  codemirror?: { dom: HTMLElement };
+};
 type EditorMode = "visual" | "jinja";
 
 interface EditorContext {
@@ -25,11 +29,13 @@ type OptionalSetting =
   | "postConfirmationActions";
 
 type OptionalSettings = Record<OptionalSetting, boolean>;
+type SectionStatus = OptionalSetting | "confirmationUpdate";
 
 interface EditorSection {
   title: string;
   setting?: OptionalSetting;
   parent?: string;
+  status?: SectionStatus;
 }
 
 interface OptionalSection {
@@ -46,13 +52,20 @@ const editorSections: EditorSection[] = [
     title: "Post-send actions",
     setting: "postSendActions",
     parent: "Notification",
+    status: "postSendActions",
   },
-  { title: "Repeat notification", setting: "repeat" },
-  { title: "Confirmation", setting: "confirmation" },
+  { title: "Repeat notification", setting: "repeat", status: "repeat" },
+  { title: "Confirmation", setting: "confirmation", status: "confirmation" },
+  {
+    title: "Notify recipients when confirmed",
+    parent: "Confirmation",
+    status: "confirmationUpdate",
+  },
   {
     title: "Post-confirmation actions",
     setting: "postConfirmationActions",
-    parent: "confirmation",
+    parent: "Confirmation",
+    status: "postConfirmationActions",
   },
 ];
 
@@ -60,7 +73,7 @@ const optionalSections: Record<OptionalSetting, OptionalSection> = {
   postSendActions: { index: 5 },
   repeat: { index: 6 },
   confirmation: { index: 7 },
-  postConfirmationActions: { index: 8 },
+  postConfirmationActions: { index: 9 },
 };
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -104,11 +117,12 @@ function defaultAlert(): Alert {
       message: "",
       actions_enabled: false,
       confirmation: {
-        enabled: false,
-        button: "Activity completed",
+        enabled: true,
+        button: "",
         completion_message: "",
         notify_on_confirmation: false,
         confirmation_message: "",
+        clear_on_confirmation: true,
         resend_interval: "00:30:00",
         max_attempts: 5,
         actions_enabled: false,
@@ -130,6 +144,27 @@ function valueOf(event: Event): string {
 
 function checkedOf(event: Event): boolean {
   return (event.currentTarget as HTMLInputElement).checked;
+}
+
+async function fillActionEditors(host: HTMLElement): Promise<void> {
+  await customElements.whenDefined("ha-code-editor");
+
+  const editors = Array.from(
+    host.querySelectorAll<CodeEditor>("ha-code-editor.nc-action-editor"),
+  );
+
+  for (const editor of editors) {
+    await editor.updateComplete;
+    const codeMirror = editor.codemirror?.dom;
+    if (!codeMirror || !editor.isConnected) continue;
+
+    editor.style.height = "280px";
+    codeMirror.style.height = "100%";
+    const scroller = codeMirror.querySelector(
+      ".cm-scroller",
+    ) as HTMLElement | null;
+    if (scroller) scroller.style.height = "100%";
+  }
 }
 
 function field(
@@ -154,6 +189,22 @@ function section(
   </section>`;
 }
 
+function subpanel(
+  title: string,
+  subtitle: string,
+  content: TemplateResult,
+): TemplateResult {
+  return html`<div class="nc-subpanel">
+    <div class="nc-subpanel-header">
+      <span class="nc-subpanel-heading">
+        <span class="nc-subpanel-title">${title}</span>
+        <span class="nc-subpanel-subtitle">${subtitle}</span>
+      </span>
+    </div>
+    <div class="nc-subpanel-content">${content}</div>
+  </div>`;
+}
+
 function optionalControls(
   context: EditorContext,
   setting: OptionalSetting,
@@ -176,6 +227,29 @@ function optionalControls(
     />
     <button class="nc-icon-button danger" type="button" aria-label=${`Remove ${label}`} title=${`Remove ${label}`} @click=${() => context.removeSetting(setting)}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
   </div>`;
+}
+
+function confirmationNotificationControls(
+  context: EditorContext,
+): TemplateResult {
+  const confirmation = context.value.notification.confirmation;
+  const enabled = Boolean(confirmation.notify_on_confirmation);
+
+  return html`<label class="nc-switch-label">
+    <span class="nc-setting-state">${enabled ? "Enabled" : "Disabled"}</span>
+    <input
+      class="nc-switch-input"
+      type="checkbox"
+      role="switch"
+      .checked=${enabled}
+      aria-label="Notify recipients when confirmed"
+      title="Notify recipients when confirmed"
+      @change=${(event: Event) => {
+        confirmation.notify_on_confirmation = checkedOf(event);
+        context.markDirty();
+      }}
+    />
+  </label>`;
 }
 
 function renderBasicSection(context: EditorContext): TemplateResult {
@@ -331,6 +405,10 @@ function renderRecipientSection(): TemplateResult {
       <div class="nc-help">
         Search for a recipient, choose a type when needed, then select it. You
         can mix devices, areas, labels, floors, and notification entities.
+      </div>
+      <div class="nc-help">
+        Mobile App-only recipients use legacy Mobile App delivery. Mixed or
+        non-mobile recipients use standard Notify delivery.
       </div>`,
     "nc-section-recipient",
   );
@@ -356,21 +434,27 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
         )}
         ${field(
           "Message",
-          html`<textarea
+          html`<ha-code-editor
             .value=${notification.message || ""}
             placeholder="Notification message"
+            class="nc-code-editor nc-action-editor"
+            mode="jinja2"
+            language="jinja"
+            aria-label="Notification message"
             @input=${(event: Event) => {
-              notification.message = valueOf(event);
+              notification.message = (
+                event.currentTarget as CodeEditor
+              ).value;
               context.markDirty();
               context.refreshStatuses();
             }}
-          ></textarea>`,
+          ></ha-code-editor>`,
           true,
         )}
       </div>
       <div class="nc-help">
-        Select notification entities in Recipients. They provide the
-        notification service and can receive the confirmation action.
+        Recipients on selected devices, areas, floors, and labels receive direct
+        Mobile App notifications when a matching notifier is available.
       </div>`,
   );
 }
@@ -379,25 +463,20 @@ function renderPostSendActionsSection(context: EditorContext): TemplateResult {
   const notification = context.value.notification;
   return section(
     "Post-send actions",
-    html`<div class="nc-grid">
-        ${field(
-          "Actions",
-          html`<ha-code-editor
-            data-role="notification-actions"
-            class="nc-code-editor nc-action-editor"
-            mode="yaml"
-            language="yaml"
-            .value=${JSON.stringify(notification.actions || [], null, 2)}
-            @input=${() => context.markDirty()}
-          ></ha-code-editor>`,
-          true,
-        )}
+    html`<div class="nc-help">
+        Runs after every notification send. Enter a JSON array of Home
+        Assistant actions. JSON is valid YAML; YAML syntax and Jinja templates
+        are highlighted, but only JSON arrays can be saved.
       </div>
-      <div class="nc-help">
-        Enter a JSON array of Home Assistant actions. JSON is valid YAML; YAML
-        syntax and Jinja templates are highlighted, but only JSON arrays can be
-        saved.
-      </div>`,
+      <ha-code-editor
+        data-role="notification-actions"
+        class="nc-code-editor nc-action-editor"
+        mode="yaml"
+        language="yaml"
+        aria-label="Post-send actions"
+        .value=${JSON.stringify(notification.actions || [], null, 2)}
+        @input=${() => context.markDirty()}
+      ></ha-code-editor>`,
     "",
     optionalControls(context, "postSendActions", Boolean(notification.actions_enabled), "post-send actions", (enabled) => {
       notification.actions_enabled = enabled;
@@ -455,43 +534,13 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
           "Button text",
           html`<input
             type="text"
-            .value=${confirmation.button || "Activity completed"}
+            .value=${confirmation.button}
+            placeholder="Activity completed"
             @input=${(event: Event) => {
               confirmation.button = valueOf(event);
               context.markDirty();
             }}
           />`,
-        )}
-        ${field(
-          "Confirmation notification",
-          html`<div class="nc-check">
-            <input
-              class="nc-switch-input"
-              type="checkbox"
-              role="switch"
-              .checked=${Boolean(confirmation.notify_on_confirmation)}
-              @change=${(event: Event) => {
-                confirmation.notify_on_confirmation = checkedOf(event);
-                context.markDirty();
-              }}
-            /><span>Notify recipients when confirmed</span>
-          </div>
-          <div class="nc-help">
-            Send the alert recipients a message identifying the user who
-            confirmed it.
-          </div>`,
-          true,
-        )}
-        ${field(
-          "Confirmation message",
-          html`<textarea
-            .value=${confirmation.confirmation_message || ""}
-            @input=${(event: Event) => {
-              confirmation.confirmation_message = valueOf(event);
-              context.markDirty();
-            }}
-          ></textarea>`,
-          true,
         )}
         ${field(
           "Completion message",
@@ -533,6 +582,22 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
           />`,
         )}
       </div>
+      <label class="nc-switch-label nc-confirmation-clear">
+        <input
+          class="nc-switch-input"
+          type="checkbox"
+          role="switch"
+          .checked=${confirmation.clear_on_confirmation !== false}
+          @change=${(event: Event) => {
+            confirmation.clear_on_confirmation = checkedOf(event);
+            context.markDirty();
+          }}
+        />
+        <span>Clear notifications when acknowledged</span>
+      </label>
+      <div class="nc-help">
+        Confirmation buttons require at least one Mobile App recipient.
+      </div>
       `,
     "",
     optionalControls(context, "confirmation", Boolean(confirmation.enabled), "confirmation", (enabled) => {
@@ -542,36 +607,56 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
   );
 }
 
+function renderConfirmationNotificationSection(
+  context: EditorContext,
+): TemplateResult {
+  const confirmation = context.value.notification.confirmation;
+  return section(
+    "Notify recipients when confirmed",
+    html`<ha-code-editor
+      .value=${confirmation.confirmation_message || ""}
+      placeholder="Confirmed by {{ confirmed_by }}"
+      class="nc-code-editor nc-action-editor"
+      mode="jinja2"
+      language="jinja"
+      aria-label="Confirmation message"
+      @input=${(event: Event) => {
+        confirmation.confirmation_message = (
+          event.currentTarget as CodeEditor
+        ).value;
+        context.markDirty();
+      }}
+    ></ha-code-editor>`,
+    "",
+    confirmationNotificationControls(context),
+  );
+}
+
 function renderPostConfirmationActionsSection(
   context: EditorContext,
 ): TemplateResult {
   const confirmation = context.value.notification.confirmation;
   return section(
     "Post-confirmation actions",
-    html`<div class="nc-grid">
-        ${field(
-          "Actions",
-          html`<ha-code-editor
-            data-role="actions"
-            class="nc-code-editor nc-action-editor"
-            mode="yaml"
-            language="yaml"
-            .value=${JSON.stringify(confirmation.actions || [], null, 2)}
-            @input=${() => context.markDirty()}
-          ></ha-code-editor>`,
-          true,
-        )}
+    html`<div class="nc-help">
+        Runs after a recipient confirms. Enter a JSON array of Home Assistant
+        actions. JSON is valid YAML; YAML syntax and Jinja templates are
+        highlighted, but only JSON arrays can be saved.
       </div>
-      <div class="nc-help">
-        Enter a JSON array of Home Assistant actions. JSON is valid YAML; YAML
-        syntax and Jinja templates are highlighted, but only JSON arrays can be
-        saved.
-      </div>`,
+      <ha-code-editor
+        data-role="actions"
+        class="nc-code-editor nc-action-editor"
+        mode="yaml"
+        language="yaml"
+        aria-label="Post-confirmation actions"
+        .value=${JSON.stringify(confirmation.actions || [], null, 2)}
+        @input=${() => context.markDirty()}
+      ></ha-code-editor>`,
     "",
     optionalControls(context, "postConfirmationActions", Boolean(confirmation.actions_enabled), "post-confirmation actions", (enabled) => {
       confirmation.actions_enabled = enabled;
       context.markDirty();
-    }, !confirmation.enabled),
+    }),
   );
 }
 
@@ -669,14 +754,14 @@ export function openEditor({
   registries,
   onSave,
   onTest,
-  onCancel,
+  onDiscardTest,
 }: {
   root: ShadowRoot;
   alert?: Alert;
   registries: Registries;
   onSave: (alert: Alert) => Promise<void>;
-  onTest: (alert: Alert) => Promise<void>;
-  onCancel?: () => void;
+  onTest: (alert: Alert) => Promise<{ session_id: string }>;
+  onDiscardTest: (sessionId: string) => Promise<unknown>;
 }): void {
   const value = clone(alert || defaultAlert());
   value.notification.confirmation = {
@@ -701,10 +786,25 @@ export function openEditor({
     const backButton = document.createElement("button");
     backButton.className = "nc-button secondary";
     backButton.textContent = "Back to alerts";
-    backButton.addEventListener("click", () => close() && onCancel?.());
+    backButton.addEventListener("click", close);
     dashboardActions.replaceChildren(backButton);
   }
+  const restoreDashboardAction = (): void => {
+    if (!dashboardActions) return;
+
+    const addButton = document.createElement("button");
+    addButton.className = "nc-button";
+    addButton.textContent = "+ Add alert";
+    addButton.addEventListener("click", () => {
+      const panel = root.host as HTMLElement & {
+        addAlert?: () => Promise<void>;
+      };
+      void panel.addAlert?.();
+    });
+    dashboardActions.replaceChildren(addButton);
+  };
   let dirty = false;
+  let draftTestSessionId: string | null = null;
   const context: EditorContext = {
     value,
     mode: editorModeFor(value),
@@ -717,12 +817,11 @@ export function openEditor({
   };
   const optionalSettings: OptionalSettings = {
     repeat: Boolean(value.notification.repeat),
-    confirmation: Boolean(alert?.notification.confirmation),
-    postSendActions: Boolean(value.notification.actions_enabled),
-    postConfirmationActions: Boolean(
-      value.notification.confirmation.actions_enabled,
-    ),
+    confirmation: !alert || Boolean(alert.notification.confirmation),
+    postSendActions: true,
+    postConfirmationActions: !alert || Boolean(alert.notification.confirmation),
   };
+  const collapsedParents = new Set<string>();
   const renderEditor = (): void => {
     render(
       html`<div class="nc-editor-view">
@@ -730,22 +829,6 @@ export function openEditor({
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
             <nav class="nc-section-header" aria-label="Alert sections">
-              ${editorSections.map(
-                ({ title, setting, parent }, index) => {
-                  return html`
-                  <button
-                    class="nc-section-nav-button ${setting ? "nc-optional-setting" : ""} ${
-                      parent ? "nc-section-nav-child" : ""
-                    }"
-                    data-setting=${setting || nothing}
-                    ?hidden=${!isSectionVisible(setting, optionalSettings)}
-                    @click=${() => showSection(index)}
-                  >
-                    <span class="nc-section-status" aria-hidden="true"></span>
-                    <span>${title}</span>
-                  </button>`;
-                },
-              )}
               <select
                 class="nc-add-setting"
                 aria-label="Add setting"
@@ -756,27 +839,57 @@ export function openEditor({
                   Repeat notification
                 </option>
                 <option
-                  value="postSendActions"
-                  ?disabled=${optionalSettings.postSendActions}
-                >
-                  Post-send actions
-                </option>
-                <option
                   value="confirmation"
                   ?disabled=${optionalSettings.confirmation}
                 >
-                  Confirmation
-                </option>
-                <option
-                  value="postConfirmationActions"
-                  ?disabled=${
-                    !optionalSettings.confirmation ||
-                    optionalSettings.postConfirmationActions
-                  }
-                >
-                  Post-confirmation actions
+                  Confirmation and confirmation notification
                 </option>
               </select>
+              ${editorSections.map(
+                ({ title, setting, parent, status }, index) => {
+                  const hasChildren = editorSections.some(
+                    (section) => section.parent === title,
+                  );
+                  return html`
+                  <div
+                    class="nc-section-nav-row"
+                    data-setting=${setting || nothing}
+                    data-parent=${parent || nothing}
+                    ?hidden=${
+                      !isSectionVisible(setting, optionalSettings) ||
+                      (parent === "Confirmation" &&
+                        !optionalSettings.confirmation)
+                    }
+                  >
+                    <button
+                      class="nc-section-nav-button ${setting ? "nc-optional-setting" : ""} ${
+                        parent ? "nc-section-nav-child" : ""
+                      }"
+                      @click=${() => showSection(index)}
+                    >
+                      ${status
+                        ? html`<span
+                            class="nc-section-status"
+                            data-status=${status}
+                            aria-hidden="true"
+                          ></span>`
+                        : nothing}
+                      <span>${title}</span>
+                    </button>
+                    ${hasChildren
+                      ? html`<button
+                          class="nc-section-collapse-button"
+                          type="button"
+                          aria-label=${`Collapse ${title} subpanels`}
+                          title=${`Collapse ${title} subpanels`}
+                          aria-expanded="true"
+                          data-collapse-parent=${title}
+                          @click=${() => toggleSidebarChildren(title)}
+                        ><ha-icon icon="mdi:chevron-down"></ha-icon></button>`
+                      : nothing}
+                  </div>`;
+                },
+              )}
             </nav>
             <select
               class="nc-section-select"
@@ -784,9 +897,13 @@ export function openEditor({
               @change=${(event: Event) => showSection(Number(valueOf(event)))}
             >
               ${editorSections.map(
-                ({ title, setting }, index) => html`<option
+                ({ title, setting, parent }, index) => html`<option
                   value=${index}
-                  ?disabled=${!isSectionVisible(setting, optionalSettings)}
+                  ?disabled=${
+                    !isSectionVisible(setting, optionalSettings) ||
+                    (parent === "Confirmation" &&
+                      !optionalSettings.confirmation)
+                  }
                 >
                   ${title}
                 </option>`,
@@ -819,6 +936,12 @@ export function openEditor({
                 ${renderConfirmationSection(context)}
               </div><div
                 class="nc-optional-setting"
+                data-setting="confirmation"
+                ?hidden=${!optionalSettings.confirmation}
+              >
+                ${renderConfirmationNotificationSection(context)}
+              </div><div
+                class="nc-optional-setting"
                 data-setting="postConfirmationActions"
                 ?hidden=${!optionalSettings.postConfirmationActions}
               >
@@ -838,7 +961,7 @@ export function openEditor({
             ><ha-icon icon="mdi:code-braces"></ha-icon></button>
             <button
               class="nc-button secondary"
-              @click=${() => close() && onCancel?.()}
+              @click=${close}
             >
               Cancel</button
             ><button
@@ -856,6 +979,7 @@ export function openEditor({
   renderEditor();
   if (page) page.append(host);
   else root.append(host);
+  void fillActionEditors(host);
 
   const visual = host.querySelector<HTMLElement>('[data-role="visual"]')!;
   const recipientMount = host.querySelector<HTMLElement>(
@@ -878,44 +1002,35 @@ export function openEditor({
   function refreshStatuses(): void {
     visual.hidden = context.mode !== "visual";
     jinja.hidden = context.mode === "visual";
-    const configured = [
-      Boolean(value.name.trim()),
-      Boolean(
-        value.monitor.on_change ||
-        value.monitor.interval ||
-        value.monitor.startup,
+    const enabled: Record<SectionStatus, boolean> = {
+      postSendActions: Boolean(value.notification.actions_enabled),
+      repeat: Boolean(value.notification.repeat?.enabled !== false),
+      confirmation: Boolean(value.notification.confirmation.enabled),
+      confirmationUpdate: Boolean(
+        value.notification.confirmation.notify_on_confirmation,
       ),
-      context.mode === "visual"
-        ? visualConditions().length > 0
-        : Boolean(conditionTemplate(value).trim()),
-      Object.values(recipients.target()).some((items) =>
-        Boolean(items?.length),
+      postConfirmationActions: Boolean(
+        value.notification.confirmation.enabled &&
+          value.notification.confirmation.actions_enabled,
       ),
-      Boolean(value.notification.message.trim()),
-      Boolean(value.notification.actions_enabled),
-      Boolean(value.notification.repeat),
-      Boolean(value.notification.confirmation.enabled),
-      Boolean(value.notification.confirmation.actions_enabled),
-    ];
+    };
     host
       .querySelectorAll<HTMLElement>(".nc-section-status")
-      .forEach((status, index) => {
-        status.classList.toggle("active", configured[index]);
-        status.setAttribute(
+      .forEach((indicator) => {
+        const status = indicator.dataset.status as SectionStatus | undefined;
+        const isEnabled = Boolean(status && enabled[status]);
+        indicator.classList.toggle("active", isEnabled);
+        indicator.setAttribute(
           "aria-label",
-          configured[index] ? "Configured" : "Not configured",
+          isEnabled ? "Enabled" : "Disabled",
         );
       });
-    updatePostConfirmationAvailability();
   }
 
   context.refreshStatuses = refreshStatuses;
 
   function addSetting(setting: string): void {
-    if (setting === "postSendActions") {
-      value.notification.actions_enabled = true;
-      optionalSettings.postSendActions = true;
-    } else if (setting === "repeat") {
+    if (setting === "repeat") {
       value.notification.repeat ||= {
         interval: "00:30",
         max_attempts: 5,
@@ -925,8 +1040,6 @@ export function openEditor({
     } else if (setting === "confirmation") {
       value.notification.confirmation.enabled = true;
       optionalSettings.confirmation = true;
-    } else if (setting === "postConfirmationActions") {
-      value.notification.confirmation.actions_enabled = true;
       optionalSettings.postConfirmationActions = true;
     } else return;
 
@@ -943,8 +1056,10 @@ export function openEditor({
       `.nc-section-select option[value="${sectionIndex}"]`,
     );
     if (mobileOption) mobileOption.disabled = false;
+    if (setting === "confirmation") {
+      setOptionalSettingVisible("postConfirmationActions", true);
+    }
     if (select) select.value = "";
-    updatePostConfirmationAvailability();
     context.markDirty();
     refreshStatuses();
   }
@@ -965,6 +1080,7 @@ export function openEditor({
         completion_message: "",
         notify_on_confirmation: false,
         confirmation_message: "",
+        clear_on_confirmation: true,
         resend_interval: "00:30:00",
         max_attempts: 5,
         actions_enabled: false,
@@ -996,19 +1112,6 @@ export function openEditor({
       `.nc-add-setting option[value="${setting}"]`,
     );
     if (addOption) addOption.disabled = visible;
-    updatePostConfirmationAvailability();
-  }
-
-  function updatePostConfirmationAvailability(): void {
-    const option = host.querySelector<HTMLOptionElement>(
-      '.nc-add-setting option[value="postConfirmationActions"]',
-    );
-    if (option) {
-      option.disabled =
-        !optionalSettings.confirmation ||
-        !value.notification.confirmation.enabled ||
-        optionalSettings.postConfirmationActions;
-    }
   }
 
   function showSection(index: number): void {
@@ -1028,15 +1131,55 @@ export function openEditor({
     const select = host.querySelector<HTMLSelectElement>(".nc-section-select");
     if (select) select.value = String(index);
   }
+
+  function toggleSidebarChildren(parent: string): void {
+    const collapsed = !collapsedParents.has(parent);
+    if (collapsed) collapsedParents.add(parent);
+    else collapsedParents.delete(parent);
+
+    host
+      .querySelectorAll<HTMLElement>(`.nc-section-nav-row[data-parent="${parent}"]`)
+      .forEach((row) => {
+        const setting = row.dataset.setting as OptionalSetting | undefined;
+        row.hidden = collapsed || !isSectionVisible(setting, optionalSettings);
+      });
+
+    const button = host.querySelector<HTMLButtonElement>(
+      `[data-collapse-parent="${parent}"]`,
+    );
+    if (button) {
+      button.setAttribute("aria-expanded", String(!collapsed));
+      button.setAttribute(
+        "aria-label",
+        `${collapsed ? "Expand" : "Collapse"} ${parent} subpanels`,
+      );
+      button.setAttribute(
+        "title",
+        `${collapsed ? "Expand" : "Collapse"} ${parent} subpanels`,
+      );
+      const icon = button.querySelector<HTMLElement>("ha-icon");
+      if (icon) icon.setAttribute("icon", collapsed ? "mdi:chevron-right" : "mdi:chevron-down");
+    }
+  }
   refreshStatuses();
   showSection(0);
+  async function discardDraftTest(): Promise<void> {
+    const sessionId = draftTestSessionId;
+    draftTestSessionId = null;
+    if (!sessionId) return;
+    try {
+      await onDiscardTest(sessionId);
+    } catch {
+      // The server-side TTL releases drafts if this best-effort cleanup fails.
+    }
+  }
   function close(): boolean {
     if (dirty && !window.confirm("Discard unsaved changes?")) return false;
+    void discardDraftTest();
     host.remove();
     if (dashboardContent) dashboardContent.hidden = false;
     if (dashboardTabs) dashboardTabs.hidden = false;
-    const panel = root.host as HTMLElement & { render?: () => void };
-    panel.render?.();
+    restoreDashboardAction();
     return true;
   }
   function formPayload(): Alert {
@@ -1085,6 +1228,7 @@ export function openEditor({
         completion_message: confirmation.completion_message,
         notify_on_confirmation: Boolean(confirmation.notify_on_confirmation),
         confirmation_message: confirmation.confirmation_message,
+        clear_on_confirmation: confirmation.clear_on_confirmation !== false,
         resend_interval: String(confirmation.resend_interval),
         max_attempts: confirmation.max_attempts,
         actions_enabled: Boolean(confirmation.actions_enabled),
@@ -1099,7 +1243,9 @@ export function openEditor({
     const button = event.currentTarget as HTMLButtonElement;
     try {
       button.disabled = true;
-      await onTest(formPayload());
+      await discardDraftTest();
+      const result = await onTest(formPayload());
+      draftTestSessionId = result.session_id;
     } catch (error) {
       const toast = document.createElement("div");
       toast.className = "nc-toast";
@@ -1120,9 +1266,11 @@ export function openEditor({
         throw new Error("Enable condition changes, an interval, or both.");
       const result = formPayload();
       button.disabled = true;
+      await discardDraftTest();
       await onSave(result);
       Object.assign(value, result);
       dirty = false;
+      close();
     } catch (error) {
       const toast = document.createElement("div");
       toast.className = "nc-toast";

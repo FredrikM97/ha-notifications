@@ -2,6 +2,9 @@ export interface Hass {
   connection: {
     sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
   };
+  user?: {
+    is_admin: boolean;
+  };
 }
 
 export type AlertConditionType = "template" | "state" | "numeric" | "attribute";
@@ -34,6 +37,7 @@ export interface ConfirmationConfig {
   completion_message: string;
   notify_on_confirmation: boolean;
   confirmation_message: string;
+  clear_on_confirmation: boolean;
   resend_interval: string | Record<string, number>;
   max_attempts: number;
   actions_enabled: boolean;

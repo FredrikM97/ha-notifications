@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
 )
@@ -19,15 +18,16 @@ from homeassistant.exceptions import (
 )
 
 from .const import (
+    CONF_SHOW_SIDEBAR,
     DOMAIN,
     SERVICE_RELOAD,
     SERVICE_TEST,
 )
+from .notifications import NotificationCenter
 from .panel import (
     async_register_frontend,
     async_unregister_frontend,
 )
-from .notifications import NotificationCenter
 from .websocket import async_setup as async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -170,7 +170,11 @@ async def async_setup_entry(
     entry.runtime_data = manager
 
     await async_register_frontend(
-        hass
+        hass,
+        show_in_sidebar=entry.data.get(
+            CONF_SHOW_SIDEBAR,
+            True,
+        ),
     )
 
     _LOGGER.info(

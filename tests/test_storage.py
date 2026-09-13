@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from test_support import load_storage
-
 
 storage = load_storage()
 
@@ -73,7 +72,8 @@ class NotificationStorageTests(unittest.TestCase):
             instance = storage.NotificationStorage(hass)
             result = self.run_async(
                 instance.async_validate_yaml_text(
-                    "alerts:\n  - name: Test\n    conditions:\n      - type: template\n        template: '{{ true }}'\n"
+                    "alerts:\n  - name: Test\n    conditions:\n"
+                    "      - type: template\n        template: '{{ true }}'\n"
                 )
             )
 
@@ -85,7 +85,8 @@ class NotificationStorageTests(unittest.TestCase):
             instance = storage.NotificationStorage(FakeHass(Path(directory)))
             result = self.run_async(
                 instance.async_save_yaml_text(
-                    "alerts:\n  - name: Test\n    conditions:\n      - type: template\n        template: '{{ true }}'\n"
+                    "alerts:\n  - name: Test\n    conditions:\n"
+                    "      - type: template\n        template: '{{ true }}'\n"
                 )
             )
 
@@ -130,11 +131,7 @@ class NotificationStorageTests(unittest.TestCase):
     def test_invalid_yaml_cannot_replace_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:
             instance = storage.NotificationStorage(FakeHass(Path(directory)))
-            self.run_async(
-                instance.async_save_yaml_text(
-                    "alerts: []\n"
-                )
-            )
+            self.run_async(instance.async_save_yaml_text("alerts: []\n"))
             original = instance.yaml_path.read_text(encoding="utf-8")
 
             with self.assertRaises(ValueError):

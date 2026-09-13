@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import unittest
+from datetime import timedelta
 
 from test_support import load_const_and_models
-
 
 _, models = load_const_and_models()
 
@@ -100,6 +99,19 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(notification["message"], "Message")
         self.assertEqual(notification["data"], {"tag": "reminder"})
         self.assertEqual(notification["target"], {"entity_id": ["notify.phone"]})
+        self.assertNotIn("persistent", notification)
+        self.assertTrue(notification["confirmation"]["clear_on_confirmation"])
+
+    def test_legacy_persistent_notification_setting_is_ignored(self):
+        notification = models.normalize_notification(
+            {
+                "persistent": True,
+                "confirmation": {"clear_on_confirmation": False},
+            }
+        )
+
+        self.assertNotIn("persistent", notification)
+        self.assertFalse(notification["confirmation"]["clear_on_confirmation"])
 
     def test_confirmation_data_is_preserved(self):
         alert = models.normalize_alert(
@@ -129,9 +141,7 @@ class NormalizationTests(unittest.TestCase):
                 "alerts": [
                     {
                         "name": "Android action",
-                        "conditions": [
-                            {"type": "template", "template": "{{ true }}"}
-                        ],
+                        "conditions": [{"type": "template", "template": "{{ true }}"}],
                         "notification": {
                             "action": "notify.mobile_app_phone",
                             "confirmation": {
@@ -144,9 +154,7 @@ class NormalizationTests(unittest.TestCase):
             }
         )["alerts"][0]
 
-        self.assertTrue(
-            alert["notification"]["confirmation"]["enabled"]
-        )
+        self.assertTrue(alert["notification"]["confirmation"]["enabled"])
         self.assertEqual(
             alert["notification"]["confirmation"]["button"],
             "Done",
@@ -186,9 +194,7 @@ class NormalizationTests(unittest.TestCase):
             alert["notification"]["confirmation"]["resend_interval"],
             {"minutes": 30},
         )
-        self.assertFalse(
-            alert["notification"]["confirmation"]["actions_enabled"]
-        )
+        self.assertFalse(alert["notification"]["confirmation"]["actions_enabled"])
         self.assertFalse(
             alert["notification"]["confirmation"]["notify_on_confirmation"]
         )
@@ -213,7 +219,10 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(len(normalized["alerts"]), 2)
         self.assertTrue(all(item["enabled"] for item in normalized["alerts"]))
         self.assertTrue(
-            all(item["notification"]["action"] == "notify.default" for item in normalized["alerts"])
+            all(
+                item["notification"]["action"] == "notify.default"
+                for item in normalized["alerts"]
+            )
         )
 
     def test_confirmation_actions_have_explicit_enabled_state_and_omit_empty_list(self):
@@ -297,19 +306,37 @@ class ConditionCompilationTests(unittest.TestCase):
             {
                 "logic": "all",
                 "conditions": [
-                    {"type": "state", "entity_id": "binary_sensor.door", "state": "on", "for": "00:05"},
-                    {"type": "numeric", "entity_id": "sensor.temp", "above": 20, "below": 30},
-                    {"type": "attribute", "entity_id": "climate.room", "attribute": "mode", "value": "heat"},
-                    {"type": "template", "template": "is_state('input_boolean.away', 'off')"},
+                    {
+                        "type": "state",
+                        "entity_id": "binary_sensor.door",
+                        "state": "on",
+                        "for": "00:05",
+                    },
+                    {
+                        "type": "numeric",
+                        "entity_id": "sensor.temp",
+                        "above": 20,
+                        "below": 30,
+                    },
+                    {
+                        "type": "attribute",
+                        "entity_id": "climate.room",
+                        "attribute": "mode",
+                        "value": "heat",
+                    },
+                    {
+                        "type": "template",
+                        "template": "is_state('input_boolean.away', 'off')",
+                    },
                 ],
             }
         )
 
-        self.assertIn("is_state(\"binary_sensor.door\", \"on\")", compiled)
+        self.assertIn('is_state("binary_sensor.door", "on")', compiled)
         self.assertIn("total_seconds() >= 300", compiled)
-        self.assertIn("states(\"sensor.temp\") | float(0) > 20.0", compiled)
-        self.assertIn("states(\"sensor.temp\") | float(0) < 30.0", compiled)
-        self.assertIn("state_attr(\"climate.room\", \"mode\") == \"heat\"", compiled)
+        self.assertIn('states("sensor.temp") | float(0) > 20.0', compiled)
+        self.assertIn('states("sensor.temp") | float(0) < 30.0', compiled)
+        self.assertIn('state_attr("climate.room", "mode") == "heat"', compiled)
         self.assertIn("is_state('input_boolean.away', 'off')", compiled)
         self.assertIn(" and ", compiled)
 
@@ -356,11 +383,7 @@ class ConditionCompilationTests(unittest.TestCase):
     def test_blank_template_condition_defaults_to_true(self):
         self.assertEqual(
             models.compile_condition(
-                {
-                    "conditions": [
-                        {"type": "template", "template": "{{   }}"}
-                    ]
-                }
+                {"conditions": [{"type": "template", "template": "{{   }}"}]}
             ),
             "{{ true }}",
         )

@@ -3,7 +3,6 @@ from datetime import timedelta
 
 from test_support import load_const_and_models
 
-
 const, models = load_const_and_models()
 
 

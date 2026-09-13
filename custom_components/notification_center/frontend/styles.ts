@@ -7,6 +7,10 @@ export const styles = `
   box-sizing: border-box;
 }
 
+:host(notification-center-card) {
+  container-type: inline-size;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -368,7 +372,13 @@ select {
   background: transparent;
 }
 
+.nc-section-nav-row {
+  display: flex;
+  align-items: center;
+}
+
 .nc-section-header .nc-section-nav-button {
+  flex: 1 1 auto;
   width: 100%;
   border: 0;
   border-radius: 9px;
@@ -402,13 +412,27 @@ select {
   font-size: 12px;
 }
 
-.nc-section-header .nc-section-nav-button.nc-section-nav-child::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  flex: 0 0 4px;
+.nc-section-collapse-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
   border-radius: 50%;
-  background: currentColor;
+  padding: 0;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+}
+
+.nc-section-collapse-button:hover {
+  background: var(--secondary-background-color);
+  color: var(--primary-text-color);
+}
+
+.nc-section-collapse-button ha-icon {
+  --mdc-icon-size: 18px;
 }
 
 .nc-add-setting {
@@ -478,9 +502,8 @@ select {
 .nc-section {
   border: 0;
   border-radius: 0;
-  padding: 0 0 20px;
+  padding: 0;
   margin-bottom: 20px;
-  border-bottom: 1px solid var(--divider-color);
 }
 
 .nc-section-titlebar {
@@ -565,7 +588,7 @@ select {
   border: 1px solid var(--divider-color);
   border-radius: 9px;
   padding: 10px;
-  background: var(--primary-background-color);
+  background: var(--card-background-color);
   color: var(--primary-text-color);
 }
 
@@ -581,11 +604,12 @@ select {
 }
 
 ha-code-editor.nc-action-editor {
+  --code-editor-background-color: var(--secondary-background-color);
+  --code-editor-gutter-color: var(--secondary-background-color);
+  display: block;
   width: 100%;
-  min-height: 180px;
-  border: 1px solid var(--divider-color);
-  border-radius: 8px;
-  background: var(--primary-background-color);
+  height: auto;
+  min-height: 0;
 }
 
 .nc-target-picker {
@@ -616,7 +640,7 @@ ha-code-editor.nc-action-editor {
   border: 1px solid var(--divider-color);
   border-radius: 9px;
   padding: 10px;
-  background: var(--primary-background-color);
+  background: var(--card-background-color);
   color: var(--primary-text-color);
 }
 
@@ -735,6 +759,7 @@ ha-code-editor.nc-action-editor {
 
 .nc-switch-input {
   appearance: none;
+  -webkit-appearance: none;
   position: relative;
   width: 42px !important;
   height: 24px;
@@ -746,26 +771,81 @@ ha-code-editor.nc-action-editor {
   background: var(--divider-color);
   cursor: pointer;
   transition: background 0.15s ease;
-  background-image: radial-gradient(
-    circle at 12px 12px,
-    var(--card-background-color) 0 8px,
-    transparent 9px
-  );
+}
+
+.nc-switch-input::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--card-background-color);
+  transition: transform 0.15s ease;
 }
 
 .nc-switch-input:checked {
   background-color: var(--primary-color);
-  background-position: 18px 0;
 }
 
-.nc-check {
+.nc-switch-input:checked::after {
+  transform: translateX(18px);
+}
+
+.nc-switch-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.nc-switch-label {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.nc-confirmation-clear {
+  margin-top: 16px;
 }
 
 .nc-check input:not(.nc-switch-input) {
   width: auto;
+}
+
+.nc-subpanel {
+  background: transparent;
+}
+
+.nc-subpanel-header {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 8px 12px;
+  color: var(--primary-text-color);
+}
+
+.nc-subpanel-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.nc-subpanel-title {
+  color: var(--primary-text-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nc-subpanel-subtitle {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+}
+
+.nc-subpanel-content {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
 }
 
 .nc-help {
@@ -838,6 +918,54 @@ ha-code-editor.nc-action-editor {
   box-shadow: var(--ha-box-shadow);
 }
 
+@container (max-width: 700px) {
+  .nc-page {
+    padding: 14px;
+  }
+
+  .nc-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nc-alert {
+    grid-template-columns: auto 1fr;
+  }
+
+  .nc-alert-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .nc-grid,
+  .nc-condition-row,
+  .nc-recipient-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .nc-modal-body {
+    padding: 14px;
+  }
+
+  .nc-editor-layout {
+    display: block;
+  }
+
+  .nc-section-header {
+    display: none;
+  }
+
+  .nc-section-select {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .nc-history-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 @media (max-width: 700px) {
   .nc-page {
     padding: 14px;
@@ -901,12 +1029,10 @@ ha-code-editor.nc-action-editor {
   width: 100%;
 }
 
-ha-code-editor.nc-code-editor {
+ha-code-editor.nc-alert-yaml-editor {
+  --code-editor-background-color: var(--secondary-background-color);
+  --code-editor-gutter-color: var(--secondary-background-color);
   display: block;
   min-height: 650px;
-}
-
-ha-code-editor.nc-action-editor {
-  min-height: 180px;
 }
 `;

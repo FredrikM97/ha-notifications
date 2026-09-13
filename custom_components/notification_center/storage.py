@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
@@ -18,7 +17,6 @@ from .const import (
     STORAGE_VERSION,
 )
 from .models import normalize_config
-
 
 DEFAULT_YAML = """# Notification Center
 #

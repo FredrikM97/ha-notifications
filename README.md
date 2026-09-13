@@ -5,11 +5,13 @@ as expected by Home Assistant and HACS. For packaging, run
 `npm install && npm run export:hacs`. The source frontend remains TypeScript;
 the export contains compiled browser output.
 
-For local Home Assistant testing, run `sh scripts/install_local.sh` to copy the
-integration into `config/custom_components/notification_center`, or pass a
-different Home Assistant configuration directory:
+For local Home Assistant testing, build the frontend in a Node-capable
+environment, then run the Node-free installer to copy the integration into
+`config/custom_components/notification_center`, or pass a different Home
+Assistant configuration directory:
 
 ```bash
+npm run build
 sh scripts/install_local.sh /path/to/home-assistant-config
 ```
 
@@ -20,6 +22,7 @@ Notification Center is designed to replace large collections of notification aut
 It provides:
 
 * A dedicated Home Assistant frontend panel
+* A Lovelace custom card with the full Notification Center management UI
 * Visual alert management
 * YAML editing and import/export
 * Device, area and label notification targets
@@ -35,6 +38,25 @@ It provides:
 * No `configuration.yaml` entry required
 * No external notification script required
 * Configuration stored in Home Assistant storage
+
+## Lovelace card
+
+The integration automatically registers its compiled frontend module with Home
+Assistant, so no manually configured Lovelace resource is required. In a
+dashboard, choose **Add card**, select **Notification Center**, and add it. The
+card opens the same full alert editor, history, and YAML UI as the sidebar
+panel; it is not a status-only card.
+
+The card configuration is:
+
+```yaml
+type: custom:notification-center-card
+```
+
+Only Home Assistant administrators can access the card's alert data or editing
+controls. Non-administrators see an access-required message. Disabling an
+already-added confirmation leaves its notification and post-confirmation
+settings intact and editable, so it can be re-enabled without rebuilding it.
 
 ---
 

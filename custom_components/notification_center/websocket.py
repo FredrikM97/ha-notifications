@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 
@@ -179,7 +178,7 @@ async def async_setup(
         """Send a non-persisting test for the editor's current payload."""
 
         try:
-            await _manager(
+            result = await _manager(
                 hass
             ).async_test_alert_payload(
                 msg["alert"]
@@ -191,6 +190,28 @@ async def async_setup(
                 str(err) or "Unable to send test notification.",
             )
             return
+
+        connection.send_result(
+            msg["id"],
+            result,
+        )
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"):
+                f"{DOMAIN}/discard_test_payload",
+            vol.Required("session_id"): str,
+        }
+    )
+    @websocket_api.async_response
+    async def handle_discard_test_payload(
+        _hass: HomeAssistant,
+        connection,
+        msg: dict[str, Any],
+    ) -> None:
+        """Discard temporary confirmation actions for an editor draft test."""
+
+        await _manager(hass).async_discard_draft_test(msg["session_id"])
 
         connection.send_result(
             msg["id"],

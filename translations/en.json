@@ -6,8 +6,12 @@
       "user": {
         "title": "Notification Center",
         "description": "Install Notification Center. Alerts are managed from its dashboard.",
-        "data": {},
-        "data_description": {}
+        "data": {
+          "show_sidebar": "Show in sidebar"
+        },
+        "data_description": {
+          "show_sidebar": "Add Notification Center to the Home Assistant sidebar. It remains available as a dashboard card either way."
+        }
       }
     },
     "abort": {

@@ -28,6 +28,7 @@ export interface AlertFormValues {
     completion_message: string;
     notify_on_confirmation: boolean;
     confirmation_message: string;
+    clear_on_confirmation: boolean;
     resend_interval: string;
     max_attempts: number;
     actions_enabled: boolean;
@@ -50,14 +51,18 @@ export function buildAlertPayload(
   values: AlertFormValues,
 ): Alert {
   const result = cloneAlert(original);
-  const action =
-    notificationServiceForTarget(values.target) ||
-    result.notification?.action ||
-    "";
+  const action = notificationServiceForTarget(values.target) ||
+    result.notification?.action || "";
 
   if (!action && !hasRecipients(values.target)) {
     throw new Error(
       "Select at least one device, area, label, or notification entity in Recipients.",
+    );
+  }
+
+  if (values.confirmation.enabled && !hasRecipients(values.target)) {
+    throw new Error(
+      "Confirmation requires at least one notification recipient.",
     );
   }
 

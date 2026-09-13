@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import sys
 import types
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION_ROOT = ROOT / "custom_components" / "notification_center"
@@ -105,6 +104,14 @@ def load_notifications():
         "homeassistant.helpers.entity_registry",
         types.ModuleType("homeassistant.helpers.entity_registry"),
     )
+    device_registry = sys.modules.setdefault(
+        "homeassistant.helpers.device_registry",
+        types.ModuleType("homeassistant.helpers.device_registry"),
+    )
+    area_registry = sys.modules.setdefault(
+        "homeassistant.helpers.area_registry",
+        types.ModuleType("homeassistant.helpers.area_registry"),
+    )
     template = sys.modules.setdefault(
         "homeassistant.helpers.template",
         types.ModuleType("homeassistant.helpers.template"),
@@ -127,6 +134,8 @@ def load_notifications():
     event.async_track_template_result = lambda *args: None
     event.async_track_time_interval = lambda *args: None
     entity_registry.async_get = lambda hass: hass.entity_registry
+    device_registry.async_get = lambda hass: hass.device_registry
+    area_registry.async_get = lambda hass: hass.area_registry
     template.Template = object
     template.TemplateError = Exception
     template.result_as_boolean = bool

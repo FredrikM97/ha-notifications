@@ -13,6 +13,11 @@ import type {
 
 const DOMAIN = "notification_center";
 
+export interface DraftTestResult {
+  session_id: string;
+  confirmation_action_id: string | null;
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -94,8 +99,15 @@ export async function testAlert(hass: Hass, alertId: string): Promise<unknown> {
 export async function testAlertPayload(
   hass: Hass,
   alert: Alert,
+): Promise<DraftTestResult> {
+  return call<DraftTestResult>(hass, "test_payload", { alert });
+}
+
+export async function discardDraftTestPayload(
+  hass: Hass,
+  sessionId: string,
 ): Promise<unknown> {
-  return call(hass, "test_payload", { alert });
+  return call(hass, "discard_test_payload", { session_id: sessionId });
 }
 
 export async function getHistory(

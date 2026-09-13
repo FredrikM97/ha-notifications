@@ -1,4 +1,5 @@
 import {
+  discardDraftTestPayload,
   deleteAlert,
   errorMessage,
   getAlerts,
@@ -95,6 +96,10 @@ class NotificationCenterPanel extends HTMLElement {
     return this._hass;
   }
 
+  protected isAdmin(): boolean {
+    return Boolean(this._hass?.user?.is_admin);
+  }
+
   async getRegistries(): Promise<Registries> {
     if (this._registries) {
       return this._registries;
@@ -126,7 +131,7 @@ class NotificationCenterPanel extends HTMLElement {
   }
 
   async refresh() {
-    if (!this._hass) {
+    if (!this._hass || !this.isAdmin()) {
       return;
     }
 
@@ -147,6 +152,24 @@ class NotificationCenterPanel extends HTMLElement {
 
   render(): void {
     if (!this.shadowRoot) {
+      return;
+    }
+    if (!this.isAdmin()) {
+      render(
+        html`<style>
+            ${styles}
+          </style>
+          <div class="nc-page">
+            <div class="nc-card nc-empty">
+              <h2>Administrator access required</h2>
+              <p>
+                Notification Center alerts can only be viewed and edited by
+                Home Assistant administrators.
+              </p>
+            </div>
+          </div>`,
+        this.shadowRoot,
+      );
       return;
     }
     const content = tabContent(this.tab);
@@ -326,10 +349,12 @@ class NotificationCenterPanel extends HTMLElement {
       alert: null,
       registries,
       onTest: async (draft) => {
-        await testAlertPayload(this._hass, draft);
-        this.showToast(
-          "Draft test notification sent. Confirmation callbacks require saving.",
-        );
+        const result = await testAlertPayload(this._hass, draft);
+        this.showToast("Draft test notification sent.");
+        return result;
+      },
+      onDiscardTest: async (sessionId) => {
+        await discardDraftTestPayload(this._hass, sessionId);
       },
       onSave: async (alert) => {
         await saveAlert(this._hass, alert);
@@ -355,10 +380,12 @@ class NotificationCenterPanel extends HTMLElement {
       alert,
       registries,
       onTest: async (draft) => {
-        await testAlertPayload(this._hass, draft);
-        this.showToast(
-          "Draft test notification sent. Confirmation callbacks require saving.",
-        );
+        const result = await testAlertPayload(this._hass, draft);
+        this.showToast("Draft test notification sent.");
+        return result;
+      },
+      onDiscardTest: async (sessionId) => {
+        await discardDraftTestPayload(this._hass, sessionId);
       },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
@@ -429,4 +456,52 @@ class NotificationCenterPanel extends HTMLElement {
 
 if (!customElements.get("notification-center-panel")) {
   customElements.define("notification-center-panel", NotificationCenterPanel);
+}
+
+interface NotificationCenterCardConfig {
+  type: "custom:notification-center-card";
+}
+
+class NotificationCenterCard extends NotificationCenterPanel {
+  private config: NotificationCenterCardConfig | null = null;
+
+  setConfig(config: NotificationCenterCardConfig): void {
+    if (!config || config.type !== "custom:notification-center-card") {
+      throw new Error("Card type must be custom:notification-center-card.");
+    }
+    this.config = config;
+    this.render();
+  }
+
+  getCardSize(): number {
+    return 12;
+  }
+
+  static getStubConfig(): NotificationCenterCardConfig {
+    return { type: "custom:notification-center-card" };
+  }
+}
+
+if (!customElements.get("notification-center-card")) {
+  customElements.define("notification-center-card", NotificationCenterCard);
+}
+
+const customCardWindow = window as Window & {
+  customCards?: Array<{
+    type: string;
+    name: string;
+    description: string;
+  }>;
+};
+customCardWindow.customCards = customCardWindow.customCards || [];
+if (
+  !customCardWindow.customCards.some(
+    (card) => card.type === "notification-center-card",
+  )
+) {
+  customCardWindow.customCards.push({
+    type: "notification-center-card",
+    name: "Notification Center",
+    description: "Manage Notification Center alerts, history, and YAML.",
+  });
 }
