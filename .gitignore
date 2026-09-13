@@ -1,5 +1,9 @@
 # Python caches
 __pycache__/
+node_modules/
+custom_components/notification_center/frontend/dist/
+.ha-config/
+hacs-export/
 *.py[cod]
 *$py.class
 

@@ -315,15 +315,7 @@ sequence:
                         for_each: '{{ confirmation_actions }}'
                         sequence:
                           - action: '{{ repeat.item.action }}'
-                            target: |
-
-                              {{ repeat.item.target
-                                 if repeat.item.target is defined
-                                 else omit }}
-                            data: |
-
-                              {{ repeat.item.data
-                                 if repeat.item.data is defined
-                                 else omit }}
+                            target: "{{ repeat.item.target if repeat.item.target is defined else omit }}"
+                            data: "{{ repeat.item.data if repeat.item.data is defined else omit }}"
                 - variables:
                     state: DONE

@@ -1895,14 +1895,15 @@ class NotificationCenter:
     async def async_save_yaml(
         self,
         text: str,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Replace configuration using raw YAML."""
 
-        await self.storage.async_save_yaml_text(
+        normalized = await self.storage.async_save_yaml_text(
             text
         )
 
         await self.async_reload()
+        return normalized
 
     async def async_get_yaml(
         self,

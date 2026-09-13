@@ -19,7 +19,9 @@ class ConfigContractTests(unittest.TestCase):
                     "id": "demo",
                     "name": "Demo",
                     "enabled": True,
-                    "condition": "{{ true }}",
+                    "conditions": [
+                        {"type": "template", "template": "{{ true }}"}
+                    ],
                     "monitor": {"on_change": True, "interval": "00:30"},
                     "notification": {
                         "action": "notify.test",

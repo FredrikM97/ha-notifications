@@ -1,0 +1,392 @@
+import {
+  deleteAlert,
+  errorMessage,
+  getAlerts,
+  getHistory,
+  loadRegistries,
+  saveAlert,
+  testAlert,
+} from "./api.js";
+
+import { openEditor } from "./editor.js";
+
+import { renderHistory } from "./history.js";
+
+import { styles } from "./styles.js";
+import { html, render } from "lit";
+import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
+import { renderYamlView } from "./yaml-view.js";
+
+class NotificationCenterPanel extends HTMLElement {
+  private _hass: Hass | null = null;
+  private alerts: Alert[] = [];
+  private history: HistoryEntry[] = [];
+  private tab: "alerts" | "history" | "yaml" = "alerts";
+  private loading = false;
+  private _registries: Registries | null = null;
+  private _registriesPromise: Promise<Registries> | null = null;
+  private _initialized = false;
+
+  constructor() {
+    super();
+
+    this.attachShadow({
+      mode: "open",
+    });
+
+    this._hass = null;
+    this.alerts = [];
+    this.history = [];
+    this.tab = "alerts";
+    this.loading = false;
+    this._registries = null;
+    this._registriesPromise = null;
+  }
+
+  set hass(value: Hass) {
+    this._hass = value;
+
+    if (this.isConnected && !this._initialized) {
+      this._initialized = true;
+      this.refresh();
+    }
+  }
+
+  get hass() {
+    return this._hass;
+  }
+
+  async getRegistries(): Promise<Registries> {
+    if (this._registries) {
+      return this._registries;
+    }
+
+    if (!this._registriesPromise) {
+      this._registriesPromise = loadRegistries(this._hass).then(
+        (registries) => {
+          this._registries = registries;
+          return registries;
+        },
+      );
+    }
+
+    return this._registriesPromise;
+  }
+
+  connectedCallback() {
+    this.render();
+
+    if (this._hass) {
+      this._initialized = true;
+
+      this.refresh();
+    }
+  }
+
+  async refresh() {
+    if (!this._hass) {
+      return;
+    }
+
+    this.loading = true;
+
+    try {
+      [this.alerts, this.history] = await Promise.all([
+        getAlerts(this._hass),
+        getHistory(this._hass, null, 150),
+      ]);
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  render(): void {
+    if (!this.shadowRoot) {
+      return;
+    }
+    const content =
+      this.tab === "alerts"
+        ? html`<div id="alerts-view"></div>`
+        : this.tab === "history"
+          ? html`<div id="history-view"></div>`
+          : html`<div id="yaml-view"></div>`;
+    render(
+      html`<style>
+          ${styles}
+        </style>
+        <div class="nc-page">
+          <div class="nc-header">
+            <div class="nc-title">
+              <div class="nc-title-icon">🔔</div>
+              <div>
+                <h1>Notification Center</h1>
+                <p>Manage alerts, notifications and debug history.</p>
+              </div>
+            </div>
+            <div class="nc-actions">
+              <button class="nc-button" @click=${this.addAlert}>
+                + Add alert
+              </button>
+            </div>
+          </div>
+          <div class="nc-tabs">
+            ${(
+              [
+                ["alerts", "Alerts"],
+                ["history", "History"],
+                ["yaml", "YAML"],
+              ] as const
+            ).map(
+              ([key, label]) =>
+                html`<button
+                  class="nc-tab ${this.tab === key ? "active" : ""}"
+                  @click=${() => {
+                    this.tab = key;
+                    this.render();
+                  }}
+                >
+                  ${label}
+                </button>`,
+            )}
+          </div>
+          ${content}
+        </div>`,
+      this.shadowRoot,
+    );
+    if (this.tab === "alerts")
+      this.renderAlerts(this.shadowRoot.querySelector("#alerts-view")!);
+    if (this.tab === "history")
+      renderHistory(
+        this.shadowRoot.querySelector("#history-view")!,
+        this.history,
+      );
+    if (this.tab === "yaml" && this._hass)
+      renderYamlView(
+        this.shadowRoot.querySelector("#yaml-view")!,
+        this._hass,
+        (message, error) => this.showToast(message, error),
+        () => this.refresh(),
+      );
+  }
+
+  renderAlerts(container: HTMLElement): void {
+    render(
+      this.alerts.length
+        ? html`<div class="nc-alerts">
+            ${this.alerts.map((alert) => this.alertCardTemplate(alert))}
+          </div>`
+        : html`<div class="nc-card nc-empty">
+            <h2>No alerts yet</h2>
+            <p>
+              Create your first alert. You can trigger it from condition
+              changes, an interval, or both.
+            </p>
+            <button class="nc-button" @click=${this.addAlert}>
+              Create alert
+            </button>
+          </div>`,
+      container,
+    );
+  }
+
+  private alertCardTemplate(alert: Alert) {
+    const runtime = alert.runtime || {};
+    const monitor =
+      [
+        alert.monitor?.on_change ? "condition changes" : "",
+        alert.monitor?.interval ? `every ${alert.monitor.interval}` : "",
+      ]
+        .filter(Boolean)
+        .join(" + ") || "No trigger";
+    return html`<div class="nc-card nc-alert">
+      <div class="nc-alert-icon">${alert.icon || "🔔"}</div>
+      <div class="nc-alert-main">
+        <div class="nc-alert-name">${alert.name}</div>
+        <span
+          class="${runtime.active
+            ? "nc-status active"
+            : alert.enabled
+              ? "nc-status ok"
+              : "nc-status disabled"}"
+          >${runtime.active
+            ? "Active"
+            : alert.enabled
+              ? "Ready"
+              : "Disabled"}</span
+        >
+        <div class="nc-alert-meta">
+          ${monitor} · ${this.targetSummary(alert.notification?.target)}
+        </div>
+        <div class="nc-alert-meta">
+          ${runtime.last_notified
+            ? `Last notification: ${this.formatTime(runtime.last_notified)}`
+            : "No notification sent yet"}
+        </div>
+      </div>
+      <div class="nc-alert-actions">
+        <button
+          class="nc-button"
+          ?disabled=${!alert.enabled}
+          @click=${() => this.testAlertFromCard(alert)}
+        >
+          Test</button
+        ><button class="nc-button" @click=${() => this.toggleAlert(alert)}>
+          ${alert.enabled ? "Disable" : "Enable"}</button
+        ><button class="nc-button" @click=${() => this.editAlert(alert)}>
+          Edit</button
+        ><button
+          class="nc-button danger"
+          @click=${() => this.removeAlert(alert)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>`;
+  }
+
+  private async testAlertFromCard(alert: Alert) {
+    try {
+      await testAlert(this._hass, alert.id);
+      this.showToast("Test notification sent.");
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+  private async toggleAlert(alert: Alert) {
+    try {
+      await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
+      this.showToast(alert.enabled ? "Alert disabled." : "Alert enabled.");
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
+  targetSummary(target: Alert["notification"]["target"] = {}) {
+    const parts = [];
+
+    for (const [key, label] of [
+      ["device_id", "devices"],
+      ["area_id", "areas"],
+      ["floor_id", "floors"],
+      ["label_id", "labels"],
+      ["entity_id", "entities"],
+    ]) {
+      const count = target[key]?.length || 0;
+
+      if (count) {
+        parts.push(`${count} ${label}`);
+      }
+    }
+
+    return parts.join(", ") || "No target";
+  }
+
+  async addAlert() {
+    const registries = await this.getRegistries();
+
+    openEditor({
+      root: this.shadowRoot,
+      alert: null,
+      registries,
+      onTest: async () => {
+        throw new Error("Save the alert before testing it.");
+      },
+      onSave: async (alert) => {
+        await saveAlert(this._hass, alert);
+
+        this.showToast("Alert created.");
+
+        await this.refresh();
+      },
+    });
+  }
+
+  async editAlert(alert) {
+    const registries = await this.getRegistries();
+
+    openEditor({
+      root: this.shadowRoot,
+      alert,
+      registries,
+      onTest: async (alertId) => {
+        await testAlert(this._hass, alertId);
+
+        this.showToast("Test notification sent.");
+
+        await this.refresh();
+      },
+      onSave: async (updated) => {
+        const saved = await saveAlert(this._hass, updated);
+
+        this.alerts = this.alerts.map((item) =>
+          item.id === saved.id
+            ? {
+                ...item,
+                ...saved,
+                runtime: item.runtime,
+              }
+            : item,
+        );
+
+        this.showToast("Alert saved.");
+      },
+    });
+  }
+
+  async removeAlert(alert) {
+    if (!window.confirm(`Delete "${alert.name}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteAlert(this._hass, alert.id);
+
+      this.showToast("Alert deleted.");
+
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
+  formatTime(value) {
+    if (!value) {
+      return "—";
+    }
+
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(value));
+    } catch (_err) {
+      return value;
+    }
+  }
+
+  showToast(message, error = false) {
+    const toast = document.createElement("div");
+
+    toast.className = "nc-toast";
+
+    toast.textContent = message;
+
+    if (error) {
+      toast.style.background = "var(--error-color)";
+      toast.style.color = "white";
+    }
+
+    this.shadowRoot.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3500);
+  }
+}
+
+if (!customElements.get("notification-center-panel")) {
+  customElements.define("notification-center-panel", NotificationCenterPanel);
+}

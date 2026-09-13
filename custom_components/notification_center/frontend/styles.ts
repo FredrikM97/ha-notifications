@@ -315,6 +315,11 @@ select {
   overflow: hidden;
 }
 
+.nc-editor-shell > .nc-modal-header {
+  background: var(--primary-color);
+  color: var(--text-primary-color);
+}
+
 .nc-modal {
   width: min(900px, 100%);
   max-height: 92vh;

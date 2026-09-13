@@ -3,19 +3,19 @@
 This file is a lightweight map of the repository so agents can narrow to the right files before reading deeper.
 
 ## Primary entry points
-- `__init__.py` — integration setup, runtime registration, update hooks, reload behavior
-- `config_flow.py` — UI config flow and validation logic
-- `storage.py` — persisted alert storage and save/load behavior
-- `models.py` — alert schema and data model
-- `notifications.py` — notification sending and confirmation handling
-- `panel.py` — panel registration and compiled frontend entry point
-- `websocket.py` — runtime frontend/backend communication
+- `custom_components/notification_center/__init__.py` — integration setup, runtime registration, update hooks, reload behavior
+- `custom_components/notification_center/config_flow.py` — UI config flow and validation logic
+- `custom_components/notification_center/storage.py` — persisted alert storage and save/load behavior
+- `custom_components/notification_center/models.py` — alert schema and data model
+- `custom_components/notification_center/notifications.py` — notification sending and confirmation handling
+- `custom_components/notification_center/panel.py` — panel registration and compiled frontend entry point
+- `custom_components/notification_center/websocket.py` — runtime frontend/backend communication
 
 ## Frontend/editor surfaces
-- `frontend/src/api.ts` — API calls for listing/saving alerts
-- `frontend/src/editor.ts` — editor form and alert editing logic
-- `frontend/panel.js` — dashboard/panel interactions
-- `frontend/styles.js` — styling and layout
+- `custom_components/notification_center/frontend/api.ts` — API calls for listing/saving alerts
+- `custom_components/notification_center/frontend/editor.ts` — editor form and alert editing logic
+- `custom_components/notification_center/frontend/panel.ts` — dashboard/panel interactions
+- `custom_components/notification_center/frontend/styles.ts` — styling and layout
 
 ## Runtime and alert execution
 - `__init__.py` and `notifications.py` — execution and notification logic
@@ -33,7 +33,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Good starting points by task
 - Save/edit lifecycle bug: `config_flow.py`, `storage.py`, `websocket.py`
 - Runtime trigger or interval issue: `__init__.py`, `notifications.py`, `models.py`
-- Panel/editor UI issue: `frontend/editor.js`, `frontend/panel.js`, `frontend/api.js`
+- Panel/editor UI issue: `frontend/editor.ts`, `frontend/panel.ts`, `frontend/api.ts`
 - YAML/import or validation issue: `config_flow.py`, `storage.py`, `models.py`
 - Notification/confirmation flow: `notifications.py`, `models.py`, `websocket.py`
 

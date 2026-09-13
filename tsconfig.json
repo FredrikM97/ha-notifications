@@ -10,11 +10,13 @@
     "strict": false,
     "noImplicitAny": false,
     "skipLibCheck": true,
-    "rootDir": "./frontend",
+    "rootDir": "./custom_components/notification_center/frontend",
+    "outDir": "./custom_components/notification_center/frontend/dist",
+    "sourceMap": true,
+    "declaration": false,
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "frontend/**/*.ts"
-, "frontend/styles.ts", "frontend/recipient-picker.ts", "frontend/dom.ts", "frontend/editor.ts", "frontend/panel.ts", "frontend/history.ts", "frontend/condition-builder.ts", "frontend/api.ts"  ]
+  "include": ["custom_components/notification_center/frontend/**/*.ts"],
+  "exclude": ["custom_components/notification_center/frontend/dist"]
 }

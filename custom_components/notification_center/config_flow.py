@@ -7,8 +7,6 @@ from typing import Any
 from homeassistant import config_entries
 
 from .const import DOMAIN
-from .models import normalize_config
-from .storage import NotificationStorage
 
 
 class NotificationCenterConfigFlow(
@@ -39,33 +37,4 @@ class NotificationCenterConfigFlow(
 
         return self.async_show_form(
             step_id="user",
-        )
-
-    async def async_step_import(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Import the previous YAML configuration."""
-
-        if self.hass.config_entries.async_entries(DOMAIN):
-            return self.async_abort(
-                reason="already_configured"
-            )
-
-        if user_input:
-            normalized = normalize_config(
-                user_input
-            )
-
-            storage = NotificationStorage(
-                self.hass
-            )
-
-            await storage.async_save_config(
-                normalized
-            )
-
-        return self.async_create_entry(
-            title="Notification Center",
-            data={},
         )

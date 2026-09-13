@@ -9,7 +9,6 @@ import voluptuous as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
-    SOURCE_IMPORT,
 )
 from homeassistant.core import (
     HomeAssistant,
@@ -126,63 +125,6 @@ async def async_setup(
             SERVICE_TEST,
             handle_test,
             schema=SERVICE_TEST_SCHEMA,
-        )
-
-    # ---------------------------------------------------------
-    # Legacy YAML migration
-    # ---------------------------------------------------------
-
-    legacy_config = config.get(
-        DOMAIN
-    )
-
-    existing_entries = (
-        hass.config_entries.async_entries(
-            DOMAIN
-        )
-    )
-
-    if (
-        isinstance(
-            legacy_config,
-            dict,
-        )
-        and legacy_config.get(
-            "alerts"
-        ) is not None
-        and not existing_entries
-    ):
-        async def import_legacy() -> None:
-            try:
-                result = (
-                    await hass.config_entries.flow.async_init(
-                        DOMAIN,
-                        context={
-                            "source": SOURCE_IMPORT,
-                        },
-                        data=legacy_config,
-                    )
-                )
-
-                if result.get(
-                    "type"
-                ) == "abort":
-                    _LOGGER.warning(
-                        "Notification Center YAML migration "
-                        "did not create a config entry: %s",
-                        result.get(
-                            "reason"
-                        ),
-                    )
-
-            except Exception:
-                _LOGGER.exception(
-                    "Failed to migrate legacy "
-                    "Notification Center YAML"
-                )
-
-        hass.async_create_task(
-            import_legacy()
         )
 
     return True

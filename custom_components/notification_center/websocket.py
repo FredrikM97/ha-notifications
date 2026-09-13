@@ -271,7 +271,7 @@ async def async_setup(
     ) -> None:
         """Save YAML."""
 
-        await _manager(
+        result = await _manager(
             hass
         ).async_save_yaml(
             msg["yaml"]
@@ -279,7 +279,10 @@ async def async_setup(
 
         connection.send_result(
             msg["id"],
-            True,
+            {
+                "saved": True,
+                "config": result,
+            },
         )
 
     @websocket_api.websocket_command(

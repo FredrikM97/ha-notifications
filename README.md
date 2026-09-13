@@ -1,5 +1,18 @@
 # Notification Center
 
+The integration source lives under `custom_components/notification_center`,
+as expected by Home Assistant and HACS. For packaging, run
+`npm install && npm run export:hacs`. The source frontend remains TypeScript;
+the export contains compiled browser output.
+
+For local Home Assistant testing, run `npm run install:ha` to install into the
+ignored `.ha-config/custom_components/notification_center` directory, or pass
+your Home Assistant configuration directory:
+
+```bash
+npm run install:ha -- /path/to/home-assistant-config
+```
+
 A Home Assistant custom integration for creating, managing, and debugging state-based notifications from a dedicated UI.
 
 Notification Center is designed to replace large collections of notification automations and external notification scripts with a single, self-contained integration.
@@ -305,9 +318,9 @@ Notification Center sup
 
 ## Canonical YAML structure
 
-Notification Center writes one canonical representation for each alert. Legacy fields such as
-`notifications`, `trigger`, `logic`, and a top-level `confirmation` are accepted when reading
-older configurations but are removed when the configuration is saved.
+Notification Center writes one canonical representation for each alert.
+Configuration uses one `notification`, a `conditions` list, and a `monitor`
+object. YAML validation rejects malformed structures before writing.
 
 ```yaml
 version: 1

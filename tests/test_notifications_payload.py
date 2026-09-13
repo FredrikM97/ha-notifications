@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import unittest
 
 from test_support import load_notifications
@@ -22,6 +23,19 @@ class NotificationPayloadTests(unittest.TestCase):
     class Hass:
         def __init__(self):
             self.services = NotificationPayloadTests.ServiceRecorder()
+
+    class Storage:
+        def __init__(self, config):
+            self.config = config
+            self.saved = []
+
+        async def async_load_config(self):
+            return self.config
+
+        async def async_save_config(self, config):
+            self.saved.append(config)
+            self.config = config
+            return config
 
     def test_remove_none_drops_nested_null_values(self):
         self.assertEqual(
@@ -211,6 +225,66 @@ class NotificationPayloadTests(unittest.TestCase):
                     test=True,
                 )
             )
+
+    def test_save_alert_replaces_existing_alert_instead_of_merging(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        manager.storage = self.Storage(
+            {
+                "version": 1,
+                "alerts": [
+                    {
+                        "id": "demo",
+                        "name": "Old name",
+                        "description": "Remove this",
+                        "conditions": [],
+                        "monitor": {"on_change": True, "startup": True},
+                        "notification": {
+                            "action": "notify.old",
+                            "target": {},
+                            "title": "Old",
+                            "message": "Old",
+                        },
+                    },
+                    {
+                        "id": "other",
+                        "name": "Other",
+                        "conditions": [],
+                        "monitor": {"on_change": True, "startup": True},
+                        "notification": {"action": "notify.other"},
+                    },
+                ],
+            }
+        )
+        manager.async_reload = lambda: asyncio.sleep(0)
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+
+        saved = asyncio.run(
+            manager.async_save_alert(
+                {
+                    "id": "demo",
+                    "name": "New name",
+                    "conditions": [],
+                    "monitor": {"on_change": False, "startup": True},
+                    "notification": {
+                        "action": "notify.new",
+                        "target": {"entity_id": ["notify.phone"]},
+                        "title": "New",
+                        "message": "New",
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(saved["name"], "New name")
+        self.assertEqual(len(manager.storage.config["alerts"]), 2)
+        replaced = manager.storage.config["alerts"][0]
+        self.assertEqual(replaced["name"], "New name")
+        self.assertEqual(replaced["description"], "")
+        self.assertEqual(manager.storage.config["alerts"][1]["id"], "other")
 
 if __name__ == "__main__":
     unittest.main()

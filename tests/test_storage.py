@@ -73,7 +73,7 @@ class NotificationStorageTests(unittest.TestCase):
             instance = storage.NotificationStorage(hass)
             result = self.run_async(
                 instance.async_validate_yaml_text(
-                    "alerts:\n  - name: Test\n    condition: '{{ true }}'\n"
+                    "alerts:\n  - name: Test\n    conditions:\n      - type: template\n        template: '{{ true }}'\n"
                 )
             )
 
@@ -85,7 +85,7 @@ class NotificationStorageTests(unittest.TestCase):
             instance = storage.NotificationStorage(FakeHass(Path(directory)))
             result = self.run_async(
                 instance.async_save_yaml_text(
-                    "alerts:\n  - name: Test\n    condition: '{{ true }}'\n"
+                    "alerts:\n  - name: Test\n    conditions:\n      - type: template\n        template: '{{ true }}'\n"
                 )
             )
 
@@ -94,6 +94,38 @@ class NotificationStorageTests(unittest.TestCase):
             saved = instance.yaml_path.read_text(encoding="utf-8")
             self.assertIn("version: 1", saved)
             self.assertIn("id: test", saved)
+
+    def test_saved_yaml_contains_one_canonical_notification_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            instance = storage.NotificationStorage(FakeHass(Path(directory)))
+            self.run_async(
+                instance.async_save_config(
+                    {
+                        "version": 1,
+                        "alerts": [
+                            {
+                                "id": "demo",
+                                "name": "Demo",
+                                "conditions": [],
+                                "monitor": {"on_change": True, "startup": True},
+                                "notification": {
+                                    "action": "notify.mobile_app_phone",
+                                    "target": {"entity_id": ["notify.phone"]},
+                                    "title": "Demo",
+                                    "message": "Check this",
+                                },
+                                "notifications": [
+                                    {"action": "notify.legacy"},
+                                ],
+                            }
+                        ],
+                    }
+                )
+            )
+
+            saved = instance.yaml_path.read_text(encoding="utf-8")
+            self.assertEqual(saved.count("notification:"), 1)
+            self.assertNotIn("notifications:", saved)
 
     def test_invalid_yaml_cannot_replace_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:

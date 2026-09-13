@@ -1,11 +1,20 @@
 {
   "name": "notification-center-frontend",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.json && esbuild custom_components/notification_center/frontend/dist/panel.js --bundle --format=esm --outfile=custom_components/notification_center/frontend/dist/panel.bundle.js && mv custom_components/notification_center/frontend/dist/panel.bundle.js custom_components/notification_center/frontend/dist/panel.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write custom_components/notification_center/frontend/*.ts tests/frontend_smoke.mjs",
+    "test:frontend": "node tests/frontend_smoke.mjs",
+    "clean": "rm -rf custom_components/notification_center/frontend/dist",
+    "export:hacs": "sh scripts/export_hacs.sh",
+    "install:ha": "sh scripts/install_local.sh"
   },
   "devDependencies": {
+    "lit": "^3.3.1",
+    "esbuild": "^0.25.9",
+    "prettier": "^3.8.3",
     "typescript": "^5.8.3"
   }
 }

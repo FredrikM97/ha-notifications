@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import timedelta
 import json
 import re
+from copy import deepcopy
+from datetime import timedelta
 from typing import Any, Mapping
 
 from .const import CONFIG_VERSION
@@ -245,50 +245,20 @@ def normalize_notification(
     defaults = defaults or {}
 
     source = deepcopy(notification) if isinstance(notification, dict) else {}
-    legacy_data = source.pop("data", {})
-    if not isinstance(legacy_data, dict):
-        legacy_data = {}
-
     merged = _merge(defaults, source)
 
-    title = merged.get("title", legacy_data.get("title", "Reminder"))
-    message = merged.get("message", legacy_data.get("message", ""))
+    title = merged.get("title", "Reminder")
+    message = merged.get("message", "")
 
     extra_data = merged.get("data")
-    if extra_data is None:
-        extra_data = merged.get("extra_data", {})
     if not isinstance(extra_data, dict):
         extra_data = {}
-
-    if not extra_data:
-        extra_data = {
-            key: value
-            for key, value in legacy_data.items()
-            if key not in {
-                "title",
-                "message",
-                "confirmation_button",
-                "completion_message",
-                "resend_interval",
-                "max_attempts",
-                "confirmation_actions",
-            }
-        }
 
     confirmation_source = merged.get("confirmation", {})
     if not isinstance(confirmation_source, dict):
         confirmation_source = {}
 
-    legacy_confirmation = {}
-    if "confirmation_button" in legacy_data:
-        legacy_confirmation["button"] = legacy_data["confirmation_button"]
-    for key in ("completion_message", "resend_interval", "max_attempts"):
-        if key in legacy_data:
-            legacy_confirmation[key] = legacy_data[key]
-    if "confirmation_actions" in legacy_data:
-        legacy_confirmation["actions"] = legacy_data["confirmation_actions"]
-
-    confirmation = _merge(legacy_confirmation, confirmation_source)
+    confirmation = confirmation_source
 
     actions = confirmation.get("actions")
     if not isinstance(actions, list):
@@ -363,14 +333,6 @@ def normalize_alert(
     if not isinstance(monitor, dict):
         monitor = {}
 
-    # Accept the old trigger shape when reading older configurations.
-    legacy_trigger = source.get("trigger", {})
-    if isinstance(legacy_trigger, dict):
-        monitor = _merge(legacy_trigger, monitor)
-
-    if "recheck_interval" in source and "interval" not in monitor:
-        monitor["interval"] = source["recheck_interval"]
-
     normalized_monitor = {
         "on_change": bool(monitor.get("on_change", True)),
         "startup": bool(monitor.get("startup", True)),
@@ -378,14 +340,7 @@ def normalize_alert(
     if monitor.get("interval") is not None:
         normalized_monitor["interval"] = monitor["interval"]
 
-    conditions = source.get("conditions")
-    if conditions is None:
-        legacy_condition = source.get("condition")
-        conditions = (
-            [{"type": "template", "template": legacy_condition}]
-            if legacy_condition
-            else []
-        )
+    conditions = source.get("conditions", [])
     if isinstance(conditions, dict):
         conditions = [conditions]
     if not isinstance(conditions, list):
@@ -395,31 +350,9 @@ def normalize_alert(
         normalize_condition(item) for item in conditions
     ]
 
-    notification_source = source.get("notification")
-    # Read the old list form, but never persist it.
-    if notification_source is None:
-        legacy_notifications = source.get("notifications")
-        if isinstance(legacy_notifications, list) and legacy_notifications:
-            notification_source = legacy_notifications[0]
-        elif isinstance(legacy_notifications, dict):
-            notification_source = legacy_notifications
-
-    notification_input = deepcopy(
-        notification_source or {
-            "title": name,
-            "message": "",
-        }
-    )
-
-    legacy_confirmation = source.get("confirmation")
-    if isinstance(legacy_confirmation, dict):
-        nested_confirmation = notification_input.get("confirmation", {})
-        if not isinstance(nested_confirmation, dict):
-            nested_confirmation = {}
-        notification_input["confirmation"] = _merge(
-            legacy_confirmation,
-            nested_confirmation,
-        )
+    notification_input = deepcopy(source.get("notification", {}))
+    if not isinstance(notification_input, dict):
+        notification_input = {}
 
     notification = normalize_notification(
         notification_input,

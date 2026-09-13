@@ -8,39 +8,42 @@ from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    FRONTEND_BUILD_DIR,
+    FRONTEND_REGISTERED_KEY,
+    FRONTEND_STATIC_URL,
+    PANEL_ICON,
+    PANEL_MODULE,
+    PANEL_TITLE,
+    VERSION,
+)
 
 
-FRONTEND_DIR = Path(__file__).parent / "frontend"
-
-PANEL_URL = f"{DOMAIN}/panel.ts"
-
-FRONTEND_VERSION = "0.4.0"
-
-_STATIC_REGISTERED = f"{DOMAIN}_frontend_static_registered"
+FRONTEND_DIR = Path(__file__).parent / "frontend" / FRONTEND_BUILD_DIR
 
 
 async def async_register_frontend(hass: HomeAssistant) -> None:
     """Register the Notification Center frontend."""
 
-    panel_file = FRONTEND_DIR / "panel.ts"
+    panel_file = FRONTEND_DIR / "panel.js"
 
     if not panel_file.is_file():
         raise RuntimeError(
             f"Notification Center frontend is missing: {panel_file}"
         )
-    if not hass.data.get(_STATIC_REGISTERED):
+    if not hass.data.get(FRONTEND_REGISTERED_KEY):
         await hass.http.async_register_static_paths(
             [
                 StaticPathConfig(
-                    PANEL_URL,
+                    FRONTEND_STATIC_URL,
                     str(FRONTEND_DIR),
                     False,
                 )
             ]
         )
 
-        hass.data[_STATIC_REGISTERED] = True
+        hass.data[FRONTEND_REGISTERED_KEY] = True
 
     # Register the actual Home Assistant panel.
     #
@@ -57,9 +60,9 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
             hass=hass,
             frontend_url_path=DOMAIN,
             webcomponent_name="notification-center-panel",
-            sidebar_title="Notification Center",
-            sidebar_icon="mdi:bell-cog",
-            module_url=f"{PANEL_URL}?v={FRONTEND_VERSION}",
+            sidebar_title=PANEL_TITLE,
+            sidebar_icon=PANEL_ICON,
+            module_url=f"{PANEL_MODULE}?v={VERSION}",
             require_admin=True,
         )
 

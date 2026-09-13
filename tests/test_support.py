@@ -9,6 +9,7 @@ import types
 
 
 ROOT = Path(__file__).resolve().parents[1]
+INTEGRATION_ROOT = ROOT / "custom_components" / "notification_center"
 PACKAGE_NAME = "custom_components.notification_center"
 
 
@@ -24,7 +25,7 @@ def ensure_package() -> None:
         PACKAGE_NAME,
         types.ModuleType(PACKAGE_NAME),
     )
-    package.__path__ = [str(ROOT)]
+    package.__path__ = [str(INTEGRATION_ROOT)]
 
 
 def load_module(module_name: str, file_path: Path):
@@ -42,8 +43,8 @@ def load_module(module_name: str, file_path: Path):
 def load_const_and_models():
     """Load the pure configuration modules once for the test process."""
     ensure_package()
-    const = load_module(f"{PACKAGE_NAME}.const", ROOT / "const.py")
-    models = load_module(f"{PACKAGE_NAME}.models", ROOT / "models.py")
+    const = load_module(f"{PACKAGE_NAME}.const", INTEGRATION_ROOT / "const.py")
+    models = load_module(f"{PACKAGE_NAME}.models", INTEGRATION_ROOT / "models.py")
     return const, models
 
 
@@ -81,7 +82,7 @@ def load_storage():
     helpers.__path__ = []
     helpers_storage.Store = Store
 
-    return load_module(f"{PACKAGE_NAME}.storage", ROOT / "storage.py")
+    return load_module(f"{PACKAGE_NAME}.storage", INTEGRATION_ROOT / "storage.py")
 
 
 def load_notifications():
@@ -133,5 +134,5 @@ def load_notifications():
 
     return load_module(
         f"{PACKAGE_NAME}.notifications",
-        ROOT / "notifications.py",
+        INTEGRATION_ROOT / "notifications.py",
     )

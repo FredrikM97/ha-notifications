@@ -75,17 +75,17 @@ class NormalizationTests(unittest.TestCase):
         )
         self.assertEqual(models.normalize_target(None), {})
 
-    def test_condition_and_notification_legacy_shapes_are_normalized(self):
-        condition = models.normalize_condition("{{ true }}")
+    def test_condition_and_notification_shapes_are_normalized(self):
+        condition = models.normalize_condition(
+            {"type": "template", "template": "{{ true }}"}
+        )
         notification = models.normalize_notification(
             {
                 "action": "notify.mobile",
                 "target": {"entity_id": "notify.phone"},
-                "data": {
-                    "title": "Legacy title",
-                    "message": "Legacy message",
-                    "tag": "reminder",
-                },
+                "title": "Title",
+                "message": "Message",
+                "data": {"tag": "reminder"},
             },
             {"title": "Default title"},
         )
@@ -94,19 +94,20 @@ class NormalizationTests(unittest.TestCase):
             condition,
             {"type": "template", "template": "{{ true }}"},
         )
-        self.assertEqual(notification["title"], "Default title")
-        self.assertEqual(notification["message"], "Legacy message")
+        self.assertEqual(notification["title"], "Title")
+        self.assertEqual(notification["message"], "Message")
         self.assertEqual(notification["data"], {"tag": "reminder"})
         self.assertEqual(notification["target"], {"entity_id": ["notify.phone"]})
 
-    def test_legacy_confirmation_data_is_preserved(self):
+    def test_confirmation_data_is_preserved(self):
         alert = models.normalize_alert(
             {
                 "name": "Legacy reminder",
                 "notification": {
                     "action": "notify.mobile",
-                    "data": {
-                        "confirmation_button": "Done",
+                    "confirmation": {
+                        "enabled": True,
+                        "button": "Done",
                         "completion_message": "Completed",
                         "max_attempts": 3,
                     },
@@ -126,7 +127,9 @@ class NormalizationTests(unittest.TestCase):
                 "alerts": [
                     {
                         "name": "Android action",
-                        "condition": "{{ true }}",
+                        "conditions": [
+                            {"type": "template", "template": "{{ true }}"}
+                        ],
                         "notification": {
                             "action": "notify.mobile_app_phone",
                             "confirmation": {
@@ -147,19 +150,23 @@ class NormalizationTests(unittest.TestCase):
             "Done",
         )
 
-    def test_alert_normalizes_legacy_fields_to_one_canonical_notification(self):
+    def test_alert_normalizes_canonical_fields(self):
         alert = models.normalize_alert(
             {
                 "name": "Kitchen lights",
-                "condition": "{{ is_state('light.kitchen', 'on') }}",
+                "conditions": [
+                    {
+                        "type": "template",
+                        "template": "{{ is_state('light.kitchen', 'on') }}",
+                    }
+                ],
                 "notification": {
                     "action": "notify.mobile",
                     "message": "Lights are on",
                     "repeat": {"interval": "00:30", "max_attempts": 3},
                     "confirmation": {"enabled": True, "button": "Done"},
                 },
-                "trigger": {"interval": "01:00:00"},
-                "confirmation": {"max_attempts": 99},
+                "monitor": {"interval": "01:00:00"},
             }
         )
 
@@ -172,7 +179,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertNotIn("confirmation", alert)
         self.assertEqual(alert["notification"]["repeat"]["interval"], "00:30")
         self.assertEqual(alert["notification"]["confirmation"]["button"], "Done")
-        self.assertEqual(alert["notification"]["confirmation"]["max_attempts"], 20)
+        self.assertEqual(alert["notification"]["confirmation"]["max_attempts"], 5)
         self.assertEqual(
             alert["notification"]["confirmation"]["resend_interval"],
             {"minutes": 30},
@@ -290,18 +297,17 @@ class ConditionCompilationTests(unittest.TestCase):
         self.assertNotIn(" or ", compiled)
         self.assertEqual(models.compile_condition({"conditions": []}), "{{ true }}")
 
-    def test_legacy_notification_list_is_reduced_to_one_notification(self):
+    def test_notification_is_normalized_to_one_notification(self):
         alert = models.normalize_alert(
             {
-                "name": "Legacy",
-                "notifications": [
-                    {"action": "notify.first", "message": "First"},
-                    {"action": "notify.second", "message": "Second"},
-                ],
+                "name": "Canonical",
+                "notification": {
+                    "action": "notify.first",
+                    "message": "First",
+                },
             }
         )
         self.assertEqual(alert["notification"]["action"], "notify.first")
-        self.assertNotIn("notifications", alert)
 
     def test_template_expression_is_not_double_wrapped(self):
         self.assertEqual(
