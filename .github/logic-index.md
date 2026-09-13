@@ -19,10 +19,20 @@ This is a compact map of the integration’s main execution flows and decision p
 - `custom_components/notification_center/models.py`
   - alert schema and field definitions
   - config structure used across runtime and UI
+- `custom_components/notification_center/durations.py`
+  - duration parsing and formatting helpers
+- `custom_components/notification_center/model_conditions.py`
+  - visual condition to Jinja template compilation
 - `custom_components/notification_center/storage.py`
   - load/save to Home Assistant storage
   - persistence safeguards
   - last-known-good config handling
+- `custom_components/notification_center/delivery/`
+  - `rendering.py`: template rendering and payload cleanup
+  - `recipients.py`: recipient registry snapshot and target expansion
+  - `mobile_app.py`: Mobile App legacy service resolution
+  - `planning.py`: delivery route planning and confirmation delivery validation
+  - `dispatch.py`: Home Assistant notify service calls
 
 ## 3. Runtime alert lifecycle
 - `__init__.py`
@@ -34,6 +44,18 @@ This is a compact map of the integration’s main execution flows and decision p
   - confirmation flow
   - follow-up actions
   - history/debug event generation
+- `custom_components/notification_center/runtime/actions.py`
+  - post-send and post-confirmation service action rendering/execution
+  - draft confirmation action execution
+- `custom_components/notification_center/runtime/confirmations.py`
+  - confirmation user resolution and completion notification construction/sending
+- `custom_components/notification_center/runtime/config_api.py`
+  - save, delete, YAML, list, and history runtime API operations
+- `custom_components/notification_center/runtime/state.py`
+  - alert runtime state defaults
+  - repeat/resend due calculation
+- `custom_components/notification_center/runtime/drafts.py`
+  - editor draft notification session IDs, confirmation actions, and expiry
 
 ## 4. Frontend/editor flow
 - `custom_components/notification_center/panel.py`

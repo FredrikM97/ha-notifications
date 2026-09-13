@@ -314,6 +314,41 @@ async def async_setup(
     @websocket_api.websocket_command(
         {
             vol.Required("type"):
+                f"{DOMAIN}/validate_conditions",
+            vol.Required("alert"):
+                dict,
+        }
+    )
+    @websocket_api.async_response
+    async def handle_validate_conditions(
+        _hass: HomeAssistant,
+        connection,
+        msg: dict[str, Any],
+    ) -> None:
+        """Validate alert conditions without writing or notifying."""
+
+        try:
+            await _manager(
+                hass
+            ).async_validate_conditions(
+                msg["alert"]
+            )
+        except Exception as err:
+            connection.send_error(
+                msg["id"],
+                "condition_invalid",
+                str(err) or "Condition is invalid.",
+            )
+            return
+
+        connection.send_result(
+            msg["id"],
+            True,
+        )
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"):
                 f"{DOMAIN}/save_yaml",
             vol.Required("yaml"):
                 str,
@@ -364,50 +399,18 @@ async def async_setup(
             True,
         )
 
-    websocket_api.async_register_command(
-        hass,
+    for handler in (
         handle_list,
-    )
-
-    websocket_api.async_register_command(
-        hass,        handle_validate_yaml,
-    )
-
-    websocket_api.async_register_command(
-        hass,        handle_save,
-    )
-
-    websocket_api.async_register_command(
-        hass,
+        handle_validate_yaml,
+        handle_validate_conditions,
+        handle_save,
         handle_delete,
-    )
-
-    websocket_api.async_register_command(
-        hass,
         handle_test,
-    )
-
-    websocket_api.async_register_command(
-        hass,
         handle_test_payload,
-    )
-
-    websocket_api.async_register_command(
-        hass,
+        handle_discard_test_payload,
         handle_history,
-    )
-
-    websocket_api.async_register_command(
-        hass,
         handle_get_yaml,
-    )
-
-    websocket_api.async_register_command(
-        hass,
         handle_save_yaml,
-    )
-
-    websocket_api.async_register_command(
-        hass,
         handle_reload,
-    )
+    ):
+        websocket_api.async_register_command(hass, handler)

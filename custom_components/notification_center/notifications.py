@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -45,6 +44,15 @@ from .models import (
     compile_condition,
     normalize_config,
     parse_duration,
+)
+from .runtime import (
+    ConfirmationSupport,
+    DraftConfirmationSessions,
+    NotificationActionRunner,
+    NotificationConfigAPI,
+    ensure_alert_state,
+    notification_due,
+    resolve_user,
 )
 from .storage import NotificationStorage
 
@@ -90,6 +98,21 @@ class NotificationCenter:
             self._ensure_runtime_state,
         )
 
+        self.action_runner = NotificationActionRunner(
+            hass,
+            self.history,
+        )
+
+        self.confirmation_support = ConfirmationSupport(
+            hass,
+            self.dispatcher,
+            self.history,
+        )
+
+        self.config_api = NotificationConfigAPI(self)
+
+        self.draft_sessions = DraftConfirmationSessions(_DRAFT_SESSION_TTL)
+
         self._templates: dict[
             str,
             Template,
@@ -117,8 +140,57 @@ class NotificationCenter:
             str,
             str,
         ] = {}
-        self._draft_sessions: dict[str, datetime] = {}
-        self._draft_actions: dict[str, dict[str, Any]] = {}
+        self._draft_sessions = self.draft_sessions.sessions
+        self._draft_actions = self.draft_sessions.actions
+
+    @property
+    def _action_runner(self) -> NotificationActionRunner:
+        """Return the service action runner, creating it for test instances."""
+
+        runner = getattr(self, "action_runner", None)
+        if runner is None:
+            runner = NotificationActionRunner(
+                self.hass,
+                self.history,
+            )
+            self.action_runner = runner
+        return runner
+
+    @property
+    def _draft_store(self) -> DraftConfirmationSessions:
+        """Return draft sessions, creating them for test instances."""
+
+        sessions = getattr(self, "draft_sessions", None)
+        if sessions is None:
+            sessions = DraftConfirmationSessions(_DRAFT_SESSION_TTL)
+            self.draft_sessions = sessions
+            self._draft_sessions = sessions.sessions
+            self._draft_actions = sessions.actions
+        return sessions
+
+    @property
+    def _confirmation_support(self) -> ConfirmationSupport:
+        """Return confirmation helpers, creating them for test instances."""
+
+        support = getattr(self, "confirmation_support", None)
+        if support is None:
+            support = ConfirmationSupport(
+                self.hass,
+                self.dispatcher,
+                self.history,
+            )
+            self.confirmation_support = support
+        return support
+
+    @property
+    def _config_api(self) -> NotificationConfigAPI:
+        """Return config operations, creating them for test instances."""
+
+        api = getattr(self, "config_api", None)
+        if api is None:
+            api = NotificationConfigAPI(self)
+            self.config_api = api
+        return api
 
     # ---------------------------------------------------------
     # Setup / unload
@@ -448,25 +520,7 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         """Return runtime state for an alert."""
 
-        state = self.state["alerts"].setdefault(
-            alert["id"],
-            {
-                "active": False,
-                "acknowledged": False,
-                "attempts": 0,
-                "notification_id": None,
-                "confirmation_action_id": None,
-                "started_at": None,
-                "last_evaluated": None,
-                "last_notified": None,
-                "confirmed_at": None,
-                "confirmed_by": None,
-                "last_error": None,
-                "last_event": None,
-            },
-        )
-
-        return state
+        return ensure_alert_state(self.state, alert)
 
     async def _process_condition(
         self,
@@ -579,79 +633,11 @@ class NotificationCenter:
             "startup",
             "interval",
         ):
-            if self._notification_due(
-                alert,
-                state,
-            ):
+            if notification_due(alert["notification"], state):
                 await self._send_notification(
                     alert,
                     context=context,
                 )
-
-    def _notification_due(
-        self,
-        alert: dict[str, Any],
-        state: dict[str, Any],
-    ) -> bool:
-        """Determine if a repeated notification is due."""
-
-        notification = alert["notification"]
-        repeat = notification.get("repeat")
-
-        confirmation = notification.get(
-            "confirmation",
-            {},
-        )
-
-        confirmation_pending = bool(state.get("confirmation_action_id"))
-
-        if confirmation_pending and confirmation.get(
-            "enabled",
-            False,
-        ):
-            repeat = {
-                "interval": confirmation.get("resend_interval"),
-                "max_attempts": confirmation.get(
-                    "max_attempts",
-                    5,
-                ),
-            }
-
-        if not repeat or not repeat.get("enabled", True):
-            return False
-
-        attempts = int(
-            state.get(
-                "attempts",
-                0,
-            )
-        )
-
-        max_attempts = int(
-            repeat.get(
-                "max_attempts",
-                1,
-            )
-        )
-
-        if attempts >= max_attempts:
-            return False
-
-        last_notified = state.get("last_notified")
-
-        if not last_notified:
-            return True
-
-        parsed = dt_util.parse_datetime(str(last_notified))
-
-        if parsed is None:
-            return True
-
-        elapsed = dt_util.utcnow() - parsed
-
-        interval = parse_duration(repeat["interval"])
-
-        return elapsed >= interval
 
     async def _send_notification(
         self,
@@ -721,11 +707,12 @@ class NotificationCenter:
             },
         )
 
-        await self._run_notification_actions(
-            alert,
-            context,
-            attempt,
-        )
+        if alert["notification"].get("actions_enabled", False):
+            await self._action_runner.async_run_notification_actions(
+                alert,
+                context,
+                attempt,
+            )
 
         self._save_state()
 
@@ -766,7 +753,7 @@ class NotificationCenter:
 
         self._expire_draft_sessions()
 
-        draft = getattr(self, "_draft_actions", {}).get(action)
+        draft = self._draft_store.resolve_action(action)
         if draft is not None:
             self._discard_draft_session(draft["session_id"])
             await self._handle_draft_confirmation(draft["alert"], event)
@@ -813,9 +800,7 @@ class NotificationCenter:
             },
         )
 
-        notification = alert["notification"]
-
-        confirmation = notification.get(
+        confirmation = alert["notification"].get(
             "confirmation",
             {},
         )
@@ -832,72 +817,22 @@ class NotificationCenter:
                     alert_id,
                 )
 
-        completion_message = confirmation.get("completion_message") or ""
-
-        confirmation_message = confirmation.get("confirmation_message")
-
-        if confirmation.get("notify_on_confirmation", False):
-            completion_message = (
-                confirmation_message
-                or completion_message
-                or "{{ confirmed_by }} confirmed this notification."
+        if confirmation.get("completion_message") or confirmation.get(
+            "notify_on_confirmation", False
+        ):
+            await self._confirmation_support.async_send_completion(
+                alert,
+                event.context,
+                confirmed_by,
+                record_history=True,
             )
 
-        if completion_message:
-            completion_alert = deepcopy(alert)
-
-            completion_alert["notification"] = deepcopy(notification)
-
-            completion_alert["notification"]["message"] = await _render_value(
-                self.hass,
-                completion_message,
-                {
-                    "alert_id": alert["id"],
-                    "alert_name": alert["name"],
-                    "alert_active": True,
-                    "confirmed_by": confirmed_by,
-                    "context": event.context,
-                    "now": dt_util.now(),
-                },
+        if confirmation.get("actions_enabled", False):
+            await self._action_runner.async_run_confirmation_actions(
+                alert,
+                event.context,
+                confirmed_by,
             )
-
-            completion_alert["notification"]["confirmation"] = {
-                "enabled": False,
-                "button": "",
-                "completion_message": "",
-                "actions": [],
-            }
-
-            try:
-                await self.dispatcher.async_send(
-                    completion_alert,
-                    attempt=1,
-                    confirmation_action_id=None,
-                    context=event.context,
-                )
-
-                await self.history.record(
-                    alert,
-                    "completion_sent",
-                    "Completion notification sent.",
-                    {},
-                )
-
-            except Exception as err:
-                await self.history.record(
-                    alert,
-                    "completion_failed",
-                    "Completion notification failed.",
-                    {
-                        "error": str(err),
-                    },
-                )
-
-        await self._run_confirmation_actions(
-            alert,
-            event.context,
-            confirmed_by,
-        )
 
         self._save_state()
 
@@ -911,8 +846,7 @@ class NotificationCenter:
         confirmed_by = self._resolve_user(
             event.context.user_id if event.context else None
         )
-        notification = alert["notification"]
-        confirmation = notification.get("confirmation", {})
+        confirmation = alert["notification"].get("confirmation", {})
 
         if confirmation.get("clear_on_confirmation", True):
             try:
@@ -920,155 +854,22 @@ class NotificationCenter:
             except Exception:
                 _LOGGER.exception("Failed to clear draft notification")
 
-        completion_message = confirmation.get("completion_message") or ""
-        if confirmation.get("notify_on_confirmation", False):
-            completion_message = (
-                confirmation.get("confirmation_message")
-                or completion_message
-                or "{{ confirmed_by }} confirmed this notification."
+        if confirmation.get("completion_message") or confirmation.get(
+            "notify_on_confirmation", False
+        ):
+            await self._confirmation_support.async_send_completion(
+                alert,
+                event.context,
+                confirmed_by,
+                test=True,
             )
 
-        if completion_message:
-            completion_alert = deepcopy(alert)
-            completion_alert["notification"] = deepcopy(notification)
-            completion_alert["notification"]["message"] = await _render_value(
-                self.hass,
-                completion_message,
-                {
-                    "alert_id": alert["id"],
-                    "alert_name": alert["name"],
-                    "alert_active": True,
-                    "confirmed_by": confirmed_by,
-                    "context": event.context,
-                    "now": dt_util.now(),
-                },
+        if confirmation.get("actions_enabled", False):
+            await self._action_runner.async_run_draft_confirmation_actions(
+                alert,
+                event.context,
+                confirmed_by,
             )
-            completion_alert["notification"]["confirmation"] = {"enabled": False}
-
-            try:
-                await self.dispatcher.async_send(
-                    completion_alert,
-                    attempt=1,
-                    confirmation_action_id=None,
-                    context=event.context,
-                    test=True,
-                )
-            except Exception:
-                _LOGGER.exception("Failed to send draft completion notification")
-
-        await self._run_draft_confirmation_actions(
-            alert,
-            event.context,
-            confirmed_by,
-        )
-
-    async def _run_draft_confirmation_actions(
-        self,
-        alert: dict[str, Any],
-        context: Context | None,
-        confirmed_by: str,
-    ) -> None:
-        """Run draft follow-up actions without writing alert history."""
-
-        confirmation = alert["notification"].get("confirmation", {})
-        if not confirmation.get("actions_enabled", False):
-            return
-
-        variables = {
-            "alert_id": alert["id"],
-            "alert_name": alert["name"],
-            "alert_active": True,
-            "confirmed_by": confirmed_by,
-            "now": dt_util.now(),
-        }
-        for action in confirmation.get("actions", []):
-            try:
-                service = str(
-                    await _render_value(self.hass, action.get("action"), variables)
-                    or ""
-                )
-                if not service or "." not in service:
-                    raise ValueError("Invalid confirmation action.")
-                target = await _render_value(
-                    self.hass, action.get("target", {}), variables
-                )
-                data = _remove_none(
-                    await _render_value(self.hass, action.get("data", {}), variables)
-                )
-                domain, service_name = service.split(".", 1)
-                await self.hass.services.async_call(
-                    domain,
-                    service_name,
-                    service_data=data if isinstance(data, dict) else {},
-                    target=target if target else None,
-                    blocking=True,
-                    context=context,
-                )
-            except Exception:
-                _LOGGER.exception(
-                    "Draft confirmation action failed for %s",
-                    alert["id"],
-                )
-
-    async def _run_notification_actions(
-        self,
-        alert: dict[str, Any],
-        context: Context | None,
-        attempt: int,
-    ) -> None:
-        """Run actions after a notification dispatch."""
-
-        notification = alert["notification"]
-        if not notification.get("actions_enabled", False):
-            return
-
-        variables = {
-            "alert_id": alert["id"],
-            "alert_name": alert["name"],
-            "alert_active": True,
-            "attempt": attempt,
-            "context": context,
-            "now": dt_util.now(),
-        }
-
-        for index, action in enumerate(notification.get("actions", []), start=1):
-            try:
-                service = str(
-                    await _render_value(self.hass, action.get("action"), variables)
-                    or ""
-                )
-                if not service or "." not in service:
-                    raise ValueError("Invalid post-send action.")
-
-                target = await _render_value(
-                    self.hass, action.get("target", {}), variables
-                )
-                data = _remove_none(
-                    await _render_value(self.hass, action.get("data", {}), variables)
-                )
-                domain, service_name = service.split(".", 1)
-                await self.hass.services.async_call(
-                    domain,
-                    service_name,
-                    service_data=data if isinstance(data, dict) else {},
-                    target=target if target else None,
-                    blocking=True,
-                    context=context,
-                )
-                await self.history.record(
-                    alert,
-                    "notification_action",
-                    "Post-send action executed.",
-                    {"attempt": attempt, "index": index, "action": service},
-                )
-            except Exception as err:
-                _LOGGER.exception("Post-send action failed for %s", alert["id"])
-                await self.history.record(
-                    alert,
-                    "notification_action_failed",
-                    "Post-send action failed.",
-                    {"attempt": attempt, "index": index, "error": str(err)},
-                )
 
     def _resolve_user(
         self,
@@ -1079,121 +880,7 @@ class NotificationCenter:
         if not user_id:
             return "Unknown user"
 
-        for state in self.hass.states.async_all("person"):
-            if state.attributes.get("user_id") == user_id:
-                return state.name
-
-        return "Unknown user"
-
-    async def _run_confirmation_actions(
-        self,
-        alert: dict[str, Any],
-        context: Context | None,
-        confirmed_by: str,
-    ) -> None:
-        """Run actions after confirmation."""
-
-        confirmation = alert["notification"].get(
-            "confirmation",
-            {},
-        )
-
-        if not confirmation.get("actions_enabled", False):
-            return
-
-        actions = confirmation.get(
-            "actions",
-            [],
-        )
-
-        variables = {
-            "alert_id": alert["id"],
-            "alert_name": alert["name"],
-            "alert_active": True,
-            "confirmed_by": confirmed_by,
-            "now": dt_util.now(),
-        }
-
-        for index, action in enumerate(
-            actions,
-            start=1,
-        ):
-            try:
-                service = await _render_value(
-                    self.hass,
-                    action.get("action"),
-                    variables,
-                )
-                service = str(service or "")
-
-                if not service or "." not in service:
-                    raise ValueError("Invalid confirmation action.")
-
-                target = await _render_value(
-                    self.hass,
-                    action.get(
-                        "target",
-                        {},
-                    ),
-                    variables,
-                )
-
-                data = await _render_value(
-                    self.hass,
-                    action.get(
-                        "data",
-                        {},
-                    ),
-                    variables,
-                )
-                data = _remove_none(data)
-
-                domain, service_name = service.split(
-                    ".",
-                    1,
-                )
-
-                await self.hass.services.async_call(
-                    domain,
-                    service_name,
-                    service_data=(
-                        data
-                        if isinstance(
-                            data,
-                            dict,
-                        )
-                        else {}
-                    ),
-                    target=(target if target else None),
-                    blocking=True,
-                    context=context,
-                )
-
-                await self.history.record(
-                    alert,
-                    "confirmation_action",
-                    "Confirmation action executed.",
-                    {
-                        "index": index,
-                        "action": service,
-                    },
-                )
-
-            except Exception as err:
-                _LOGGER.exception(
-                    "Confirmation action failed for %s",
-                    alert["id"],
-                )
-
-                await self.history.record(
-                    alert,
-                    "confirmation_action_failed",
-                    "Confirmation action failed.",
-                    {
-                        "index": index,
-                        "error": str(err),
-                    },
-                )
+        return resolve_user(getattr(self, "hass", None), user_id)
 
     # ---------------------------------------------------------
     # Public operations
@@ -1248,10 +935,6 @@ class NotificationCenter:
     ) -> dict[str, str | None]:
         """Send a normalized editor draft without saving or changing runtime state."""
 
-        if not hasattr(self, "_draft_sessions"):
-            self._draft_sessions = {}
-            self._draft_actions = {}
-
         normalized = normalize_config(
             {
                 "version": 1,
@@ -1259,23 +942,23 @@ class NotificationCenter:
             }
         )["alerts"][0]
 
-        self._expire_draft_sessions()
-        session_id = f"NC_DRAFT_{uuid.uuid4().hex}"
-        delivery_alert = deepcopy(normalized)
-        delivery_alert["id"] = session_id
-        expires_at = dt_util.utcnow() + _DRAFT_SESSION_TTL
-        self._draft_sessions[session_id] = expires_at
+        delivery = self._draft_store.create(normalized, dt_util.utcnow())
+        delivery_alert = delivery.alert
+        session_id = delivery_alert["id"]
         if hasattr(self, "hass") and hasattr(self, "_tasks"):
-            self._schedule(self._async_expire_draft_session(session_id, expires_at))
+            self._schedule(
+                self._async_expire_draft_session(session_id, delivery.expires_at)
+            )
 
         confirmation = delivery_alert["notification"].get("confirmation", {})
         confirmation_action_id = None
         if confirmation.get("enabled", False):
             confirmation_action_id = f"NC_DRAFT_CONFIRM_{uuid.uuid4().hex}"
-            self._draft_actions[confirmation_action_id] = {
-                "session_id": session_id,
-                "alert": delivery_alert,
-            }
+            self._draft_store.register_action(
+                confirmation_action_id,
+                session_id,
+                delivery_alert,
+            )
 
         await self.dispatcher.async_send(
             delivery_alert,
@@ -1293,12 +976,7 @@ class NotificationCenter:
     def _expire_draft_sessions(self) -> None:
         """Discard draft sessions whose confirmation window has expired."""
 
-        now = dt_util.utcnow()
-        for session_id, expires_at in list(
-            getattr(self, "_draft_sessions", {}).items()
-        ):
-            if expires_at <= now:
-                self._discard_draft_session(session_id)
+        self._draft_store.expire(dt_util.utcnow())
 
     async def _async_expire_draft_session(
         self,
@@ -1314,10 +992,7 @@ class NotificationCenter:
     def _discard_draft_session(self, session_id: str) -> None:
         """Remove all temporary confirmation actions for one draft session."""
 
-        getattr(self, "_draft_sessions", {}).pop(session_id, None)
-        for action_id, draft in list(getattr(self, "_draft_actions", {}).items()):
-            if draft["session_id"] == session_id:
-                self._draft_actions.pop(action_id, None)
+        self._draft_store.discard(session_id)
 
     async def async_discard_draft_test(self, session_id: str) -> None:
         """Explicitly dispose an editor draft test session."""
@@ -1331,49 +1006,7 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         """Create or update an alert."""
 
-        config = await self.storage.async_load_config()
-
-        alerts = list(config["alerts"])
-
-        normalized = normalize_config(
-            {
-                "version": 1,
-                "alerts": [alert],
-            }
-        )["alerts"][0]
-
-        existing = next(
-            (item for item in alerts if item["id"] == normalized["id"]),
-            None,
-        )
-
-        now = dt_util.utcnow().isoformat()
-
-        if existing:
-            normalized["created_at"] = existing.get("created_at") or now
-        else:
-            normalized["created_at"] = now
-
-        normalized["updated_at"] = now
-
-        if existing:
-            alerts = [
-                (normalized if item["id"] == normalized["id"] else item)
-                for item in alerts
-            ]
-        else:
-            alerts.append(normalized)
-
-        await self.storage.async_save_config(
-            {
-                "version": 1,
-                "alerts": alerts,
-            }
-        )
-
-        await self.async_reload()
-
-        return normalized
+        return await self._config_api.async_save_alert(alert)
 
     async def async_delete_alert(
         self,
@@ -1381,38 +1014,7 @@ class NotificationCenter:
     ) -> None:
         """Delete an alert."""
 
-        alert = self.alerts.get(alert_id)
-
-        if alert:
-            try:
-                await self.dispatcher.async_clear(
-                    alert,
-                    context=None,
-                )
-            except Exception:
-                _LOGGER.exception(
-                    "Failed clearing notification before deleting %s",
-                    alert_id,
-                )
-
-        config = await self.storage.async_load_config()
-
-        config["alerts"] = [
-            alert for alert in config["alerts"] if alert["id"] != alert_id
-        ]
-
-        await self.storage.async_save_config(config)
-
-        self.state["alerts"].pop(
-            alert_id,
-            None,
-        )
-
-        self.history.remove_alert(alert_id)
-
-        await self.async_reload()
-
-        self.storage.async_delay_save_state(self.state)
+        await self._config_api.async_delete_alert(alert_id)
 
     async def async_validate_yaml(
         self,
@@ -1420,7 +1022,15 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         """Validate raw YAML without changing the saved config."""
 
-        return await self.storage.async_validate_yaml_text(text)
+        return await self._config_api.async_validate_yaml(text)
+
+    async def async_validate_conditions(
+        self,
+        alert: dict[str, Any],
+    ) -> bool:
+        """Validate alert conditions without changing saved config."""
+
+        return await self._config_api.async_validate_conditions(alert)
 
     async def async_save_yaml(
         self,
@@ -1428,36 +1038,21 @@ class NotificationCenter:
     ) -> dict[str, Any]:
         """Replace configuration using raw YAML."""
 
-        normalized = await self.storage.async_save_yaml_text(text)
-
-        await self.async_reload()
-        return normalized
+        return await self._config_api.async_save_yaml(text)
 
     async def async_get_yaml(
         self,
     ) -> str:
         """Return YAML."""
 
-        return await self.storage.async_load_yaml_text()
+        return await self._config_api.async_get_yaml()
 
     async def async_list_alerts(
         self,
     ) -> list[dict[str, Any]]:
         """Return alerts with runtime information."""
 
-        result = []
-
-        for alert in self.alerts.values():
-            state = self._ensure_runtime_state(alert)
-
-            result.append(
-                {
-                    **deepcopy(alert),
-                    "runtime": deepcopy(state),
-                }
-            )
-
-        return result
+        return await self._config_api.async_list_alerts()
 
     async def async_history(
         self,
@@ -1466,7 +1061,7 @@ class NotificationCenter:
     ) -> list[dict[str, Any]]:
         """Return trace history."""
 
-        return await self.history.list(alert_id, limit)
+        return await self._config_api.async_history(alert_id, limit)
 
     def _save_state(self) -> None:
         """Schedule persistent state save."""

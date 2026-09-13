@@ -5,6 +5,7 @@ import { createRecipientPicker } from "./recipient-picker.js";
 import { html, nothing, render } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert, Registries } from "./types.js";
+import * as YAML from "yaml";
 
 type FormControl = HTMLInputElement | HTMLTextAreaElement;
 type CodeEditor = HTMLElement & {
@@ -12,7 +13,18 @@ type CodeEditor = HTMLElement & {
   updateComplete?: Promise<unknown>;
   codemirror?: { dom: HTMLElement };
 };
-type EditorMode = "visual" | "jinja";
+interface CodeEditorOptions {
+  role?: string;
+  value: string;
+  placeholder?: string;
+  mode: string;
+  language: string;
+  label: string;
+  className?: string;
+  readOnly?: boolean;
+  onInput?: (event: Event) => void;
+}
+type EditorMode = "visual" | "yaml" | "jinja";
 
 interface EditorContext {
   value: Alert;
@@ -20,16 +32,18 @@ interface EditorContext {
   markDirty(): void;
   refreshStatuses(): void;
   removeSetting(setting: OptionalSetting): void;
+  setMode(mode: EditorMode): void;
+  validateCondition(): void;
+  validateActions(role: string, label: string): void;
 }
 
 type OptionalSetting =
-  | "repeat"
   | "confirmation"
   | "postSendActions"
   | "postConfirmationActions";
 
 type OptionalSettings = Record<OptionalSetting, boolean>;
-type SectionStatus = OptionalSetting | "confirmationUpdate";
+type SectionStatus = OptionalSetting | "confirmationUpdate" | "repeat";
 
 interface EditorSection {
   title: string;
@@ -49,12 +63,16 @@ const editorSections: EditorSection[] = [
   { title: "Recipients" },
   { title: "Notification" },
   {
+    title: "Reminder interval",
+    parent: "Notification",
+    status: "repeat",
+  },
+  {
     title: "Post-send actions",
     setting: "postSendActions",
     parent: "Notification",
     status: "postSendActions",
   },
-  { title: "Repeat notification", setting: "repeat", status: "repeat" },
   { title: "Confirmation", setting: "confirmation", status: "confirmation" },
   {
     title: "Notify recipients when confirmed",
@@ -70,11 +88,18 @@ const editorSections: EditorSection[] = [
 ];
 
 const optionalSections: Record<OptionalSetting, OptionalSection> = {
-  postSendActions: { index: 5 },
-  repeat: { index: 6 },
+  postSendActions: { index: 6 },
   confirmation: { index: 7 },
   postConfirmationActions: { index: 9 },
 };
+
+const ACTIONS_PLACEHOLDER = `- action: switch.turn_on
+  metadata: {}
+  target:
+    entity_id:
+      - switch.pixi_smart_drinking_fountain_water_pump_reset
+      - switch.pixi_smart_drinking_fountain_filter_reset
+  data: {}`;
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -138,12 +163,71 @@ function conditionTemplate(alert: Alert): string {
   );
 }
 
+function conditionsYaml(conditions: Alert["conditions"]): string {
+  return YAML.stringify(conditions.length ? conditions : []);
+}
+
+function actionsYaml(actions: Record<string, unknown>[] | undefined): string {
+  return actions?.length ? YAML.stringify(actions) : "";
+}
+
+function parseConditionsYaml(value: string): Alert["conditions"] {
+  const parsed = YAML.parse(value || "[]");
+  if (!Array.isArray(parsed)) {
+    throw new Error("Conditions YAML must be a list.");
+  }
+  if (!parsed.every((item) => item && typeof item === "object")) {
+    throw new Error("Conditions YAML must contain condition objects.");
+  }
+  return parsed as Alert["conditions"];
+}
+
 function valueOf(event: Event): string {
   return (event.currentTarget as FormControl).value;
 }
 
 function checkedOf(event: Event): boolean {
   return (event.currentTarget as HTMLInputElement).checked;
+}
+
+function showEditorToast(
+  root: ShadowRoot,
+  message: string,
+  duration = 6000,
+): void {
+  const toast = document.createElement("div");
+  toast.className = "nc-toast";
+  toast.textContent = message;
+  root.append(toast);
+  window.setTimeout(() => toast.remove(), duration);
+}
+
+function durationInputValue(
+  value: string | Record<string, number> | undefined,
+  fallback: string,
+): string {
+  if (typeof value === "string") {
+    const parts = value.split(":");
+    if (parts.length === 2) return `${value}:00`;
+    return value;
+  }
+  if (!value || typeof value !== "object") return fallback;
+
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(
+      (Number(value.hours) || 0) * 3600 +
+        (Number(value.minutes) || 0) * 60 +
+        (Number(value.seconds) || 0),
+    ),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
 }
 
 async function fillActionEditors(host: HTMLElement): Promise<void> {
@@ -175,6 +259,30 @@ function field(
   return html`<div class=${full ? "nc-field full" : "nc-field"}>
     <label>${label}</label>${content}
   </div>`;
+}
+
+function codeEditor({
+  role,
+  value,
+  placeholder = "",
+  mode,
+  language,
+  label,
+  className = "nc-action-editor",
+  readOnly = false,
+  onInput,
+}: CodeEditorOptions): TemplateResult {
+  return html`<ha-code-editor
+    data-role=${role || nothing}
+    .value=${value}
+    placeholder=${placeholder || nothing}
+    class=${`nc-code-editor ${className}`}
+    mode=${mode}
+    language=${language}
+    aria-label=${label}
+    ?read-only=${readOnly}
+    @input=${onInput || nothing}
+  ></ha-code-editor>`;
 }
 
 function section(
@@ -314,7 +422,7 @@ function renderMonitorSection(context: EditorContext): TemplateResult {
                 .checked=${Boolean(monitor.interval)}
                 @change=${(event: Event) => {
                   monitor.interval = checkedOf(event)
-                    ? monitor.interval || "12:00"
+                    ? monitor.interval || "12:00:00"
                     : undefined;
                   context.markDirty();
                   context.refreshStatuses();
@@ -325,7 +433,7 @@ function renderMonitorSection(context: EditorContext): TemplateResult {
               data-role="interval"
               type="time"
               step="1"
-              .value=${monitor.interval || "12:00"}
+              .value=${durationInputValue(monitor.interval, "12:00:00")}
               @input=${(event: Event) => {
                 monitor.interval = valueOf(event);
                 context.markDirty();
@@ -361,33 +469,60 @@ function renderConditionSection(context: EditorContext): TemplateResult {
     html`<div class="nc-condition-mode">
         <button
           class="nc-button secondary nc-condition-mode-button"
-          @click=${() => setMode(context, "visual")}
+          @click=${() => context.setMode("visual")}
         >
           Visual conditions
         </button>
         <button
           class="nc-button secondary nc-condition-mode-button"
-          @click=${() => setMode(context, "jinja")}
+          @click=${() => context.setMode("yaml")}
+        >
+          Conditions YAML
+        </button>
+        <button
+          class="nc-button secondary nc-condition-mode-button"
+          @click=${() => context.setMode("jinja")}
         >
           Advanced Jinja
         </button>
       </div>
       <div data-role="visual" class="nc-condition-visual"></div>
+      <div data-role="conditions-yaml">
+        ${field(
+          "Conditions YAML",
+          codeEditor({
+            role: "conditions-yaml-editor",
+            value: conditionsYaml(context.value.conditions),
+            mode: "yaml",
+            language: "yaml",
+            label: "Conditions YAML",
+            onInput: () => context.markDirty(),
+          }),
+          true,
+        )}
+        <div class="nc-help">
+          Edit the raw <code>conditions:</code> list. This is the YAML behind
+          the visual editor.
+        </div>
+      </div>
       <div data-role="jinja">
         ${field(
           "Jinja condition",
-          html`<textarea
-            data-role="condition"
-            .value=${condition}
-            placeholder="{{ is_state('binary_sensor.example', 'on') }}"
-            @input=${(event: Event) => {
+          codeEditor({
+            role: "condition",
+            value: condition,
+            placeholder: "{{ is_state('binary_sensor.example', 'on') }}",
+            mode: "jinja2",
+            language: "jinja",
+            label: "Jinja condition",
+            onInput: (event: Event) => {
               context.value.conditions = [
-                { type: "template", template: valueOf(event) },
+                { type: "template", template: (event.currentTarget as CodeEditor).value },
               ];
               context.markDirty();
               context.refreshStatuses();
-            }}
-          ></textarea>`,
+            },
+          }),
           true,
         )}
         <div class="nc-help">
@@ -395,6 +530,13 @@ function renderConditionSection(context: EditorContext): TemplateResult {
           automatically tracks entities referenced by the template.
         </div>
       </div>`,
+    "",
+    html`<button
+      class="nc-button secondary"
+      @click=${() => context.validateCondition()}
+    >
+      Validate condition
+    </button>`,
   );
 }
 
@@ -434,21 +576,18 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
         )}
         ${field(
           "Message",
-          html`<ha-code-editor
-            .value=${notification.message || ""}
-            placeholder="Notification message"
-            class="nc-code-editor nc-action-editor"
-            mode="jinja2"
-            language="jinja"
-            aria-label="Notification message"
-            @input=${(event: Event) => {
-              notification.message = (
-                event.currentTarget as CodeEditor
-              ).value;
+          codeEditor({
+            value: notification.message || "",
+            placeholder: "Notification message",
+            mode: "jinja2",
+            language: "jinja",
+            label: "Notification message",
+            onInput: (event: Event) => {
+              notification.message = (event.currentTarget as CodeEditor).value;
               context.markDirty();
               context.refreshStatuses();
-            }}
-          ></ha-code-editor>`,
+            },
+          }),
           true,
         )}
       </div>
@@ -459,69 +598,128 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
   );
 }
 
+function renderReminderIntervalSection(context: EditorContext): TemplateResult {
+  const notification = context.value.notification;
+  const repeat = notification.repeat;
+  const repeatEnabled = Boolean(repeat && repeat.enabled !== false);
+  const isRepeatEnabled = (): boolean =>
+    Boolean(notification.repeat && notification.repeat.enabled !== false);
+  const toggleRepeat = (enabled: boolean): void => {
+    if (enabled) {
+      notification.repeat = {
+        interval: repeat?.interval || "00:30:00",
+        max_attempts: repeat?.max_attempts || 5,
+        enabled: true,
+      };
+    } else if (notification.repeat) {
+      notification.repeat.enabled = false;
+    } else {
+      notification.repeat = {
+        interval: "00:30:00",
+        max_attempts: 5,
+        enabled: false,
+      };
+    }
+    context.markDirty();
+    context.refreshStatuses();
+  };
+
+  return section(
+    "Reminder interval",
+    html`<div class="nc-help">
+        Send another notification while this alert remains active.
+      </div>
+      <div class="nc-grid">
+        ${field(
+          "Interval",
+          html`<input
+            type="time"
+            step="1"
+                .value=${durationInputValue(
+                  repeat?.interval as string | Record<string, number> | undefined,
+                  "00:30:00",
+                )}
+            @input=${(event: Event) => {
+              notification.repeat = {
+                interval: valueOf(event),
+                    max_attempts: repeat?.max_attempts || 5,
+                    enabled: isRepeatEnabled(),
+              };
+              context.markDirty();
+            }}
+          />`,
+        )}
+        ${field(
+          "Maximum reminders",
+          html`<input
+            type="number"
+            min="1"
+            .value=${String(repeat?.max_attempts || 5)}
+            @input=${(event: Event) => {
+              notification.repeat = {
+                    interval: repeat?.interval || "00:30:00",
+                max_attempts: Number(valueOf(event)) || 5,
+                    enabled: isRepeatEnabled(),
+              };
+              context.markDirty();
+            }}
+          />`,
+        )}
+      </div>`,
+    "",
+    html`<div class="nc-setting-controls">
+      <span class="nc-setting-state">${repeatEnabled ? "Enabled" : "Disabled"}</span>
+      <input
+        class="nc-switch-input"
+        type="checkbox"
+        role="switch"
+        .checked=${repeatEnabled}
+        aria-label="Enable reminder interval"
+        title=${repeatEnabled ? "Disable reminder interval" : "Enable reminder interval"}
+        @change=${(event: Event) => {
+          const enabled = checkedOf(event);
+          toggleRepeat(enabled);
+          const label = (event.currentTarget as HTMLElement)
+            .closest(".nc-setting-controls")
+            ?.querySelector<HTMLElement>(".nc-setting-state");
+          if (label) label.textContent = enabled ? "Enabled" : "Disabled";
+        }}
+      />
+    </div>`,
+  );
+}
+
 function renderPostSendActionsSection(context: EditorContext): TemplateResult {
   const notification = context.value.notification;
   return section(
     "Post-send actions",
     html`<div class="nc-help">
-        Runs after every notification send. Enter a JSON array of Home
-        Assistant actions. JSON is valid YAML; YAML syntax and Jinja templates
-        are highlighted, but only JSON arrays can be saved.
+        Runs after every notification send. Enter a YAML list of Home Assistant
+        actions. JSON arrays also work because JSON is valid YAML.
       </div>
-      <ha-code-editor
-        data-role="notification-actions"
-        class="nc-code-editor nc-action-editor"
-        mode="yaml"
-        language="yaml"
-        aria-label="Post-send actions"
-        .value=${JSON.stringify(notification.actions || [], null, 2)}
-        @input=${() => context.markDirty()}
-      ></ha-code-editor>`,
+      ${codeEditor({
+        role: "notification-actions",
+        value: actionsYaml(notification.actions),
+        placeholder: ACTIONS_PLACEHOLDER,
+        mode: "yaml",
+        language: "yaml",
+        label: "Post-send actions",
+        onInput: () => context.markDirty(),
+      })}`,
     "",
-    optionalControls(context, "postSendActions", Boolean(notification.actions_enabled), "post-send actions", (enabled) => {
-      notification.actions_enabled = enabled;
-      context.markDirty();
-    }),
-  );
-}
-
-function renderRepeatSection(context: EditorContext): TemplateResult {
-  const repeat = context.value.notification.repeat;
-  return section(
-    "Repeat notification",
-    html`<div class="nc-grid">
-      ${field(
-        "Interval",
-        html`<input
-          type="time"
-          step="1"
-          .value=${repeat?.interval || "00:30"}
-          @input=${(event: Event) => {
-            if (context.value.notification.repeat)
-              context.value.notification.repeat.interval = valueOf(event);
-            context.markDirty();
-          }}
-        />`,
-      )}
-      ${field(
-        "Maximum attempts",
-        html`<input
-          type="number"
-          .value=${String(repeat?.max_attempts || 5)}
-          @input=${(event: Event) => {
-            if (context.value.notification.repeat)
-              context.value.notification.repeat.max_attempts =
-                Number(valueOf(event)) || 5;
-            context.markDirty();
-          }}
-        />`,
-      )}
+    html`<div class="nc-setting-controls">
+      <button
+        class="nc-button secondary"
+        @click=${() =>
+          context.validateActions("notification-actions", "Post-send actions")}
+      >
+        Validate actions
+      </button>
+      ${optionalControls(context, "postSendActions", Boolean(notification.actions_enabled), "post-send actions", (enabled) => {
+        notification.actions_enabled = enabled;
+        context.markDirty();
+      })}
     </div>`,
-    "",
-    optionalControls(context, "repeat", repeat?.enabled !== false, "repeat notification", (enabled) => {
-      if (repeat) repeat.enabled = enabled;
-      context.markDirty();
-    }),
   );
 }
 
@@ -554,11 +752,14 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
           true,
         )}
         ${field(
-          "Reminder interval",
+          "Confirmation reminder interval",
           html`<input
             type="time"
             step="1"
-            .value=${String(confirmation.resend_interval || "00:30:00")}
+            .value=${durationInputValue(
+              confirmation.resend_interval,
+              "00:30:00",
+            )}
             @input=${(event: Event) => {
               confirmation.resend_interval = valueOf(event);
               context.markDirty();
@@ -613,20 +814,17 @@ function renderConfirmationNotificationSection(
   const confirmation = context.value.notification.confirmation;
   return section(
     "Notify recipients when confirmed",
-    html`<ha-code-editor
-      .value=${confirmation.confirmation_message || ""}
-      placeholder="Confirmed by {{ confirmed_by }}"
-      class="nc-code-editor nc-action-editor"
-      mode="jinja2"
-      language="jinja"
-      aria-label="Confirmation message"
-      @input=${(event: Event) => {
-        confirmation.confirmation_message = (
-          event.currentTarget as CodeEditor
-        ).value;
+    codeEditor({
+      value: confirmation.confirmation_message || "",
+      placeholder: "Confirmed by {{ confirmed_by }}",
+      mode: "jinja2",
+      language: "jinja",
+      label: "Confirmation message",
+      onInput: (event: Event) => {
+        confirmation.confirmation_message = (event.currentTarget as CodeEditor).value;
         context.markDirty();
-      }}
-    ></ha-code-editor>`,
+      },
+    }),
     "",
     confirmationNotificationControls(context),
   );
@@ -639,62 +837,33 @@ function renderPostConfirmationActionsSection(
   return section(
     "Post-confirmation actions",
     html`<div class="nc-help">
-        Runs after a recipient confirms. Enter a JSON array of Home Assistant
-        actions. JSON is valid YAML; YAML syntax and Jinja templates are
-        highlighted, but only JSON arrays can be saved.
+        Runs after a recipient confirms. Enter a YAML list of Home Assistant
+        actions. JSON arrays also work because JSON is valid YAML.
       </div>
-      <ha-code-editor
-        data-role="actions"
-        class="nc-code-editor nc-action-editor"
-        mode="yaml"
-        language="yaml"
-        aria-label="Post-confirmation actions"
-        .value=${JSON.stringify(confirmation.actions || [], null, 2)}
-        @input=${() => context.markDirty()}
-      ></ha-code-editor>`,
+      ${codeEditor({
+        role: "actions",
+        value: actionsYaml(confirmation.actions),
+        placeholder: ACTIONS_PLACEHOLDER,
+        mode: "yaml",
+        language: "yaml",
+        label: "Post-confirmation actions",
+        onInput: () => context.markDirty(),
+      })}`,
     "",
-    optionalControls(context, "postConfirmationActions", Boolean(confirmation.actions_enabled), "post-confirmation actions", (enabled) => {
-      confirmation.actions_enabled = enabled;
-      context.markDirty();
-    }),
+    html`<div class="nc-setting-controls">
+      <button
+        class="nc-button secondary"
+        @click=${() =>
+          context.validateActions("actions", "Post-confirmation actions")}
+      >
+        Validate actions
+      </button>
+      ${optionalControls(context, "postConfirmationActions", Boolean(confirmation.actions_enabled), "post-confirmation actions", (enabled) => {
+        confirmation.actions_enabled = enabled;
+        context.markDirty();
+      })}
+    </div>`,
   );
-}
-
-function setMode(context: EditorContext, mode: EditorMode): void {
-  context.mode = mode;
-  context.markDirty();
-  context.refreshStatuses();
-}
-
-function yamlValue(value: unknown, indent = 0): string {
-  const padding = " ".repeat(indent);
-  const isComplex = (item: unknown): boolean =>
-    Array.isArray(item) || Boolean(item && typeof item === "object");
-
-  if (Array.isArray(value)) {
-    if (!value.length) return `${padding}[]`;
-    return value
-      .map((item) =>
-        isComplex(item)
-          ? `${padding}-\n${yamlValue(item, indent + 2)}`
-          : `${padding}- ${yamlValue(item)}`,
-      )
-      .join("\n");
-  }
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (!entries.length) return `${padding}{}`;
-    return entries
-      .map(([key, item]) =>
-        isComplex(item)
-          ? `${padding}${key}:\n${yamlValue(item, indent + 2)}`
-          : `${padding}${key}: ${yamlValue(item)}`,
-      )
-      .join("\n");
-  }
-  return typeof value === "string"
-    ? JSON.stringify(value)
-    : String(value ?? "null");
 }
 
 function showYaml(root: ShadowRoot, alert: Alert): void {
@@ -715,12 +884,14 @@ function showYaml(root: ShadowRoot, alert: Alert): void {
           </button>
         </header>
         <main class="nc-modal-body">
-          <ha-code-editor
-            mode="yaml"
-            language="yaml"
-            read-only
-            class="nc-code-editor nc-alert-yaml-editor"
-          ></ha-code-editor>
+          ${codeEditor({
+            value: "",
+            mode: "yaml",
+            language: "yaml",
+            label: "Alert YAML",
+            className: "nc-alert-yaml-editor",
+            readOnly: true,
+          })}
         </main>
       </section>
     </div>`,
@@ -728,7 +899,7 @@ function showYaml(root: ShadowRoot, alert: Alert): void {
   );
   const editor = popup.querySelector<CodeEditor>("ha-code-editor");
   if (!editor) throw new Error("Missing alert YAML editor");
-  editor.value = yamlValue(alert);
+  editor.value = YAML.stringify(alert);
   root.append(popup);
 }
 
@@ -738,12 +909,14 @@ function actionArrayValue(
 ): Record<string, unknown>[] {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(editor?.value || "[]");
+    parsed = YAML.parse(editor?.value || "[]");
   } catch {
-    throw new Error(`${label} must be a valid JSON array.`);
+    throw new Error(
+      `${label} must be a valid YAML list of action objects. Example: - action: switch.turn_on`,
+    );
   }
   if (!Array.isArray(parsed) || !parsed.every((item) => item && typeof item === "object")) {
-    throw new Error(`${label} must be a JSON array of action objects.`);
+    throw new Error(`${label} must be a YAML list of action objects.`);
   }
   return parsed as Record<string, unknown>[];
 }
@@ -753,14 +926,18 @@ export function openEditor({
   alert,
   registries,
   onSave,
+  onSaved,
   onTest,
+  onValidateCondition,
   onDiscardTest,
 }: {
   root: ShadowRoot;
   alert?: Alert;
   registries: Registries;
-  onSave: (alert: Alert) => Promise<void>;
+  onSave: (alert: Alert) => Promise<Alert | void>;
+  onSaved?: (alert: Alert) => Promise<void> | void;
   onTest: (alert: Alert) => Promise<{ session_id: string }>;
+  onValidateCondition: (alert: Alert) => Promise<unknown>;
   onDiscardTest: (sessionId: string) => Promise<unknown>;
 }): void {
   const value = clone(alert || defaultAlert());
@@ -786,7 +963,7 @@ export function openEditor({
     const backButton = document.createElement("button");
     backButton.className = "nc-button secondary";
     backButton.textContent = "Back to alerts";
-    backButton.addEventListener("click", close);
+    backButton.addEventListener("click", () => close());
     dashboardActions.replaceChildren(backButton);
   }
   const restoreDashboardAction = (): void => {
@@ -814,9 +991,11 @@ export function openEditor({
     },
     refreshStatuses: () => {},
     removeSetting: () => {},
+    setMode: () => {},
+    validateCondition: () => {},
+    validateActions: () => {},
   };
   const optionalSettings: OptionalSettings = {
-    repeat: Boolean(value.notification.repeat),
     confirmation: !alert || Boolean(alert.notification.confirmation),
     postSendActions: true,
     postConfirmationActions: !alert || Boolean(alert.notification.confirmation),
@@ -835,9 +1014,6 @@ export function openEditor({
                 @change=${(event: Event) => addSetting(valueOf(event))}
               >
                 <option value="">Add setting</option>
-                <option value="repeat" ?disabled=${optionalSettings.repeat}>
-                  Repeat notification
-                </option>
                 <option
                   value="confirmation"
                   ?disabled=${optionalSettings.confirmation}
@@ -916,18 +1092,12 @@ export function openEditor({
                 context,
               )}${renderRecipientSection()}${renderNotificationSection(
                 context,
-              )}<div
+              )}${renderReminderIntervalSection(context)}<div
                 class="nc-optional-setting"
                 data-setting="postSendActions"
                 ?hidden=${!optionalSettings.postSendActions}
               >
                 ${renderPostSendActionsSection(context)}
-              </div><div
-                class="nc-optional-setting"
-                data-setting="repeat"
-                ?hidden=${!optionalSettings.repeat}
-              >
-                ${renderRepeatSection(context)}
               </div><div
                 class="nc-optional-setting"
                 data-setting="confirmation"
@@ -961,7 +1131,7 @@ export function openEditor({
             ><ha-icon icon="mdi:code-braces"></ha-icon></button>
             <button
               class="nc-button secondary"
-              @click=${close}
+              @click=${() => close()}
             >
               Cancel</button
             ><button
@@ -982,6 +1152,9 @@ export function openEditor({
   void fillActionEditors(host);
 
   const visual = host.querySelector<HTMLElement>('[data-role="visual"]')!;
+  const conditionsYamlView = host.querySelector<HTMLElement>(
+    '[data-role="conditions-yaml"]',
+  )!;
   const recipientMount = host.querySelector<HTMLElement>(
     '[data-role="recipients"]',
   )!;
@@ -999,12 +1172,28 @@ export function openEditor({
   recipientMount.replaceChildren(recipients.element);
   const jinja = host.querySelector<HTMLElement>('[data-role="jinja"]')!;
 
+  context.setMode = (mode: EditorMode): void => {
+    if (mode === "yaml" && context.mode === "visual") {
+      const editor = host.querySelector<CodeEditor>(
+        '[data-role="conditions-yaml-editor"]',
+      );
+      if (editor) editor.value = conditionsYaml(visualConditions());
+    }
+
+    context.mode = mode;
+    context.markDirty();
+    context.refreshStatuses();
+  };
+
   function refreshStatuses(): void {
     visual.hidden = context.mode !== "visual";
-    jinja.hidden = context.mode === "visual";
+    conditionsYamlView.hidden = context.mode !== "yaml";
+    jinja.hidden = context.mode !== "jinja";
     const enabled: Record<SectionStatus, boolean> = {
+      repeat: Boolean(
+        value.notification.repeat && value.notification.repeat.enabled !== false,
+      ),
       postSendActions: Boolean(value.notification.actions_enabled),
-      repeat: Boolean(value.notification.repeat?.enabled !== false),
       confirmation: Boolean(value.notification.confirmation.enabled),
       confirmationUpdate: Boolean(
         value.notification.confirmation.notify_on_confirmation,
@@ -1020,6 +1209,7 @@ export function openEditor({
         const status = indicator.dataset.status as SectionStatus | undefined;
         const isEnabled = Boolean(status && enabled[status]);
         indicator.classList.toggle("active", isEnabled);
+        indicator.textContent = isEnabled ? "✓" : "×";
         indicator.setAttribute(
           "aria-label",
           isEnabled ? "Enabled" : "Disabled",
@@ -1030,14 +1220,7 @@ export function openEditor({
   context.refreshStatuses = refreshStatuses;
 
   function addSetting(setting: string): void {
-    if (setting === "repeat") {
-      value.notification.repeat ||= {
-        interval: "00:30",
-        max_attempts: 5,
-        enabled: true,
-      };
-      optionalSettings.repeat = true;
-    } else if (setting === "confirmation") {
+    if (setting === "confirmation") {
       value.notification.confirmation.enabled = true;
       optionalSettings.confirmation = true;
       optionalSettings.postConfirmationActions = true;
@@ -1065,9 +1248,7 @@ export function openEditor({
   }
 
   function removeSetting(setting: OptionalSetting): void {
-    if (setting === "repeat") {
-      delete value.notification.repeat;
-    } else if (setting === "postSendActions") {
+    if (setting === "postSendActions") {
       delete value.notification.actions;
       value.notification.actions_enabled = false;
     } else if (setting === "postConfirmationActions") {
@@ -1173,8 +1354,8 @@ export function openEditor({
       // The server-side TTL releases drafts if this best-effort cleanup fails.
     }
   }
-  function close(): boolean {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return false;
+  function close({ force = false }: { force?: boolean } = {}): boolean {
+    if (!force && dirty && !window.confirm("Discard unsaved changes?")) return false;
     void discardDraftTest();
     host.remove();
     if (dashboardContent) dashboardContent.hidden = false;
@@ -1183,6 +1364,16 @@ export function openEditor({
     return true;
   }
   function formPayload(): Alert {
+    const conditions =
+      context.mode === "visual"
+        ? visualConditions()
+        : context.mode === "yaml"
+          ? parseConditionsYaml(
+              host.querySelector<CodeEditor>(
+                '[data-role="conditions-yaml-editor"]',
+              )?.value || "[]",
+            )
+        : [{ type: "template" as const, template: conditionTemplate(value) }];
     let actions: Record<string, unknown>[] = [];
     if (optionalSettings.postConfirmationActions) {
       actions = actionArrayValue(
@@ -1192,7 +1383,13 @@ export function openEditor({
     }
     const repeat = value.notification.repeat
       ? {
-          interval: String(value.notification.repeat.interval || "00:30"),
+          interval: durationInputValue(
+            value.notification.repeat.interval as
+              | string
+              | Record<string, number>
+              | undefined,
+            "00:30:00",
+          ),
           max_attempts: Number(value.notification.repeat.max_attempts) || 5,
           enabled: value.notification.repeat.enabled !== false,
         }
@@ -1209,13 +1406,12 @@ export function openEditor({
       name: value.name,
       description: value.description,
       condition: conditionTemplate(value),
-      conditions:
-        context.mode === "visual"
-          ? visualConditions()
-          : [{ type: "template", template: conditionTemplate(value) }],
+      conditions,
       onChange: value.monitor.on_change,
       startup: value.monitor.startup,
-      interval: value.monitor.interval,
+      interval: value.monitor.interval
+        ? durationInputValue(value.monitor.interval, "12:00:00")
+        : undefined,
       target: recipients.target(),
       title: value.notification.title,
       message: value.notification.message,
@@ -1229,7 +1425,10 @@ export function openEditor({
         notify_on_confirmation: Boolean(confirmation.notify_on_confirmation),
         confirmation_message: confirmation.confirmation_message,
         clear_on_confirmation: confirmation.clear_on_confirmation !== false,
-        resend_interval: String(confirmation.resend_interval),
+        resend_interval: durationInputValue(
+          confirmation.resend_interval,
+          "00:30:00",
+        ),
         max_attempts: confirmation.max_attempts,
         actions_enabled: Boolean(confirmation.actions_enabled),
         ...(actions.length ? { actions } : {}),
@@ -1239,6 +1438,60 @@ export function openEditor({
   function yamlView(): void {
     showYaml(root, formPayload());
   }
+
+  function conditionPayload(): Alert {
+    return {
+      ...value,
+      conditions:
+        context.mode === "visual"
+          ? visualConditions()
+          : context.mode === "yaml"
+            ? parseConditionsYaml(
+                host.querySelector<CodeEditor>(
+                  '[data-role="conditions-yaml-editor"]',
+                )?.value || "[]",
+              )
+          : [{ type: "template" as const, template: conditionTemplate(value) }],
+    };
+  }
+
+  function hasRequiredCondition(): boolean {
+    if (context.mode === "visual") {
+      return visualConditions().length > 0;
+    }
+
+    if (context.mode === "yaml") {
+      try {
+        return parseConditionsYaml(
+          host.querySelector<CodeEditor>('[data-role="conditions-yaml-editor"]')
+            ?.value || "[]",
+        ).length > 0;
+      } catch {
+        return true;
+      }
+    }
+
+    return Boolean(conditionTemplate(value).trim());
+  }
+
+  context.validateCondition = async (): Promise<void> => {
+    try {
+      if (!hasRequiredCondition()) throw new Error("Condition is required.");
+      await onValidateCondition(conditionPayload());
+    } catch (error) {
+      showEditorToast(root, errorMessage(error));
+    }
+  };
+
+  context.validateActions = (role: string, label: string): void => {
+    try {
+      actionArrayValue(host.querySelector<CodeEditor>(`[data-role="${role}"]`), label);
+      showEditorToast(root, `${label} are valid.`, 4000);
+    } catch (error) {
+      showEditorToast(root, errorMessage(error));
+    }
+  };
+
   async function test(event: Event): Promise<void> {
     const button = event.currentTarget as HTMLButtonElement;
     try {
@@ -1247,11 +1500,7 @@ export function openEditor({
       const result = await onTest(formPayload());
       draftTestSessionId = result.session_id;
     } catch (error) {
-      const toast = document.createElement("div");
-      toast.className = "nc-toast";
-      toast.textContent = errorMessage(error);
-      root.append(toast);
-      window.setTimeout(() => toast.remove(), 6000);
+      showEditorToast(root, errorMessage(error));
     } finally {
       button.disabled = false;
     }
@@ -1260,23 +1509,21 @@ export function openEditor({
     const button = event.currentTarget as HTMLButtonElement;
     try {
       if (!value.name.trim()) throw new Error("Name is required.");
-      if (!conditionTemplate(value).trim())
+      if (!hasRequiredCondition())
         throw new Error("Condition is required.");
       if (!value.monitor.on_change && !value.monitor.interval)
         throw new Error("Enable condition changes, an interval, or both.");
       const result = formPayload();
       button.disabled = true;
       await discardDraftTest();
-      await onSave(result);
-      Object.assign(value, result);
+      const saved = await onSave(result);
+      const savedAlert = saved || result;
+      Object.assign(value, savedAlert);
       dirty = false;
-      close();
+      close({ force: true });
+      await onSaved?.(savedAlert);
     } catch (error) {
-      const toast = document.createElement("div");
-      toast.className = "nc-toast";
-      toast.textContent = errorMessage(error);
-      root.append(toast);
-      window.setTimeout(() => toast.remove(), 6000);
+      showEditorToast(root, errorMessage(error));
     } finally {
       button.disabled = false;
     }

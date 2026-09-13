@@ -128,6 +128,44 @@ class NotificationStorageTests(unittest.TestCase):
             self.assertEqual(saved.count("notification:"), 1)
             self.assertNotIn("notifications:", saved)
 
+    def test_saved_yaml_repairs_stale_browser_duration_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            instance = storage.NotificationStorage(FakeHass(Path(directory)))
+            self.run_async(
+                instance.async_save_config(
+                    {
+                        "version": 1,
+                        "alerts": [
+                            {
+                                "id": "demo",
+                                "name": "Demo",
+                                "conditions": [
+                                    {
+                                        "type": "state",
+                                        "entity_id": "sensor.water",
+                                        "state": "low",
+                                        "for": "[object Object]",
+                                    }
+                                ],
+                                "monitor": {"interval": "[object Object]"},
+                                "notification": {
+                                    "repeat": {"interval": "[object Object]"},
+                                    "confirmation": {
+                                        "enabled": True,
+                                        "resend_interval": "[object Object]",
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                )
+            )
+
+            saved = instance.yaml_path.read_text(encoding="utf-8")
+            self.assertNotIn("[object Object]", saved)
+            self.assertIn("resend_interval:", saved)
+            self.assertIn("minutes: 30", saved)
+
     def test_invalid_yaml_cannot_replace_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:
             instance = storage.NotificationStorage(FakeHass(Path(directory)))

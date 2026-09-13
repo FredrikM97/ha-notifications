@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
-import json
 import re
 from copy import deepcopy
-from datetime import timedelta
-from typing import Any, Mapping
+from typing import Any
 
 from .const import CONFIG_VERSION
+from .durations import (
+    duration_to_mapping as duration_to_mapping,
+)
+from .durations import (
+    duration_to_string as duration_to_string,
+)
+from .durations import (
+    parse_duration as parse_duration,
+)
+from .model_conditions import compile_condition as compile_condition
+
+__all__ = (
+    "compile_condition",
+    "duration_to_mapping",
+    "duration_to_string",
+    "normalize_alert",
+    "normalize_condition",
+    "normalize_config",
+    "normalize_notification",
+    "normalize_target",
+    "parse_duration",
+)
 
 
 def _list(value: Any) -> list:
@@ -42,134 +62,6 @@ def _merge(
             result[key] = deepcopy(value)
 
     return result
-
-
-def parse_duration(
-    value: Any,
-    default: timedelta | None = None,
-) -> timedelta | None:
-    """Parse a Home Assistant style duration."""
-    if value is None:
-        return default
-
-    if isinstance(value, timedelta):
-        return value
-
-    if isinstance(value, (int, float)):
-        return timedelta(
-            seconds=float(value)
-        )
-
-    if isinstance(value, Mapping):
-        return timedelta(
-            days=float(value.get("days", 0)),
-            hours=float(value.get("hours", 0)),
-            minutes=float(value.get("minutes", 0)),
-            seconds=float(value.get("seconds", 0)),
-        )
-
-    if isinstance(value, str):
-        value = value.strip()
-
-        if not value:
-            return default
-
-        parts = value.split(":")
-
-        try:
-            if len(parts) == 3:
-                return timedelta(
-                    hours=float(parts[0]),
-                    minutes=float(parts[1]),
-                    seconds=float(parts[2]),
-                )
-
-            if len(parts) == 2:
-                return timedelta(
-                    hours=float(parts[0]),
-                    minutes=float(parts[1]),
-                )
-
-            return timedelta(
-                seconds=float(value)
-            )
-
-        except ValueError:
-            raise ValueError(
-                f"Invalid duration: {value}"
-            )
-
-    raise ValueError(
-        f"Unsupported duration: {value!r}"
-    )
-
-
-def duration_to_mapping(
-    value: Any,
-) -> dict[str, int | float]:
-    """Convert duration to readable YAML mapping."""
-    duration = parse_duration(value)
-
-    if duration is None:
-        return {}
-
-    seconds = duration.total_seconds()
-
-    days, remainder = divmod(
-        seconds,
-        86400,
-    )
-
-    hours, remainder = divmod(
-        remainder,
-        3600,
-    )
-
-    minutes, seconds = divmod(
-        remainder,
-        60,
-    )
-
-    result: dict[str, int | float] = {}
-
-    if days:
-        result["days"] = int(days)
-
-    if hours:
-        result["hours"] = int(hours)
-
-    if minutes:
-        result["minutes"] = int(minutes)
-
-    if seconds:
-        result["seconds"] = (
-            int(seconds)
-            if seconds.is_integer()
-            else seconds
-        )
-
-    return result or {"seconds": 0}
-
-
-def duration_to_string(
-    value: Any,
-    default: str = "00:00:00",
-) -> str:
-    """Convert a duration to an HTML time-input compatible string."""
-    duration = parse_duration(value)
-
-    if duration is None:
-        return default
-
-    total_seconds = max(
-        0,
-        int(duration.total_seconds()),
-    )
-
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def _slug(value: str) -> str:
@@ -235,7 +127,43 @@ def normalize_condition(
         "template",
     )
 
+    if result.get("for") is not None:
+        duration = _normalize_duration_value(result.get("for"), None)
+        if duration is None:
+            result.pop("for", None)
+        else:
+            result["for"] = duration
+
     return result
+
+
+def _normalize_duration_string(value: Any) -> str | None:
+    if value is None or value == "[object Object]":
+        return None
+
+    if isinstance(value, str):
+        try:
+            parse_duration(value)
+        except ValueError:
+            return None
+        return value
+
+    try:
+        return duration_to_string(value)
+    except ValueError:
+        return None
+
+
+def _normalize_duration_value(value: Any, default: Any) -> Any:
+    if value is None or value == "[object Object]":
+        return deepcopy(default)
+
+    try:
+        parse_duration(value)
+    except ValueError:
+        return deepcopy(default)
+
+    return deepcopy(value)
 
 
 def normalize_notification(
@@ -280,8 +208,9 @@ def normalize_notification(
             )
         ),
         "button": str(confirmation.get("button") or ""),
-        "resend_interval": deepcopy(
-            confirmation.get("resend_interval", {"minutes": 30})
+        "resend_interval": _normalize_duration_value(
+            confirmation.get("resend_interval"),
+            {"minutes": 30},
         ),
         "max_attempts": max(
             1,
@@ -327,8 +256,13 @@ def normalize_notification(
         result["actions"] = deepcopy(notification_actions)
 
     repeat = merged.get("repeat")
-    if repeat is not None:
-        result["repeat"] = deepcopy(repeat)
+    if isinstance(repeat, dict):
+        normalized_repeat = deepcopy(repeat)
+        normalized_repeat["interval"] = _normalize_duration_value(
+            repeat.get("interval"),
+            "00:30",
+        )
+        result["repeat"] = normalized_repeat
 
     result["confirmation"] = normalized_confirmation
     return result
@@ -358,10 +292,13 @@ def normalize_alert(
         "on_change": bool(monitor.get("on_change", True)),
         "startup": bool(monitor.get("startup", True)),
     }
-    if monitor.get("interval") is not None:
-        normalized_monitor["interval"] = monitor["interval"]
+    interval = _normalize_duration_string(monitor.get("interval"))
+    if interval is not None:
+        normalized_monitor["interval"] = interval
 
-    conditions = source.get("conditions", [])
+    conditions = source.get("conditions")
+    if conditions is None:
+        conditions = []
     if isinstance(conditions, dict):
         conditions = [conditions]
     if not isinstance(conditions, list):
@@ -390,6 +327,10 @@ def normalize_alert(
         "conditions": normalized_conditions,
         "notification": notification,
     }
+
+    logic = source.get("logic")
+    if logic in ("any", "or", "all", "and"):
+        result["logic"] = "any" if logic in ("any", "or") else "all"
 
     for key in ("created_at", "updated_at"):
         if source.get(key) is not None:
@@ -463,175 +404,3 @@ def normalize_config(
 
     return result
 
-
-def _seconds(value: Any) -> int:
-    """Get whole seconds."""
-    duration = parse_duration(
-        value,
-        timedelta(),
-    )
-
-    return max(
-        0,
-        int(
-            duration.total_seconds()
-        ),
-    )
-
-
-def compile_condition(
-    alert: dict[str, Any],
-) -> str:
-    """Compile visual conditions into one Jinja condition."""
-    expressions: list[str] = []
-
-    for condition in alert.get(
-        "conditions",
-        [],
-    ):
-        condition_type = condition.get(
-            "type"
-        )
-
-        if condition_type == "state":
-            entity_id = str(
-                condition.get(
-                    "entity_id",
-                    "",
-                )
-            )
-
-            state = str(
-                condition.get(
-                    "state",
-                    "",
-                )
-            )
-
-            if not entity_id:
-                continue
-
-            expression = (
-                f"is_state("
-                f"{json.dumps(entity_id)}, "
-                f"{json.dumps(state)}"
-                f")"
-            )
-
-            duration = _seconds(
-                condition.get("for")
-            )
-
-            if duration:
-                expression = (
-                    "("
-                    f"{expression}"
-                    " and "
-                    f"(now() - states["
-                    f"{json.dumps(entity_id)}"
-                    "].last_changed)"
-                    ".total_seconds() >= "
-                    f"{duration}"
-                    ")"
-                )
-
-            expressions.append(
-                expression
-            )
-
-        elif condition_type == "numeric":
-            entity_id = str(
-                condition.get(
-                    "entity_id",
-                    "",
-                )
-            )
-
-            if not entity_id:
-                continue
-
-            expression = (
-                f"states("
-                f"{json.dumps(entity_id)}"
-                ") | float(0)"
-            )
-
-            parts: list[str] = []
-
-            if condition.get(
-                "above"
-            ) is not None:
-                parts.append(
-                    f"{expression} > "
-                    f"{float(condition['above'])}"
-                )
-
-            if condition.get(
-                "below"
-            ) is not None:
-                parts.append(
-                    f"{expression} < "
-                    f"{float(condition['below'])}"
-                )
-
-            if parts:
-                expressions.append(
-                    "("
-                    + " and ".join(parts)
-                    + ")"
-                )
-
-        elif condition_type == "attribute":
-            entity_id = str(
-                condition.get(
-                    "entity_id",
-                    "",
-                )
-            )
-
-            attribute = str(
-                condition.get(
-                    "attribute",
-                    "",
-                )
-            )
-
-            expected = condition.get(
-                "value"
-            )
-
-            if (
-                entity_id
-                and attribute
-            ):
-                expressions.append(
-                    f"state_attr("
-                    f"{json.dumps(entity_id)}, "
-                    f"{json.dumps(attribute)}"
-                    f") == "
-                    f"{json.dumps(expected)}"
-                )
-
-        elif condition_type == "template":
-            template = str(
-                condition.get(
-                    "template",
-                    "",
-                )
-            ).strip()
-
-            if (
-                template.startswith("{{")
-                and template.endswith("}}")
-            ):
-                template = template[2:-2].strip()
-
-            if template:
-                expressions.append(
-                    f"({template})"
-                )
-
-    if not expressions:
-        return "{{ true }}"
-
-    return "{{ " + " and ".join(expressions) + " }}"

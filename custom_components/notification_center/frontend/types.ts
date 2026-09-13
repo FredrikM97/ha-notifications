@@ -12,13 +12,13 @@ export type AlertConditionType = "template" | "state" | "numeric" | "attribute";
 export interface AlertCondition {
   type: AlertConditionType;
   template?: string;
-  entity_id?: string;
+  entity_id?: string | string[];
   attribute?: string;
   above?: string | number;
   below?: string | number;
-  state?: string;
+  state?: string | string[];
   value?: string;
-  for?: string;
+  for?: string | Record<string, number>;
   [key: string]: unknown;
 }
 
@@ -50,7 +50,12 @@ export interface NotificationConfig {
   title: string;
   message: string;
   data?: Record<string, unknown>;
-  repeat?: Record<string, unknown>;
+  repeat?: {
+    interval?: string | Record<string, number>;
+    max_attempts?: number;
+    enabled?: boolean;
+    [key: string]: unknown;
+  };
   actions_enabled: boolean;
   actions?: Record<string, unknown>[];
   confirmation: ConfirmationConfig;
@@ -71,7 +76,7 @@ export interface Alert {
   monitor: {
     on_change: boolean;
     startup: boolean;
-    interval?: string;
+    interval?: string | Record<string, number>;
   };
   notification: NotificationConfig;
   runtime?: RuntimeAlertState;
@@ -79,6 +84,7 @@ export interface Alert {
 }
 
 export interface HistoryEntry {
+  alert_id?: string;
   timestamp?: string;
   alert_name?: string;
   type?: string;
@@ -98,7 +104,18 @@ export interface Registries {
 
 export interface RegistryEntity {
   entity_id: string;
+  friendly_name?: string;
   name?: string;
+  name_by_user?: string;
+  original_name?: string;
+}
+
+export interface RegistryState {
+  entity_id: string;
+  attributes?: {
+    friendly_name?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface RegistryDevice {

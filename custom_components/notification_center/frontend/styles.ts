@@ -145,12 +145,21 @@ select {
 }
 
 .nc-section-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(244, 67, 54, 0.12);
   color: var(--error-color);
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 800;
   line-height: 1;
 }
 
 .nc-section-status.active {
+  background: rgba(76, 175, 80, 0.14);
   color: var(--success-color, #4caf50);
 }
 
@@ -197,6 +206,13 @@ select {
   justify-content: flex-end;
 }
 
+.nc-alert-statuses {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .nc-status {
   display: inline-flex;
   align-items: center;
@@ -207,6 +223,10 @@ select {
   font-weight: 700;
 }
 
+.nc-status ha-icon {
+  --mdc-icon-size: 14px;
+}
+
 .nc-status.active {
   background: rgba(244, 67, 54, 0.14);
   color: var(--error-color);
@@ -215,6 +235,11 @@ select {
 .nc-status.ok {
   background: rgba(76, 175, 80, 0.14);
   color: var(--success-color, #4caf50);
+}
+
+.nc-status.idle {
+  background: rgba(33, 150, 243, 0.12);
+  color: var(--info-color, #2196f3);
 }
 
 .nc-status.disabled {
@@ -242,7 +267,10 @@ select {
 
 .nc-toolbar select,
 .nc-toolbar input,
-.nc-yaml textarea,\n.nc-code-editor {
+.nc-yaml textarea,
+.nc-code-editor {
+  box-sizing: border-box;
+  max-width: 100%;
   background: var(--card-background-color);
   color: var(--primary-text-color);
   border: 1px solid var(--divider-color);
@@ -250,14 +278,49 @@ select {
   padding: 10px;
 }
 
+ha-code-editor.nc-code-editor {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+ha-code-editor.nc-code-editor .cm-editor,
+ha-code-editor.nc-code-editor .cm-scroller,
+ha-code-editor.nc-code-editor .cm-content {
+  max-width: 100%;
+}
+
+ha-code-editor.nc-code-editor .cm-scroller {
+  overflow-x: auto;
+}
+
 .nc-history {
   display: grid;
   gap: 8px;
 }
 
+.nc-history-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.nc-history-filter-title {
+  font-weight: 700;
+}
+
+.nc-history-filter-subtitle {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+}
+
 .nc-history-item {
   display: grid;
-  grid-template-columns: 150px 180px 1fr;
+  grid-template-columns: 150px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   padding: 13px;
@@ -269,18 +332,90 @@ select {
   font-size: 12px;
 }
 
-.nc-history-type {
+.nc-history-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nc-history-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-weight: 700;
+}
+
+.nc-history-alert-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.nc-history-alert-link:hover {
+  text-decoration: underline;
 }
 
 .nc-history-message {
   min-width: 0;
 }
 
+.nc-history-summary {
+  overflow: hidden;
+  color: var(--secondary-text-color);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-history-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nc-history-badge.error {
+  background: rgba(244, 67, 54, 0.14);
+  color: var(--error-color);
+}
+
+.nc-history-badge.success {
+  background: rgba(76, 175, 80, 0.14);
+  color: var(--success-color, #4caf50);
+}
+
+.nc-history-badge.info {
+  background: rgba(33, 150, 243, 0.12);
+  color: var(--info-color, #2196f3);
+}
+
+.nc-history-badge.muted {
+  background: var(--secondary-background-color);
+  color: var(--secondary-text-color);
+}
+
 .nc-details {
   margin-top: 6px;
   color: var(--secondary-text-color);
   font-size: 12px;
+}
+
+.nc-details summary {
+  cursor: pointer;
+}
+
+.nc-details pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--secondary-background-color);
   white-space: pre-wrap;
 }
 
@@ -289,7 +424,8 @@ select {
   gap: 12px;
 }
 
-.nc-yaml textarea,\n.nc-code-editor {
+.nc-yaml textarea,
+.nc-code-editor {
   width: 100%;
   min-height: 650px;
   resize: vertical;
@@ -886,7 +1022,8 @@ ha-code-editor.nc-action-editor {
 
 .nc-condition-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--divider-color);
@@ -896,6 +1033,8 @@ ha-code-editor.nc-action-editor {
 
 .nc-condition-row .nc-button {
   justify-self: start;
+  align-self: end;
+  white-space: nowrap;
 }
 
 .nc-error {

@@ -310,6 +310,76 @@ class NotificationPayloadTests(unittest.TestCase):
         self.assertEqual(clear_calls, [])
         self.assertTrue(manager.state["alerts"]["water"]["acknowledged"])
 
+    def test_confirmation_sends_completion_notification_without_new_action(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        sent = []
+        events = []
+
+        class Dispatcher:
+            async def async_clear(self, *_args, **_kwargs):
+                pass
+
+            async def async_send(self, alert, **kwargs):
+                sent.append((alert, kwargs))
+
+        class Storage:
+            def async_delay_save_state(self, state):
+                pass
+
+        class History:
+            async def record(self, _alert, event_type, *_args, **_kwargs):
+                events.append(event_type)
+
+        alert = {
+            "id": "water",
+            "name": "Water reminder",
+            "notification": {
+                "message": "Check this",
+                "confirmation": {
+                    "enabled": True,
+                    "completion_message": "Completed",
+                },
+            },
+        }
+        manager.hass = self.Hass()
+        manager.alerts = {"water": alert}
+        manager.state = {
+            "alerts": {
+                "water": {
+                    "confirmation_action_id": "NC_CONFIRM_water",
+                }
+            },
+            "history": [],
+        }
+        manager._pending_actions = {"NC_CONFIRM_water": "water"}
+        manager.dispatcher = Dispatcher()
+        manager.history = History()
+        manager.storage = Storage()
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 9, 13, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._handle_notification_action(
+                SimpleNamespace(
+                    data={"action": "NC_CONFIRM_water"},
+                    context=SimpleNamespace(user_id=None),
+                )
+            )
+        )
+
+        self.assertEqual(len(sent), 1)
+        completion_alert, kwargs = sent[0]
+        self.assertEqual(completion_alert["notification"]["message"], "Completed")
+        self.assertEqual(
+            completion_alert["notification"]["confirmation"],
+            {"enabled": False},
+        )
+        self.assertIsNone(kwargs["confirmation_action_id"])
+        self.assertIn("completion_sent", events)
+
     def test_confirmation_uses_direct_mobile_app_service_for_selected_device(self):
         hass = self.Hass(
             [
@@ -1072,7 +1142,10 @@ class NotificationPayloadTests(unittest.TestCase):
             kwargs["confirmation_action_id"],
             result["confirmation_action_id"],
         )
-        self.assertIn(result["confirmation_action_id"], manager._draft_actions)
+        self.assertIn(
+            result["confirmation_action_id"],
+            manager.draft_sessions.actions,
+        )
         self.assertFalse(hasattr(manager, "state"))
         self.assertTrue(kwargs["test"])
 
@@ -1119,8 +1192,8 @@ class NotificationPayloadTests(unittest.TestCase):
         )
 
         self.assertEqual(len(clears), 1)
-        self.assertEqual(manager._draft_actions, {})
-        self.assertEqual(manager._draft_sessions, {})
+        self.assertEqual(manager.draft_sessions.actions, {})
+        self.assertEqual(manager.draft_sessions.sessions, {})
         self.assertFalse(hasattr(manager, "state"))
 
     def test_draft_sessions_can_be_disposed_and_expire(self):
@@ -1150,8 +1223,11 @@ class NotificationPayloadTests(unittest.TestCase):
         session_id = result["session_id"]
         asyncio.run(manager.async_discard_draft_test(session_id))
 
-        self.assertNotIn(session_id, manager._draft_sessions)
-        self.assertNotIn(result["confirmation_action_id"], manager._draft_actions)
+        self.assertNotIn(session_id, manager.draft_sessions.sessions)
+        self.assertNotIn(
+            result["confirmation_action_id"],
+            manager.draft_sessions.actions,
+        )
 
         result = asyncio.run(
             manager.async_test_alert_payload(
@@ -1168,12 +1244,17 @@ class NotificationPayloadTests(unittest.TestCase):
             )
         )
         session_id = result["session_id"]
-        manager._draft_sessions[session_id] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        manager.draft_sessions.sessions[session_id] = datetime(
+            2000, 1, 1, tzinfo=timezone.utc
+        )
 
         asyncio.run(manager.async_discard_draft_test("another-session"))
 
-        self.assertNotIn(session_id, manager._draft_sessions)
-        self.assertNotIn(result["confirmation_action_id"], manager._draft_actions)
+        self.assertNotIn(session_id, manager.draft_sessions.sessions)
+        self.assertNotIn(
+            result["confirmation_action_id"],
+            manager.draft_sessions.actions,
+        )
 
     def test_post_send_actions_run_after_each_successful_dispatch(self):
         manager = notifications.NotificationCenter.__new__(

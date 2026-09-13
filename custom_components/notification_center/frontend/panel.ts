@@ -8,6 +8,7 @@ import {
   saveAlert,
   testAlert,
   testAlertPayload,
+  validateConditions,
 } from "./api.js";
 
 import { openEditor } from "./editor.js";
@@ -28,7 +29,13 @@ interface PanelTabDefinition {
 
 interface AlertStatus {
   className: string;
+  icon: string;
   label: string;
+}
+
+interface AlertCardStatus {
+  enabled: AlertStatus;
+  condition: AlertStatus;
 }
 
 const panelTabs: PanelTabDefinition[] = [
@@ -47,20 +54,31 @@ function tabContent(tab: PanelTab) {
   return html`<div id="yaml-view"></div>`;
 }
 
-function alertStatus(alert: Alert): AlertStatus {
-  if (alert.runtime?.active) {
-    return { className: "nc-status active", label: "Active" };
-  }
-  if (alert.enabled) {
-    return { className: "nc-status ok", label: "Ready" };
-  }
-  return { className: "nc-status disabled", label: "Disabled" };
+function alertStatus(alert: Alert): AlertCardStatus {
+  return {
+    enabled: alert.enabled
+      ? { className: "nc-status ok", icon: "mdi:check-circle", label: "Enabled" }
+      : {
+          className: "nc-status disabled",
+          icon: "mdi:pause-circle-outline",
+          label: "Disabled",
+        },
+    condition: alert.runtime?.active
+      ? {
+          className: "nc-status active",
+          icon: "mdi:alert-circle",
+          label: "Triggered",
+        }
+      : { className: "nc-status idle", icon: "mdi:circle-outline", label: "Idle" },
+  };
 }
 
 class NotificationCenterPanel extends HTMLElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private history: HistoryEntry[] = [];
+  private historyAlertId: string | null = null;
+  private historyAlertName: string | null = null;
   private tab: PanelTab = "alerts";
   private loading = false;
   private _registries: Registries | null = null;
@@ -77,6 +95,8 @@ class NotificationCenterPanel extends HTMLElement {
     this._hass = null;
     this.alerts = [];
     this.history = [];
+    this.historyAlertId = null;
+    this.historyAlertName = null;
     this.tab = "alerts";
     this.loading = false;
     this._registries = null;
@@ -140,8 +160,13 @@ class NotificationCenterPanel extends HTMLElement {
     try {
       [this.alerts, this.history] = await Promise.all([
         getAlerts(this._hass),
-        getHistory(this._hass, null, 150),
+        getHistory(this._hass, this.historyAlertId, 150),
       ]);
+      if (this.historyAlertId) {
+        this.historyAlertName =
+          this.alerts.find((alert) => alert.id === this.historyAlertId)?.name ||
+          this.historyAlertName;
+      }
     } catch (err) {
       this.showToast(errorMessage(err), true);
     } finally {
@@ -216,6 +241,12 @@ class NotificationCenterPanel extends HTMLElement {
       renderHistory(
         this.shadowRoot.querySelector("#history-view")!,
         this.history,
+        {
+          alertName: this.historyAlertName,
+          onAlertSelected: (alertId, alertName) =>
+            this.showHistoryForAlert(alertId, alertName),
+          onShowAll: () => this.showAllHistory(),
+        },
       );
     if (this.tab === "yaml" && this._hass)
       renderYamlView(
@@ -262,10 +293,16 @@ class NotificationCenterPanel extends HTMLElement {
       </div>
       <div class="nc-alert-main">
         <div class="nc-alert-name">${alert.name}</div>
-        <span
-          class=${status.className}
-          >${status.label}</span
-        >
+        <div class="nc-alert-statuses">
+          <span class=${status.enabled.className}
+            ><ha-icon icon=${status.enabled.icon}></ha-icon
+            >${status.enabled.label}</span
+          >
+          <span class=${status.condition.className}
+            ><ha-icon icon=${status.condition.icon}></ha-icon
+            >${status.condition.label}</span
+          >
+        </div>
         <div class="nc-alert-meta">
           ${monitor} · ${this.targetSummary(alert.notification?.target)}
         </div>
@@ -286,6 +323,8 @@ class NotificationCenterPanel extends HTMLElement {
           ${alert.enabled ? "Disable" : "Enable"}</button
         ><button class="nc-button" @click=${() => this.editAlert(alert)}>
           Edit</button
+        ><button class="nc-button" @click=${() => this.showAlertHistory(alert)}>
+          History</button
         ><button
           class="nc-button danger"
           @click=${() => this.removeAlert(alert)}
@@ -305,6 +344,52 @@ class NotificationCenterPanel extends HTMLElement {
       this.showToast(errorMessage(err), true);
     }
   }
+
+  private async showAlertHistory(alert: Alert): Promise<void> {
+    await this.showHistoryForAlert(alert.id, alert.name);
+  }
+
+  private async showHistoryForAlert(
+    alertId: string,
+    alertName: string,
+  ): Promise<void> {
+    if (!this._hass) return;
+
+    this.historyAlertId = alertId;
+    this.historyAlertName = alertName;
+    this.tab = "history";
+    this.loading = true;
+    this.render();
+
+    try {
+      this.history = await getHistory(this._hass, alertId, 150);
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  private async showAllHistory(): Promise<void> {
+    if (!this._hass) return;
+
+    this.historyAlertId = null;
+    this.historyAlertName = null;
+    this.tab = "history";
+    this.loading = true;
+    this.render();
+
+    try {
+      this.history = await getHistory(this._hass, null, 150);
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
   private async toggleAlert(alert: Alert) {
     try {
       await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
@@ -353,14 +438,21 @@ class NotificationCenterPanel extends HTMLElement {
         this.showToast("Draft test notification sent.");
         return result;
       },
+      onValidateCondition: async (draft) => {
+        await validateConditions(this._hass, draft);
+        this.showToast("Condition is valid.");
+      },
       onDiscardTest: async (sessionId) => {
         await discardDraftTestPayload(this._hass, sessionId);
       },
       onSave: async (alert) => {
-        await saveAlert(this._hass, alert);
+        const saved = await saveAlert(this._hass, alert);
 
         this.showToast("Alert created.");
 
+        return saved;
+      },
+      onSaved: async () => {
         await this.refresh();
       },
     });
@@ -384,6 +476,10 @@ class NotificationCenterPanel extends HTMLElement {
         this.showToast("Draft test notification sent.");
         return result;
       },
+      onValidateCondition: async (draft) => {
+        await validateConditions(this._hass, draft);
+        this.showToast("Condition is valid.");
+      },
       onDiscardTest: async (sessionId) => {
         await discardDraftTestPayload(this._hass, sessionId);
       },
@@ -401,6 +497,10 @@ class NotificationCenterPanel extends HTMLElement {
         );
 
         this.showToast("Alert saved.");
+        return saved;
+      },
+      onSaved: async () => {
+        await this.refresh();
       },
     });
   }

@@ -8,6 +8,7 @@ import type {
   RegistryEntity,
   RegistryFloor,
   RegistryLabel,
+  RegistryState,
   RegistryUser,
 } from "./types.js";
 
@@ -52,17 +53,24 @@ async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
 }
 
 export async function loadRegistries(hass: Hass): Promise<Registries> {
-  const [entities, devices, areas, labels, floors, users] = await Promise.all([
+  const [entities, states, devices, areas, labels, floors, users] = await Promise.all([
     callRegistry<RegistryEntity>(hass, "config/entity_registry/list"),
+    callRegistry<RegistryState>(hass, "get_states"),
     callRegistry<RegistryDevice>(hass, "config/device_registry/list"),
     callRegistry<RegistryArea>(hass, "config/area_registry/list"),
     callRegistry<RegistryLabel>(hass, "config/label_registry/list"),
     callRegistry<RegistryFloor>(hass, "config/floor_registry/list"),
     callRegistry<RegistryUser>(hass, "config/auth/list"),
   ]);
+  const friendlyNames = new Map(
+    states.map((state) => [state.entity_id, state.attributes?.friendly_name]),
+  );
 
   return {
-    entities,
+    entities: entities.map((entity) => ({
+      ...entity,
+      friendly_name: friendlyNames.get(entity.entity_id) || entity.friendly_name,
+    })),
     devices,
     areas,
     labels,
@@ -101,6 +109,13 @@ export async function testAlertPayload(
   alert: Alert,
 ): Promise<DraftTestResult> {
   return call<DraftTestResult>(hass, "test_payload", { alert });
+}
+
+export async function validateConditions(
+  hass: Hass,
+  alert: Alert,
+): Promise<unknown> {
+  return call(hass, "validate_conditions", { alert });
 }
 
 export async function discardDraftTestPayload(

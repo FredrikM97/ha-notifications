@@ -18,53 +18,6 @@ from .const import (
 )
 from .models import normalize_config
 
-DEFAULT_YAML = """# Notification Center
-#
-# This file is managed by the Notification Center integration.
-# You can edit it manually or use the YAML editor in the UI.
-#
-# No configuration.yaml entry is required.
-#
-# An alert can be checked:
-#
-#   monitor:
-#     on_change: true
-#     interval: "12:00:00"
-#
-# Both can be enabled at the same time.
-#
-# Notifications can target:
-#
-#   entity_id
-#   device_id
-#   area_id
-#   floor_id
-#   label_id
-#
-# Example:
-#
-# alerts:
-#
-#   - id: example
-#     name: Example reminder
-#     condition: "{{ is_state('binary_sensor.example', 'on') }}"
-#
-#     monitor:
-#       on_change: true
-#       interval: "01:00:00"
-#
-#     notification:
-#       action: notify.mobile_app_your_phone
-#       target:
-#         device_id:
-#           - YOUR_DEVICE_ID
-#       title: Example
-#       message: Something needs attention.
-#
-version: 1
-alerts: []
-"""
-
 
 def _read_text(path: Path) -> str:
     """Read text from disk."""

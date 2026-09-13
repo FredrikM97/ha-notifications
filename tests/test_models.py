@@ -199,6 +199,63 @@ class NormalizationTests(unittest.TestCase):
             alert["notification"]["confirmation"]["notify_on_confirmation"]
         )
 
+    def test_monitor_interval_accepts_mapping_and_discards_browser_object_text(self):
+        mapped = models.normalize_alert(
+            {
+                "name": "Mapped interval",
+                "monitor": {"interval": {"minutes": 20}},
+            }
+        )
+        stale = models.normalize_alert(
+            {
+                "name": "Stale interval",
+                "monitor": {"interval": "[object Object]"},
+            }
+        )
+
+        self.assertEqual(mapped["monitor"]["interval"], "00:20:00")
+        self.assertNotIn("interval", stale["monitor"])
+
+    def test_notification_durations_discard_browser_object_text(self):
+        alert = models.normalize_alert(
+            {
+                "name": "Stale notification durations",
+                "notification": {
+                    "repeat": {
+                        "interval": "[object Object]",
+                        "max_attempts": 3,
+                    },
+                    "confirmation": {
+                        "enabled": True,
+                        "resend_interval": "[object Object]",
+                    },
+                },
+            }
+        )
+
+        self.assertEqual(alert["notification"]["repeat"]["interval"], "00:30")
+        self.assertEqual(
+            alert["notification"]["confirmation"]["resend_interval"],
+            {"minutes": 30},
+        )
+
+    def test_condition_for_discards_browser_object_text(self):
+        alert = models.normalize_alert(
+            {
+                "name": "Stale condition duration",
+                "conditions": [
+                    {
+                        "type": "state",
+                        "entity_id": "sensor.water",
+                        "state": "low",
+                        "for": "[object Object]",
+                    }
+                ],
+            }
+        )
+
+        self.assertNotIn("for", alert["conditions"][0])
+
     def test_config_accepts_alert_mapping_and_applies_defaults(self):
         normalized = models.normalize_config(
             {
@@ -366,19 +423,19 @@ class ConditionCompilationTests(unittest.TestCase):
         self.assertEqual(alert["notification"]["action"], "notify.first")
 
     def test_template_expression_is_not_double_wrapped(self):
-        self.assertEqual(
-            models.compile_condition(
-                {
-                    "conditions": [
-                        {
-                            "type": "template",
-                            "template": "{{ false }}",
-                        }
-                    ]
-                }
-            ),
-            "{{ (false) }}",
+        compiled = models.compile_condition(
+            {
+                "conditions": [
+                    {
+                        "type": "template",
+                        "template": "{{ false }}",
+                    }
+                ]
+            }
         )
+
+        self.assertIn("{% set nc_condition_0 = (false) %}", compiled)
+        self.assertIn("{{ (nc_condition_0 | bool) }}", compiled)
 
     def test_blank_template_condition_defaults_to_true(self):
         self.assertEqual(
@@ -387,6 +444,75 @@ class ConditionCompilationTests(unittest.TestCase):
             ),
             "{{ true }}",
         )
+
+    def test_block_template_condition_is_not_wrapped_as_expression(self):
+        compiled = models.compile_condition(
+            {
+                "conditions": [
+                    {
+                        "type": "template",
+                        "template": "{% set threshold = 20 %}\n{{ threshold > 10 }}",
+                    }
+                ]
+            }
+        )
+
+        self.assertIn("{% set nc_condition_0 %}", compiled)
+        self.assertIn("{% set threshold = 20 %}", compiled)
+        self.assertIn("{% endset %}", compiled)
+        self.assertIn("{{ (nc_condition_0 | bool) }}", compiled)
+
+    def test_any_conditions_support_lists_and_numeric_duration(self):
+        alert = models.normalize_alert(
+            {
+                "name": "Condition set",
+                "logic": "any",
+                "conditions": [
+                    {
+                        "type": "state",
+                        "entity_id": ["sensor.water_level"],
+                        "state": ["low"],
+                        "id": "low_water",
+                    },
+                    {
+                        "type": "numeric",
+                        "entity_id": ["sensor.filter_duration"],
+                        "above": 29,
+                        "for": {"seconds": 0},
+                    },
+                    {
+                        "alias": "Battery low detection",
+                        "type": "template",
+                        "template": "{{ true }}",
+                        "enabled": False,
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(alert["logic"], "any")
+        self.assertEqual(alert["conditions"][0]["type"], "state")
+        self.assertEqual(alert["conditions"][0]["state"], ["low"])
+        self.assertEqual(alert["conditions"][1]["type"], "numeric")
+
+        compiled = models.compile_condition(alert)
+
+        self.assertIn('is_state("sensor.water_level", "low")', compiled)
+        self.assertIn('states("sensor.filter_duration") | float(0) > 29.0', compiled)
+        self.assertIn(" or ", compiled)
+        self.assertNotIn("Battery low detection", compiled)
+
+    def test_numeric_condition_needs_entity_id_not_registry_id(self):
+        condition = models.normalize_condition(
+            {
+                "type": "numeric",
+                "entity_id": "sensor.cat_food",
+                "below": 20,
+            }
+        )
+
+        self.assertEqual(condition["type"], "numeric")
+        self.assertEqual(condition["entity_id"], "sensor.cat_food")
 
 
 if __name__ == "__main__":
