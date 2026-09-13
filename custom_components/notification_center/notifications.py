@@ -134,6 +134,91 @@ def _remove_none(value: Any) -> Any:
     return value
 
 
+_GENERIC_NOTIFY_TARGET_KEYS = (
+    "device_id",
+    "area_id",
+    "floor_id",
+    "label_id",
+    "entity_id",
+)
+
+
+def _target_values(
+    target: dict[str, Any],
+    key: str,
+) -> list[str]:
+    """Return non-empty target values as strings."""
+    values = target.get(key, [])
+    if not isinstance(values, list):
+        values = [values]
+    return [str(value) for value in values if value]
+
+
+def _resolve_user_notification_target(
+    hass: HomeAssistant,
+    target: Any,
+) -> tuple[dict[str, Any], bool]:
+    """Resolve user IDs to mobile-app notify entities for generic notify."""
+    if not isinstance(target, dict):
+        return {}, False
+
+    resolved_target = {
+        key: deepcopy(target[key])
+        for key in _GENERIC_NOTIFY_TARGET_KEYS
+        if key in target
+    }
+    user_ids = _target_values(target, "user_id")
+    if not user_ids:
+        return resolved_target, False
+
+    try:
+        from homeassistant.helpers import entity_registry as er
+
+        entity_registry = er.async_get(hass)
+        mobile_app_entries = hass.config_entries.async_entries("mobile_app")
+    except (AttributeError, ImportError):
+        mobile_app_entries = []
+        entity_registry = None
+
+    entry_user_ids = {
+        entry.entry_id: str(entry.data.get("user_id"))
+        for entry in mobile_app_entries
+        if isinstance(getattr(entry, "data", None), dict)
+        and entry.data.get("user_id")
+    }
+    entities_by_user = {user_id: [] for user_id in user_ids}
+
+    if entity_registry is not None:
+        for entity in entity_registry.entities.values():
+            user_id = entry_user_ids.get(
+                getattr(entity, "config_entry_id", None)
+            )
+            if (
+                user_id in entities_by_user
+                and entity.entity_id.startswith("notify.")
+            ):
+                entities_by_user[user_id].append(entity.entity_id)
+
+    missing_user_ids = [
+        user_id
+        for user_id in user_ids
+        if not entities_by_user[user_id]
+    ]
+    if missing_user_ids:
+        raise ValueError(
+            "Selected user has no notification-capable mobile_app device: "
+            f"{', '.join(missing_user_ids)}"
+        )
+
+    entity_ids = _target_values(resolved_target, "entity_id")
+    for user_id in user_ids:
+        for entity_id in entities_by_user[user_id]:
+            if entity_id not in entity_ids:
+                entity_ids.append(entity_id)
+    resolved_target["entity_id"] = entity_ids
+    return resolved_target, True
+
+
 def _notification_services_for_target(
     hass: HomeAssistant,
     target: Any,
@@ -309,6 +394,13 @@ class NotificationDispatcher:
             variables,
         )
 
+        target, has_user_recipients = (
+            _resolve_user_notification_target(
+                self.hass,
+                target,
+            )
+        )
+
         extra_data = await _render_value(
             self.hass,
             notification.get(
@@ -342,8 +434,14 @@ class NotificationDispatcher:
             target,
         )
 
-        if action == "notify.send_message" or (
-            not action and resolved_actions
+        has_target = isinstance(target, dict) and any(
+            values
+            for values in target.values()
+            if isinstance(values, (str, list))
+        )
+
+        if action == "notify.send_message" or has_user_recipients or (
+            not action and (resolved_actions or has_target)
         ):
             actions_to_call = [
                 "notify.send_message"
@@ -427,14 +525,6 @@ class NotificationDispatcher:
                         )
                         if str(entity_id).startswith("notify.")
                     ]
-                    has_target = isinstance(
-                        target,
-                        dict,
-                    ) and any(
-                        values
-                        for values in target.values()
-                        if isinstance(values, list)
-                    )
                     if not recipients and not has_target:
                         raise ValueError(
                             "Confirmation buttons require at least one "
@@ -1213,7 +1303,7 @@ class NotificationCenter:
                 ),
             }
 
-        if not repeat:
+        if not repeat or not repeat.get("enabled", True):
             return False
 
         attempts = int(
@@ -1336,6 +1426,12 @@ class NotificationCenter:
             {
                 "attempt": attempt,
             },
+        )
+
+        await self._run_notification_actions(
+            alert,
+            context,
+            attempt,
         )
 
         self._save_state()
@@ -1474,6 +1570,17 @@ class NotificationCenter:
             or ""
         )
 
+        confirmation_message = (
+            confirmation.get("confirmation_message")
+        )
+
+        if confirmation.get("notify_on_confirmation", False):
+            completion_message = (
+                confirmation_message
+                or completion_message
+                or "{{ confirmed_by }} confirmed this notification."
+            )
+
         if completion_message:
             completion_alert = deepcopy(
                 alert
@@ -1489,7 +1596,18 @@ class NotificationCenter:
                 "notification"
             ][
                 "message"
-            ] = completion_message
+            ] = await _render_value(
+                self.hass,
+                completion_message,
+                {
+                    "alert_id": alert["id"],
+                    "alert_name": alert["name"],
+                    "alert_active": True,
+                    "confirmed_by": confirmed_by,
+                    "context": event.context,
+                    "now": dt_util.now(),
+                },
+            )
 
             completion_alert[
                 "notification"
@@ -1534,6 +1652,70 @@ class NotificationCenter:
         )
 
         self._save_state()
+
+    async def _run_notification_actions(
+        self,
+        alert: dict[str, Any],
+        context: Context | None,
+        attempt: int,
+    ) -> None:
+        """Run actions after a notification dispatch."""
+
+        notification = alert["notification"]
+        if not notification.get("actions_enabled", False):
+            return
+
+        variables = {
+            "alert_id": alert["id"],
+            "alert_name": alert["name"],
+            "alert_active": True,
+            "attempt": attempt,
+            "context": context,
+            "now": dt_util.now(),
+        }
+
+        for index, action in enumerate(notification.get("actions", []), start=1):
+            try:
+                service = str(
+                    await _render_value(
+                        self.hass, action.get("action"), variables
+                    )
+                    or ""
+                )
+                if not service or "." not in service:
+                    raise ValueError("Invalid post-send action.")
+
+                target = await _render_value(
+                    self.hass, action.get("target", {}), variables
+                )
+                data = _remove_none(
+                    await _render_value(
+                        self.hass, action.get("data", {}), variables
+                    )
+                )
+                domain, service_name = service.split(".", 1)
+                await self.hass.services.async_call(
+                    domain,
+                    service_name,
+                    service_data=data if isinstance(data, dict) else {},
+                    target=target if target else None,
+                    blocking=True,
+                    context=context,
+                )
+                await self._record_event(
+                    alert,
+                    "notification_action",
+                    "Post-send action executed.",
+                    {"attempt": attempt, "index": index, "action": service},
+                )
+            except Exception as err:
+                _LOGGER.exception("Post-send action failed for %s", alert["id"])
+                await self._record_event(
+                    alert,
+                    "notification_action_failed",
+                    "Post-send action failed.",
+                    {"attempt": attempt, "index": index, "error": str(err)},
+                )
 
     def _resolve_user(
         self,
@@ -1741,6 +1923,27 @@ class NotificationCenter:
             "test",
             "Test notification sent.",
             {},
+        )
+
+    async def async_test_alert_payload(
+        self,
+        alert: dict[str, Any],
+    ) -> None:
+        """Send a normalized editor draft without saving or changing runtime state."""
+
+        normalized = normalize_config(
+            {
+                "version": 1,
+                "alerts": [alert],
+            }
+        )["alerts"][0]
+
+        await self.dispatcher.async_send(
+            normalized,
+            attempt=1,
+            confirmation_action_id=None,
+            context=None,
+            test=True,
         )
 
     async def async_save_alert(

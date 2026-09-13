@@ -202,6 +202,7 @@ def normalize_target(
         "floor_id",
         "label_id",
         "entity_id",
+        "user_id",
     ):
         values = [
             str(item)
@@ -289,10 +290,16 @@ def normalize_notification(
         "completion_message": str(
             confirmation.get("completion_message") or ""
         ),
+        "notify_on_confirmation": bool(
+            confirmation.get("notify_on_confirmation", False)
+        ),
+        "confirmation_message": str(
+            confirmation.get("confirmation_message") or ""
+        ),
         "actions_enabled": actions_enabled,
     }
 
-    if actions_enabled and actions:
+    if actions:
         normalized_confirmation["actions"] = deepcopy(actions)
 
     result = {
@@ -304,6 +311,17 @@ def normalize_notification(
 
     if extra_data:
         result["data"] = deepcopy(extra_data)
+
+    notification_actions = merged.get("actions")
+    if not isinstance(notification_actions, list):
+        notification_actions = []
+
+    notification_actions_enabled = bool(
+        merged.get("actions_enabled", bool(notification_actions))
+    )
+    result["actions_enabled"] = notification_actions_enabled
+    if notification_actions:
+        result["actions"] = deepcopy(notification_actions)
 
     repeat = merged.get("repeat")
     if repeat is not None:

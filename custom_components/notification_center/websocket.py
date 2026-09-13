@@ -165,6 +165,41 @@ async def async_setup(
     @websocket_api.websocket_command(
         {
             vol.Required("type"):
+                f"{DOMAIN}/test_payload",
+            vol.Required("alert"):
+                dict,
+        }
+    )
+    @websocket_api.async_response
+    async def handle_test_payload(
+        _hass: HomeAssistant,
+        connection,
+        msg: dict[str, Any],
+    ) -> None:
+        """Send a non-persisting test for the editor's current payload."""
+
+        try:
+            await _manager(
+                hass
+            ).async_test_alert_payload(
+                msg["alert"]
+            )
+        except Exception as err:
+            connection.send_error(
+                msg["id"],
+                "test_failed",
+                str(err) or "Unable to send test notification.",
+            )
+            return
+
+        connection.send_result(
+            msg["id"],
+            True,
+        )
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"):
                 f"{DOMAIN}/history",
             vol.Optional(
                 "alert_id"
@@ -329,6 +364,11 @@ async def async_setup(
     websocket_api.async_register_command(
         hass,
         handle_test,
+    )
+
+    websocket_api.async_register_command(
+        hass,
+        handle_test_payload,
     )
 
     websocket_api.async_register_command(

@@ -1,7 +1,8 @@
 # Python caches
 __pycache__/
 node_modules/
-custom_components/notification_center/frontend/dist/
+custom_components/notification_center/dist/
+custom_components/notification_center/frontend/panel.js
 .ha-config/
 hacs-export/
 *.py[cod]

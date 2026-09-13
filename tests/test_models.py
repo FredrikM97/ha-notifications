@@ -65,12 +65,14 @@ class NormalizationTests(unittest.TestCase):
                 {
                     "entity_id": "light.kitchen",
                     "device_id": ["phone", ""],
+                    "user_id": "a-user-id",
                     "ignored": "value",
                 }
             ),
             {
                 "entity_id": ["light.kitchen"],
                 "device_id": ["phone"],
+                "user_id": ["a-user-id"],
             },
         )
         self.assertEqual(models.normalize_target(None), {})
@@ -187,6 +189,9 @@ class NormalizationTests(unittest.TestCase):
         self.assertFalse(
             alert["notification"]["confirmation"]["actions_enabled"]
         )
+        self.assertFalse(
+            alert["notification"]["confirmation"]["notify_on_confirmation"]
+        )
 
     def test_config_accepts_alert_mapping_and_applies_defaults(self):
         normalized = models.normalize_config(
@@ -241,6 +246,30 @@ class NormalizationTests(unittest.TestCase):
         confirmation = enabled["notification"]["confirmation"]
         self.assertTrue(confirmation["actions_enabled"])
         self.assertEqual(len(confirmation["actions"]), 1)
+
+    def test_notification_actions_and_confirmation_notice_are_normalized(self):
+        alert = models.normalize_alert(
+            {
+                "name": "With post-send behavior",
+                "notification": {
+                    "actions_enabled": True,
+                    "actions": [{"action": "light.turn_on"}],
+                    "confirmation": {
+                        "notify_on_confirmation": True,
+                        "confirmation_message": "{{ confirmed_by }} confirmed.",
+                    },
+                },
+            }
+        )
+
+        notification = alert["notification"]
+        self.assertTrue(notification["actions_enabled"])
+        self.assertEqual(notification["actions"], [{"action": "light.turn_on"}])
+        self.assertTrue(notification["confirmation"]["notify_on_confirmation"])
+        self.assertEqual(
+            notification["confirmation"]["confirmation_message"],
+            "{{ confirmed_by }} confirmed.",
+        )
 
     def test_alert_metadata_is_preserved(self):
         alert = models.normalize_alert(

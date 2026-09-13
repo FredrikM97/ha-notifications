@@ -23,6 +23,7 @@ export function createRecipientPicker(
     floor_id: "Floors",
     label_id: "Labels",
     entity_id: "Notification entities",
+    user_id: "Users",
   };
   const items: RecipientItem[] = [
     ...registries.devices.map((item) => ({
@@ -51,6 +52,13 @@ export function createRecipientPicker(
         type: "entity_id" as const,
         id: item.entity_id,
         label: item.name || item.entity_id,
+      })),
+    ...registries.users
+      .filter((item) => item.is_active !== false)
+      .map((item) => ({
+        type: "user_id" as const,
+        id: item.id,
+        label: item.name,
       })),
   ];
   const selected = new Set<string>();
@@ -112,7 +120,9 @@ export function createRecipientPicker(
           <div class="nc-recipient-toolbar">
             <input
               type="search"
-              placeholder="Search devices, labels, or notification services"
+              autocomplete="off"
+              name="notification-center-recipient-search"
+              placeholder="Search recipients"
               .value=${search}
               @input=${(event: Event) => {
                 search = (event.currentTarget as HTMLInputElement).value;

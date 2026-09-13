@@ -101,6 +101,10 @@ def load_notifications():
         "homeassistant.helpers.event",
         types.ModuleType("homeassistant.helpers.event"),
     )
+    entity_registry = sys.modules.setdefault(
+        "homeassistant.helpers.entity_registry",
+        types.ModuleType("homeassistant.helpers.entity_registry"),
+    )
     template = sys.modules.setdefault(
         "homeassistant.helpers.template",
         types.ModuleType("homeassistant.helpers.template"),
@@ -122,6 +126,7 @@ def load_notifications():
     event.TrackTemplateResult = object
     event.async_track_template_result = lambda *args: None
     event.async_track_time_interval = lambda *args: None
+    entity_registry.async_get = lambda hass: hass.entity_registry
     template.Template = object
     template.TemplateError = Exception
     template.result_as_boolean = bool

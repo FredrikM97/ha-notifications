@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && esbuild custom_components/notification_center/frontend/dist/panel.js --bundle --format=esm --outfile=custom_components/notification_center/frontend/dist/panel.bundle.js && mv custom_components/notification_center/frontend/dist/panel.bundle.js custom_components/notification_center/frontend/dist/panel.js",
+    "build": "tsc -p tsconfig.json --noEmit && esbuild custom_components/notification_center/frontend/panel.ts --bundle --format=esm --outfile=custom_components/notification_center/dist/panel.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write custom_components/notification_center/frontend/*.ts tests/frontend_smoke.mjs",
     "test:frontend": "node tests/frontend_smoke.mjs",
-    "clean": "rm -rf custom_components/notification_center/frontend/dist",
+    "clean": "rm -rf custom_components/notification_center/dist",
     "export:hacs": "sh scripts/export_hacs.sh",
     "install:ha": "sh scripts/install_local.sh"
   },

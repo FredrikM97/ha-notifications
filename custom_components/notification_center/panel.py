@@ -20,7 +20,7 @@ from .const import (
 )
 
 
-FRONTEND_DIR = Path(__file__).parent / "frontend" / FRONTEND_BUILD_DIR
+FRONTEND_DIR = Path(__file__).parent / FRONTEND_BUILD_DIR
 
 
 async def async_register_frontend(hass: HomeAssistant) -> None:

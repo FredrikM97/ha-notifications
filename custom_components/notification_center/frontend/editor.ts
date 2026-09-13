@@ -2,7 +2,7 @@ import { errorMessage } from "./api.js";
 import { buildAlertPayload } from "./alert-payload.js";
 import { visualConditionBuilder } from "./condition-builder.js";
 import { createRecipientPicker } from "./recipient-picker.js";
-import { html, render } from "lit";
+import { html, nothing, render } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert, Registries } from "./types.js";
 
@@ -15,28 +15,100 @@ interface EditorContext {
   mode: EditorMode;
   markDirty(): void;
   refreshStatuses(): void;
+  removeSetting(setting: OptionalSetting): void;
 }
 
+type OptionalSetting =
+  | "repeat"
+  | "confirmation"
+  | "postSendActions"
+  | "postConfirmationActions";
+
+type OptionalSettings = Record<OptionalSetting, boolean>;
+
+interface EditorSection {
+  title: string;
+  setting?: OptionalSetting;
+  parent?: string;
+}
+
+interface OptionalSection {
+  index: number;
+}
+
+const editorSections: EditorSection[] = [
+  { title: "Basic" },
+  { title: "When to check" },
+  { title: "Condition" },
+  { title: "Recipients" },
+  { title: "Notification" },
+  {
+    title: "Post-send actions",
+    setting: "postSendActions",
+    parent: "Notification",
+  },
+  { title: "Repeat notification", setting: "repeat" },
+  { title: "Confirmation", setting: "confirmation" },
+  {
+    title: "Post-confirmation actions",
+    setting: "postConfirmationActions",
+    parent: "confirmation",
+  },
+];
+
+const optionalSections: Record<OptionalSetting, OptionalSection> = {
+  postSendActions: { index: 5 },
+  repeat: { index: 6 },
+  confirmation: { index: 7 },
+  postConfirmationActions: { index: 8 },
+};
+
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+function editorModeFor(value: Alert): EditorMode {
+  if (
+    value.conditions.some((item) =>
+      ["state", "numeric", "attribute"].includes(item.type),
+    )
+  ) {
+    return "visual";
+  }
+
+  return "jinja";
+}
+
+function sectionForSetting(setting: OptionalSetting): OptionalSection {
+  return optionalSections[setting];
+}
+
+function isSectionVisible(
+  setting: OptionalSetting | undefined,
+  settings: OptionalSettings,
+): boolean {
+  return !setting || settings[setting];
+}
 
 function defaultAlert(): Alert {
   return {
     id: `alert_${Date.now()}`,
-    name: "New alert",
+    name: "",
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
-    conditions: [{ type: "template", template: "{{ false }}" }],
+    conditions: [{ type: "template", template: "" }],
     monitor: { on_change: true, startup: true },
     notification: {
       action: "notify.send_message",
       target: {},
-      title: "Reminder",
-      message: "Something needs your attention.",
+      title: "",
+      message: "",
+      actions_enabled: false,
       confirmation: {
         enabled: false,
         button: "Activity completed",
         completion_message: "",
+        notify_on_confirmation: false,
+        confirmation_message: "",
         resend_interval: "00:30:00",
         max_attempts: 5,
         actions_enabled: false,
@@ -48,7 +120,7 @@ function defaultAlert(): Alert {
 function conditionTemplate(alert: Alert): string {
   return (
     alert.conditions.find((condition) => condition.type === "template")
-      ?.template || "{{ false }}"
+      ?.template || ""
   );
 }
 
@@ -74,10 +146,36 @@ function section(
   title: string,
   content: TemplateResult,
   className = "",
+  controls: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
   return html`<section class="nc-section ${className}" data-title=${title}>
+    <header class="nc-section-titlebar"><h2>${title}</h2>${controls}</header>
     <div class="nc-section-content">${content}</div>
   </section>`;
+}
+
+function optionalControls(
+  context: EditorContext,
+  setting: OptionalSetting,
+  enabled: boolean,
+  label: string,
+  onToggle: (enabled: boolean) => void,
+  disabled = false,
+): TemplateResult {
+  return html`<div class="nc-setting-controls">
+    <span class="nc-setting-state">${enabled ? "Enabled" : "Disabled"}</span>
+    <input
+      class="nc-switch-input"
+      type="checkbox"
+      role="switch"
+      .checked=${enabled}
+      ?disabled=${disabled}
+      aria-label=${`Enable ${label}`}
+      title=${enabled ? `Disable ${label}` : `Enable ${label}`}
+      @change=${(event: Event) => onToggle(checkedOf(event))}
+    />
+    <button class="nc-icon-button danger" type="button" aria-label=${`Remove ${label}`} title=${`Remove ${label}`} @click=${() => context.removeSetting(setting)}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+  </div>`;
 }
 
 function renderBasicSection(context: EditorContext): TemplateResult {
@@ -207,6 +305,7 @@ function renderConditionSection(context: EditorContext): TemplateResult {
           html`<textarea
             data-role="condition"
             .value=${condition}
+            placeholder="{{ is_state('binary_sensor.example', 'on') }}"
             @input=${(event: Event) => {
               context.value.conditions = [
                 { type: "template", template: valueOf(event) },
@@ -246,7 +345,8 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
           "Title",
           html`<input
             type="text"
-            .value=${notification.title || "Reminder"}
+            .value=${notification.title}
+            placeholder="Notification title"
             @input=${(event: Event) => {
               notification.title = valueOf(event);
               context.markDirty();
@@ -258,6 +358,7 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
           "Message",
           html`<textarea
             .value=${notification.message || ""}
+            placeholder="Notification message"
             @input=${(event: Event) => {
               notification.message = valueOf(event);
               context.markDirty();
@@ -274,31 +375,42 @@ function renderNotificationSection(context: EditorContext): TemplateResult {
   );
 }
 
+function renderPostSendActionsSection(context: EditorContext): TemplateResult {
+  const notification = context.value.notification;
+  return section(
+    "Post-send actions",
+    html`<div class="nc-grid">
+        ${field(
+          "Actions",
+          html`<ha-code-editor
+            data-role="notification-actions"
+            class="nc-code-editor nc-action-editor"
+            mode="yaml"
+            language="yaml"
+            .value=${JSON.stringify(notification.actions || [], null, 2)}
+            @input=${() => context.markDirty()}
+          ></ha-code-editor>`,
+          true,
+        )}
+      </div>
+      <div class="nc-help">
+        Enter a JSON array of Home Assistant actions. JSON is valid YAML; YAML
+        syntax and Jinja templates are highlighted, but only JSON arrays can be
+        saved.
+      </div>`,
+    "",
+    optionalControls(context, "postSendActions", Boolean(notification.actions_enabled), "post-send actions", (enabled) => {
+      notification.actions_enabled = enabled;
+      context.markDirty();
+    }),
+  );
+}
+
 function renderRepeatSection(context: EditorContext): TemplateResult {
   const repeat = context.value.notification.repeat;
   return section(
     "Repeat notification",
     html`<div class="nc-grid">
-      ${field(
-        "Repeat",
-        html`<div class="nc-check">
-          <input
-            data-role="repeat"
-            type="checkbox"
-            .checked=${Boolean(repeat)}
-            @change=${(event: Event) => {
-              if (checkedOf(event))
-                context.value.notification.repeat ||= {
-                  interval: "00:30",
-                  max_attempts: 5,
-                };
-              else delete context.value.notification.repeat;
-              context.markDirty();
-              context.refreshStatuses();
-            }}
-          /><span>Repeat while active</span>
-        </div>`,
-      )}
       ${field(
         "Interval",
         html`<input
@@ -326,6 +438,11 @@ function renderRepeatSection(context: EditorContext): TemplateResult {
         />`,
       )}
     </div>`,
+    "",
+    optionalControls(context, "repeat", repeat?.enabled !== false, "repeat notification", (enabled) => {
+      if (repeat) repeat.enabled = enabled;
+      context.markDirty();
+    }),
   );
 }
 
@@ -334,20 +451,6 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
   return section(
     "Confirmation",
     html`<div class="nc-grid">
-        ${field(
-          "Confirmation",
-          html`<div class="nc-check">
-            <input
-              type="checkbox"
-              .checked=${Boolean(confirmation.enabled)}
-              @change=${(event: Event) => {
-                confirmation.enabled = checkedOf(event);
-                context.markDirty();
-                context.refreshStatuses();
-              }}
-            /><span>Require confirmation</span>
-          </div>`,
-        )}
         ${field(
           "Button text",
           html`<input
@@ -358,6 +461,37 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
               context.markDirty();
             }}
           />`,
+        )}
+        ${field(
+          "Confirmation notification",
+          html`<div class="nc-check">
+            <input
+              class="nc-switch-input"
+              type="checkbox"
+              role="switch"
+              .checked=${Boolean(confirmation.notify_on_confirmation)}
+              @change=${(event: Event) => {
+                confirmation.notify_on_confirmation = checkedOf(event);
+                context.markDirty();
+              }}
+            /><span>Notify recipients when confirmed</span>
+          </div>
+          <div class="nc-help">
+            Send the alert recipients a message identifying the user who
+            confirmed it.
+          </div>`,
+          true,
+        )}
+        ${field(
+          "Confirmation message",
+          html`<textarea
+            .value=${confirmation.confirmation_message || ""}
+            @input=${(event: Event) => {
+              confirmation.confirmation_message = valueOf(event);
+              context.markDirty();
+            }}
+          ></textarea>`,
+          true,
         )}
         ${field(
           "Completion message",
@@ -398,37 +532,46 @@ function renderConfirmationSection(context: EditorContext): TemplateResult {
             }}
           />`,
         )}
+      </div>
+      `,
+    "",
+    optionalControls(context, "confirmation", Boolean(confirmation.enabled), "confirmation", (enabled) => {
+      confirmation.enabled = enabled;
+      context.markDirty();
+    }),
+  );
+}
+
+function renderPostConfirmationActionsSection(
+  context: EditorContext,
+): TemplateResult {
+  const confirmation = context.value.notification.confirmation;
+  return section(
+    "Post-confirmation actions",
+    html`<div class="nc-grid">
         ${field(
-          "Follow-up actions",
-          html`<div class="nc-check">
-            <input
-              data-role="actions-toggle"
-              type="checkbox"
-              .checked=${Boolean(confirmation.actions_enabled)}
-              @change=${(event: Event) => {
-                confirmation.actions_enabled = checkedOf(event);
-                context.markDirty();
-              }}
-            /><span>Run actions after confirmation</span>
-          </div>`,
-          true,
-        )}
-        ${field(
-          "Actions after confirmation",
-          html`<textarea
+          "Actions",
+          html`<ha-code-editor
             data-role="actions"
-            class="code"
+            class="nc-code-editor nc-action-editor"
+            mode="yaml"
+            language="yaml"
             .value=${JSON.stringify(confirmation.actions || [], null, 2)}
             @input=${() => context.markDirty()}
-          ></textarea>`,
+          ></ha-code-editor>`,
           true,
         )}
       </div>
       <div class="nc-help">
-        Optional Home Assistant actions use JSON here, which is also valid YAML.
-        Jinja templates are supported in action targets and data, just like
-        conditions.
+        Enter a JSON array of Home Assistant actions. JSON is valid YAML; YAML
+        syntax and Jinja templates are highlighted, but only JSON arrays can be
+        saved.
       </div>`,
+    "",
+    optionalControls(context, "postConfirmationActions", Boolean(confirmation.actions_enabled), "post-confirmation actions", (enabled) => {
+      confirmation.actions_enabled = enabled;
+      context.markDirty();
+    }, !confirmation.enabled),
   );
 }
 
@@ -438,26 +581,55 @@ function setMode(context: EditorContext, mode: EditorMode): void {
   context.refreshStatuses();
 }
 
+function yamlValue(value: unknown, indent = 0): string {
+  const padding = " ".repeat(indent);
+  const isComplex = (item: unknown): boolean =>
+    Array.isArray(item) || Boolean(item && typeof item === "object");
+
+  if (Array.isArray(value)) {
+    if (!value.length) return `${padding}[]`;
+    return value
+      .map((item) =>
+        isComplex(item)
+          ? `${padding}-\n${yamlValue(item, indent + 2)}`
+          : `${padding}- ${yamlValue(item)}`,
+      )
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) return `${padding}{}`;
+    return entries
+      .map(([key, item]) =>
+        isComplex(item)
+          ? `${padding}${key}:\n${yamlValue(item, indent + 2)}`
+          : `${padding}${key}: ${yamlValue(item)}`,
+      )
+      .join("\n");
+  }
+  return typeof value === "string"
+    ? JSON.stringify(value)
+    : String(value ?? "null");
+}
+
 function showYaml(root: ShadowRoot, alert: Alert): void {
-  const host = document.createElement("div");
-  const close = () => host.remove();
+  const popup = document.createElement("div");
+  const close = (): void => popup.remove();
   render(
     html`<div
       class="nc-modal-backdrop"
-      @click=${(event: MouseEvent) =>
-        event.target === event.currentTarget && close()}
+      @click=${(event: MouseEvent) => {
+        if (event.target === event.currentTarget) close();
+      }}
     >
       <section class="nc-modal nc-alert-yaml-modal">
         <header class="nc-modal-header">
           <h2>Alert YAML</h2>
-          <button class="nc-button secondary" @click=${close}>
-            Back to editor
+          <button class="nc-icon-button" @click=${close} aria-label="Close YAML" title="Close YAML">
+            <ha-icon icon="mdi:close"></ha-icon>
           </button>
         </header>
         <main class="nc-modal-body">
-          <div class="nc-help">
-            This is a read-only view of the alert currently being edited.
-          </div>
           <ha-code-editor
             mode="yaml"
             language="yaml"
@@ -467,31 +639,28 @@ function showYaml(root: ShadowRoot, alert: Alert): void {
         </main>
       </section>
     </div>`,
-    host,
+    popup,
   );
-  const editor = host.querySelector<CodeEditor>("ha-code-editor");
+  const editor = popup.querySelector<CodeEditor>("ha-code-editor");
   if (!editor) throw new Error("Missing alert YAML editor");
   editor.value = yamlValue(alert);
-  root.append(host);
+  root.append(popup);
 }
 
-function yamlValue(value: unknown, indent = 0): string {
-  const padding = " ".repeat(indent);
-  if (Array.isArray(value))
-    return value.length
-      ? value
-          .map(
-            (item) => `${padding}- ${yamlValue(item, indent + 2).trimStart()}`,
-          )
-          .join("\n")
-      : `${padding}[]`;
-  if (value && typeof value === "object")
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, item]) => `${padding}${key}: ${yamlValue(item, indent + 2)}`)
-      .join("\n");
-  return typeof value === "string"
-    ? JSON.stringify(value)
-    : String(value ?? "null");
+function actionArrayValue(
+  editor: CodeEditor | null,
+  label: string,
+): Record<string, unknown>[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(editor?.value || "[]");
+  } catch {
+    throw new Error(`${label} must be a valid JSON array.`);
+  }
+  if (!Array.isArray(parsed) || !parsed.every((item) => item && typeof item === "object")) {
+    throw new Error(`${label} must be a JSON array of action objects.`);
+  }
+  return parsed as Record<string, unknown>[];
 }
 
 export function openEditor({
@@ -506,7 +675,7 @@ export function openEditor({
   alert?: Alert;
   registries: Registries;
   onSave: (alert: Alert) => Promise<void>;
-  onTest: (alertId: string) => Promise<void>;
+  onTest: (alert: Alert) => Promise<void>;
   onCancel?: () => void;
 }): void {
   const value = clone(alert || defaultAlert());
@@ -521,55 +690,108 @@ export function openEditor({
   };
   const host = document.createElement("div");
   const page = root.querySelector<HTMLElement>(".nc-page");
-  if (page) page.hidden = true;
+  const dashboardContent = page?.querySelector<HTMLElement>(
+    "#alerts-view, #history-view, #yaml-view",
+  );
+  const dashboardTabs = page?.querySelector<HTMLElement>(".nc-tabs");
+  const dashboardActions = page?.querySelector<HTMLElement>(".nc-actions");
+  if (dashboardContent) dashboardContent.hidden = true;
+  if (dashboardTabs) dashboardTabs.hidden = true;
+  if (dashboardActions) {
+    const backButton = document.createElement("button");
+    backButton.className = "nc-button secondary";
+    backButton.textContent = "Back to alerts";
+    backButton.addEventListener("click", () => close() && onCancel?.());
+    dashboardActions.replaceChildren(backButton);
+  }
   let dirty = false;
   const context: EditorContext = {
     value,
-    mode: value.conditions.some((item) =>
-      ["state", "numeric", "attribute"].includes(item.type),
-    )
-      ? "visual"
-      : "jinja",
+    mode: editorModeFor(value),
     markDirty: () => {
       dirty = true;
+      refreshStatuses();
     },
     refreshStatuses: () => {},
+    removeSetting: () => {},
   };
-  const titles = [
-    "Basic",
-    "When to check",
-    "Condition",
-    "Recipients",
-    "Notification",
-    "Repeat notification",
-    "Confirmation",
-  ];
-
+  const optionalSettings: OptionalSettings = {
+    repeat: Boolean(value.notification.repeat),
+    confirmation: Boolean(alert?.notification.confirmation),
+    postSendActions: Boolean(value.notification.actions_enabled),
+    postConfirmationActions: Boolean(
+      value.notification.confirmation.actions_enabled,
+    ),
+  };
   const renderEditor = (): void => {
     render(
       html`<div class="nc-editor-view">
         <section class="nc-editor-shell">
-          <header class="nc-modal-header">
-            <h2>${value.id ? "Edit alert" : "Add alert"}</h2>
-            <button
-              class="nc-button secondary"
-              @click=${() => close() && onCancel?.()}
-            >
-              Back to alerts
-            </button>
-          </header>
           <main class="nc-modal-body">
-            <nav class="nc-section-header">
-              ${titles.map(
-                (title, index) =>
-                  html`<button
-                    class="nc-section-nav-button"
+            <div class="nc-editor-layout">
+            <nav class="nc-section-header" aria-label="Alert sections">
+              ${editorSections.map(
+                ({ title, setting, parent }, index) => {
+                  return html`
+                  <button
+                    class="nc-section-nav-button ${setting ? "nc-optional-setting" : ""} ${
+                      parent ? "nc-section-nav-child" : ""
+                    }"
+                    data-setting=${setting || nothing}
+                    ?hidden=${!isSectionVisible(setting, optionalSettings)}
                     @click=${() => showSection(index)}
                   >
-                    ${title}
-                  </button>`,
+                    <span class="nc-section-status" aria-hidden="true"></span>
+                    <span>${title}</span>
+                  </button>`;
+                },
               )}
+              <select
+                class="nc-add-setting"
+                aria-label="Add setting"
+                @change=${(event: Event) => addSetting(valueOf(event))}
+              >
+                <option value="">Add setting</option>
+                <option value="repeat" ?disabled=${optionalSettings.repeat}>
+                  Repeat notification
+                </option>
+                <option
+                  value="postSendActions"
+                  ?disabled=${optionalSettings.postSendActions}
+                >
+                  Post-send actions
+                </option>
+                <option
+                  value="confirmation"
+                  ?disabled=${optionalSettings.confirmation}
+                >
+                  Confirmation
+                </option>
+                <option
+                  value="postConfirmationActions"
+                  ?disabled=${
+                    !optionalSettings.confirmation ||
+                    optionalSettings.postConfirmationActions
+                  }
+                >
+                  Post-confirmation actions
+                </option>
+              </select>
             </nav>
+            <select
+              class="nc-section-select"
+              aria-label="Alert section"
+              @change=${(event: Event) => showSection(Number(valueOf(event)))}
+            >
+              ${editorSections.map(
+                ({ title, setting }, index) => html`<option
+                  value=${index}
+                  ?disabled=${!isSectionVisible(setting, optionalSettings)}
+                >
+                  ${title}
+                </option>`,
+              )}
+            </select>
             <div class="nc-editor-sections">
               ${renderBasicSection(context)}${renderMonitorSection(
                 context,
@@ -577,12 +799,43 @@ export function openEditor({
                 context,
               )}${renderRecipientSection()}${renderNotificationSection(
                 context,
-              )}${renderRepeatSection(context)}${renderConfirmationSection(
-                context,
-              )}
+              )}<div
+                class="nc-optional-setting"
+                data-setting="postSendActions"
+                ?hidden=${!optionalSettings.postSendActions}
+              >
+                ${renderPostSendActionsSection(context)}
+              </div><div
+                class="nc-optional-setting"
+                data-setting="repeat"
+                ?hidden=${!optionalSettings.repeat}
+              >
+                ${renderRepeatSection(context)}
+              </div><div
+                class="nc-optional-setting"
+                data-setting="confirmation"
+                ?hidden=${!optionalSettings.confirmation}
+              >
+                ${renderConfirmationSection(context)}
+              </div><div
+                class="nc-optional-setting"
+                data-setting="postConfirmationActions"
+                ?hidden=${!optionalSettings.postConfirmationActions}
+              >
+                ${renderPostConfirmationActionsSection(context)}
+              </div>
+            </div>
             </div>
           </main>
           <footer class="nc-modal-footer">
+            <button
+              class="nc-icon-button"
+              type="button"
+              aria-label="View alert YAML"
+              title="View alert YAML"
+              aria-expanded="false"
+              @click=${yamlView}
+            ><ha-icon icon="mdi:code-braces"></ha-icon></button>
             <button
               class="nc-button secondary"
               @click=${() => close() && onCancel?.()}
@@ -590,11 +843,9 @@ export function openEditor({
               Cancel</button
             ><button
               class="nc-button secondary"
-              ?disabled=${!value.id}
               @click=${test}
             >
               Test alert</button
-            ><button class="nc-button secondary" @click=${yamlView}>YAML</button
             ><button class="nc-button" @click=${save}>Save alert</button>
           </footer>
         </section>
@@ -603,7 +854,8 @@ export function openEditor({
     );
   };
   renderEditor();
-  root.append(host);
+  if (page) page.append(host);
+  else root.append(host);
 
   const visual = host.querySelector<HTMLElement>('[data-role="visual"]')!;
   const recipientMount = host.querySelector<HTMLElement>(
@@ -627,7 +879,7 @@ export function openEditor({
     visual.hidden = context.mode !== "visual";
     jinja.hidden = context.mode === "visual";
     const configured = [
-      Boolean(value.name.trim() || value.description.trim()),
+      Boolean(value.name.trim()),
       Boolean(
         value.monitor.on_change ||
         value.monitor.interval ||
@@ -639,11 +891,11 @@ export function openEditor({
       Object.values(recipients.target()).some((items) =>
         Boolean(items?.length),
       ),
-      Boolean(
-        value.notification.title.trim() || value.notification.message.trim(),
-      ),
+      Boolean(value.notification.message.trim()),
+      Boolean(value.notification.actions_enabled),
       Boolean(value.notification.repeat),
       Boolean(value.notification.confirmation.enabled),
+      Boolean(value.notification.confirmation.actions_enabled),
     ];
     host
       .querySelectorAll<HTMLElement>(".nc-section-status")
@@ -654,9 +906,110 @@ export function openEditor({
           configured[index] ? "Configured" : "Not configured",
         );
       });
+    updatePostConfirmationAvailability();
   }
 
   context.refreshStatuses = refreshStatuses;
+
+  function addSetting(setting: string): void {
+    if (setting === "postSendActions") {
+      value.notification.actions_enabled = true;
+      optionalSettings.postSendActions = true;
+    } else if (setting === "repeat") {
+      value.notification.repeat ||= {
+        interval: "00:30",
+        max_attempts: 5,
+        enabled: true,
+      };
+      optionalSettings.repeat = true;
+    } else if (setting === "confirmation") {
+      value.notification.confirmation.enabled = true;
+      optionalSettings.confirmation = true;
+    } else if (setting === "postConfirmationActions") {
+      value.notification.confirmation.actions_enabled = true;
+      optionalSettings.postConfirmationActions = true;
+    } else return;
+
+    host
+      .querySelectorAll<HTMLElement>(`[data-setting="${setting}"]`)
+      .forEach((item) => (item.hidden = false));
+    const select = host.querySelector<HTMLSelectElement>(".nc-add-setting");
+    const option = select?.querySelector<HTMLOptionElement>(
+      `option[value="${setting}"]`,
+    );
+    if (option) option.disabled = true;
+    const sectionIndex = sectionForSetting(setting as OptionalSetting).index;
+    const mobileOption = host.querySelector<HTMLOptionElement>(
+      `.nc-section-select option[value="${sectionIndex}"]`,
+    );
+    if (mobileOption) mobileOption.disabled = false;
+    if (select) select.value = "";
+    updatePostConfirmationAvailability();
+    context.markDirty();
+    refreshStatuses();
+  }
+
+  function removeSetting(setting: OptionalSetting): void {
+    if (setting === "repeat") {
+      delete value.notification.repeat;
+    } else if (setting === "postSendActions") {
+      delete value.notification.actions;
+      value.notification.actions_enabled = false;
+    } else if (setting === "postConfirmationActions") {
+      delete value.notification.confirmation.actions;
+      value.notification.confirmation.actions_enabled = false;
+    } else {
+      value.notification.confirmation = {
+        enabled: false,
+        button: "",
+        completion_message: "",
+        notify_on_confirmation: false,
+        confirmation_message: "",
+        resend_interval: "00:30:00",
+        max_attempts: 5,
+        actions_enabled: false,
+      };
+      optionalSettings.postConfirmationActions = false;
+      setOptionalSettingVisible("postConfirmationActions", false);
+    }
+    optionalSettings[setting] = false;
+    setOptionalSettingVisible(setting, false);
+    context.markDirty();
+    showSection(0);
+  }
+
+  context.removeSetting = removeSetting;
+
+  function setOptionalSettingVisible(
+    setting: OptionalSetting,
+    visible: boolean,
+  ): void {
+    host
+      .querySelectorAll<HTMLElement>(`[data-setting="${setting}"]`)
+      .forEach((item) => (item.hidden = !visible));
+    const sectionIndex = sectionForSetting(setting).index;
+    const mobileOption = host.querySelector<HTMLOptionElement>(
+      `.nc-section-select option[value="${sectionIndex}"]`,
+    );
+    if (mobileOption) mobileOption.disabled = !visible;
+    const addOption = host.querySelector<HTMLOptionElement>(
+      `.nc-add-setting option[value="${setting}"]`,
+    );
+    if (addOption) addOption.disabled = visible;
+    updatePostConfirmationAvailability();
+  }
+
+  function updatePostConfirmationAvailability(): void {
+    const option = host.querySelector<HTMLOptionElement>(
+      '.nc-add-setting option[value="postConfirmationActions"]',
+    );
+    if (option) {
+      option.disabled =
+        !optionalSettings.confirmation ||
+        !value.notification.confirmation.enabled ||
+        optionalSettings.postConfirmationActions;
+    }
+  }
 
   function showSection(index: number): void {
     host
@@ -672,35 +1025,42 @@ export function openEditor({
         if (active) button.setAttribute("aria-current", "step");
         else button.removeAttribute("aria-current");
       });
+    const select = host.querySelector<HTMLSelectElement>(".nc-section-select");
+    if (select) select.value = String(index);
   }
   refreshStatuses();
+  showSection(0);
   function close(): boolean {
     if (dirty && !window.confirm("Discard unsaved changes?")) return false;
     host.remove();
-    if (page) page.hidden = false;
+    if (dashboardContent) dashboardContent.hidden = false;
+    if (dashboardTabs) dashboardTabs.hidden = false;
+    const panel = root.host as HTMLElement & { render?: () => void };
+    panel.render?.();
     return true;
   }
   function formPayload(): Alert {
-    const actionToggle = host.querySelector<HTMLInputElement>(
-      '[data-role="actions-toggle"]',
-    );
     let actions: Record<string, unknown>[] = [];
-    if (actionToggle?.checked) {
-      try {
-        actions = JSON.parse(
-          host.querySelector<HTMLTextAreaElement>('[data-role="actions"]')
-            ?.value || "[]",
-        );
-      } catch {
-        actions = [];
-      }
+    if (optionalSettings.postConfirmationActions) {
+      actions = actionArrayValue(
+        host.querySelector<CodeEditor>('[data-role="actions"]'),
+        "Post-confirmation actions",
+      );
     }
     const repeat = value.notification.repeat
       ? {
           interval: String(value.notification.repeat.interval || "00:30"),
           max_attempts: Number(value.notification.repeat.max_attempts) || 5,
+          enabled: value.notification.repeat.enabled !== false,
         }
       : undefined;
+    let notificationActions: Record<string, unknown>[] = [];
+    if (optionalSettings.postSendActions) {
+      notificationActions = actionArrayValue(
+        host.querySelector<CodeEditor>('[data-role="notification-actions"]'),
+        "Post-send actions",
+      );
+    }
     const confirmation = value.notification.confirmation!;
     return buildAlertPayload(value, {
       name: value.name,
@@ -717,13 +1077,17 @@ export function openEditor({
       title: value.notification.title,
       message: value.notification.message,
       repeat,
+      actions_enabled: Boolean(value.notification.actions_enabled),
+      ...(notificationActions.length ? { actions: notificationActions } : {}),
       confirmation: {
         enabled: Boolean(confirmation.enabled),
         button: confirmation.button,
         completion_message: confirmation.completion_message,
+        notify_on_confirmation: Boolean(confirmation.notify_on_confirmation),
+        confirmation_message: confirmation.confirmation_message,
         resend_interval: String(confirmation.resend_interval),
         max_attempts: confirmation.max_attempts,
-        actions_enabled: Boolean(actionToggle?.checked),
+        actions_enabled: Boolean(confirmation.actions_enabled),
         ...(actions.length ? { actions } : {}),
       },
     });
@@ -734,9 +1098,8 @@ export function openEditor({
   async function test(event: Event): Promise<void> {
     const button = event.currentTarget as HTMLButtonElement;
     try {
-      if (!value.id) throw new Error("Save the alert before testing it.");
       button.disabled = true;
-      await onTest(value.id);
+      await onTest(formPayload());
     } catch (error) {
       const toast = document.createElement("div");
       toast.className = "nc-toast";
@@ -744,7 +1107,7 @@ export function openEditor({
       root.append(toast);
       window.setTimeout(() => toast.remove(), 6000);
     } finally {
-      button.disabled = !value.id;
+      button.disabled = false;
     }
   }
   async function save(event: Event): Promise<void> {

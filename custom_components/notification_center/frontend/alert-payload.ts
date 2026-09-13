@@ -18,11 +18,16 @@ export interface AlertFormValues {
   repeat?: {
     interval: string;
     max_attempts: number;
+    enabled: boolean;
   };
+  actions_enabled: boolean;
+  actions?: Record<string, unknown>[];
   confirmation: {
     enabled: boolean;
     button: string;
     completion_message: string;
+    notify_on_confirmation: boolean;
+    confirmation_message: string;
     resend_interval: string;
     max_attempts: number;
     actions_enabled: boolean;
@@ -71,6 +76,8 @@ export function buildAlertPayload(
     message: values.message,
     ...(result.notification?.data ? { data: result.notification.data } : {}),
     ...(values.repeat ? { repeat: values.repeat } : {}),
+    actions_enabled: values.actions_enabled,
+    ...(values.actions?.length ? { actions: values.actions } : {}),
     confirmation: values.confirmation,
   };
 

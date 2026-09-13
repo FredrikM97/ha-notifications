@@ -6,6 +6,7 @@ import {
   loadRegistries,
   saveAlert,
   testAlert,
+  testAlertPayload,
 } from "./api.js";
 
 import { openEditor } from "./editor.js";
@@ -17,11 +18,49 @@ import { html, render } from "lit";
 import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
 import { renderYamlView } from "./yaml-view.js";
 
+type PanelTab = "alerts" | "history" | "yaml";
+
+interface PanelTabDefinition {
+  key: PanelTab;
+  label: string;
+}
+
+interface AlertStatus {
+  className: string;
+  label: string;
+}
+
+const panelTabs: PanelTabDefinition[] = [
+  { key: "alerts", label: "Alerts" },
+  { key: "history", label: "History" },
+  { key: "yaml", label: "YAML" },
+];
+
+function tabContent(tab: PanelTab) {
+  if (tab === "alerts") {
+    return html`<div id="alerts-view"></div>`;
+  }
+  if (tab === "history") {
+    return html`<div id="history-view"></div>`;
+  }
+  return html`<div id="yaml-view"></div>`;
+}
+
+function alertStatus(alert: Alert): AlertStatus {
+  if (alert.runtime?.active) {
+    return { className: "nc-status active", label: "Active" };
+  }
+  if (alert.enabled) {
+    return { className: "nc-status ok", label: "Ready" };
+  }
+  return { className: "nc-status disabled", label: "Disabled" };
+}
+
 class NotificationCenterPanel extends HTMLElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private history: HistoryEntry[] = [];
-  private tab: "alerts" | "history" | "yaml" = "alerts";
+  private tab: PanelTab = "alerts";
   private loading = false;
   private _registries: Registries | null = null;
   private _registriesPromise: Promise<Registries> | null = null;
@@ -62,12 +101,15 @@ class NotificationCenterPanel extends HTMLElement {
     }
 
     if (!this._registriesPromise) {
-      this._registriesPromise = loadRegistries(this._hass).then(
-        (registries) => {
+      this._registriesPromise = loadRegistries(this._hass)
+        .then((registries) => {
           this._registries = registries;
           return registries;
-        },
-      );
+        })
+        .catch((err) => {
+          this._registriesPromise = null;
+          throw err;
+        });
     }
 
     return this._registriesPromise;
@@ -107,12 +149,7 @@ class NotificationCenterPanel extends HTMLElement {
     if (!this.shadowRoot) {
       return;
     }
-    const content =
-      this.tab === "alerts"
-        ? html`<div id="alerts-view"></div>`
-        : this.tab === "history"
-          ? html`<div id="history-view"></div>`
-          : html`<div id="yaml-view"></div>`;
+    const content = tabContent(this.tab);
     render(
       html`<style>
           ${styles}
@@ -127,20 +164,14 @@ class NotificationCenterPanel extends HTMLElement {
               </div>
             </div>
             <div class="nc-actions">
-              <button class="nc-button" @click=${this.addAlert}>
+              <button class="nc-button" @click=${() => this.addAlert()}>
                 + Add alert
               </button>
             </div>
           </div>
           <div class="nc-tabs">
-            ${(
-              [
-                ["alerts", "Alerts"],
-                ["history", "History"],
-                ["yaml", "YAML"],
-              ] as const
-            ).map(
-              ([key, label]) =>
+            ${panelTabs.map(
+              ({ key, label }) =>
                 html`<button
                   class="nc-tab ${this.tab === key ? "active" : ""}"
                   @click=${() => {
@@ -184,7 +215,7 @@ class NotificationCenterPanel extends HTMLElement {
               Create your first alert. You can trigger it from condition
               changes, an interval, or both.
             </p>
-            <button class="nc-button" @click=${this.addAlert}>
+            <button class="nc-button" @click=${() => this.addAlert()}>
               Create alert
             </button>
           </div>`,
@@ -194,6 +225,7 @@ class NotificationCenterPanel extends HTMLElement {
 
   private alertCardTemplate(alert: Alert) {
     const runtime = alert.runtime || {};
+    const status = alertStatus(alert);
     const monitor =
       [
         alert.monitor?.on_change ? "condition changes" : "",
@@ -202,20 +234,14 @@ class NotificationCenterPanel extends HTMLElement {
         .filter(Boolean)
         .join(" + ") || "No trigger";
     return html`<div class="nc-card nc-alert">
-      <div class="nc-alert-icon">${alert.icon || "🔔"}</div>
+      <div class="nc-alert-icon">
+        <ha-icon icon=${alert.icon || "mdi:bell-outline"}></ha-icon>
+      </div>
       <div class="nc-alert-main">
         <div class="nc-alert-name">${alert.name}</div>
         <span
-          class="${runtime.active
-            ? "nc-status active"
-            : alert.enabled
-              ? "nc-status ok"
-              : "nc-status disabled"}"
-          >${runtime.active
-            ? "Active"
-            : alert.enabled
-              ? "Ready"
-              : "Disabled"}</span
+          class=${status.className}
+          >${status.label}</span
         >
         <div class="nc-alert-meta">
           ${monitor} · ${this.targetSummary(alert.notification?.target)}
@@ -266,8 +292,8 @@ class NotificationCenterPanel extends HTMLElement {
     }
   }
 
-  targetSummary(target: Alert["notification"]["target"] = {}) {
-    const parts = [];
+  targetSummary(target: Alert["notification"]["target"] = {}): string {
+    const parts: string[] = [];
 
     for (const [key, label] of [
       ["device_id", "devices"],
@@ -286,15 +312,24 @@ class NotificationCenterPanel extends HTMLElement {
     return parts.join(", ") || "No target";
   }
 
-  async addAlert() {
-    const registries = await this.getRegistries();
+  addAlert = async () => {
+    let registries: Registries;
+    try {
+      registries = await this.getRegistries();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+      return;
+    }
 
     openEditor({
       root: this.shadowRoot,
       alert: null,
       registries,
-      onTest: async () => {
-        throw new Error("Save the alert before testing it.");
+      onTest: async (draft) => {
+        await testAlertPayload(this._hass, draft);
+        this.showToast(
+          "Draft test notification sent. Confirmation callbacks require saving.",
+        );
       },
       onSave: async (alert) => {
         await saveAlert(this._hass, alert);
@@ -304,21 +339,26 @@ class NotificationCenterPanel extends HTMLElement {
         await this.refresh();
       },
     });
-  }
+  };
 
-  async editAlert(alert) {
-    const registries = await this.getRegistries();
+  async editAlert(alert: Alert): Promise<void> {
+    let registries: Registries;
+    try {
+      registries = await this.getRegistries();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+      return;
+    }
 
     openEditor({
       root: this.shadowRoot,
       alert,
       registries,
-      onTest: async (alertId) => {
-        await testAlert(this._hass, alertId);
-
-        this.showToast("Test notification sent.");
-
-        await this.refresh();
+      onTest: async (draft) => {
+        await testAlertPayload(this._hass, draft);
+        this.showToast(
+          "Draft test notification sent. Confirmation callbacks require saving.",
+        );
       },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
@@ -338,7 +378,7 @@ class NotificationCenterPanel extends HTMLElement {
     });
   }
 
-  async removeAlert(alert) {
+  async removeAlert(alert: Alert): Promise<void> {
     if (!window.confirm(`Delete "${alert.name}"?`)) {
       return;
     }
@@ -354,7 +394,7 @@ class NotificationCenterPanel extends HTMLElement {
     }
   }
 
-  formatTime(value) {
+  formatTime(value: string | undefined): string {
     if (!value) {
       return "—";
     }
@@ -369,7 +409,7 @@ class NotificationCenterPanel extends HTMLElement {
     }
   }
 
-  showToast(message, error = false) {
+  showToast(message: string, error = false): void {
     const toast = document.createElement("div");
 
     toast.className = "nc-toast";

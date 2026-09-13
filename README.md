@@ -5,12 +5,12 @@ as expected by Home Assistant and HACS. For packaging, run
 `npm install && npm run export:hacs`. The source frontend remains TypeScript;
 the export contains compiled browser output.
 
-For local Home Assistant testing, run `npm run install:ha` to install into the
-ignored `.ha-config/custom_components/notification_center` directory, or pass
-your Home Assistant configuration directory:
+For local Home Assistant testing, run `sh scripts/install_local.sh` to copy the
+integration into `config/custom_components/notification_center`, or pass a
+different Home Assistant configuration directory:
 
 ```bash
-npm run install:ha -- /path/to/home-assistant-config
+sh scripts/install_local.sh /path/to/home-assistant-config
 ```
 
 A Home Assistant custom integration for creating, managing, and debugging state-based notifications from a dedicated UI.

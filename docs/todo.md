@@ -14,7 +14,7 @@ repository layout.
 - [x] Make recipient results part of the normal layout so the dropdown cannot be hidden behind the editor.
 - [x] Use switch-style controls for confirmation and follow-up-action enablement.
 - [x] Split frontend responsibilities into focused TypeScript modules.
-- [x] Compile frontend TypeScript to `custom_components/notification_center/frontend/dist` and serve browser-loadable JavaScript.
+- [x] Compile frontend TypeScript and serve a browser-loadable `frontend/panel.js` bundle.
 - [x] Remove the unused `frontend.py` frontend registration.
 - [x] Remove repeated frontend section-divider comments.
 - [x] Use one source of truth for panel title, icon, version, and static resource paths.
@@ -42,6 +42,5 @@ npm run test:frontend
 ```
 
 The frontend source of truth is `custom_components/notification_center/frontend/*.ts`. JavaScript is a release
-artifact only: run `npm run build` when packaging the Home Assistant panel.
-The generated `custom_components/notification_center/frontend/dist/` directory is ignored and is not part of the
-source tree.
+artifact: build it before running the installer or packaging the Home Assistant panel. The build produces one bundled
+`dist/panel.js` file, which the installer and HACS export package unchanged.

@@ -25,12 +25,15 @@ export interface NotificationTarget {
   floor_id?: string[];
   label_id?: string[];
   entity_id?: string[];
+  user_id?: string[];
 }
 
 export interface ConfirmationConfig {
   enabled: boolean;
   button: string;
   completion_message: string;
+  notify_on_confirmation: boolean;
+  confirmation_message: string;
   resend_interval: string | Record<string, number>;
   max_attempts: number;
   actions_enabled: boolean;
@@ -44,6 +47,8 @@ export interface NotificationConfig {
   message: string;
   data?: Record<string, unknown>;
   repeat?: Record<string, unknown>;
+  actions_enabled: boolean;
+  actions?: Record<string, unknown>[];
   confirmation: ConfirmationConfig;
 }
 
@@ -84,6 +89,7 @@ export interface Registries {
   areas: RegistryArea[];
   labels: RegistryLabel[];
   floors: RegistryFloor[];
+  users: RegistryUser[];
 }
 
 export interface RegistryEntity {
@@ -113,4 +119,10 @@ export interface RegistryFloor {
   id?: string;
   floor_id?: string;
   name?: string;
+}
+
+export interface RegistryUser {
+  id: string;
+  name: string;
+  is_active?: boolean;
 }

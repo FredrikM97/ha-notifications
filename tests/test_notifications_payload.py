@@ -21,8 +21,41 @@ class NotificationPayloadTests(unittest.TestCase):
             self.calls.append((domain, service, kwargs))
 
     class Hass:
-        def __init__(self):
+        def __init__(self, mobile_app_entries=(), entities=()):
             self.services = NotificationPayloadTests.ServiceRecorder()
+            self.config_entries = type(
+                "ConfigEntries",
+                (),
+                {
+                    "async_entries": lambda _self, domain: (
+                        mobile_app_entries if domain == "mobile_app" else []
+                    )
+                },
+            )()
+            self.entity_registry = type(
+                "EntityRegistry",
+                (),
+                {"entities": {entity.entity_id: entity for entity in entities}},
+            )()
+
+    @staticmethod
+    def mobile_app_entry(entry_id, user_id):
+        return type(
+            "ConfigEntry",
+            (),
+            {"entry_id": entry_id, "data": {"user_id": user_id}},
+        )()
+
+    @staticmethod
+    def notify_entity(entity_id, config_entry_id):
+        return type(
+            "EntityEntry",
+            (),
+            {
+                "entity_id": entity_id,
+                "config_entry_id": config_entry_id,
+            },
+        )()
 
     class Storage:
         def __init__(self, config):
@@ -143,6 +176,101 @@ class NotificationPayloadTests(unittest.TestCase):
             {"entity_id": ["notify.mobile_app_phone"]},
         )
 
+    def test_selected_user_resolves_to_mobile_app_notify_entity(self):
+        hass = self.Hass(
+            [self.mobile_app_entry("mobile-entry", "a-user-id")],
+            [self.notify_entity("notify.mobile_app_phone", "mobile-entry")],
+        )
+        dispatcher = notifications.NotificationDispatcher(hass)
+        alert = {
+            "id": "user-recipient",
+            "name": "User recipient",
+            "notification": {
+                "target": {"user_id": ["a-user-id"]},
+                "message": "Check this",
+            },
+        }
+
+        asyncio.run(
+            dispatcher.async_send(
+                alert,
+                attempt=1,
+                confirmation_action_id=None,
+                context=None,
+                test=True,
+            )
+        )
+
+        domain, service, kwargs = hass.services.calls[0]
+        self.assertEqual((domain, service), ("notify", "send_message"))
+        self.assertEqual(
+            kwargs["target"],
+            {"entity_id": ["notify.mobile_app_phone"]},
+        )
+        self.assertNotIn("user_id", kwargs["target"])
+
+    def test_selected_user_combines_with_other_generic_recipients(self):
+        hass = self.Hass(
+            [self.mobile_app_entry("mobile-entry", "a-user-id")],
+            [self.notify_entity("notify.mobile_app_phone", "mobile-entry")],
+        )
+        dispatcher = notifications.NotificationDispatcher(hass)
+
+        asyncio.run(
+            dispatcher.async_send(
+                {
+                    "id": "mixed-recipients",
+                    "name": "Mixed recipients",
+                    "notification": {
+                        "target": {
+                            "user_id": ["a-user-id"],
+                            "device_id": ["another-device"],
+                        },
+                        "message": "Check this",
+                    },
+                },
+                attempt=1,
+                confirmation_action_id=None,
+                context=None,
+                test=True,
+            )
+        )
+
+        self.assertEqual(
+            hass.services.calls[0][2]["target"],
+            {
+                "device_id": ["another-device"],
+                "entity_id": ["notify.mobile_app_phone"],
+            },
+        )
+
+    def test_selected_user_without_mobile_app_notify_entity_is_rejected(self):
+        hass = self.Hass(
+            [self.mobile_app_entry("mobile-entry", "a-user-id")],
+        )
+        dispatcher = notifications.NotificationDispatcher(hass)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "notification-capable mobile_app device: a-user-id",
+        ):
+            asyncio.run(
+                dispatcher.async_send(
+                    {
+                        "id": "user-without-device",
+                        "name": "User without device",
+                        "notification": {
+                            "target": {"user_id": ["a-user-id"]},
+                            "message": "Check this",
+                        },
+                    },
+                    attempt=1,
+                    confirmation_action_id=None,
+                    context=None,
+                    test=True,
+                )
+            )
+
     def test_plain_test_payload_has_no_null_data_option(self):
         hass = self.Hass()
         dispatcher = notifications.NotificationDispatcher(hass)
@@ -225,6 +353,81 @@ class NotificationPayloadTests(unittest.TestCase):
                     test=True,
                 )
             )
+
+    def test_draft_test_normalizes_and_does_not_save_or_change_runtime(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        sent = []
+
+        class Dispatcher:
+            async def async_send(self, alert, **kwargs):
+                sent.append((alert, kwargs))
+
+        manager.dispatcher = Dispatcher()
+
+        asyncio.run(
+            manager.async_test_alert_payload(
+                {
+                    "id": "draft",
+                    "name": "Draft alert",
+                    "conditions": [],
+                    "monitor": {"on_change": True},
+                    "notification": {
+                        "target": {"entity_id": ["notify.phone"]},
+                        "message": "Preview this",
+                        "confirmation": {"enabled": True},
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(len(sent), 1)
+        alert, kwargs = sent[0]
+        self.assertEqual(alert["notification"]["target"], {"entity_id": ["notify.phone"]})
+        self.assertIsNone(kwargs["confirmation_action_id"])
+        self.assertTrue(kwargs["test"])
+
+    def test_post_send_actions_run_after_each_successful_dispatch(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        calls = []
+
+        class Dispatcher:
+            async def async_send(self, *_args, **_kwargs):
+                calls.append("notification")
+
+        class Services:
+            async def async_call(self, domain, service, **_kwargs):
+                calls.append(f"{domain}.{service}")
+
+        manager.dispatcher = Dispatcher()
+        manager.hass = type("Hass", (), {"services": Services()})()
+        manager._ensure_runtime_state = lambda _alert: {
+            "attempts": 0,
+        }
+        manager._record_event = lambda *_args, **_kwargs: asyncio.sleep(0)
+        manager._save_state = lambda: None
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._send_notification(
+                {
+                    "id": "post-send",
+                    "name": "Post-send",
+                    "notification": {
+                        "actions_enabled": True,
+                        "actions": [{"action": "light.turn_on"}],
+                    },
+                },
+                context=None,
+            )
+        )
+
+        self.assertEqual(calls, ["notification", "light.turn_on"])
 
     def test_save_alert_replaces_existing_alert_instead_of_merging(self):
         manager = notifications.NotificationCenter.__new__(

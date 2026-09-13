@@ -8,6 +8,7 @@ import type {
   RegistryEntity,
   RegistryFloor,
   RegistryLabel,
+  RegistryUser,
 } from "./types.js";
 
 const DOMAIN = "notification_center";
@@ -41,22 +42,18 @@ export async function call<T>(
 }
 
 async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
-  try {
-    return await hass.connection.sendMessagePromise<T[]>({
-      type,
-    });
-  } catch (_err) {
-    return [] as T[];
-  }
+  const result = await hass.connection.sendMessagePromise<T[]>({ type });
+  return Array.isArray(result) ? result : [];
 }
 
 export async function loadRegistries(hass: Hass): Promise<Registries> {
-  const [entities, devices, areas, labels, floors] = await Promise.all([
+  const [entities, devices, areas, labels, floors, users] = await Promise.all([
     callRegistry<RegistryEntity>(hass, "config/entity_registry/list"),
     callRegistry<RegistryDevice>(hass, "config/device_registry/list"),
     callRegistry<RegistryArea>(hass, "config/area_registry/list"),
     callRegistry<RegistryLabel>(hass, "config/label_registry/list"),
     callRegistry<RegistryFloor>(hass, "config/floor_registry/list"),
+    callRegistry<RegistryUser>(hass, "config/auth/list"),
   ]);
 
   return {
@@ -65,6 +62,7 @@ export async function loadRegistries(hass: Hass): Promise<Registries> {
     areas,
     labels,
     floors,
+    users,
   };
 }
 
@@ -91,6 +89,13 @@ export async function testAlert(hass: Hass, alertId: string): Promise<unknown> {
   return call(hass, "test", {
     alert_id: alertId,
   });
+}
+
+export async function testAlertPayload(
+  hass: Hass,
+  alert: Alert,
+): Promise<unknown> {
+  return call(hass, "test_payload", { alert });
 }
 
 export async function getHistory(
