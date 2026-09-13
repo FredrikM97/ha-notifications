@@ -1462,6 +1462,69 @@ class NotificationPayloadTests(unittest.TestCase):
             ].startswith("NC_CONFIRM_enabled-active_")
         )
 
+    def test_reload_due_resend_clears_existing_notification_before_send(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        calls = []
+
+        class Dispatcher:
+            async def async_clear(self, alert, **kwargs):
+                calls.append(("clear", alert, kwargs))
+
+            async def async_send(self, alert, **kwargs):
+                calls.append(("send", alert, kwargs))
+
+        manager.dispatcher = Dispatcher()
+        manager.history = type(
+            "History",
+            (),
+            {"record": lambda *_args, **_kwargs: asyncio.sleep(0)},
+        )()
+        manager._pending_actions = {}
+        manager._save_state = lambda: None
+        manager.state = {
+            "alerts": {
+                "resend-active": {
+                    "active": True,
+                    "acknowledged": False,
+                    "attempts": 1,
+                    "last_notified": "2026-01-01T00:00:00+00:00",
+                    "confirmation_action_id": None,
+                }
+            },
+            "history": [],
+        }
+        alert = {
+            "id": "resend-active",
+            "name": "Resend active",
+            "monitor": {"startup": True},
+            "notification": {
+                "actions_enabled": False,
+                "repeat": {
+                    "enabled": True,
+                    "interval": "00:00:01",
+                    "max_attempts": 5,
+                },
+                "confirmation": {"enabled": False},
+            },
+        }
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._process_condition(
+                alert,
+                True,
+                source="reload",
+                context=None,
+            )
+        )
+
+        self.assertEqual([call[0] for call in calls], ["clear", "send"])
+        self.assertEqual(calls[1][2]["attempt"], 2)
+
     def test_save_alert_replaces_existing_alert_instead_of_merging(self):
         manager = notifications.NotificationCenter.__new__(
             notifications.NotificationCenter

@@ -691,13 +691,16 @@ class NotificationCenter:
 
         # Startup/interval can cause a repeat.
         if source in (
+            "reload",
             "startup",
             "interval",
         ):
             if notification_due(alert["notification"], state):
+                self._ensure_confirmation_action(alert, state)
                 await self._send_notification(
                     alert,
                     context=context,
+                    replace_existing=True,
                 )
 
     async def _send_notification(
@@ -705,6 +708,7 @@ class NotificationCenter:
         alert: dict[str, Any],
         *,
         context: Context | None,
+        replace_existing: bool = False,
     ) -> None:
         """Send a notification and update runtime state."""
 
@@ -723,6 +727,18 @@ class NotificationCenter:
         action_id = state.get("confirmation_action_id")
 
         try:
+            if replace_existing:
+                try:
+                    await self.dispatcher.async_clear(
+                        alert,
+                        context=context,
+                    )
+                except Exception:
+                    _LOGGER.exception(
+                        "Failed clearing previous notification for %s",
+                        alert["id"],
+                    )
+
             await self.dispatcher.async_send(
                 alert,
                 attempt=attempt,
