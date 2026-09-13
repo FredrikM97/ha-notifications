@@ -10,9 +10,9 @@ It provides:
 * Visual alert management
 * YAML editing and import/export
 * Device, area and label notification targets
-* Trigger-based conditions
+* Condition-change monitoring
 * Interval-based condition checking
-* Optional use of both trigger and interval checking
+* Optional use of both mechanisms
 * Actionable notifications
 * Confirmation handling
 * Follow-up actions
@@ -97,12 +97,9 @@ Both mechanisms can be enabled.
 For example:
 
 ```yaml
-trigger:
-  enabled: true
-
-interval:
-  enabled: true
-  minutes: 30
+monitor:
+  on_change: true
+  interval: "00:30:00"
 ```
 
 The condition can therefore be evaluated immediately when relevant entities change while also being periodically rechecked.
@@ -236,12 +233,16 @@ An alert can execute Home Assistant actions after confirmation.
 Example:
 
 ```yaml
-actions:
-  - action: switch.turn_on
-    target:
-      entity_id:
-        - switch.water_pump_reset
-        - switch.filter_reset
+notification:
+  confirmation:
+    enabled: true
+    actions_enabled: true
+    actions:
+      - action: switch.turn_on
+        target:
+          entity_id:
+            - switch.water_pump_reset
+            - switch.filter_reset
 ```
 
 Multiple actions can be configured.
@@ -271,11 +272,11 @@ Actionable notifications can optionally be resent if they have not been confirme
 For example:
 
 ```yaml
-resend:
-  enabled: true
-  interval:
-    minutes: 30
-  max_attempts: 5
+notification:
+  confirmation:
+    enabled: true
+    resend_interval: "00:30:00"
+    max_attempts: 5
 ```
 
 This allows a notification to behave like:
@@ -301,3 +302,49 @@ The UI should expose these options without requiring users to manually build the
 # YAML support
 
 Notification Center sup
+
+## Canonical YAML structure
+
+Notification Center writes one canonical representation for each alert. Legacy fields such as
+`notifications`, `trigger`, `logic`, and a top-level `confirmation` are accepted when reading
+older configurations but are removed when the configuration is saved.
+
+```yaml
+version: 1
+alerts:
+  - id: low_water
+    name: Low water
+    enabled: true
+    description: ""
+    icon: mdi:bell-outline
+    monitor:
+      on_change: true
+      startup: true
+      interval: "01:00:00"
+    conditions:
+      - type: template
+        template: "{{ states('sensor.water_level') | float(100) < 20 }}"
+    notification:
+      action: notify.send_message
+      target:
+        device_id:
+          - YOUR_DEVICE_ID
+      title: Reminder
+      message: Something needs your attention.
+      confirmation:
+        enabled: true
+        button: Activity completed
+        resend_interval: "00:30:00"
+        max_attempts: 5
+        actions_enabled: true
+        actions:
+          - action: switch.turn_on
+            target:
+              entity_id:
+                - switch.water_pump_reset
+```
+
+Multiple visual conditions are combined with `AND`. There is no separate `logic` field.
+
+`actions_enabled` explicitly controls whether follow-up actions are configured. Empty `actions`
+lists are omitted from saved YAML.

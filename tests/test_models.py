@@ -120,7 +120,34 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(confirmation["completion_message"], "Completed")
         self.assertEqual(confirmation["max_attempts"], 3)
 
-    def test_alert_normalizes_legacy_fields_and_preserves_runtime_aliases(self):
+    def test_enabled_confirmation_is_present_in_runtime_notification(self):
+        alert = models.normalize_config(
+            {
+                "alerts": [
+                    {
+                        "name": "Android action",
+                        "condition": "{{ true }}",
+                        "notification": {
+                            "action": "notify.mobile_app_phone",
+                            "confirmation": {
+                                "enabled": True,
+                                "button": "Done",
+                            },
+                        },
+                    }
+                ]
+            }
+        )["alerts"][0]
+
+        self.assertTrue(
+            alert["notification"]["confirmation"]["enabled"]
+        )
+        self.assertEqual(
+            alert["notification"]["confirmation"]["button"],
+            "Done",
+        )
+
+    def test_alert_normalizes_legacy_fields_to_one_canonical_notification(self):
         alert = models.normalize_alert(
             {
                 "name": "Kitchen lights",
@@ -139,7 +166,10 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(alert["id"], "kitchen_lights")
         self.assertEqual(alert["conditions"][0]["type"], "template")
         self.assertEqual(alert["monitor"]["interval"], "01:00:00")
-        self.assertEqual(alert["notification"], alert["notifications"][0])
+        self.assertNotIn("notifications", alert)
+        self.assertNotIn("trigger", alert)
+        self.assertNotIn("logic", alert)
+        self.assertNotIn("confirmation", alert)
         self.assertEqual(alert["notification"]["repeat"]["interval"], "00:30")
         self.assertEqual(alert["notification"]["confirmation"]["button"], "Done")
         self.assertEqual(alert["notification"]["confirmation"]["max_attempts"], 20)
@@ -147,7 +177,9 @@ class NormalizationTests(unittest.TestCase):
             alert["notification"]["confirmation"]["resend_interval"],
             {"minutes": 30},
         )
-        self.assertEqual(alert["confirmation"]["max_attempts"], 20)
+        self.assertFalse(
+            alert["notification"]["confirmation"]["actions_enabled"]
+        )
 
     def test_config_accepts_alert_mapping_and_applies_defaults(self):
         normalized = models.normalize_config(
@@ -171,6 +203,52 @@ class NormalizationTests(unittest.TestCase):
         self.assertTrue(
             all(item["notification"]["action"] == "notify.default" for item in normalized["alerts"])
         )
+
+    def test_confirmation_actions_have_explicit_enabled_state_and_omit_empty_list(self):
+        disabled = models.normalize_alert(
+            {
+                "name": "No actions",
+                "notification": {
+                    "confirmation": {"enabled": True},
+                },
+            }
+        )
+        confirmation = disabled["notification"]["confirmation"]
+        self.assertFalse(confirmation["actions_enabled"])
+        self.assertNotIn("actions", confirmation)
+
+        enabled = models.normalize_alert(
+            {
+                "name": "With actions",
+                "notification": {
+                    "confirmation": {
+                        "enabled": True,
+                        "actions_enabled": True,
+                        "actions": [
+                            {"action": "light.turn_on"},
+                        ],
+                    },
+                },
+            }
+        )
+        confirmation = enabled["notification"]["confirmation"]
+        self.assertTrue(confirmation["actions_enabled"])
+        self.assertEqual(len(confirmation["actions"]), 1)
+
+    def test_alert_metadata_is_preserved(self):
+        alert = models.normalize_alert(
+            {
+                "name": "Editable",
+                "description": "Keep this",
+                "icon": "mdi:test",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-02T00:00:00+00:00",
+            }
+        )
+        self.assertEqual(alert["description"], "Keep this")
+        self.assertEqual(alert["icon"], "mdi:test")
+        self.assertEqual(alert["created_at"], "2026-01-01T00:00:00+00:00")
+        self.assertEqual(alert["updated_at"], "2026-01-02T00:00:00+00:00")
 
     def test_invalid_alert_collection_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -199,18 +277,58 @@ class ConditionCompilationTests(unittest.TestCase):
         self.assertIn("is_state('input_boolean.away', 'off')", compiled)
         self.assertIn(" and ", compiled)
 
-    def test_any_logic_and_empty_conditions(self):
+    def test_multiple_conditions_are_combined_with_and(self):
         compiled = models.compile_condition(
             {
-                "logic": "any",
                 "conditions": [
                     {"type": "state", "entity_id": "sensor.one", "state": "on"},
                     {"type": "state", "entity_id": "sensor.two", "state": "off"},
                 ],
             }
         )
-        self.assertIn(" or ", compiled)
+        self.assertIn(" and ", compiled)
+        self.assertNotIn(" or ", compiled)
         self.assertEqual(models.compile_condition({"conditions": []}), "{{ true }}")
+
+    def test_legacy_notification_list_is_reduced_to_one_notification(self):
+        alert = models.normalize_alert(
+            {
+                "name": "Legacy",
+                "notifications": [
+                    {"action": "notify.first", "message": "First"},
+                    {"action": "notify.second", "message": "Second"},
+                ],
+            }
+        )
+        self.assertEqual(alert["notification"]["action"], "notify.first")
+        self.assertNotIn("notifications", alert)
+
+    def test_template_expression_is_not_double_wrapped(self):
+        self.assertEqual(
+            models.compile_condition(
+                {
+                    "conditions": [
+                        {
+                            "type": "template",
+                            "template": "{{ false }}",
+                        }
+                    ]
+                }
+            ),
+            "{{ (false) }}",
+        )
+
+    def test_blank_template_condition_defaults_to_true(self):
+        self.assertEqual(
+            models.compile_condition(
+                {
+                    "conditions": [
+                        {"type": "template", "template": "{{   }}"}
+                    ]
+                }
+            ),
+            "{{ true }}",
+        )
 
 
 if __name__ == "__main__":

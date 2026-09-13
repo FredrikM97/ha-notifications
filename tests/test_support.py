@@ -82,3 +82,56 @@ def load_storage():
     helpers_storage.Store = Store
 
     return load_module(f"{PACKAGE_NAME}.storage", ROOT / "storage.py")
+
+
+def load_notifications():
+    """Load runtime helpers with minimal Home Assistant dependencies."""
+    ensure_package()
+    load_storage()
+
+    homeassistant = sys.modules["homeassistant"]
+    const = sys.modules.setdefault(
+        "homeassistant.const",
+        types.ModuleType("homeassistant.const"),
+    )
+    core = sys.modules["homeassistant.core"]
+    helpers = sys.modules["homeassistant.helpers"]
+    event = sys.modules.setdefault(
+        "homeassistant.helpers.event",
+        types.ModuleType("homeassistant.helpers.event"),
+    )
+    template = sys.modules.setdefault(
+        "homeassistant.helpers.template",
+        types.ModuleType("homeassistant.helpers.template"),
+    )
+    util = sys.modules.setdefault(
+        "homeassistant.util",
+        types.ModuleType("homeassistant.util"),
+    )
+    dt = sys.modules.setdefault(
+        "homeassistant.util.dt",
+        types.ModuleType("homeassistant.util.dt"),
+    )
+
+    const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
+    core.Context = object
+    core.Event = object
+    core.callback = lambda function: function
+    event.TrackTemplate = object
+    event.TrackTemplateResult = object
+    event.async_track_template_result = lambda *args: None
+    event.async_track_time_interval = lambda *args: None
+    template.Template = object
+    template.TemplateError = Exception
+    template.result_as_boolean = bool
+    dt.now = lambda: None
+    dt.utcnow = lambda: None
+    dt.parse_datetime = lambda value: None
+    helpers.__path__ = []
+    util.__path__ = []
+    homeassistant.__path__ = []
+
+    return load_module(
+        f"{PACKAGE_NAME}.notifications",
+        ROOT / "notifications.py",
+    )

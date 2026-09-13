@@ -81,11 +81,19 @@ async def async_setup(
     ) -> None:
         """Create/update an alert."""
 
-        result = await _manager(
-            hass
-        ).async_save_alert(
-            msg["alert"]
-        )
+        try:
+            result = await _manager(
+                hass
+            ).async_save_alert(
+                msg["alert"]
+            )
+        except Exception as err:
+            connection.send_error(
+                msg["id"],
+                "save_failed",
+                str(err) or "Unable to save alert.",
+            )
+            return
 
         connection.send_result(
             msg["id"],
@@ -135,11 +143,19 @@ async def async_setup(
     ) -> None:
         """Test an alert."""
 
-        await _manager(
-            hass
-        ).async_test_alert(
-            msg["alert_id"]
-        )
+        try:
+            await _manager(
+                hass
+            ).async_test_alert(
+                msg["alert_id"]
+            )
+        except Exception as err:
+            connection.send_error(
+                msg["id"],
+                "test_failed",
+                str(err) or "Unable to send test notification.",
+            )
+            return
 
         connection.send_result(
             msg["id"],

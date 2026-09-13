@@ -56,7 +56,7 @@ DEFAULT_YAML = """# Notification Center
 #       interval: "01:00:00"
 #
 #     notification:
-#       action: notify.send_message
+#       action: notify.mobile_app_your_phone
 #       target:
 #         device_id:
 #           - YOUR_DEVICE_ID

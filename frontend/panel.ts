@@ -1,5 +1,6 @@
 import {
   deleteAlert,
+  errorMessage,
   getAlerts,
   getHistory,
   getYaml,
@@ -8,22 +9,31 @@ import {
   saveYaml,
   testAlert,
   validateYaml,
-} from "./api.js";
+} from "./api.ts";
 
 import {
   openEditor,
-} from "./editor.js";
+} from "./editor.ts";
 
 import {
   renderHistory,
-} from "./history.js";
+} from "./history.ts";
 
-import {
-  styles,
-} from "./styles.js";
+import { styles } from "./styles.ts";
+import { createYamlEditor } from "./dom.ts";
 
 class NotificationCenterPanel
   extends HTMLElement {
+  private _hass: any = null;
+  private alerts: any[] = [];
+  private history: any[] = [];
+  private tab = "alerts";
+  private loading = false;
+  private _registries: any = null;
+  private _registriesPromise: Promise<any> | null = null;
+  private _initialized = false;
+  private _yamlTextarea: any = null;
+
   constructor() {
     super();
 
@@ -105,8 +115,7 @@ class NotificationCenterPanel
       ]);
     } catch (err) {
       this.showToast(
-        err?.message ||
-          String(err),
+        errorMessage(err),
         true,
       );
     } finally {
@@ -536,8 +545,7 @@ class NotificationCenterPanel
 
         } catch (err) {
           this.showToast(
-            err?.message ||
-              String(err),
+            errorMessage(err),
             true,
           );
         }
@@ -580,13 +588,14 @@ class NotificationCenterPanel
 
         } catch (err) {
           this.showToast(
-            err?.message ||
-              String(err),
+            errorMessage(err),
             true,
           );
         }
       },
     );
+
+    test.disabled = !alert.enabled;
 
     const edit =
       document.createElement(
@@ -680,6 +689,11 @@ class NotificationCenterPanel
       root: this.shadowRoot,
       alert: null,
       registries,
+      onTest: async () => {
+        throw new Error(
+          "Save the alert before testing it.",
+        );
+      },
       onSave: async (
         alert,
       ) => {
@@ -705,21 +719,49 @@ class NotificationCenterPanel
       root: this.shadowRoot,
       alert,
       registries,
+      onTest: async (alertId) => {
+        await testAlert(
+          this._hass,
+          alertId,
+        );
+
+        this.showToast(
+          "Test notification sent.",
+        );
+
+        await this.refresh();
+      },
       onSave: async (
         updated,
       ) => {
-        await saveAlert(
+        const saved = await saveAlert(
           this._hass,
           updated,
+        );
+
+        this.alerts = this.alerts.map(
+          (item) =>
+            item.id === saved.id
+              ? {
+                  ...item,
+                  ...saved,
+                  runtime: item.runtime,
+                }
+              : item,
         );
 
         this.showToast(
           "Alert saved.",
         );
 
-        await this.refresh();
       },
     });
+  }
+
+  openYamlTab() {
+    this.tab = "yaml";
+    this.render();
+    this.loadYaml();
   }
 
   async removeAlert(alert) {
@@ -745,8 +787,7 @@ class NotificationCenterPanel
 
     } catch (err) {
       this.showToast(
-        err?.message ||
-          String(err),
+        errorMessage(err),
         true,
       );
     }
@@ -855,20 +896,20 @@ class NotificationCenterPanel
       buttons,
     );
 
-    const textarea =
-      document.createElement(
-        "textarea",
+    const editor =
+      createYamlEditor(
+        "version: 1\\nalerts: []",
       );
 
-    textarea.id =
-      "nc-yaml-editor";
-
-    textarea.placeholder =
-      "version: 1\\nalerts: []";
+    editor.id = "nc-yaml-editor";
+    editor.setAttribute(
+      "aria-label",
+      "Notification Center YAML",
+    );
 
     wrapper.append(
       toolbar,
-      textarea,
+      editor,
     );
 
     copy.addEventListener(
@@ -876,14 +917,14 @@ class NotificationCenterPanel
       async () => {
         try {
           await navigator.clipboard.writeText(
-            textarea.value,
+            editor.value,
           );
           this.showToast(
             "YAML copied to clipboard.",
           );
         } catch (err) {
           this.showToast(
-            err?.message || String(err),
+            errorMessage(err),
             true,
           );
         }
@@ -896,13 +937,13 @@ class NotificationCenterPanel
         try {
           const text =
             await navigator.clipboard.readText();
-          textarea.value = text;
+          editor.value = text;
           this.showToast(
             "YAML pasted from clipboard.",
           );
         } catch (err) {
           this.showToast(
-            err?.message || String(err),
+            errorMessage(err),
             true,
           );
         }
@@ -916,14 +957,14 @@ class NotificationCenterPanel
           validate.disabled = true;
           await validateYaml(
             this._hass,
-            textarea.value,
+            editor.value,
           );
           this.showToast(
             "YAML is valid.",
           );
         } catch (err) {
           this.showToast(
-            err?.message || String(err),
+            errorMessage(err),
             true,
           );
         } finally {
@@ -936,7 +977,7 @@ class NotificationCenterPanel
       "click",
       () =>
         this.loadYaml(
-          textarea,
+          editor,
         ),
     );
 
@@ -949,7 +990,7 @@ class NotificationCenterPanel
 
           await saveYaml(
             this._hass,
-            textarea.value,
+            editor.value,
           );
 
           this.showToast(
@@ -960,8 +1001,7 @@ class NotificationCenterPanel
 
         } catch (err) {
           this.showToast(
-            err?.message ||
-              String(err),
+            errorMessage(err),
             true,
           );
         } finally {
@@ -976,22 +1016,22 @@ class NotificationCenterPanel
     );
 
     this._yamlTextarea =
-      textarea;
+      editor;
 
     this.loadYaml(
-      textarea,
+      editor,
     );
   }
 
   async loadYaml(
-    textarea = null,
+    editor = null,
   ) {
     if (!this._hass) {
       return;
     }
 
     const target =
-      textarea ||
+      editor ||
       this._yamlTextarea;
 
     if (!target) {
@@ -1009,8 +1049,7 @@ class NotificationCenterPanel
 
     } catch (err) {
       this.showToast(
-        err?.message ||
-          String(err),
+            errorMessage(err),
         true,
       );
     }

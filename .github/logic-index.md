@@ -36,15 +36,15 @@ This is a compact map of the integration’s main execution flows and decision p
   - history/debug event generation
 
 ## 4. Frontend/editor flow
-- `frontend.py`
+- `panel.py`
   - panel registration and frontend resource loading
-- `frontend/api.js`
+- `frontend/src/api.ts`
   - fetch/save/update alert API calls
-- `frontend/editor.js`
+- `frontend/src/editor.ts`
   - visual editor logic
   - new/edit alert state
   - YAML and validation UI behavior
-- `frontend/panel.js`
+- `frontend/src/panel.ts`
   - dashboard list, actions, and selection handling
 - `frontend/styles.js`
   - compact style and layout rules
@@ -62,7 +62,7 @@ When debugging a problem, these are the main places to check:
 - Stored config safety: `storage.py`
 - Validation entry points: `config_flow.py`
 - Trigger and condition execution: `__init__.py`, `notifications.py`
-- Frontend save and reload behavior: `frontend/api.js`, `frontend/editor.js`, `websocket.py`
+- Frontend save and reload behavior: `frontend/src/api.ts`, `frontend/src/editor.ts`, `websocket.py`
 
 ## 7. Recommended read order
 For most bugs, read in this order:
@@ -72,13 +72,13 @@ For most bugs, read in this order:
 4. `__init__.py`
 5. `notifications.py`
 6. `websocket.py`
-7. the relevant frontend file (`frontend/editor.js` or `frontend/panel.js`)
+7. the relevant frontend file (`frontend/src/editor.ts` or `frontend/src/panel.ts`)
 
 ## 8. Quick symptom mapping
 - Save fails or config disappears: `config_flow.py`, `storage.py`, `websocket.py`
 - Alert does not trigger: `__init__.py`, `notifications.py`, `models.py`
 - Periodic or change-based checks break: `__init__.py`, `notifications.py`, `models.py`
-- UI does not reflect new saved values: `frontend/editor.js`, `frontend/api.js`, `websocket.py`
+- UI does not reflect new saved values: `frontend/src/editor.ts`, `frontend/src/api.ts`, `websocket.py`
 - Notification or confirmation not sent: `notifications.py`, `models.py`, `websocket.py`
 
 ## 9. Read strategy

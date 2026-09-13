@@ -1,5 +1,14 @@
 const DOMAIN = "notification_center";
 
+export function errorMessage(error) {
+  return (
+    error?.error?.message ||
+    error?.details?.message ||
+    error?.message ||
+    String(error)
+  );
+}
+
 export async function call(hass, command, data = {}) {
   return hass.connection.sendMessagePromise({
     type: `${DOMAIN}/${command}`,

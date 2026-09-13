@@ -11,7 +11,7 @@ class ConfigContractTests(unittest.TestCase):
     def test_config_version_defined(self):
         self.assertEqual(const.CONFIG_VERSION, 1)
 
-    def test_normalize_config_has_monitor_and_compat_trigger(self):
+    def test_normalize_config_has_canonical_monitor(self):
         config = {
             "version": 1,
             "alerts": [
@@ -37,7 +37,9 @@ class ConfigContractTests(unittest.TestCase):
         self.assertEqual(normalized["version"], 1)
         self.assertTrue(alert["monitor"]["on_change"])
         self.assertEqual(alert["monitor"]["interval"], "00:30")
-        self.assertEqual(alert["trigger"]["interval"], "00:30")
+        self.assertNotIn("trigger", alert)
+        self.assertNotIn("logic", alert)
+        self.assertNotIn("notify_on_start", alert)
 
     def test_parse_duration_time_strings(self):
         self.assertEqual(models.parse_duration("12:00"), timedelta(hours=12))

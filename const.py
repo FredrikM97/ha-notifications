@@ -18,11 +18,8 @@ STORAGE_VERSION = 1
 STORAGE_KEY = "notification_center"
 
 MAX_HISTORY = 500
-
-FRONTEND_STATIC_URL = "/notification_center_static"
 PANEL_URL = "notification-center"
 PANEL_URL_PATH = "notification_center"
-STATIC_URL_PATH = "/notification_center_static"
 PANEL_TITLE = "Notification Center"
 PANEL_ICON = "mdi:bell-cog"
 

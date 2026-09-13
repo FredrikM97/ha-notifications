@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import datetime
+import inspect
 import logging
 from typing import Any
 import uuid
@@ -45,6 +46,22 @@ from .storage import NotificationStorage
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _async_render_template(
+    template: Template,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Render a template across Home Assistant template API variants."""
+
+    result = template.async_render(
+        *args,
+        **kwargs,
+    )
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 async def _render_value(
     hass: HomeAssistant,
     value: Any,
@@ -68,7 +85,8 @@ async def _render_value(
             hass,
         )
 
-        return await template.async_render(
+        return await _async_render_template(
+            template,
             variables,
             parse_result=True,
             strict=False,
@@ -95,6 +113,133 @@ async def _render_value(
         }
 
     return value
+
+
+def _remove_none(value: Any) -> Any:
+    """Remove null values before sending service data to Home Assistant."""
+    if isinstance(value, dict):
+        return {
+            key: _remove_none(item)
+            for key, item in value.items()
+            if item is not None
+        }
+
+    if isinstance(value, list):
+        return [
+            _remove_none(item)
+            for item in value
+            if item is not None
+        ]
+
+    return value
+
+
+def _notification_services_for_target(
+    hass: HomeAssistant,
+    target: Any,
+) -> list[str]:
+    """Resolve notify entities for device, area, and label targets."""
+    if not isinstance(target, dict):
+        return []
+
+    try:
+        from homeassistant.helpers import device_registry as dr
+        from homeassistant.helpers import entity_registry as er
+    except ImportError:
+        return []
+
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    area_registry = None
+    try:
+        from homeassistant.helpers import area_registry as ar
+
+        area_registry = ar.async_get(hass)
+    except ImportError:
+        pass
+
+    device_ids = {
+        str(value)
+        for value in target.get("device_id", [])
+    }
+    area_ids = {
+        str(value)
+        for value in target.get("area_id", [])
+    }
+    floor_ids = {
+        str(value)
+        for value in target.get("floor_id", [])
+    }
+    label_ids = {
+        str(value)
+        for value in target.get("label_id", [])
+    }
+
+    if isinstance(
+        target.get("device_id"),
+        str,
+    ):
+        device_ids = {target["device_id"]}
+    if isinstance(
+        target.get("area_id"),
+        str,
+    ):
+        area_ids = {target["area_id"]}
+    if isinstance(
+        target.get("floor_id"),
+        str,
+    ):
+        floor_ids = {target["floor_id"]}
+    if isinstance(
+        target.get("label_id"),
+        str,
+    ):
+        label_ids = {target["label_id"]}
+
+    floor_area_ids = set()
+    if area_registry is not None:
+        floor_area_ids = {
+            area.area_id
+            for area in area_registry.areas.values()
+            if area.floor_id in floor_ids
+        }
+        area_ids.update(floor_area_ids)
+
+    for device in device_registry.devices.values():
+        if (
+            device.area_id in area_ids
+            or label_ids.intersection(
+                getattr(device, "labels", set())
+            )
+        ):
+            device_ids.add(device.id)
+
+    services = []
+
+    for entity in entity_registry.entities.values():
+        if not entity.entity_id.startswith("notify."):
+            continue
+
+        entity_labels = getattr(
+            entity,
+            "labels",
+            set(),
+        )
+
+        matches = (
+            entity.entity_id in target.get(
+                "entity_id",
+                [],
+            )
+            or entity.device_id in device_ids
+            or entity.area_id in area_ids
+            or label_ids.intersection(entity_labels)
+        )
+
+        if matches and entity.entity_id not in services:
+            services.append(entity.entity_id)
+
+    return services
 
 
 class NotificationDispatcher:
@@ -179,14 +324,41 @@ class NotificationDispatcher:
         ):
             extra_data = {}
 
-        extra_data = deepcopy(
-            extra_data
+        extra_data = _remove_none(
+            deepcopy(extra_data)
         )
 
         confirmation = notification.get(
             "confirmation",
             {},
         )
+
+        action = str(
+            notification.get("action") or ""
+        )
+
+        resolved_actions = _notification_services_for_target(
+            self.hass,
+            target,
+        )
+
+        if action == "notify.send_message" or (
+            not action and resolved_actions
+        ):
+            actions_to_call = [
+                "notify.send_message"
+            ]
+        else:
+            actions_to_call = [action]
+
+        if not action and actions_to_call:
+            action = actions_to_call[0]
+
+        if not action:
+            raise ValueError(
+                "No valid notify service was found for the selected "
+                "devices, areas, labels, or notification entities."
+            )
 
         if (
             confirmation_action_id
@@ -214,7 +386,7 @@ class NotificationDispatcher:
 
             extra_data["actions"] = actions
 
-        service_data: dict[str, Any] = {
+        service_data = {
             "message": str(
                 message
             ),
@@ -230,11 +402,8 @@ class NotificationDispatcher:
                 extra_data
             )
 
-        action = str(
-            notification.get(
-                "action",
-                "notify.send_message",
-            )
+        service_data = _remove_none(
+            service_data
         )
 
         if "." not in action:
@@ -242,23 +411,71 @@ class NotificationDispatcher:
                 f"Invalid notification action: {action}"
             )
 
-        domain, service = action.split(
-            ".",
-            1,
-        )
+        for action_to_call in actions_to_call:
+            if "." not in action_to_call:
+                raise ValueError(
+                    f"Invalid notification action: {action_to_call}"
+                )
 
-        await self.hass.services.async_call(
-            domain,
-            service,
-            service_data=service_data,
-            target=(
-                target
-                if target
-                else None
-            ),
-            blocking=True,
-            context=context,
-        )
+            if confirmation_action_id:
+                if action_to_call == "notify.send_message":
+                    recipients = resolved_actions or [
+                        str(entity_id)
+                        for entity_id in target.get(
+                            "entity_id",
+                            [],
+                        )
+                        if str(entity_id).startswith("notify.")
+                    ]
+                    has_target = isinstance(
+                        target,
+                        dict,
+                    ) and any(
+                        values
+                        for values in target.values()
+                        if isinstance(values, list)
+                    )
+                    if not recipients and not has_target:
+                        raise ValueError(
+                            "Confirmation buttons require at least one "
+                            "notification recipient."
+                        )
+
+            domain, service = action_to_call.split(
+                ".",
+                1,
+            )
+
+            try:
+                await self.hass.services.async_call(
+                    domain,
+                    service,
+                    service_data=service_data,
+                    target=(
+                        None
+                        if action_to_call != "notify.send_message"
+                        and action_to_call in resolved_actions
+                        else target
+                    ),
+                    blocking=True,
+                    context=context,
+                )
+            except Exception as err:
+                detail = str(err)
+                if (
+                    action_to_call == "notify.send_message"
+                    and extra_data
+                ):
+                    detail = (
+                        f"{detail} The selected notification recipient "
+                        "does not accept notification data such as "
+                        "confirmation actions."
+                    )
+
+                raise RuntimeError(
+                    f"Notification service {action_to_call} rejected "
+                    f"the payload: {detail}"
+                ) from err
 
     async def async_clear(
         self,
@@ -273,10 +490,7 @@ class NotificationDispatcher:
         ]
 
         action = str(
-            notification.get(
-                "action",
-                "notify.send_message",
-            )
+            notification.get("action") or ""
         )
 
         if not action.startswith(
@@ -503,10 +717,6 @@ class NotificationCenter:
             for alert in normalized[
                 "alerts"
             ]
-            if alert.get(
-                "enabled",
-                True,
-            )
         }
 
         for alert_id in list(
@@ -522,9 +732,11 @@ class NotificationCenter:
                 alert
             )
 
-            self._setup_alert(
-                alert
-            )
+            if alert.get(
+                "enabled",
+                True,
+            ):
+                self._setup_alert(alert)
 
     def _remove_alert_listeners(self) -> None:
         """Remove alert listeners."""
@@ -724,6 +936,12 @@ class NotificationCenter:
         for alert in list(
             self.alerts.values()
         ):
+            if not alert.get(
+                "enabled",
+                True,
+            ):
+                continue
+
             await self._evaluate_alert(
                 alert,
                 source=source,
@@ -748,7 +966,8 @@ class NotificationCenter:
             return
 
         try:
-            result = await template.async_render(
+            result = await _async_render_template(
+                template,
                 parse_result=True,
                 strict=False,
             )
@@ -1353,6 +1572,9 @@ class NotificationCenter:
             {},
         )
 
+        if not confirmation.get("actions_enabled", False):
+            return
+
         actions = confirmation.get(
             "actions",
             [],
@@ -1371,9 +1593,14 @@ class NotificationCenter:
             start=1,
         ):
             try:
-                service = action.get(
-                    "action"
+                service = await _render_value(
+                    self.hass,
+                    action.get(
+                        "action"
+                    ),
+                    variables,
                 )
+                service = str(service or "")
 
                 if not service or "." not in service:
                     raise ValueError(
@@ -1397,6 +1624,7 @@ class NotificationCenter:
                     ),
                     variables,
                 )
+                data = _remove_none(data)
 
                 domain, service_name = (
                     service.split(
@@ -1471,10 +1699,39 @@ class NotificationCenter:
                 f"Unknown alert: {alert_id}"
             )
 
+        confirmation = alert[
+            "notification"
+        ].get(
+            "confirmation",
+            {},
+        )
+
+        confirmation_action_id = None
+
+        if confirmation.get(
+            "enabled",
+            False,
+        ):
+            confirmation_action_id = (
+                f"NC_TEST_CONFIRM_"
+                f"{alert_id}_"
+                f"{uuid.uuid4().hex}"
+            )
+
+            state = self._ensure_runtime_state(
+                alert
+            )
+            state[
+                "confirmation_action_id"
+            ] = confirmation_action_id
+            self._pending_actions[
+                confirmation_action_id
+            ] = alert_id
+
         await self.dispatcher.async_send(
             alert,
             attempt=1,
-            confirmation_action_id=None,
+            confirmation_action_id=confirmation_action_id,
             context=None,
             test=True,
         )

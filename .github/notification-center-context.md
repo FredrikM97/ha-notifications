@@ -8,12 +8,12 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `storage.py` — persisted alert storage and save/load behavior
 - `models.py` — alert schema and data model
 - `notifications.py` — notification sending and confirmation handling
-- `panel.py` and `frontend.py` — panel registration and frontend entry points
+- `panel.py` — panel registration and compiled frontend entry point
 - `websocket.py` — runtime frontend/backend communication
 
 ## Frontend/editor surfaces
-- `frontend/api.js` — API calls for listing/saving alerts
-- `frontend/editor.js` — editor form and alert editing logic
+- `frontend/src/api.ts` — API calls for listing/saving alerts
+- `frontend/src/editor.ts` — editor form and alert editing logic
 - `frontend/panel.js` — dashboard/panel interactions
 - `frontend/styles.js` — styling and layout
 

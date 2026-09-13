@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "rootDir": "./frontend",
+    "noEmitOnError": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "frontend/**/*.ts"
+, "frontend/styles.ts", "frontend/recipient-picker.ts", "frontend/dom.ts", "frontend/editor.ts", "frontend/panel.ts", "frontend/history.ts", "frontend/condition-builder.ts", "frontend/api.ts"  ]
+}

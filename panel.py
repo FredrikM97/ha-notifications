@@ -13,10 +13,9 @@ from .const import DOMAIN
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
-STATIC_URL = f"/{DOMAIN}_static"
-PANEL_URL = f"{STATIC_URL}/panel.js"
+PANEL_URL = f"{DOMAIN}/panel.ts"
 
-FRONTEND_VERSION = "0.3.2"
+FRONTEND_VERSION = "0.4.0"
 
 _STATIC_REGISTERED = f"{DOMAIN}_frontend_static_registered"
 
@@ -24,28 +23,17 @@ _STATIC_REGISTERED = f"{DOMAIN}_frontend_static_registered"
 async def async_register_frontend(hass: HomeAssistant) -> None:
     """Register the Notification Center frontend."""
 
-    panel_file = FRONTEND_DIR / "panel.js"
+    panel_file = FRONTEND_DIR / "panel.ts"
 
     if not panel_file.is_file():
         raise RuntimeError(
             f"Notification Center frontend is missing: {panel_file}"
         )
-
-    # Register the directory containing panel.js and its imported modules.
-    #
-    # panel.js can therefore use:
-    #
-    #   import "./api.js";
-    #   import "./editor.js";
-    #   import "./history.js";
-    #   import "./styles.js";
-    #
-    # and the browser will resolve those relative to panel.js.
     if not hass.data.get(_STATIC_REGISTERED):
         await hass.http.async_register_static_paths(
             [
                 StaticPathConfig(
-                    STATIC_URL,
+                    PANEL_URL,
                     str(FRONTEND_DIR),
                     False,
                 )

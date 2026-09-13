@@ -234,7 +234,7 @@ select {
 
 .nc-toolbar select,
 .nc-toolbar input,
-.nc-yaml textarea {
+.nc-yaml textarea,\n.nc-code-editor {
   background: var(--card-background-color);
   color: var(--primary-text-color);
   border: 1px solid var(--divider-color);
@@ -281,7 +281,7 @@ select {
   gap: 12px;
 }
 
-.nc-yaml textarea {
+.nc-yaml textarea,\n.nc-code-editor {
   width: 100%;
   min-height: 650px;
   resize: vertical;
@@ -326,6 +326,7 @@ select {
 }
 
 .nc-modal-header {
+  background: var(--secondary-background-color);
   padding: 20px;
   border-bottom: 1px solid var(--divider-color);
   display: flex;
@@ -344,7 +345,7 @@ select {
   gap: 18px;
 }
 
-.nc-section-nav {
+.nc-section-header {
   position: sticky;
   top: 0;
   z-index: 15;
@@ -358,7 +359,7 @@ select {
   box-shadow: var(--ha-box-shadow);
 }
 
-.nc-section-nav-button {
+.nc-section-header .nc-section-nav-button {
   flex: 1 0 auto;
   border: 0;
   border-radius: 9px;
@@ -375,18 +376,18 @@ select {
   gap: 7px;
 }
 
-.nc-section-nav-button:hover {
+.nc-section-header .nc-section-nav-button:hover {
   background: var(--primary-background-color);
   color: var(--primary-text-color);
 }
 
-.nc-section-nav-button.active {
+.nc-section-header .nc-section-nav-button.active {
   background: var(--card-background-color);
   color: var(--primary-text-color);
   box-shadow: var(--ha-box-shadow);
 }
 
-.nc-section[hidden] {
+.nc-section:not(.active) {
   display: none;
 }
 
@@ -457,12 +458,12 @@ select {
 
 .nc-recipient-input {
   position: relative;
-  z-index: 10;
+  z-index: 40;
 }
 
 .nc-section-recipient {
   position: relative;
-  z-index: 3;
+  z-index: 30;
   overflow: visible;
 }
 
@@ -508,11 +509,11 @@ select {
 
 .nc-recipient-results {
   display: grid;
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
-  z-index: 20;
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  z-index: 1;
   grid-template-columns: 1fr;
   gap: 6px;
   max-height: 240px;
@@ -591,6 +592,33 @@ select {
   content: "×";
   font-size: 18px;
   line-height: 1;
+}
+
+
+
+.nc-check input.nc-switch-input {
+  appearance: none;
+  position: relative;
+  width: 42px !important;
+  height: 24px;
+  margin: 0;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--divider-color);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  background-image: radial-gradient(
+    circle at 12px 12px,
+    var(--card-background-color) 0 8px,
+    transparent 9px
+  );
+}
+
+.nc-check input.nc-switch-input:checked {
+  background-color: var(--primary-color);
+  background-position: 18px 0;
 }
 
 .nc-check {
@@ -708,5 +736,19 @@ select {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+}
+.nc-alert-yaml-modal {
+  width: min(1000px, 100%);
+  max-height: 92vh;
+}
+
+.nc-alert-yaml-editor {
+  min-height: 600px;
+  width: 100%;
+}
+
+ha-code-editor.nc-code-editor {
+  display: block;
+  min-height: 650px;
 }
 `;
