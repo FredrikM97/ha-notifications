@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from test_support import load_notifications
@@ -1300,6 +1300,167 @@ class NotificationPayloadTests(unittest.TestCase):
         )
 
         self.assertEqual(calls, ["notification", "light.turn_on"])
+
+    def test_repeat_interval_sets_up_periodic_evaluation_without_monitor_interval(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        intervals = []
+        original_template = notifications.Template
+        original_track_interval = notifications.async_track_time_interval
+
+        manager.hass = object()
+        manager._templates = {}
+        manager._template_unsubs = {}
+        manager._interval_unsubs = {}
+        manager._schedule = lambda _coroutine: None
+
+        try:
+            notifications.Template = lambda *_args, **_kwargs: object()
+
+            def track_interval(_hass, _callback, interval):
+                intervals.append(interval)
+                return lambda: None
+
+            notifications.async_track_time_interval = track_interval
+
+            manager._setup_alert(
+                {
+                    "id": "repeat-only",
+                    "name": "Repeat only",
+                    "monitor": {"on_change": False, "startup": True},
+                    "conditions": [],
+                    "notification": {
+                        "repeat": {
+                            "enabled": True,
+                            "interval": "00:00:01",
+                            "max_attempts": 5,
+                        },
+                        "confirmation": {"enabled": False},
+                    },
+                }
+            )
+        finally:
+            notifications.Template = original_template
+            notifications.async_track_time_interval = original_track_interval
+
+        self.assertEqual(intervals, [timedelta(seconds=1)])
+
+    def test_startup_sends_for_already_active_unacknowledged_alert(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        sends = []
+
+        class Dispatcher:
+            async def async_send(self, alert, **kwargs):
+                sends.append((alert, kwargs))
+
+        manager.dispatcher = Dispatcher()
+        manager.history = type(
+            "History",
+            (),
+            {"record": lambda *_args, **_kwargs: asyncio.sleep(0)},
+        )()
+        manager._save_state = lambda: None
+        manager.state = {
+            "alerts": {
+                "startup-active": {
+                    "active": True,
+                    "acknowledged": False,
+                    "attempts": 0,
+                }
+            },
+            "history": [],
+        }
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._process_condition(
+                {
+                    "id": "startup-active",
+                    "name": "Startup active",
+                    "monitor": {"startup": True},
+                    "notification": {
+                        "actions_enabled": False,
+                    },
+                },
+                True,
+                source="startup",
+                context=None,
+            )
+        )
+
+        self.assertEqual(len(sends), 1)
+
+    def test_enabled_source_sends_for_active_unsent_alert_only_once(self):
+        manager = notifications.NotificationCenter.__new__(
+            notifications.NotificationCenter
+        )
+        sends = []
+
+        class Dispatcher:
+            async def async_send(self, alert, **kwargs):
+                sends.append((alert, kwargs))
+
+        manager.dispatcher = Dispatcher()
+        manager.history = type(
+            "History",
+            (),
+            {"record": lambda *_args, **_kwargs: asyncio.sleep(0)},
+        )()
+        manager._pending_actions = {}
+        manager._save_state = lambda: None
+        manager.state = {
+            "alerts": {
+                "enabled-active": {
+                    "active": True,
+                    "acknowledged": False,
+                    "attempts": 0,
+                    "last_notified": None,
+                    "confirmation_action_id": None,
+                }
+            },
+            "history": [],
+        }
+        alert = {
+            "id": "enabled-active",
+            "name": "Enabled active",
+            "monitor": {"startup": True},
+            "notification": {
+                "actions_enabled": False,
+                "confirmation": {"enabled": True},
+            },
+        }
+        notifications.dt_util.utcnow = lambda: datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+
+        asyncio.run(
+            manager._process_condition(
+                alert,
+                True,
+                source="enabled",
+                context=None,
+            )
+        )
+        asyncio.run(
+            manager._process_condition(
+                alert,
+                True,
+                source="enabled",
+                context=None,
+            )
+        )
+
+        self.assertEqual(len(sends), 1)
+        self.assertTrue(
+            manager.state["alerts"]["enabled-active"][
+                "confirmation_action_id"
+            ].startswith("NC_CONFIRM_enabled-active_")
+        )
 
     def test_save_alert_replaces_existing_alert_instead_of_merging(self):
         manager = notifications.NotificationCenter.__new__(

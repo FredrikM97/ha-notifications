@@ -277,14 +277,16 @@ class NotificationCenter:
     async def _apply_config(
         self,
         config: dict[str, Any],
-    ) -> None:
+    ) -> set[str]:
         """Apply configuration."""
 
         normalized = normalize_config(config)
+        previous_alerts = self.alerts
 
         self._remove_alert_listeners()
 
         self.alerts = {alert["id"]: alert for alert in normalized["alerts"]}
+        newly_enabled_alert_ids = set()
 
         for alert_id in list(self.state["alerts"]):
             if alert_id not in self.alerts:
@@ -297,7 +299,13 @@ class NotificationCenter:
                 "enabled",
                 True,
             ):
+                previous = previous_alerts.get(alert["id"])
+                if previous is not None and not previous.get("enabled", True):
+                    newly_enabled_alert_ids.add(alert["id"])
+
                 self._setup_alert(alert)
+
+        return newly_enabled_alert_ids
 
     def _remove_alert_listeners(self) -> None:
         """Remove alert listeners."""
@@ -326,12 +334,20 @@ class NotificationCenter:
         async with self._reload_lock:
             config = await self.storage.async_load_config()
 
-            await self._apply_config(config)
+            newly_enabled_alert_ids = await self._apply_config(config)
 
             self._rebuild_pending_actions()
 
             if self._started:
-                await self._evaluate_all(source="startup")
+                for alert_id in newly_enabled_alert_ids:
+                    alert = self.alerts.get(alert_id)
+                    if alert is not None:
+                        await self._evaluate_alert(
+                            alert,
+                            source="enabled",
+                        )
+
+                await self._evaluate_all(source="reload")
 
     # ---------------------------------------------------------
     # Alert setup
@@ -412,8 +428,16 @@ class NotificationCenter:
             "confirmation",
             {},
         )
+        repeat = alert["notification"].get("repeat")
 
         interval = monitor.get("interval")
+
+        if (
+            not interval
+            and isinstance(repeat, dict)
+            and repeat.get("enabled", True)
+        ):
+            interval = repeat.get("interval")
 
         if not interval and confirmation.get(
             "enabled",
@@ -457,6 +481,11 @@ class NotificationCenter:
         for alert in list(self.alerts.values()):
             if not alert.get(
                 "enabled",
+                True,
+            ):
+                continue
+            if source == "startup" and not alert.get("monitor", {}).get(
+                "startup",
                 True,
             ):
                 continue
@@ -521,6 +550,28 @@ class NotificationCenter:
         """Return runtime state for an alert."""
 
         return ensure_alert_state(self.state, alert)
+
+    def _ensure_confirmation_action(
+        self,
+        alert: dict[str, Any],
+        state: dict[str, Any],
+    ) -> None:
+        """Ensure an active confirmation alert has a pending action ID."""
+
+        confirmation = alert["notification"].get(
+            "confirmation",
+            {},
+        )
+
+        if not confirmation.get("enabled", False):
+            return
+
+        if state.get("confirmation_action_id"):
+            return
+
+        action_id = f"NC_CONFIRM_{alert['id']}_{uuid.uuid4().hex}"
+        state["confirmation_action_id"] = action_id
+        self._pending_actions[action_id] = alert["id"]
 
     async def _process_condition(
         self,
@@ -590,20 +641,7 @@ class NotificationCenter:
                 f"notification_center_{alert['id']}_{uuid.uuid4().hex[:10]}"
             )
 
-            confirmation = alert["notification"].get(
-                "confirmation",
-                {},
-            )
-
-            if confirmation.get(
-                "enabled",
-                False,
-            ):
-                action_id = f"NC_CONFIRM_{alert['id']}_{uuid.uuid4().hex}"
-
-                state["confirmation_action_id"] = action_id
-
-                self._pending_actions[action_id] = alert["id"]
+            self._ensure_confirmation_action(alert, state)
 
             await self.history.record(
                 alert,
@@ -626,6 +664,29 @@ class NotificationCenter:
             "acknowledged",
             False,
         ):
+            return
+
+        attempts = int(state.get("attempts", 0))
+        has_sent = bool(state.get("last_notified") or attempts)
+
+        if (
+            source == "startup"
+            and alert.get("monitor", {}).get("startup", True)
+            and not has_sent
+        ):
+            self._ensure_confirmation_action(alert, state)
+            await self._send_notification(
+                alert,
+                context=context,
+            )
+            return
+
+        if source == "enabled" and not has_sent:
+            self._ensure_confirmation_action(alert, state)
+            await self._send_notification(
+                alert,
+                context=context,
+            )
             return
 
         # Startup/interval can cause a repeat.
