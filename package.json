@@ -1,5 +1,5 @@
 {
-  "name": "notification-center-frontend",
+  "name": "ha-notifications-frontend",
   "private": true,
   "type": "module",
   "scripts": {

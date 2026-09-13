@@ -1,4 +1,4 @@
-"""Confirmation support helpers for Notification Center runtime flows."""
+"""Confirmation support helpers for HA Notifications runtime flows."""
 
 from __future__ import annotations
 

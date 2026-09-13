@@ -25,11 +25,14 @@ const editor = readFileSync(
   "utf8",
 );
 assert.match(panel, /customElements\.define/);
+assert.match(panel, /ha-notifications-card/);
 assert.match(panel, /notification-center-card/);
 assert.match(panel, /window\.customCards|customCards/);
 assert.match(panel, /getCardSize/);
 assert.match(panel, /Administrator access required/);
 assert.match(panel, /custom:notification-center-card/);
+assert.match(panel, /custom:ha-notifications-card/);
+assert.match(panel, /HA Notifications/);
 assert.doesNotMatch(panel, /from ["']lit["']/);
 assert.match(panel, /config\/auth\/list/);
 assert.match(panel, /get_states/);

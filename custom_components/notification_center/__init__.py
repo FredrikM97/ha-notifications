@@ -1,4 +1,4 @@
-"""Notification Center integration."""
+"""HA Notifications integration."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ SERVICE_TEST_SCHEMA = vol.Schema(
 def _get_manager(
     hass: HomeAssistant,
 ) -> NotificationCenter:
-    """Get the running Notification Center."""
+    """Get the running HA Notifications manager."""
 
     data = hass.data.get(
         DOMAIN,
@@ -63,7 +63,7 @@ def _get_manager(
         NotificationCenter,
     ):
         raise HomeAssistantError(
-            "Notification Center is not configured."
+            "HA Notifications is not configured."
         )
 
     return manager
@@ -73,7 +73,7 @@ async def async_setup(
     hass: HomeAssistant,
     config: dict[str, Any],
 ) -> bool:
-    """Set up Notification Center."""
+    """Set up HA Notifications."""
 
     hass.data.setdefault(
         DOMAIN,
@@ -89,7 +89,7 @@ async def async_setup(
     async def handle_reload(
         _call: ServiceCall,
     ) -> None:
-        """Reload Notification Center."""
+        """Reload HA Notifications."""
 
         await _get_manager(
             hass
@@ -134,7 +134,7 @@ async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> bool:
-    """Set up Notification Center from a config entry."""
+    """Set up HA Notifications from a config entry."""
 
     manager = NotificationCenter(
         hass
@@ -145,14 +145,14 @@ async def async_setup_entry(
 
     except Exception:
         _LOGGER.exception(
-            "Failed to set up Notification Center"
+            "Failed to set up HA Notifications"
         )
 
         try:
             await manager.async_unload()
         except Exception:
             _LOGGER.exception(
-                "Failed cleaning up Notification Center "
+                "Failed cleaning up HA Notifications "
                 "after setup failure"
             )
 
@@ -178,7 +178,7 @@ async def async_setup_entry(
     )
 
     _LOGGER.info(
-        "Notification Center started with %d alert(s)",
+        "HA Notifications started with %d alert(s)",
         len(manager.alerts),
     )
 
@@ -189,7 +189,7 @@ async def async_unload_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> bool:
-    """Unload Notification Center."""
+    """Unload HA Notifications."""
 
     manager = entry.runtime_data
 
@@ -208,7 +208,7 @@ async def async_unload_entry(
             )
         except Exception:
             _LOGGER.exception(
-                "Failed to unload Notification Center"
+                "Failed to unload HA Notifications"
             )
             unload_ok = False
 
@@ -218,7 +218,7 @@ async def async_unload_entry(
         )
     except Exception:
         _LOGGER.exception(
-            "Failed to unregister Notification Center frontend"
+            "Failed to unregister HA Notifications frontend"
         )
         unload_ok = False
 

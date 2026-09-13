@@ -1,4 +1,4 @@
-"""Notification Center runtime engine."""
+"""HA Notifications runtime engine."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ __all__ = (
 
 
 class NotificationCenter:
-    """Notification Center runtime manager."""
+    """HA Notifications runtime manager."""
 
     def __init__(
         self,
@@ -225,7 +225,7 @@ class NotificationCenter:
             )
 
         _LOGGER.info(
-            "Notification Center loaded %d alert(s)",
+            "HA Notifications loaded %d alert(s)",
             len(self.alerts),
         )
 

@@ -1,4 +1,4 @@
-"""Notification Center WebSocket API."""
+"""HA Notifications WebSocket API."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .const import DOMAIN
 
 
 def _manager(hass: HomeAssistant):
-    """Get the Notification Center manager."""
+    """Get the HA Notifications manager."""
 
     data = hass.data.get(
         DOMAIN,
@@ -30,7 +30,7 @@ def _manager(hass: HomeAssistant):
 
     if manager is None:
         raise RuntimeError(
-            "Notification Center is not loaded."
+            "HA Notifications is not loaded."
         )
 
     return manager

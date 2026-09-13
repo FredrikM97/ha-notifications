@@ -1,31 +1,31 @@
 {
-  "title": "Notification Center",
+  "title": "HA Notifications",
   "config": {
-    "flow_title": "Notification Center",
+    "flow_title": "HA Notifications",
     "step": {
       "user": {
-        "title": "Notification Center",
-        "description": "Install Notification Center. Alerts are managed from its dashboard.",
+        "title": "HA Notifications",
+        "description": "Install HA Notifications. Alerts are managed from its dashboard.",
         "data": {
           "show_sidebar": "Show in sidebar"
         },
         "data_description": {
-          "show_sidebar": "Add Notification Center to the Home Assistant sidebar. It remains available as a dashboard card either way."
+          "show_sidebar": "Add HA Notifications to the Home Assistant sidebar. It remains available as a dashboard card either way."
         }
       }
     },
     "abort": {
-      "already_configured": "Notification Center is already configured."
+      "already_configured": "HA Notifications is already configured."
     }
   },
   "services": {
     "reload": {
       "name": "Reload",
-      "description": "Reload Notification Center configuration from the managed YAML file."
+      "description": "Reload HA Notifications configuration from the managed YAML file."
     },
     "test": {
       "name": "Test alert",
-      "description": "Send a test notification for a Notification Center alert.",
+      "description": "Send a test notification for an HA Notifications alert.",
       "fields": {
         "alert_id": {
           "name": "Alert ID",

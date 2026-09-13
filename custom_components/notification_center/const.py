@@ -1,4 +1,4 @@
-"""Constants for Notification Center."""
+"""Constants for HA Notifications."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ STORAGE_VERSION = 1
 STORAGE_KEY = "notification_center"
 
 MAX_HISTORY = 500
-PANEL_TITLE = "Notification Center"
+PANEL_TITLE = "HA Notifications"
 PANEL_ICON = "mdi:bell-cog"
 CONF_SHOW_SIDEBAR = "show_sidebar"
 FRONTEND_STATIC_URL = f"/{DOMAIN}_static"

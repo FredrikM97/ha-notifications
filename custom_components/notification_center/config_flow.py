@@ -1,4 +1,4 @@
-"""Config flow for Notification Center."""
+"""Config flow for HA Notifications."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class NotificationCenterConfigFlow(
     config_entries.ConfigFlow,
     domain=DOMAIN,
 ):
-    """Handle Notification Center config flow."""
+    """Handle HA Notifications config flow."""
 
     VERSION = 1
     MINOR_VERSION = 0
@@ -32,7 +32,7 @@ class NotificationCenterConfigFlow(
 
         if user_input is not None:
             return self.async_create_entry(
-                title="Notification Center",
+                title="HA Notifications",
                 data={
                     CONF_SHOW_SIDEBAR: user_input[CONF_SHOW_SIDEBAR],
                 },

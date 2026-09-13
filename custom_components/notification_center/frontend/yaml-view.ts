@@ -51,7 +51,7 @@ export function renderYamlView(
         id="nc-yaml-editor"
         mode="yaml"
         language="yaml"
-        aria-label="Notification Center YAML"
+        aria-label="HA Notifications YAML"
       ></ha-code-editor>
     </div>`,
     container,

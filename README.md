@@ -1,4 +1,4 @@
-# Notification Center
+# HA Notifications
 
 The integration source lives under `custom_components/notification_center`,
 as expected by Home Assistant and HACS. For packaging, run
@@ -17,12 +17,12 @@ sh scripts/install_local.sh /path/to/home-assistant-config
 
 A Home Assistant custom integration for creating, managing, and debugging state-based notifications from a dedicated UI.
 
-Notification Center is designed to replace large collections of notification automations and external notification scripts with a single, self-contained integration.
+HA Notifications is designed to replace large collections of notification automations and external notification scripts with a single, self-contained integration.
 
 It provides:
 
 * A dedicated Home Assistant frontend panel
-* A Lovelace custom card with the full Notification Center management UI
+* A Lovelace custom card with the full HA Notifications management UI
 * Visual alert management
 * YAML editing and import/export
 * Device, area and label notification targets
@@ -43,14 +43,14 @@ It provides:
 
 The integration automatically registers its compiled frontend module with Home
 Assistant, so no manually configured Lovelace resource is required. In a
-dashboard, choose **Add card**, select **Notification Center**, and add it. The
+dashboard, choose **Add card**, select **HA Notifications**, and add it. The
 card opens the same full alert editor, history, and YAML UI as the sidebar
 panel; it is not a status-only card.
 
 The card configuration is:
 
 ```yaml
-type: custom:notification-center-card
+type: custom:ha-notifications-card
 ```
 
 Only Home Assistant administrators can access the card's alert data or editing
@@ -64,7 +64,7 @@ settings intact and editable, so it can be re-enabled without rebuilding it.
 
 ### Alert management
 
-Alerts can be created and managed from the Notification Center frontend.
+Alerts can be created and managed from the HA Notifications frontend.
 
 Each alert can contain:
 
@@ -186,7 +186,7 @@ You do **not** need a separate notification script such as:
 script.global_multi_device_actionable_notifie
 ```
 
-Notification Center can execute notification services itself.
+HA Notifications can execute notification services itself.
 
 This makes the integration self-contained and avoids an external dependency on a specific Home Assistant script.
 
@@ -249,7 +249,7 @@ confirmation:
   button: "Activity completed"
 ```
 
-When the user confirms the notification, Notification Center can:
+When the user confirms the notification, HA Notifications can:
 
 1. Detect the notification action
 2. Identify the user where possible
@@ -282,7 +282,7 @@ notification:
 
 Multiple actions can be configured.
 
-This makes Notification Center useful for workflows such as:
+This makes HA Notifications useful for workflows such as:
 
 ```text
 Notification
@@ -336,11 +336,9 @@ The UI should expose these options without requiring users to manually build the
 
 # YAML support
 
-Notification Center sup
-
 ## Canonical YAML structure
 
-Notification Center writes one canonical representation for each alert.
+HA Notifications writes one canonical representation for each alert.
 Configuration uses one `notification`, a `conditions` list, and a `monitor`
 object. YAML validation rejects malformed structures before writing.
 

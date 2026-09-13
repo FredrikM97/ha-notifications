@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "notification-center-custom-integration"
+name = "ha-notifications"
 version = "0.4.0"
-description = "Home Assistant Notification Center custom integration"
+description = "Home Assistant HA Notifications custom integration"
 requires-python = ">=3.12"
 dependencies = [
     "PyYAML>=6.0",

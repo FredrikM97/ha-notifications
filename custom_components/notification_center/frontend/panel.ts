@@ -188,7 +188,7 @@ class NotificationCenterPanel extends HTMLElement {
             <div class="nc-card nc-empty">
               <h2>Administrator access required</h2>
               <p>
-                Notification Center alerts can only be viewed and edited by
+                HA Notifications alerts can only be viewed and edited by
                 Home Assistant administrators.
               </p>
             </div>
@@ -207,7 +207,7 @@ class NotificationCenterPanel extends HTMLElement {
             <div class="nc-title">
               <div class="nc-title-icon">🔔</div>
               <div>
-                <h1>Notification Center</h1>
+                <h1>HA Notifications</h1>
                 <p>Manage alerts, notifications and debug history.</p>
               </div>
             </div>
@@ -559,15 +559,20 @@ if (!customElements.get("notification-center-panel")) {
 }
 
 interface NotificationCenterCardConfig {
-  type: "custom:notification-center-card";
+  type: "custom:ha-notifications-card" | "custom:notification-center-card";
 }
 
 class NotificationCenterCard extends NotificationCenterPanel {
   private config: NotificationCenterCardConfig | null = null;
 
   setConfig(config: NotificationCenterCardConfig): void {
-    if (!config || config.type !== "custom:notification-center-card") {
-      throw new Error("Card type must be custom:notification-center-card.");
+    if (
+      !config ||
+      !["custom:ha-notifications-card", "custom:notification-center-card"].includes(
+        config.type,
+      )
+    ) {
+      throw new Error("Card type must be custom:ha-notifications-card.");
     }
     this.config = config;
     this.render();
@@ -578,8 +583,12 @@ class NotificationCenterCard extends NotificationCenterPanel {
   }
 
   static getStubConfig(): NotificationCenterCardConfig {
-    return { type: "custom:notification-center-card" };
+    return { type: "custom:ha-notifications-card" };
   }
+}
+
+if (!customElements.get("ha-notifications-card")) {
+  customElements.define("ha-notifications-card", NotificationCenterCard);
 }
 
 if (!customElements.get("notification-center-card")) {
@@ -594,14 +603,19 @@ const customCardWindow = window as Window & {
   }>;
 };
 customCardWindow.customCards = customCardWindow.customCards || [];
-if (
-  !customCardWindow.customCards.some(
-    (card) => card.type === "notification-center-card",
-  )
-) {
-  customCardWindow.customCards.push({
+for (const card of [
+  {
+    type: "ha-notifications-card",
+    name: "HA Notifications",
+    description: "Manage HA Notifications alerts, history, and YAML.",
+  },
+  {
     type: "notification-center-card",
-    name: "Notification Center",
-    description: "Manage Notification Center alerts, history, and YAML.",
-  });
+    name: "HA Notifications (legacy alias)",
+    description: "Legacy alias for HA Notifications.",
+  },
+]) {
+  if (!customCardWindow.customCards.some((item) => item.type === card.type)) {
+    customCardWindow.customCards.push(card);
+  }
 }

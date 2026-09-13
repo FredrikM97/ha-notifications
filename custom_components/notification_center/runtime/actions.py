@@ -1,4 +1,4 @@
-"""Service action execution for Notification Center alerts."""
+"""Service action execution for HA Notifications alerts."""
 
 from __future__ import annotations
 

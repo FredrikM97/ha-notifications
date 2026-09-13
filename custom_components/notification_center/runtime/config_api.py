@@ -1,4 +1,4 @@
-"""Configuration-facing runtime operations for Notification Center."""
+"""Configuration-facing runtime operations for HA Notifications."""
 
 from __future__ import annotations
 

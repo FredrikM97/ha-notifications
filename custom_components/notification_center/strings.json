@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Notification Center",
-        "description": "Notification Center manages condition-based notifications and actionable reminders.",
+        "title": "HA Notifications",
+        "description": "HA Notifications manages condition-based notifications and actionable reminders.",
         "data": {
           "show_sidebar": "Show in sidebar"
         }

@@ -1,4 +1,4 @@
-"""Condition compilation for Notification Center alerts."""
+"""Condition compilation for HA Notifications alerts."""
 
 from __future__ import annotations
 

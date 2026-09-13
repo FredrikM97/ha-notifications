@@ -1,4 +1,4 @@
-"""Runtime state bookkeeping for Notification Center alerts."""
+"""Runtime state bookkeeping for HA Notifications alerts."""
 
 from __future__ import annotations
 

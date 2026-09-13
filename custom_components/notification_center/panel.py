@@ -1,4 +1,4 @@
-"""Notification Center Home Assistant panel."""
+"""HA Notifications Home Assistant panel."""
 
 from __future__ import annotations
 
@@ -28,13 +28,13 @@ async def async_register_frontend(
     *,
     show_in_sidebar: bool,
 ) -> None:
-    """Register the Notification Center frontend."""
+    """Register the HA Notifications frontend."""
 
     panel_file = FRONTEND_DIR / "panel.js"
 
     if not panel_file.is_file():
         raise RuntimeError(
-            f"Notification Center frontend is missing: {panel_file}"
+            f"HA Notifications frontend is missing: {panel_file}"
         )
     if not hass.data.get(FRONTEND_REGISTERED_KEY):
         await hass.http.async_register_static_paths(
@@ -77,7 +77,7 @@ async def async_register_frontend(
 
 
 def async_unregister_frontend(hass: HomeAssistant) -> None:
-    """Remove the Notification Center panel."""
+    """Remove the HA Notifications panel."""
 
     frontend.async_remove_panel(
         hass,

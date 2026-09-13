@@ -1,4 +1,4 @@
-"""Runtime helpers for Notification Center."""
+"""Runtime helpers for HA Notifications."""
 
 from .actions import NotificationActionRunner
 from .config_api import NotificationConfigAPI

@@ -1,4 +1,4 @@
-"""Persistence for Notification Center."""
+"""Persistence for HA Notifications."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _parse_yaml(
         dict,
     ):
         raise ValueError(
-            "Notification Center YAML "
+            "HA Notifications YAML "
             "must contain a mapping."
         )
 
@@ -77,7 +77,7 @@ def _parse_yaml(
 
 
 class NotificationStorage:
-    """Notification Center storage."""
+    """HA Notifications storage."""
 
     def __init__(
         self,
