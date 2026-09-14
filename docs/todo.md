@@ -220,6 +220,59 @@ and editor toasts to component-owned Lit state in a browser-verified pass.
       new recipient selectors are retained for `notification_services/` to
       interpret.
 
+## Event-bus kernel rewrite (complete)
+
+`controller/core.py` was rewritten as an event-bus kernel: it owns the
+gateway, the `Command` interpreter, and a generic `EventBus` (`publish`/
+`ask`), but no alert/notification/confirmation business logic. Feature
+modules were promoted out of `controller/features/` into a top-level
+`features/` package (`triggering.py`, `confirmation.py`, `notification.py`,
+`follow_up_actions.py`, plus new `history.py` and `notification_services/`),
+each self-registering its event subscriptions via `register(bus)`. See
+`docs/architecture.md` for the full design and `.github/logic-index.md` for
+the updated module map.
+
+- [x] `controller/events.py`/`controller/bus.py` added (`Event` +
+  event/query name vocabulary; `EventBus.publish`/`ask`).
+- [x] `controller/commands.py` extended with `Emit`/`RunBatch`.
+- [x] `features/history.py` added - history recording is a bus listener,
+  not a kernel primitive; reuses the existing `PersistSave` command.
+- [x] Trigger dispatch (`_dispatch_trigger_transition`/`_handle_*`),
+  notification send/clear, follow-up actions, and confirmation effects all
+  moved from hardcoded `core.py` sequencing to event handlers.
+- [x] `_evaluate_alert` removed - core publishes `condition.check_requested`
+  (pull-based: startup/reload/interval/enabled); `features/triggering.py`
+  asks the new `EVALUATE_CONDITION` query and re-publishes
+  `condition.evaluated`. The push-based path (a tracked template firing)
+  is unchanged, since it already has the result and doesn't need to
+  re-query.
+- [x] Dead code removed: `execute_confirmation_effects` alias in
+  `features/confirmation.py` (zero references after the rewrite).
+- [x] Tests: renamed the four `test_controller_*.py` files to match their
+  new `features/` location, added `tests/test_event_bus.py` and
+  `tests/test_history_feature.py`. 119 passed; `npm run build` clean.
+- **Reviewed and intentionally left as direct calls (not bus-routed) -
+  do not re-flag as duplication:**
+  - `test_alert`/`test_alert_payload` still call `compose_send` directly
+    instead of publishing `notification.send_requested`.
+    `bridge/websocket.py`'s `handle_test`/`handle_test_payload` rely on
+    exceptions propagating out of these calls to send a websocket error to
+    the frontend; the bus-routed send path deliberately swallows
+    `compose_send` failures into an `on_failed` event for the reactive
+    engine, which would silently turn a failed test send into a false
+    "success" toast. `core._record_history`/`HistoryEventType` stay in
+    `core.py` for this reason too (`test_alert` still uses them directly).
+  - `save_alert`/`delete_alert`/`reload`/YAML load-save-validate stay
+    direct core methods (control-plane, not reactive-engine input; YAML
+    safety depends on synchronous ordering).
+  - `_expire_draft_after_ttl`/`_make_condition_callback`/
+    `_make_interval_callback` stay in `core.py` - irreducible
+    gateway-callback/task-scheduling adapters, not business logic.
+  - Gateway is not made a bus responder for `CallService`/`PersistSave`;
+    `core._execute`'s Command interpreter is the kernel's defining job per
+    `docs/architecture.md`, and moving it would relocate the same code
+    without reducing real coupling.
+
 ## Legacy TODO (complete for the pre-rewrite layout)
 
 All items below were complete for the repository layout prior to the

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
-responses = importlib.import_module(f"{PACKAGE_NAME}.controller.features.confirmation")
+responses = importlib.import_module(f"{PACKAGE_NAME}.features.confirmation")
 
 
 class TrackClearTests(unittest.TestCase):

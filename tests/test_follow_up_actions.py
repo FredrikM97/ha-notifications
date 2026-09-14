@@ -9,7 +9,7 @@ from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 actions = importlib.import_module(
-    f"{PACKAGE_NAME}.controller.features.follow_up_actions"
+    f"{PACKAGE_NAME}.features.follow_up_actions"
 )
 
 

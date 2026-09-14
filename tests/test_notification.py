@@ -9,7 +9,7 @@ from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 notifications = importlib.import_module(
-    f"{PACKAGE_NAME}.controller.features.notification"
+    f"{PACKAGE_NAME}.features.notification"
 )
 commands = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 

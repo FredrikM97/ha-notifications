@@ -20,6 +20,8 @@ from conftest import make_alert
 ensure_package()
 core_module = importlib.import_module(f"{PACKAGE_NAME}.controller.core")
 commands_module = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
+events_module = importlib.import_module(f"{PACKAGE_NAME}.controller.events")
+gateway_module = importlib.import_module(f"{PACKAGE_NAME}.ha.gateway")
 alert_schema_module = importlib.import_module(f"{PACKAGE_NAME}.domain.alert_schema")
 
 
@@ -81,6 +83,86 @@ class FakeGateway:
 
     def get_states_all(self, domain):
         return []
+
+    def fetch_registry_snapshot(self):
+        mobile_app_entries = self.config_entries_for_domain("mobile_app")
+        return gateway_module.RegistrySnapshot(
+            area_registry=self.area_registry_snapshot(),
+            device_registry=self.device_registry_snapshot(),
+            entity_registry=self.entity_registry_snapshot(),
+            mobile_app_entries=mobile_app_entries,
+            mobile_app_entry_ids={entry.entry_id for entry in mobile_app_entries},
+            person_states=self.get_states_all("person"),
+        )
+
+    def register_bus_responders(self, bus):
+        bus.respond(events_module.RENDER_TEMPLATE, lambda _p: self._answer(self.render_template))
+        bus.respond(events_module.HAS_SERVICE, lambda _p: self._answer(self.has_service))
+        bus.respond(
+            events_module.FETCH_REGISTRY_SNAPSHOT,
+            lambda _p: self._answer(self.fetch_registry_snapshot()),
+        )
+        bus.respond(
+            events_module.EVALUATE_CONDITION,
+            lambda payload: self.evaluate_condition(payload["source"]),
+        )
+
+    def register_bus_listeners(self, bus, store):
+        async def call_service(command):
+            await self.call_service(
+                command.domain, command.service, command.data, command.target
+            )
+
+        async def track_template(command):
+            def on_result(active, error, _event):
+                self.create_task(
+                    bus.publish(
+                        events_module.Event(
+                            events_module.CONDITION_EVALUATED,
+                            {
+                                "alert_id": command.key,
+                                "active": active,
+                                "error": error,
+                                "source": "change",
+                                "now": self.now_utc(),
+                            },
+                        )
+                    )
+                )
+
+            self.track_template(command.template, on_result)
+
+        async def track_interval(command):
+            def on_interval(_now):
+                self.create_task(
+                    bus.publish(
+                        events_module.Event(
+                            events_module.CONDITION_CHECK_REQUESTED,
+                            {
+                                "alert_id": command.key,
+                                "source": "interval",
+                                "now": self.now_utc(),
+                            },
+                        )
+                    )
+                )
+
+            self.track_interval(command.interval, on_interval)
+
+        async def unsubscribe(_command):
+            return None
+
+        async def persist(command):
+            self.delay_save_store(store, command.data)
+
+        bus.listen(commands_module.CallService, call_service)
+        bus.listen(commands_module.TrackTemplate, track_template)
+        bus.listen(commands_module.TrackInterval, track_interval)
+        bus.listen(commands_module.Unsubscribe, unsubscribe)
+        bus.listen(commands_module.PersistSave, persist)
+
+    async def _answer(self, value):
+        return value
 
     # -- event bus --
     def bus_listen(self, event_type, callback_fn):
@@ -151,18 +233,72 @@ def _make_controller(gateway: FakeGateway) -> core_module.NotificationCenterCont
     controller._state = {"alerts": {}, "history": []}
     controller._alerts = {}
     controller._sessions = {}
-    controller._condition_unsubs = {}
-    controller._interval_unsubs = {}
     controller._action_event_unsub = None
     controller._started_unsub = None
     controller._tasks = set()
     controller._started = True
     controller._reload_lock = asyncio.Lock()
+    controller._bus = core_module.EventBus()
+    gateway.register_bus_responders(controller._bus)
+    gateway.register_bus_listeners(controller._bus, controller._store)
+    controller._register_bus_responders()
+    for module in core_module._FEATURE_MODULES:
+        module.register(controller._bus)
     return controller
 
 
 def _alert(alert_id="alert_1", **overrides):
     return make_alert(alert_id, **overrides)
+
+
+async def _condition_changed(controller, alert_id, active, error=None):
+    await controller._bus.publish(
+        events_module.Event(
+            events_module.CONDITION_EVALUATED,
+            {
+                "alert_id": alert_id,
+                "active": active,
+                "error": error,
+                "source": "change",
+                "now": controller._gateway.now_utc(),
+            },
+        )
+    )
+
+
+class PullBasedEvaluationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_request_condition_check_goes_through_evaluate_condition_query(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        alert = _alert()
+        controller._alerts[alert["id"]] = alert
+
+        await controller._request_condition_check(alert["id"], source="interval")
+
+        state = controller._state["alerts"][alert["id"]]
+        self.assertTrue(state["active"])
+        types = [event["type"] for event in controller._state["history"]]
+        self.assertIn(core_module.HistoryEventType.CONDITION_ACTIVE, types)
+
+    async def test_request_condition_check_ignores_unknown_alert(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+
+        await controller._request_condition_check("ghost", source="interval")
+
+        self.assertEqual(gateway.service_calls, [])
+        self.assertEqual(controller._state["history"], [])
+
+    async def test_request_condition_check_noop_before_started(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        controller._started = False
+        alert = _alert()
+        controller._alerts[alert["id"]] = alert
+
+        await controller._request_condition_check(alert["id"], source="startup")
+
+        self.assertNotIn(alert["id"], controller._state["alerts"])
 
 
 class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
@@ -172,7 +308,7 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
         alert = _alert()
         controller._alerts[alert["id"]] = alert
 
-        await controller._on_condition_result(alert["id"], True, None, source="change")
+        await _condition_changed(controller, alert["id"], True)
 
         self.assertEqual(len(gateway.service_calls), 1)
         domain, service, data, _target = gateway.service_calls[0]
@@ -194,10 +330,10 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
         alert = _alert()
         controller._alerts[alert["id"]] = alert
 
-        await controller._on_condition_result(alert["id"], True, None, source="change")
+        await _condition_changed(controller, alert["id"], True)
         gateway.service_calls.clear()
 
-        await controller._on_condition_result(alert["id"], False, None, source="change")
+        await _condition_changed(controller, alert["id"], False)
 
         state = controller._state["alerts"][alert["id"]]
         self.assertFalse(state["active"])
@@ -210,9 +346,7 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
         alert = _alert()
         controller._alerts[alert["id"]] = alert
 
-        await controller._on_condition_result(
-            alert["id"], None, "boom", source="change"
-        )
+        await _condition_changed(controller, alert["id"], None, "boom")
 
         self.assertEqual(gateway.service_calls, [])
         types = [event["type"] for event in controller._state["history"]]
@@ -240,7 +374,7 @@ class ConfirmationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         controller._alerts[alert["id"]] = alert
 
-        await controller._on_condition_result(alert["id"], True, None, source="change")
+        await _condition_changed(controller, alert["id"], True)
 
         state = controller._state["alerts"][alert["id"]]
         action_id = state["confirmation_action_id"]

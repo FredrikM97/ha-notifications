@@ -1,8 +1,7 @@
 """Pure alert history formatting/querying - no Home Assistant import.
 
-`controller/core.py` owns the actual persisted `history` list (part of the
-runtime-state blob it loads/saves via `ha/gateway.py`); this module only
-builds entries and queries a list it's handed.
+`features/history.py` owns *when* to record (it listens on the event
+bus); this module only builds entries and queries a list it's handed.
 """
 
 from __future__ import annotations

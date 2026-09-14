@@ -17,7 +17,7 @@ from test_support import PACKAGE_NAME, ensure_package
 from conftest import make_alert
 
 ensure_package()
-alerts = importlib.import_module(f"{PACKAGE_NAME}.controller.features.triggering")
+alerts = importlib.import_module(f"{PACKAGE_NAME}.features.triggering")
 commands = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 const = importlib.import_module(f"{PACKAGE_NAME}.const")
 

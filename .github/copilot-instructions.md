@@ -19,20 +19,27 @@ This repository is a Home Assistant custom integration named Notification Center
 - Preserve alert behavior across create, edit, delete, enable/disable, save, reload, and runtime update flows.
 - Put new logic in the module that already owns that concern (see
   `docs/architecture.md`); do not grow `controller/core.py` or `editor/index.ts`
-  back into god-objects. Trigger/state-machine logic belongs in
-  `controller/alerts.py`; confirmation-action routing belongs in
-  `controller/responses.py`; alert-editor section UI belongs in
-  `frontend/sections.ts`.
+  back into god-objects. `controller/core.py` is a kernel: it owns the
+  gateway, the `Command` interpreter, and the `EventBus` publish/ask
+  dispatch loop, but no alert/notification/confirmation business logic.
+  Trigger/state-machine logic belongs in `features/triggering.py`;
+  confirmation session tracking and confirmation-effects routing belongs
+  in `features/confirmation.py`; notification composition belongs in
+  `features/notification.py`; follow-up action rendering belongs in
+  `features/follow_up_actions.py`; history recording belongs in
+  `features/history.py` (a bus listener, not a kernel primitive);
+  alert-editor section UI belongs in `frontend/sections.ts`.
 - Keep the frontend authored with Lit. `frontend/panel.ts` is the LitElement
   shell, and child views should use Lit templates/rendering rather than ad-hoc
   DOM HTML construction.
 - Keep `frontend/api.ts` as the only frontend/backend transport boundary. UI
   modules call typed API wrappers instead of constructing websocket messages or
   calling `hass.connection.sendMessagePromise` directly.
-- Keep delivery layered: `controller/notifications.py` decides message
-  content/recipients/route and returns `Command`s, `controller/actions.py`
-  builds post-send/post-confirmation service calls, and only
-  `controller/core.py` executes `Command`s against `ha/gateway.py`.
+- Keep delivery layered: `features/notification.py` decides message
+  content/recipients/route and returns `Command`s (via the event bus),
+  `features/follow_up_actions.py` builds post-send/post-confirmation
+  service calls, and only `controller/core.py` executes `Command`s
+  against `ha/gateway.py`.
 - Prefer straightforward `if` blocks over ternary/conditional-expression
   style for anything with real branching logic. A simple, non-nested
   two-branch expression (e.g. `"Enabled" if enabled else "Disabled"`) may use

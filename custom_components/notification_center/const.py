@@ -56,8 +56,9 @@ class HistoryEventType(StrEnum):
 
 
 class TransitionKind(StrEnum):
-    """What happened to one alert's condition (`controller/alerts.py`'s
-    `TriggerTransition.kind`), and what `controller/core.py` should do next.
+    """What happened to one alert's condition (`features/triggering.py`'s
+    `TriggerTransition.kind`), used only internally by that module to pick
+    which fact events to emit.
     """
 
     NO_CHANGE = "no_change"

@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Callable
 
-from ..commands import CallService, Command
-from ..notification_services import (
+from ..controller import events as ev
+from ..controller.commands import CallService, Command, Emit, RunBatch
+from ..controller.events import Event
+from .notification_services import (
     GENERIC_NOTIFY_SERVICE,
     GENERIC_NOTIFY_TARGET_KEYS,
     DeliveryType,
@@ -22,7 +24,7 @@ from ..notification_services import (
     resolve_user_notification_target,
     target_values,
 )
-from ..rendering import Render, remove_none, render_value
+from .rendering import Render, remove_none, render_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -296,6 +298,105 @@ def _requested_target_counts(target: dict[str, Any]) -> dict[str, int]:
         for key in GENERIC_NOTIFY_TARGET_KEYS + ("user_id",)
         if target_values(target, key)
     }
+
+
+# ----------------------------------------------------------------------
+# Event-bus adapter - the only impure part of this module
+# ----------------------------------------------------------------------
+
+
+def register(bus: Any) -> None:
+    """Subscribe this module's reactions to the events it owns."""
+
+    bus.subscribe(ev.NOTIFICATION_SEND_REQUESTED, handle_send_requested)
+    bus.subscribe(ev.NOTIFICATION_CLEAR_REQUESTED, handle_clear_requested)
+
+
+async def handle_send_requested(event: Any, bus: Any) -> list[Command]:
+    payload = event.payload
+    alert = payload["alert"]
+    now = payload["now"]
+    confirmation_action_id = payload.get("confirmation_action_id")
+
+    variables = {
+        "alert_id": alert["id"],
+        "alert_name": alert["name"],
+        "alert_active": True,
+        "attempt": payload["attempt"],
+        "test": payload.get("test", False),
+        "now": now,
+        "notification_id": f"notification_center_{alert['id']}",
+        "confirmation_action_id": confirmation_action_id,
+    }
+
+    render = await bus.ask(ev.RENDER_TEMPLATE)
+    has_service = await bus.ask(ev.HAS_SERVICE)
+    snapshot = await bus.ask(ev.FETCH_REGISTRY_SNAPSHOT)
+
+    commands: list[Command] = []
+    if payload.get("replace_existing"):
+        commands.extend(
+            await _clear_commands(alert, now, snapshot, render, has_service)
+        )
+
+    try:
+        send_commands = await compose_send(
+            alert, variables, confirmation_action_id, snapshot, render, has_service
+        )
+    except Exception as err:  # noqa: BLE001 - reported as an event, not re-raised
+        if payload.get("propagate_errors", False):
+            raise
+
+        on_failed = payload.get("on_failed")
+        if on_failed is not None:
+            failed_payload = dict(on_failed.payload)
+            failed_payload["error"] = str(err)
+            commands.append(Emit(Event(on_failed.type, failed_payload)))
+        return commands
+
+    if payload.get("propagate_errors", False):
+        commands.extend(send_commands)
+        if payload.get("on_sent") is not None:
+            commands.append(Emit(payload["on_sent"]))
+        return commands
+
+    commands.append(
+        RunBatch(
+            send_commands,
+            on_success=payload.get("on_sent"),
+            on_error=payload.get("on_failed"),
+        )
+    )
+    return commands
+
+
+async def handle_clear_requested(event: Any, bus: Any) -> list[Command]:
+    payload = event.payload
+    alert = payload["alert"]
+    now = payload.get("now")
+
+    render = await bus.ask(ev.RENDER_TEMPLATE)
+    has_service = await bus.ask(ev.HAS_SERVICE)
+    snapshot = await bus.ask(ev.FETCH_REGISTRY_SNAPSHOT)
+
+    return await _clear_commands(alert, now, snapshot, render, has_service)
+
+
+async def _clear_commands(
+    alert: dict[str, Any],
+    now: Any,
+    snapshot: RegistrySnapshot,
+    render: Render,
+    has_service: HasService,
+) -> list[Command]:
+    variables = {"alert_id": alert["id"], "alert_name": alert["name"], "now": now}
+    try:
+        commands = await compose_clear(alert, variables, snapshot, render, has_service)
+    except Exception:
+        _LOGGER.exception("Failed clearing notification for %s", alert["id"])
+        return []
+
+    return [RunBatch(commands)] if commands else []
 
 
 def _validate_confirmation_delivery(

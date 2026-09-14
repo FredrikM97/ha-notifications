@@ -1,10 +1,15 @@
-"""The controller kernel: the only imperative shell in the integration.
+"""The controller kernel: lifecycle, runtime state, and public operations.
 
-Owns the single `HomeAssistantGateway`, wires every pure module together,
-and is the only thing `bridge/websocket.py` calls. Every actual
-decision (message content, recipients, trigger timing, follow-up actions)
-is made by a pure module in this package; this file only sequences those
-calls and dispatches the `Command`s they return.
+Owns the single `HomeAssistantGateway` and the generic `EventBus`. Every
+actual decision (message content, recipients, trigger timing, follow-up
+actions, confirmation effects, history phrasing) is made by a feature
+module in `features/` that subscribed to an event this file published;
+`core.py` never imports a feature module's *decision* functions directly
+for the reactive engine - it only wires `register(bus)` once, publishes
+facts, and answers the handful
+of read queries only it can answer (gateway state, runtime state/session
+dicts). `bridge/websocket.py` still calls this file's public API directly
+for one-shot control-plane operations (save/delete/test/YAML).
 """
 
 from __future__ import annotations
@@ -17,37 +22,44 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Event as HassEvent, HomeAssistant
 
+from ..bridge import panel as panel_module
+from ..bridge import websocket as frontend_websocket
 from ..const import (
     CONFIG_FILENAME,
     DOMAIN,
     EVENT_NOTIFICATION_ACTION,
     STORAGE_KEY,
     STORAGE_VERSION,
-    HistoryEventType,
-    TransitionKind,
 )
-from ..bridge import panel as panel_module
-from ..bridge import websocket as frontend_websocket
 from ..domain.condition_schema import compile_condition
+from ..features import confirmation as responses_module
+from ..features import follow_up_actions as actions_module
+from ..features import history as history_feature_module
+from ..features import notification as notification_module
+from ..features import triggering as alerts_module
 from ..ha.gateway import HomeAssistantGateway
 from ..support import history as history_module
 from ..support import storage as storage_module
-from .features import confirmation as responses_module
-from .features import follow_up_actions as actions_module
-from .features import notification as notifications_module
-from .features import triggering as alerts_module
-from .commands import (
-    CallService,
-    Command,
-    PersistSave,
-    TrackInterval,
-    TrackTemplate,
-    Unsubscribe,
-)
+from . import events as ev
+from .bus import EventBus
+from .commands import Unsubscribe
+from .events import Event
 
 _LOGGER = logging.getLogger(__name__)
+
+# The closed set of feature modules the kernel wires up at setup - each
+# owns its own event subscriptions via `register(bus)`. This is the one
+# place the plugin set is visible/auditable, mirroring `commands.py`'s
+# closed `Command` vocabulary.
+_FEATURE_MODULES = (
+    alerts_module,
+    responses_module,
+    notification_module,
+    actions_module,
+    history_feature_module,
+)
 
 
 class NotificationCenterController:
@@ -61,14 +73,17 @@ class NotificationCenterController:
         self._alerts: dict[str, dict[str, Any]] = {}
         self._sessions: dict[str, dict[str, Any]] = {}
 
-        self._condition_unsubs: dict[str, Any] = {}
-        self._interval_unsubs: dict[str, Any] = {}
         self._action_event_unsub: Any = None
         self._started_unsub: Any = None
 
         self._tasks: set[asyncio.Task[Any]] = set()
         self._started = False
         self._reload_lock = asyncio.Lock()
+
+        self._bus = EventBus()
+        self._gateway.register_bus_responders(self._bus)
+        self._gateway.register_bus_listeners(self._bus, self._store)
+        self._register_bus_responders()
 
     @property
     def alerts(self) -> dict[str, dict[str, Any]]:
@@ -85,6 +100,9 @@ class NotificationCenterController:
 
         raw_state = await self._gateway.load_store(self._store)
         self._state = storage_module.ensure_runtime_state_shape(raw_state)
+
+        for module in _FEATURE_MODULES:
+            module.register(self._bus)
 
         config = await self._load_config()
         await self._apply_config(config)
@@ -121,7 +139,7 @@ class NotificationCenterController:
                 sidebar_icon=plan.sidebar_icon,
             )
 
-    async def _on_home_assistant_started(self, _event: Event) -> None:
+    async def _on_home_assistant_started(self, _event: HassEvent) -> None:
         self._started = True
         await self._evaluate_all(source="startup")
 
@@ -136,8 +154,8 @@ class NotificationCenterController:
             self._action_event_unsub()
             self._action_event_unsub = None
 
-        for key in list(self._condition_unsubs) + list(self._interval_unsubs):
-            self._unsubscribe(key)
+        for alert_id in self._alerts:
+            await self._bus.execute(Unsubscribe(alert_id))
 
         for task in list(self._tasks):
             if not task.done():
@@ -156,62 +174,37 @@ class NotificationCenterController:
 
         return True
 
-    # ------------------------------------------------------------------
-    # The kernel dispatcher
-    # ------------------------------------------------------------------
-
-    async def _execute(self, command: Command) -> None:
-        """Execute one Command against the gateway. The only place that does."""
-
-        if isinstance(command, CallService):
-            await self._gateway.call_service(
-                command.domain, command.service, command.data, command.target
-            )
-        elif isinstance(command, TrackTemplate):
-            self._unsubscribe(command.key)
-            self._condition_unsubs[command.key] = self._gateway.track_template(
-                command.template, self._make_condition_callback(command.key)
-            )
-        elif isinstance(command, TrackInterval):
-            interval_unsub = self._interval_unsubs.pop(command.key, None)
-            if interval_unsub:
-                interval_unsub()
-            self._interval_unsubs[command.key] = self._gateway.track_interval(
-                command.interval, self._make_interval_callback(command.key)
-            )
-        elif isinstance(command, Unsubscribe):
-            self._unsubscribe(command.key)
-        elif isinstance(command, PersistSave):
-            self._gateway.delay_save_store(self._store, command.data)
-
-    def _unsubscribe(self, key: str) -> None:
-        unsub = self._condition_unsubs.pop(key, None)
-        if unsub:
-            unsub()
-        interval_unsub = self._interval_unsubs.pop(key, None)
-        if interval_unsub:
-            interval_unsub()
-
-    def _make_condition_callback(self, alert_id: str):
-        def _callback(
-            active: bool | None, error: str | None, _event: Event | None
-        ) -> None:
-            self._schedule(
-                self._on_condition_result(alert_id, active, error, source="change")
-            )
-
-        return _callback
-
-    def _make_interval_callback(self, alert_id: str):
-        def _callback(_now: Any) -> None:
-            self._schedule(self._interval_tick(alert_id))
-
-        return _callback
-
     def _schedule(self, coroutine: Any) -> None:
         task = self._gateway.create_task(coroutine)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+    # ------------------------------------------------------------------
+    # Bus query responders - the only things a feature module can ask for
+    # ------------------------------------------------------------------
+
+    def _register_bus_responders(self) -> None:
+        self._bus.respond(ev.GET_ALERT, self._answer_get_alert)
+        self._bus.respond(ev.GET_RUNTIME_STATE, self._answer_get_runtime_state)
+        self._bus.respond(ev.GET_STATE, self._answer_get_state)
+        self._bus.respond(ev.GET_SESSIONS, self._answer_get_sessions)
+
+    async def _answer_get_alert(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        return self._alerts.get(payload["alert_id"])
+
+    async def _answer_get_runtime_state(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        alert = self._alerts.get(payload["alert_id"])
+        if alert is None:
+            return None
+        return alerts_module.ensure_runtime_state(self._state["alerts"], alert)
+
+    async def _answer_get_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        return self._state
+
+    async def _answer_get_sessions(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        return self._sessions
 
     # ------------------------------------------------------------------
     # Config load/apply/reload
@@ -238,8 +231,8 @@ class NotificationCenterController:
     async def _apply_config(self, config: dict[str, Any]) -> set[str]:
         previous_alerts = self._alerts
 
-        for key in list(self._condition_unsubs) + list(self._interval_unsubs):
-            self._unsubscribe(key)
+        for alert_id in previous_alerts:
+            await self._bus.execute(Unsubscribe(alert_id))
 
         self._alerts = {alert["id"]: alert for alert in config["alerts"]}
         newly_enabled_alert_ids: set[str] = set()
@@ -257,7 +250,7 @@ class NotificationCenterController:
                     newly_enabled_alert_ids.add(alert["id"])
 
                 for command in alerts_module.register_specs(alert):
-                    await self._execute(command)
+                    await self._bus.execute(command)
 
         return newly_enabled_alert_ids
 
@@ -271,9 +264,7 @@ class NotificationCenterController:
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
-                    alert = self._alerts.get(alert_id)
-                    if alert is not None:
-                        await self._evaluate_alert(alert, source="enabled")
+                    await self._request_condition_check(alert_id, source="enabled")
 
                 await self._evaluate_all(source="reload")
 
@@ -288,7 +279,7 @@ class NotificationCenterController:
                 )
 
     # ------------------------------------------------------------------
-    # Trigger evaluation (was AlertEngine.evaluate_all/evaluate_alert)
+    # Trigger evaluation - scheduling only, decisions live in features/
     # ------------------------------------------------------------------
 
     async def _evaluate_all(self, *, source: str) -> None:
@@ -299,462 +290,55 @@ class NotificationCenterController:
                 "startup", True
             ):
                 continue
-            await self._evaluate_alert(alert, source=source)
+            await self._request_condition_check(alert["id"], source=source)
 
-    async def _evaluate_alert(self, alert: dict[str, Any], *, source: str) -> None:
-        if not self._started:
+    async def _request_condition_check(self, alert_id: str, *, source: str) -> None:
+        """Ask `features/triggering.py` to evaluate one alert's condition now.
+
+        Pull-based (startup/reload/interval/enabled) - the push-based path
+        (a tracked template firing) already knows the result and publishes
+        `CONDITION_EVALUATED` directly from the gateway listener.
+        """
+
+        if not self._started or alert_id not in self._alerts:
             return
 
-        active, error = await self._gateway.evaluate_condition(compile_condition(alert))
-        await self._on_condition_result(alert["id"], active, error, source=source)
-
-    async def _interval_tick(self, alert_id: str) -> None:
-        alert = self._alerts.get(alert_id)
-        if alert is not None:
-            await self._evaluate_alert(alert, source="interval")
+        await self._bus.publish(
+            Event(
+                ev.CONDITION_CHECK_REQUESTED,
+                {
+                    "alert_id": alert_id,
+                    "source": source,
+                    "now": self._gateway.now_utc(),
+                },
+            )
+        )
 
     # ------------------------------------------------------------------
-    # Trigger decisions -> delegation (was AlertEngine.process_condition)
+    # Confirmation event handling - resolve who, then publish the fact
     # ------------------------------------------------------------------
 
-    async def _on_condition_result(
-        self, alert_id: str, active: bool | None, error: str | None, *, source: str
-    ) -> None:
-        alert = self._alerts.get(alert_id)
-        if alert is None:
-            return
-
+    async def _on_action_event(self, event: HassEvent) -> None:
         now = self._gateway.now_utc()
-        transition = alerts_module.on_condition_result(
-            self._state["alerts"], alert, active, error, now, source=source
-        )
-
-        await self._dispatch_trigger_transition(alert, transition, now)
-
-    async def _dispatch_trigger_transition(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        now: datetime,
-    ) -> None:
-        handlers = {
-            TransitionKind.CONDITION_ERROR: self._handle_condition_error,
-            TransitionKind.NO_CHANGE: self._handle_no_change,
-            TransitionKind.BECAME_INACTIVE: self._handle_became_inactive,
-            TransitionKind.BECAME_ACTIVE: self._handle_became_active,
-            TransitionKind.SHOULD_SEND: self._handle_should_send,
-        }
-        handler = handlers[transition.kind]
-        await handler(alert, transition, now)
-
-    async def _handle_condition_error(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        _now: datetime,
-    ) -> None:
-        await self._record_history(
-            alert,
-            HistoryEventType.CONDITION_ERROR,
-            "Template evaluation failed.",
-            {"error": transition.error, "source": transition.source},
-        )
-
-    async def _handle_no_change(
-        self,
-        _alert: dict[str, Any],
-        _transition: alerts_module.TriggerTransition,
-        _now: datetime,
-    ) -> None:
-        return
-
-    async def _handle_became_inactive(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        _now: datetime,
-    ) -> None:
-        if transition.had_pending_confirmation:
-            await self._clear_notification(alert)
-        await self._record_history(
-            alert,
-            HistoryEventType.CONDITION_INACTIVE,
-            "Condition became false.",
-            {"source": transition.source},
-        )
-
-    async def _handle_became_active(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        _now: datetime,
-    ) -> None:
-        await self._record_history(
-            alert,
-            HistoryEventType.CONDITION_ACTIVE,
-            "Condition became true.",
-            {"source": transition.source},
-        )
-        await self._send_from_transition(alert, transition, replace_existing=False)
-
-    async def _handle_should_send(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        _now: datetime,
-    ) -> None:
-        await self._send_from_transition(
-            alert, transition, replace_existing=transition.replace_existing
-        )
-
-    async def _send_from_transition(
-        self,
-        alert: dict[str, Any],
-        transition: alerts_module.TriggerTransition,
-        *,
-        replace_existing: bool,
-    ) -> None:
-        now = self._gateway.now_utc()
-        if transition.new_confirmation_action and transition.confirmation_action_id:
-            responses_module.track(
-                self._sessions,
-                transition.confirmation_action_id,
-                now=now,
-                alert_id=alert["id"],
-            )
-
-        if replace_existing:
-            await self._clear_notification(alert)
-
-        await self._send_notification(
-            alert, transition.attempt, transition.confirmation_action_id, now
-        )
-
-    # ------------------------------------------------------------------
-    # Sending / clearing (delegates to the notification feature)
-    # ------------------------------------------------------------------
-
-    def _send_variables(
-        self,
-        alert: dict[str, Any],
-        attempt: int,
-        confirmation_action_id: str | None,
-        now: datetime,
-        *,
-        test: bool,
-    ) -> dict[str, Any]:
-        return {
-            "alert_id": alert["id"],
-            "alert_name": alert["name"],
-            "alert_active": True,
-            "attempt": attempt,
-            "test": test,
-            "now": now,
-            "notification_id": f"notification_center_{alert['id']}",
-            "confirmation_action_id": confirmation_action_id,
-        }
-
-    async def _fetch_registry_snapshot(self) -> notifications_module.RegistrySnapshot:
-        mobile_app_entries = self._gateway.config_entries_for_domain("mobile_app")
-        return notifications_module.RegistrySnapshot(
-            area_registry=self._gateway.area_registry_snapshot(),
-            device_registry=self._gateway.device_registry_snapshot(),
-            entity_registry=self._gateway.entity_registry_snapshot(),
-            mobile_app_entries=mobile_app_entries,
-            mobile_app_entry_ids={entry.entry_id for entry in mobile_app_entries},
-            person_states=self._gateway.get_states_all("person"),
-        )
-
-    async def _send_notification(
-        self,
-        alert: dict[str, Any],
-        attempt: int,
-        confirmation_action_id: str | None,
-        now: datetime,
-    ) -> None:
-        """Real (trigger-driven) send - updates runtime state and history."""
-
-        variables = self._send_variables(
-            alert, attempt, confirmation_action_id, now, test=False
-        )
-        snapshot = await self._fetch_registry_snapshot()
-
-        try:
-            commands_to_run = await notifications_module.compose_send(
-                alert,
-                variables,
-                confirmation_action_id,
-                snapshot,
-                self._gateway.render_template,
-                self._gateway.has_service,
-            )
-            for command in commands_to_run:
-                await self._execute(command)
-        except Exception as err:  # noqa: BLE001 - recorded, not re-raised, matching original
-            alerts_module.record_send_result(
-                self._state["alerts"],
-                alert,
-                attempt,
-                now,
-                success=False,
-                error=str(err),
-            )
-            await self._record_history(
-                alert,
-                HistoryEventType.NOTIFICATION_FAILED,
-                "Notification failed.",
-                {"attempt": attempt, "error": str(err)},
-            )
-            return
-
-        alerts_module.record_send_result(
-            self._state["alerts"], alert, attempt, now, success=True
-        )
-        await self._record_history(
-            alert,
-            HistoryEventType.NOTIFICATION_SENT,
-            "Notification sent.",
-            {"attempt": attempt},
-        )
-
-        if alert["notification"].get("actions_enabled", False):
-            await self._run_configured_actions(
-                alert,
-                alert["notification"].get("actions", []),
-                variables,
-                HistoryEventType.NOTIFICATION_ACTION,
-                HistoryEventType.NOTIFICATION_ACTION_FAILED,
-            )
-
-    async def _clear_notification(self, alert: dict[str, Any]) -> None:
-        now = self._gateway.now_utc()
-        variables = {"alert_id": alert["id"], "alert_name": alert["name"], "now": now}
-        snapshot = await self._fetch_registry_snapshot()
-
-        try:
-            commands_to_run = await notifications_module.compose_clear(
-                alert,
-                variables,
-                snapshot,
-                self._gateway.render_template,
-                self._gateway.has_service,
-            )
-        except Exception:
-            _LOGGER.exception("Failed clearing notification for %s", alert["id"])
-            return
-
-        for command in commands_to_run:
-            await self._execute(command)
-
-    async def _run_configured_actions(
-        self,
-        alert: dict[str, Any],
-        action_list: list[dict[str, Any]],
-        variables: dict[str, Any],
-        success_type: HistoryEventType,
-        failure_type: HistoryEventType,
-        *,
-        record_history: bool = True,
-    ) -> None:
-        results = await actions_module.build_service_calls(
-            action_list, variables, self._gateway.render_template
-        )
-
-        for result in results:
-            if result.command is None:
-                if record_history:
-                    await self._record_history(
-                        alert,
-                        failure_type,
-                        "Action failed.",
-                        {"index": result.index, "error": result.error},
-                    )
-                continue
-
-            try:
-                await self._execute(result.command)
-            except Exception as err:  # noqa: BLE001 - recorded per-action, matching original
-                if record_history:
-                    await self._record_history(
-                        alert,
-                        failure_type,
-                        "Action failed.",
-                        {"index": result.index, "error": str(err)},
-                    )
-                continue
-
-            if record_history:
-                await self._record_history(
-                    alert,
-                    success_type,
-                    "Action executed.",
-                    {
-                        "index": result.index,
-                        "action": f"{result.command.domain}.{result.command.service}",
-                    },
-                )
-
-    async def _record_history(
-        self,
-        alert: dict[str, Any],
-        event_type: HistoryEventType,
-        message: str,
-        details: dict[str, Any],
-    ) -> None:
-        state = alerts_module.ensure_runtime_state(self._state["alerts"], alert)
-        entry = history_module.format_entry(
-            alert,
-            event_type,
-            message,
-            details,
-            now=self._gateway.now_utc(),
-            flow_id=state.get("flow_id"),
-        )
-        self._state["history"] = history_module.append_entry(
-            self._state["history"], entry
-        )
-        state["last_event"] = entry
-        self._persist_state()
-
-    def _persist_state(self) -> None:
-        self._gateway.delay_save_store(self._store, self._state)
-
-    # ------------------------------------------------------------------
-    # Confirmation event handling (was ConfirmationActionHandler)
-    # ------------------------------------------------------------------
-
-    async def _on_action_event(self, event: Event) -> None:
-        now = self._gateway.now_utc()
-        outcome = responses_module.match_action_event(self._sessions, event.data, now)
-        if outcome is None:
-            return
-
         confirmed_by = responses_module.resolve_person_name(
             self._gateway.get_states_all("person"),
             event.context.user_id if event.context else None,
         )
-
-        if outcome.is_draft:
-            responses_module.clear(self._sessions, outcome.session_id)
-            if outcome.draft_alert is not None:
-                await self._dispatch_confirmation_effects(
-                    outcome.draft_alert,
-                    confirmed_by,
-                    now,
-                    test=True,
-                    record_history=False,
-                )
-            return
-
-        alert = self._alerts.get(outcome.alert_id) if outcome.alert_id else None
-        if alert is None:
-            return
-
-        state = alerts_module.ensure_runtime_state(self._state["alerts"], alert)
-        if state.get("confirmation_action_id") != outcome.session_id:
-            return
-
-        responses_module.clear(self._sessions, outcome.session_id)
-        alerts_module.mark_confirmed(self._state["alerts"], alert, confirmed_by, now)
-        await self._record_history(
-            alert,
-            HistoryEventType.CONFIRMED,
-            "Notification confirmed.",
-            {"confirmed_by": confirmed_by},
+        await self._bus.publish(
+            Event(
+                ev.ACTION_RECEIVED,
+                {"event_data": event.data, "now": now, "confirmed_by": confirmed_by},
+            )
         )
 
-        await self._dispatch_confirmation_effects(
-            alert, confirmed_by, now, test=False, record_history=True
-        )
+    # ------------------------------------------------------------------
+    # Direct history recording - only `delete_alert`/`get_history` still
+    # need `support/history.py`'s pure helpers directly; every recording
+    # flow goes through `features/history.py` listening on the bus.
+    # ------------------------------------------------------------------
 
-    async def _dispatch_confirmation_effects(
-        self,
-        alert: dict[str, Any],
-        confirmed_by: str,
-        now: datetime,
-        *,
-        test: bool,
-        record_history: bool,
-    ) -> None:
-        async def clear_notification() -> None:
-            try:
-                await self._clear_notification(alert)
-            except Exception:
-                _LOGGER.exception("Failed to clear notification for %s", alert["id"])
-
-        async def send_completion(completion_alert: dict[str, Any]) -> None:
-            await self._send_completion_notification(
-                alert,
-                completion_alert,
-                now,
-                test=test,
-                record_history=record_history,
-            )
-
-        async def run_follow_up_actions(
-            action_list: list[dict[str, Any]], variables: dict[str, Any]
-        ) -> None:
-            await self._run_configured_actions(
-                alert,
-                action_list,
-                variables,
-                HistoryEventType.CONFIRMATION_ACTION,
-                HistoryEventType.CONFIRMATION_ACTION_FAILED,
-                record_history=record_history,
-            )
-
-        await responses_module.execute_confirmation_effects(
-            alert,
-            confirmed_by,
-            now,
-            self._gateway.render_template,
-            clear_notification=clear_notification,
-            send_completion=send_completion,
-            run_follow_up_actions=run_follow_up_actions,
-        )
-
-    async def _send_completion_notification(
-        self,
-        alert: dict[str, Any],
-        completion_alert: dict[str, Any],
-        now: datetime,
-        *,
-        test: bool,
-        record_history: bool,
-    ) -> None:
-        variables = self._send_variables(completion_alert, 1, None, now, test=test)
-        snapshot = await self._fetch_registry_snapshot()
-
-        try:
-            commands_to_run = await notifications_module.compose_send(
-                completion_alert,
-                variables,
-                None,
-                snapshot,
-                self._gateway.render_template,
-                self._gateway.has_service,
-            )
-            for command in commands_to_run:
-                await self._execute(command)
-        except Exception as err:
-            if record_history:
-                await self._record_history(
-                    alert,
-                    HistoryEventType.COMPLETION_FAILED,
-                    "Completion notification failed.",
-                    {"error": str(err)},
-                )
-            else:
-                _LOGGER.exception("Failed to send draft completion notification")
-            return
-
-        if record_history:
-            await self._record_history(
-                alert,
-                HistoryEventType.COMPLETION_SENT,
-                "Completion notification sent.",
-                {},
-            )
+    def _persist_state(self) -> None:
+        self._gateway.delay_save_store(self._store, self._state)
 
     # ------------------------------------------------------------------
     # Public operations - called directly by bridge/websocket.py
@@ -808,7 +392,12 @@ class NotificationCenterController:
         alert = self._alerts.get(alert_id)
         if alert:
             try:
-                await self._clear_notification(alert)
+                await self._bus.publish(
+                    Event(
+                        ev.NOTIFICATION_CLEAR_REQUESTED,
+                        {"alert": alert, "now": self._gateway.now_utc()},
+                    )
+                )
             except Exception:
                 _LOGGER.exception(
                     "Failed clearing notification before deleting %s", alert_id
@@ -833,29 +422,28 @@ class NotificationCenterController:
         if alert is None:
             raise ValueError(f"Unknown alert: {alert_id}")
 
-        confirmation_action_id = self._create_test_action(alert)
+        confirmation_action_id = await self._create_test_action(alert)
         now = self._gateway.now_utc()
-        variables = self._send_variables(
-            alert, 1, confirmation_action_id, now, test=True
+        await self._bus.publish(
+            Event(
+                ev.NOTIFICATION_SEND_REQUESTED,
+                {
+                    "alert": alert,
+                    "attempt": 1,
+                    "confirmation_action_id": confirmation_action_id,
+                    "replace_existing": False,
+                    "test": True,
+                    "now": now,
+                    "propagate_errors": True,
+                    "on_sent": Event(
+                        ev.NOTIFICATION_TEST_SENT,
+                        {"alert": alert, "now": now},
+                    ),
+                },
+            )
         )
-        snapshot = await self._fetch_registry_snapshot()
 
-        commands_to_run = await notifications_module.compose_send(
-            alert,
-            variables,
-            confirmation_action_id,
-            snapshot,
-            self._gateway.render_template,
-            self._gateway.has_service,
-        )
-        for command in commands_to_run:
-            await self._execute(command)
-
-        await self._record_history(
-            alert, HistoryEventType.TEST, "Test notification sent.", {}
-        )
-
-    def _create_test_action(self, alert: dict[str, Any]) -> str | None:
+    async def _create_test_action(self, alert: dict[str, Any]) -> str | None:
         confirmation = alert["notification"].get("confirmation", {})
         if not confirmation.get("enabled", False):
             return None
@@ -863,13 +451,20 @@ class NotificationCenterController:
         action_id = f"NC_TEST_CONFIRM_{uuid.uuid4().hex}"
         state = alerts_module.ensure_runtime_state(self._state["alerts"], alert)
         state["confirmation_action_id"] = action_id
-        responses_module.track(
-            self._sessions, action_id, now=self._gateway.now_utc(), alert_id=alert["id"]
+        await self._bus.publish(
+            Event(
+                ev.CONFIRMATION_SESSION_STARTED,
+                {
+                    "session_id": action_id,
+                    "alert_id": alert["id"],
+                    "now": self._gateway.now_utc(),
+                },
+            )
         )
         return action_id
 
     async def test_alert_payload(self, alert: dict[str, Any]) -> dict[str, str | None]:
-        """Send an already-normalized editor draft without saving or touching runtime state."""
+        """Send a normalized editor draft without changing saved runtime state."""
 
         now = self._gateway.now_utc()
 
@@ -877,12 +472,16 @@ class NotificationCenterController:
         draft_alert = deepcopy(alert)
         draft_alert["id"] = session_id
 
-        responses_module.track(
-            self._sessions,
-            session_id,
-            now=now,
-            draft_alert=draft_alert,
-            ttl=responses_module.DRAFT_SESSION_TTL,
+        await self._bus.publish(
+            Event(
+                ev.CONFIRMATION_SESSION_STARTED,
+                {
+                    "session_id": session_id,
+                    "draft_alert": draft_alert,
+                    "ttl": responses_module.DRAFT_SESSION_TTL,
+                    "now": now,
+                },
+            )
         )
         self._schedule(
             self._expire_draft_after_ttl(
@@ -894,29 +493,32 @@ class NotificationCenterController:
         confirmation_action_id = None
         if confirmation.get("enabled", False):
             confirmation_action_id = f"NC_DRAFT_CONFIRM_{uuid.uuid4().hex}"
-            responses_module.track(
-                self._sessions,
-                confirmation_action_id,
-                now=now,
-                draft_alert=draft_alert,
-                ttl=responses_module.DRAFT_SESSION_TTL,
+            await self._bus.publish(
+                Event(
+                    ev.CONFIRMATION_SESSION_STARTED,
+                    {
+                        "session_id": confirmation_action_id,
+                        "draft_alert": draft_alert,
+                        "ttl": responses_module.DRAFT_SESSION_TTL,
+                        "now": now,
+                    },
+                )
             )
 
-        variables = self._send_variables(
-            draft_alert, 1, confirmation_action_id, now, test=True
+        await self._bus.publish(
+            Event(
+                ev.NOTIFICATION_SEND_REQUESTED,
+                {
+                    "alert": draft_alert,
+                    "attempt": 1,
+                    "confirmation_action_id": confirmation_action_id,
+                    "replace_existing": False,
+                    "test": True,
+                    "now": now,
+                    "propagate_errors": True,
+                },
+            )
         )
-        snapshot = await self._fetch_registry_snapshot()
-
-        commands_to_run = await notifications_module.compose_send(
-            draft_alert,
-            variables,
-            confirmation_action_id,
-            snapshot,
-            self._gateway.render_template,
-            self._gateway.has_service,
-        )
-        for command in commands_to_run:
-            await self._execute(command)
 
         return {
             "session_id": session_id,
@@ -928,23 +530,22 @@ class NotificationCenterController:
     ) -> None:
         seconds = max(0, (expires_at - self._gateway.now_utc()).total_seconds())
         await asyncio.sleep(seconds)
-        responses_module.expire_drafts(self._sessions, self._gateway.now_utc())
+        await self._bus.publish(
+            Event(
+                ev.CONFIRMATION_SESSION_DISCARD_REQUESTED,
+                {"session_id": session_id, "now": self._gateway.now_utc()},
+            )
+        )
 
     async def discard_test_payload(self, session_id: str) -> None:
         """Explicitly dispose an editor draft test session."""
 
-        now = self._gateway.now_utc()
-        responses_module.expire_drafts(self._sessions, now)
-
-        keys_to_clear = [session_id]
-        keys_to_clear.extend(
-            key
-            for key, session in self._sessions.items()
-            if session.get("draft_alert")
-            and session["draft_alert"].get("id") == session_id
+        await self._bus.publish(
+            Event(
+                ev.CONFIRMATION_SESSION_DISCARD_REQUESTED,
+                {"session_id": session_id, "now": self._gateway.now_utc()},
+            )
         )
-        for key in keys_to_clear:
-            responses_module.clear(self._sessions, key)
 
     async def get_history(
         self, alert_id: str | None = None, limit: int = 100
@@ -995,3 +596,4 @@ async def build_controller(hass: HomeAssistant) -> NotificationCenterController:
     """Construct the controller. The only place `__init__.py` should call."""
 
     return NotificationCenterController(hass)
+
