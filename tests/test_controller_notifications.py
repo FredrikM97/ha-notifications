@@ -8,7 +8,9 @@ import unittest
 from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
-notifications = importlib.import_module(f"{PACKAGE_NAME}.controller.notifications")
+notifications = importlib.import_module(
+    f"{PACKAGE_NAME}.controller.features.notification"
+)
 commands = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 
 
@@ -100,18 +102,13 @@ def _alert(**overrides):
 
 
 class ComposeSendTests(unittest.IsolatedAsyncioTestCase):
-    async def test_explicit_action_route_with_no_target(self):
+    async def test_no_target_has_no_delivery_route(self):
         alert = _alert()
         snapshot = empty_snapshot()
-        result = await notifications.compose_send(
-            alert, {}, None, snapshot, render, has_service_false
-        )
-        self.assertEqual(len(result), 1)
-        self.assertIsInstance(result[0], commands.CallService)
-        self.assertEqual(result[0].domain, "notify")
-        self.assertEqual(result[0].service, "mobile_app_phone")
-        self.assertEqual(result[0].data["message"], "Message")
-        self.assertEqual(result[0].data["title"], "Title")
+        with self.assertRaises(ValueError):
+            await notifications.compose_send(
+                alert, {}, None, snapshot, render, has_service_false
+            )
 
     async def test_generic_notify_route(self):
         alert = _alert(
@@ -158,6 +155,42 @@ class ComposeSendTests(unittest.IsolatedAsyncioTestCase):
             alert, {}, None, snapshot, render, has_service_true
         )
         self.assertEqual(result[0].service, "mobile_app_my_phone")
+
+    async def test_mixed_direct_recipients_report_unresolved_recipient(self):
+        valid_device = FakeDevice("device_1", config_entries={"entry_1"}, name="Phone")
+        invalid_device = FakeDevice("device_2", name="Tablet")
+        entity = FakeEntity("notify.mobile_app_phone", device_id="device_1")
+
+        class FakeEntry:
+            entry_id = "entry_1"
+            data = {}
+            title = "Phone"
+
+        snapshot = empty_snapshot(
+            entities=[entity],
+            devices=[valid_device, invalid_device],
+            mobile_app_entries=[FakeEntry()],
+        )
+        alert = _alert(
+            notification={
+                "action": "notify.send_message",
+                "target": {"device_id": ["device_1", "device_2"]},
+                "title": "T",
+                "message": "M",
+                "confirmation": {"enabled": False},
+            }
+        )
+
+        result = await notifications.compose_send(
+            alert,
+            {},
+            None,
+            snapshot,
+            render,
+            lambda domain, service: service == "mobile_app_phone",
+        )
+        self.assertEqual(result[0].service, "send_message")
+        self.assertEqual(result[0].target, {"device_id": ["device_1", "device_2"]})
 
     async def test_confirmation_requires_resolved_mobile_app_route(self):
         alert = _alert(
@@ -223,9 +256,18 @@ class ComposeSendTests(unittest.IsolatedAsyncioTestCase):
                 alert, {}, None, snapshot, render, has_service_false
             )
 
+    def test_recipient_resolution_summary_names_invalid_recipient(self):
+        summary = notifications._recipient_resolution_summary(
+            empty_snapshot(), {"device_id": ["device_1"]}, has_service_false
+        )
+        self.assertEqual(
+            summary,
+            "Invalid: device_id 'device_1' (no notification-capable device found).",
+        )
+
 
 class ComposeClearTests(unittest.IsolatedAsyncioTestCase):
-    async def test_clear_with_explicit_notify_action(self):
+    async def test_clear_without_target_returns_no_commands(self):
         alert = _alert(
             notification={
                 "action": "notify.send_message",
@@ -238,9 +280,7 @@ class ComposeClearTests(unittest.IsolatedAsyncioTestCase):
         result = await notifications.compose_clear(
             alert, {}, snapshot, render, has_service_false
         )
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].service, "send_message")
-        self.assertEqual(result[0].data["data"]["tag"], "notification_center_alert_1")
+        self.assertEqual(result, [])
 
     async def test_clear_with_no_matching_route_returns_no_commands(self):
         alert = _alert(

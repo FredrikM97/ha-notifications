@@ -31,18 +31,18 @@ function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
 }
 
 describe("buildAlertPayload", () => {
-  it("resolves the generic notify action when recipients are selected", () => {
+  it("omits the delivery action when recipients are selected", () => {
     const original = defaultAlert();
     original.id = "test_alert"; // defaultAlert() ids by Date.now(), not snapshot-stable
     const payload = buildAlertPayload(
       original,
       values({ target: { entity_id: ["notify.mobile_app_phone"] } }),
     );
-    expect(payload.notification.action).toBe("notify.send_message");
+    expect(payload.notification.action).toBeUndefined();
     expect(payload).toMatchSnapshot();
   });
 
-  it("throws when there are no recipients and no existing action", () => {
+  it("throws when there are no recipients", () => {
     const original = defaultAlert();
     original.notification.action = "";
     expect(() => buildAlertPayload(original, values())).toThrow(
@@ -62,6 +62,6 @@ describe("buildAlertPayload", () => {
           },
         }),
       ),
-    ).toThrow(/Confirmation requires at least one notification recipient/);
+    ).toThrow(/Select at least one device, area, label, or notification entity/);
   });
 });

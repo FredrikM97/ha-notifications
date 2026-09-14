@@ -1,17 +1,12 @@
-"""Pure follow-up action execution: render an alert's configured actions.
-
-Replaces `runtime/actions.py`. Holds no state and makes no decisions about
-*when* to run - `controller/core.py` decides that and calls
-`build_service_calls` afterwards, then executes the returned commands.
-"""
+"""Render configured follow-up actions into service-call commands."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from .commands import CallService, Command
-from .rendering import Render, remove_none, render_value
+from ..commands import CallService, Command
+from ..rendering import Render, remove_none, render_value
 
 
 @dataclass(frozen=True)

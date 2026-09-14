@@ -1,29 +1,16 @@
-"""Pure confirmation/response tracking: pending sessions + event routing.
-
-Replaces `runtime/confirmations.py` and `runtime/drafts.py`. One session
-table covers both real (saved) alerts and unsaved editor test payloads -
-`track()`/`clear()` are the same two calls either way; only whether
-`alert_id` or `draft_alert` is set differs. No Home Assistant import: a
-person-name lookup takes a plain list of already-fetched person states
-instead of `hass`, and template rendering takes an injected `render`
-callable, matching `controller/notifications.py`/`controller/actions.py`.
-"""
+"""Track confirmation sessions and route response events."""
 
 from __future__ import annotations
 
 from copy import deepcopy
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from .rendering import Render, render_value
+from ..rendering import Render, render_value
 
 DRAFT_SESSION_TTL = timedelta(minutes=15)
-
-
-# ----------------------------------------------------------------------
-# Session table (was runtime/drafts.py + the `_pending_actions` index)
-# ----------------------------------------------------------------------
 
 
 def track(
@@ -93,6 +80,47 @@ class ResponseOutcome:
         return self.draft_alert is not None
 
 
+@dataclass(frozen=True)
+class ConfirmationEffects:
+    """Actions selected by the confirmation feature after acknowledgement."""
+
+    clear_notification: bool
+    completion_alert: dict[str, Any] | None
+    follow_up_actions: list[dict[str, Any]]
+
+
+async def execute_confirmation_effects(
+    alert: dict[str, Any],
+    confirmed_by: str,
+    now: datetime,
+    render: Render,
+    *,
+    clear_notification: Callable[[], Awaitable[None]],
+    send_completion: Callable[[dict[str, Any]], Awaitable[None]],
+    run_follow_up_actions: Callable[
+        [list[dict[str, Any]], dict[str, Any]], Awaitable[None]
+    ],
+) -> None:
+    """Execute feature-selected effects through injected runtime callbacks."""
+
+    effects = await plan_confirmation_effects(alert, confirmed_by, now, render)
+    if effects.clear_notification:
+        await clear_notification()
+    if effects.completion_alert is not None:
+        await send_completion(effects.completion_alert)
+    if effects.follow_up_actions:
+        await run_follow_up_actions(
+            effects.follow_up_actions,
+            {
+                "alert_id": alert["id"],
+                "alert_name": alert["name"],
+                "alert_active": True,
+                "confirmed_by": confirmed_by,
+                "now": now,
+            },
+        )
+
+
 def extract_action_id(event_data: Any) -> str | None:
     """Return the confirmation action ID from a mobile-action event payload."""
 
@@ -126,7 +154,7 @@ def match_action_event(
 
 
 # ----------------------------------------------------------------------
-# Person name resolution (was runtime/confirmations.py's resolve_user)
+# Person name resolution
 # ----------------------------------------------------------------------
 
 
@@ -162,14 +190,16 @@ async def build_completion_alert(
 
     notification = alert["notification"]
     confirmation = notification.get("confirmation", {})
+    if not confirmation.get("notify_on_confirmation", False):
+        return None
+
     completion_message = confirmation.get("completion_message") or ""
 
-    if confirmation.get("notify_on_confirmation", False):
-        completion_message = (
-            confirmation.get("confirmation_message")
-            or completion_message
-            or "{{ confirmed_by }} confirmed this notification."
-        )
+    completion_message = (
+        confirmation.get("confirmation_message")
+        or completion_message
+        or "{{ confirmed_by }} confirmed this notification."
+    )
 
     if not completion_message:
         return None
@@ -190,3 +220,24 @@ async def build_completion_alert(
     completion_alert["notification"]["confirmation"] = {"enabled": False}
 
     return completion_alert
+
+
+async def plan_confirmation_effects(
+    alert: dict[str, Any],
+    confirmed_by: str,
+    now: datetime,
+    render: Render,
+) -> ConfirmationEffects:
+    """Decide confirmation side effects without executing them."""
+
+    confirmation = alert["notification"].get("confirmation", {})
+    completion_alert = await build_completion_alert(alert, confirmed_by, now, render)
+    actions = confirmation.get("actions", [])
+    if not isinstance(actions, list):
+        actions = []
+
+    return ConfirmationEffects(
+        clear_notification=confirmation.get("clear_on_confirmation", True),
+        completion_alert=completion_alert,
+        follow_up_actions=actions if confirmation.get("actions_enabled", False) else [],
+    )

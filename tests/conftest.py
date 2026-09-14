@@ -21,8 +21,7 @@ def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
         "conditions": [{"type": "template", "template": "{{ true }}"}],
         "monitor": {"on_change": True, "startup": True},
         "notification": {
-            "action": "notify.send_message",
-            "target": {},
+            "target": {"entity_id": ["notify.test"]},
             "title": "Title",
             "message": "Message",
             "confirmation": {"enabled": False},

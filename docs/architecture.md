@@ -42,10 +42,11 @@ flowchart TB
     subgraph ControllerPkg["controller/ package"]
         Core["core.py\nKERNEL: owns gateway,\ngeneric Command dispatcher (_execute),\nsetup, public API, sequencing glue only"]
         Commands["commands.py\nCallService / TrackTemplate / TrackInterval /\nUnsubscribe / PersistSave (closed set)"]
-        Alerts["alerts.py (pure)\nregister_specs -> [Command]\non_condition_result/on_interval_due -> TriggerTransition"]
-        Responses["responses.py (pure-ish)\ntrack / clear / match_action_event -> ResponseOutcome"]
-        ActionsPy["actions.py (pure)\nbuild_service_calls -> [ActionResult]"]
-        Notifications["notifications.py (pure)\ncompose_send / compose_clear -> [Command]"]
+      Alerts["features/triggering.py (pure)\nregister_specs -> [Command]\non_condition_result/on_interval_due -> TriggerTransition"]
+      Responses["features/confirmation.py (pure-ish)\ntrack / clear / match_action_event -> ResponseOutcome"]
+      ActionsPy["features/follow_up_actions.py (pure)\nbuild_service_calls -> [ActionResult]"]
+      Notifications["features/notification.py (pure)\ncompose_send / compose_clear -> [Command]"]
+      NotificationRoutes["notification_services/\ntargets + targeted + Mobile App"]
     end
 
     StorageMod["support/storage.py (pure)\nYAML (de)serialization + state shape repair"]
@@ -83,6 +84,7 @@ flowchart TB
 
     Core -- "compose_send / compose_clear" --> Notifications
     Notifications -. "[Command]" .-> Core
+   Notifications --> NotificationRoutes
 
     Core -- "normalize_and_validate_yaml / normalize_and_dump_yaml" --> StorageMod
     StorageMod --> Models
@@ -111,14 +113,14 @@ internal helpers.
 | Concern | Entry point | Rule |
 | --- | --- | --- |
 | Frontend to backend communication | `frontend/api.ts` | This is the only frontend module allowed to call `hass.connection.sendMessagePromise`. UI modules import API functions, not websocket message names. |
-| Backend frontend-facing operations | `controller/core.py` (`NotificationCenterController`) | `bridge/websocket.py` calls the controller's public methods directly. It never reaches into `alerts.py`/`responses.py`/`notifications.py`/`actions.py`, and it never imports `ha.gateway`. |
+| Backend frontend-facing operations | `controller/core.py` (`NotificationCenterController`) | `bridge/websocket.py` calls the controller's public methods directly. It never reaches into `controller/features/` modules, and it never imports `ha.gateway`. |
 | Home Assistant access | `ha/gateway.py` (`HomeAssistantGateway`) | The *only* module that imports `homeassistant.*`. It is constructed and called only by `controller/core.py`. No other module - not even `support/storage.py`/`bridge/panel.py` - imports it. |
-| Config normalization | `domain/alert_schema.py` (`ConfigNormalizer`/`normalize_config`) | Save, draft, validation, storage, and reload paths normalize before acting. Do not build one-off config wrappers outside the normalizer. |
+| Config normalization | `domain/alert_schema.py` (`ConfigNormalizer`/`normalize_config`) | Owns the shared alert document shape, conditions, durations, and YAML safety. Unknown alert and notification fields are preserved for feature-owned extensions; do not add feature-specific field handling here unless it is a shared boundary invariant. |
 | Condition compilation | `domain/condition_schema.py` (`compile_condition`) | The only place visual conditions become Jinja template text. |
-| Trigger state machine | `controller/alerts.py` | Owns "when does an alert fire": condition/interval watch specs, and the active/acknowledged/repeat decision logic, returned as a `TriggerTransition` for `core.py` to act on. Never calls `notifications.py`/`actions.py` itself. |
-| Confirmation/session tracking | `controller/responses.py` | Owns the one pending-session table (real alerts and unsaved test drafts alike) and incoming mobile-action-event routing. |
-| Follow-up actions | `controller/actions.py` (`build_service_calls`) | Renders an alert's configured extra service calls; per-action errors are isolated so one bad action doesn't stop the others. |
-| Notification composition | `controller/notifications.py` (`compose_send`/`compose_clear`) | The only place that decides message content, recipients, and delivery route (including legacy Mobile App fallback). Returns `Command`s; never calls the gateway itself. |
+| Trigger state machine | `controller/features/triggering.py` | Owns "when does an alert fire": condition/interval watch specs, and the active/acknowledged/repeat decision logic, returned as a `TriggerTransition` for `core.py` to act on. This combines the frontend condition and monitor sections. |
+| Confirmation/session tracking | `controller/features/confirmation.py` | Owns the one pending-session table (real alerts and unsaved test drafts alike) and incoming mobile-action-event routing. |
+| Follow-up actions | `controller/features/follow_up_actions.py` (`build_service_calls`) | Renders an alert's configured extra service calls; per-action errors are isolated so one bad action doesn't stop the others. |
+| Notification composition | `controller/features/notification.py` (`compose_send`/`compose_clear`) | Stable controller-facing composer for message content and command construction. It delegates recipient expansion plus targeted and Mobile App service selection to `controller/notification_services/`; those components return plain resolution data, never gateway calls. |
 | The kernel | `controller/core.py` | Owns the gateway, the generic `_execute(Command)` dispatcher, and the sequencing glue between pure modules. Business decisions must not leak in here - if `_execute`'s dispatcher or `core.py`'s sequencing methods grow real decision logic, that logic belongs in a pure module instead. |
 | Alert payload construction | `frontend/alert-payload.ts` | Editor sections mutate form state; this module converts form values into the saved `Alert` payload. |
 
@@ -145,7 +147,8 @@ The backend has four levels:
    interface: normalize/validate, then call the controller. `bridge/panel.py`
    also builds the pure frontend-registration plan `core.py` uses at setup.
 3. **Controller** (`controller/`) is the brain: `core.py` is the kernel;
-   `alerts.py`/`responses.py`/`actions.py`/`notifications.py` are pure
+   `features/triggering.py`/`features/confirmation.py`/
+   `features/follow_up_actions.py`/`features/notification.py` are pure
    decision/composition modules it calls into.
 4. **Home Assistant boundary** (`ha/gateway.py`) is the only module that
    actually talks to Home Assistant, called only by `controller/core.py`.
@@ -217,4 +220,13 @@ To add a new feature:
    `frontend/api.ts`, never constructing websocket messages directly.
 6. Update this document and `.github/logic-index.md` if the new module
    introduces a new boundary or changes an existing one's responsibility.
+
+Notification delivery follows one additional rule: shared target expansion and
+`DeliveryType` classification stay in
+`controller/notification_services/targets.py`; targeted notification service
+selection lives in `targeted.py`; Mobile App entry-name and service resolution
+lives in `mobile_app.py`. Closely related
+lookup helpers stay together rather than being split into nested files.
+`controller/notifications.py` remains the one composer interface used by
+`core.py`.
 

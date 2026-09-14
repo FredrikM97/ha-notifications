@@ -2,7 +2,7 @@
 
 ## Known issues / follow-ups
 
-- **Recipient validation errors don't say which recipient is invalid.**
+- [x] **Recipient validation errors don't say which recipient is invalid.**
   When a selected notification target mixes recipients that resolve to a
   valid direct notify service with ones that don't (e.g. one device has a
   registered Mobile App notify service, another doesn't), the unresolved
@@ -14,9 +14,10 @@
   (`controller/notifications.py`, `_notification_route`) with no
   indication of which of the originally selected devices/entities/areas
   were the problem versus which were fine. Fix should surface a per-recipient
-  breakdown (valid vs. invalid, and why) back through to
-  `frontend/recipient-picker.ts`/the save-error toast, not just a single
-  pass/fail message for the whole target.
+  breakdown (valid vs. invalid, and why) through the existing save/test error
+  toast. Mixed direct Mobile App recipients now fail with named details
+  instead of silently dropping unresolved recipients; confirmation delivery
+  errors include the same details.
 
 - [x] **Split editor sections into one file each, to isolate logic per
   feature.** `frontend/editor/sections.ts` used to hold all 10 section
@@ -42,30 +43,98 @@
     here so the intent isn't lost. This is the frontend half of the
     still-open Phase 7 (full component-per-feature Lit split) below.
 
-- **Backend feature modules shouldn't live directly under `controller/`.**
-  `controller/` currently mixes the kernel (`core.py`, `commands.py`) with
-  feature/decision modules (`alerts.py`, `responses.py`, `notifications.py`,
-  `actions.py`) in one flat folder. Move the feature modules into their
-  own folder, named to mirror the frontend's structure (the frontend now
-  has a top-level `frontend/sections/` for per-section UI, so a top-level
-  `controller/features/` - or similar - would read consistently), keeping
-  `core.py`/`commands.py` as the kernel's own files. Open questions to
-  resolve before doing this:
-  - Should a "feature" that has natural sub-parts (e.g. a hypothetical
-    confirmation feature with a template-rendering sub-piece) live as one
-    file, or split into a subfolder of its own? i.e. does splitting go
-    arbitrarily deep, or should closely-related sub-logic stay in one file
-    to avoid over-fragmenting and losing the plot across too many small
-    files? No decision made yet - needs discussion before implementing.
-  - Once `controller/features/` (or whatever it's named) exists, does
-    `bridge/websocket.py` still call `controller/core.py` exclusively (per
-    the existing "one interface per subsystem" rule), or would per-feature
-    modules ever be called more directly? Current architecture rule says
-    core.py stays the only entry point - confirm that still holds before
-    moving anything.
-  Not implemented - this needs the open questions above resolved first,
-  ideally alongside Phase 7's frontend component split so both sides
-  settle on matching names/structure at the same time.
+- [x] **Split notification delivery by delivery type.** Shared target
+  expansion now lives in `controller/notification_services/targets.py`,
+  targeted notification planning in `targeted.py`, and Mobile App entry/service
+  resolution in `mobile_app.py`. `controller/features/notifications.py`
+  remains the single composer interface for `core.py`, so legacy and generic
+  behavior have dedicated owners without duplicating the public wiring.
+  - [x] **Naming/placement review:** the package is now
+    `controller/notification_services/`, with role-based module names. It
+    remains under `controller/` because it contains controller decisions and
+    injected Home Assistant capability checks, not shared domain models.
+  - [x] **Route classification:** avoid treating the literal action
+    `notify.send_message` as the primary signal for the generic route. Add a
+    dedicated classification step that derives the delivery type from legacy
+    capabilities, target shape, and user recipients.
+    The generic component now constructs its canonical action separately from
+    that classification.
+  - [x] **Remove notification-route compatibility:** target-based notifications
+    now let the backend derive the generic route and no longer persist the
+    generic `notify.send_message` action. Old generic action values normalize
+    away. No notification delivery type or action is persisted; route
+    selection uses the target, registry capabilities, and available notify
+    services.
+  - [x] **Remove empty notification actions:** target-based notification
+    payloads no longer include `action: ""`; the editor default and normalized
+    persisted shape omit the field. The backend evaluates the target and
+    capabilities directly.
+
+  - [x] **Mixed delivery targets:** a target containing both direct
+    Mobile App-capable and unresolved recipients receives one shared
+    notification through the generic target route. Do not issue both direct
+    and generic calls for the same target, or recipients may receive
+    duplicates. Mixed targets now prefer the generic route.
+  - [x] **Remove generic action terminology:** the internal
+    `generic_notify_action()` helper was removed. Delivery classification now
+    selects a generic delivery path, which uses Home Assistant's
+    `send_message` service internally without representing it as a persisted
+    notification action.
+
+  backend `controller/features/` package should not inherit from or
+  auto-discover frontend `frontend/sections/` modules: backend features have
+  different APIs, lifecycles, and runtime sequencing. Keep explicit imports
+  from `controller/core.py` so startup behavior remains deterministic. If
+  feature registration grows, add an explicit backend registry with typed
+  entries rather than filesystem/module auto-discovery.
+
+  modules now live under `controller/features/` (`triggering.py`,
+  `confirmation.py`, `notification.py`, and `follow_up_actions.py`), while `core.py`, `commands.py`, and
+  shared controller infrastructure remain at the package root. Each feature
+  remains one file; related sub-logic is not split further. `core.py` remains
+  the only runtime entry point.
+  - **Decision for notification delivery:** this feature is split one level
+    below `controller/` under `notification_services/`; recipient expansion is
+    separate from targeted and Mobile App service logic. `controller/core.py`
+    remains the only runtime entry point and continues to call
+    `controller/features/notification.py`.
+
+- [x] **Remove migration-era controller comments.** Feature modules and
+  controller infrastructure now describe their current responsibilities
+  directly instead of referring to retired `runtime/` and `delivery/`
+  layouts or narrating which module used to own the code.
+
+- [x] **Edit view should replace the dashboard view.** Pressing Edit should
+  hide or navigate away from the dashboard alert panel and restore it when the
+  editor closes. Currently the editor can leave dashboard content visible
+  behind or alongside the edit view.
+
+- [x] **Replace the reminder interval control with a real HH:MM:SS field.**
+  The interval now uses separate hour, minute, and second inputs while
+  preserving durations longer than 24 hours.
+
+- [x] **Make "Check every" clock-aware.** This control is a duration, not a
+  time-of-day clock, so it now uses an explicit `HH:MM:SS` format independent
+  of the system's 12-hour or 24-hour convention.
+
+- [x] **Keep user selectors out of notify service targets.** `user_id` is an
+  editor/backend recipient selector and is expanded to supported entity/device
+  targets before delivery. It is no longer forwarded to Home Assistant's
+  generic notify service, which rejects it as an extra target key.
+
+- [x] **Confirmation effects should be feature-owned.** The confirmation
+  feature now plans clearing, completion notification, and post-confirmation
+  actions in one `ConfirmationEffects` result. The controller kernel executes
+  that plan instead of evaluating `notify_on_confirmation` itself, reducing
+  drift between confirmation settings and runtime behavior.
+  - [x] Core now supplies execution callbacks only; the confirmation feature
+    owns effect ordering and decides which callbacks are invoked.
+
+- [x] **Dispatch runtime states through typed transitions.** Triggering now
+  emits `TransitionKind` state events and core routes them through a handler
+  map. Core no longer contains one inline conditional chain deciding what each
+  condition state means; feature transitions carry the action data and core
+  executes the selected effect.
 
 ## Architecture rewrite (in progress)
 
@@ -75,15 +144,10 @@ gateway, one controller "brain" package, pure sub-managers, a shared
 complete; `python3 -m pytest tests/` is green (99 passed) and
 `npm run build && npm run test:frontend` pass.
 
-**Remaining follow-up (not done in this pass):** `frontend/editor/index.ts`'s
-`AlertEditorController` and `frontend/editor/helpers.ts`'s `showYaml()`/
-`showEditorToast()` still use imperative DOM (`document.createElement`,
-manual `classList`/attribute manipulation) instead of pure Lit rendering.
-This is UI behavior best verified in a browser, not just by
-`tsc`/`esbuild`/the smoke test, so it's deliberately left for a dedicated
-follow-up session rather than converted blind. See
-`docs/architecture.md`'s "Frontend Shape" section and the session plan's
-Further Considerations for the target shape.
+**Remaining follow-up:** `frontend/editor/index.ts` and
+`frontend/editor/helpers.ts` still contain imperative DOM orchestration around
+the Lit templates. Convert the editor shell, section navigation, YAML modal,
+and editor toasts to component-owned Lit state in a browser-verified pass.
 
 - [x] Phase 0 — this checklist.
 - [x] Phase 1 — `ha/gateway.py`, the sole Home Assistant API wrapper.
@@ -91,11 +155,11 @@ Further Considerations for the target shape.
 - [x] `domain/` rename — `models.py`/`model_conditions.py`/`durations.py`
       moved to `domain/alert_schema.py`/`domain/condition_schema.py`/
       `domain/durations.py`; all callers updated; tests green.
-- [x] Phase 3 — pure `controller/notifications.py` (replaces `delivery/`).
-- [x] Phase 4 — pure `controller/alerts.py` + `controller/responses.py`
+- [x] Phase 3 — pure `controller/features/notification.py` (replaces `delivery/`).
+- [x] Phase 4 — pure `controller/features/triggering.py` + `controller/features/confirmation.py`
       (replaces `runtime/engine.py` + `runtime/state.py` +
       `runtime/confirmations.py` + `runtime/drafts.py`).
-- [x] Phase 5 — pure `controller/actions.py` (replaces `runtime/actions.py`).
+- [x] Phase 5 — pure `controller/features/follow_up_actions.py` (replaces `runtime/actions.py`).
 - [x] Phase 6 — pure `storage.py`, `history.py`, `panel.py`.
 - [x] Phase 7 — `controller/core.py`, the kernel.
 - [x] Phase 8 — `frontend_bridge/` (`validation.py` + `websocket.py`).
@@ -123,6 +187,38 @@ Further Considerations for the target shape.
 - [x] `domain/alert_schema.py`, `domain/condition_schema.py`,
       `domain/durations.py` — renamed/relocated (was `models.py`,
       `model_conditions.py`, `durations.py`); folded into Phase 6.
+
+- [ ] **Loosen `domain/alert_schema.py` ownership.** Investigate replacing the
+  field-by-field alert normalizer with a small data object or boundary-level
+  YAML shape validator. Feature modules should be able to add and own their
+  fields without updating one central schema for every change. Preserve the
+  guarantees that saved YAML has a valid basic alert structure, unknown feature
+  data is retained, and invalid input cannot overwrite the last valid config.
+  Decide whether the replacement should use typed core fields plus an
+  extensible mapping, or a lightweight document wrapper around the YAML data.
+  - [x] Unknown alert and notification fields are now preserved during
+    normalization; retired compatibility fields remain explicitly excluded.
+    The module still owns shared condition/duration normalization and basic
+    YAML safety, so full replacement remains open.
+  - [x] A small `AlertEnvelope` dataclass now owns only the shared alert
+    boundary; feature-owned fields remain in an extensible `extras` mapping.
+  - [x] `ConfigNormalizer` now accepts registered `AlertFeature` hooks so a
+    feature can add or normalize its own alert fields without expanding the
+    shared field list.
+  - [x] Confirmation defaults and mapping now live in the dataclass-backed
+    `domain/confirmation_schema.py` feature boundary instead of a private
+    helper inside `alert_schema.py`.
+  - [ ] **Delegate feature-owned structure:** reduce the shared schema to the
+    basic alert document boundary and move feature-specific defaults,
+    normalization, and validation into the owning backend features. Apply the
+    same rule to notification recipient types: user recipients and Mobile App
+    recipients should define and maintain their own structures under
+    `controller/notification_services/`, rather than having one central alert
+    schema manage both. Preserve extension-field retention and invalid-YAML
+    protection while making this change.
+    - [x] Target normalization no longer owns a fixed recipient-type allowlist;
+      new recipient selectors are retained for `notification_services/` to
+      interpret.
 
 ## Legacy TODO (complete for the pre-rewrite layout)
 

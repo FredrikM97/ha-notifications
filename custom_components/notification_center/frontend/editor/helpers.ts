@@ -46,7 +46,6 @@ export function defaultAlert(): Alert {
     conditions: [{ type: "template", template: "" }],
     monitor: { on_change: true, startup: true },
     notification: {
-      action: "notify.send_message",
       target: {},
       title: "",
       message: "",
@@ -160,15 +159,23 @@ export function durationInput(
   value: string,
   onChange: (next: string) => void,
 ): TemplateResult {
-  const update = (event: Event) => {
+  const normalize = (raw: string): string => {
+    const parts = raw.replace(/[^\d:]/g, "").split(":");
+    const seconds = Number(parts.pop() || 0);
+    const minutes = Number(parts.pop() || 0);
+    const hours = Number(parts.join("") || 0);
+    return `${hours}:${String(Math.min(minutes, 59)).padStart(2, "0")}:${String(
+      Math.min(seconds, 59),
+    ).padStart(2, "0")}`;
+  };
+  const update = (event: Event): void => {
     const input = event.currentTarget as HTMLInputElement;
-    const digits = input.value.replace(/\D/g, "") || "0";
-    const seconds = digits.slice(-2).padStart(2, "0");
-    const minutes = digits.slice(-4, -2).padStart(2, "0");
-    const hours = digits.slice(0, -4) || "0";
-    const formatted = `${hours}:${minutes}:${seconds}`;
-    input.value = formatted;
-    onChange(formatted);
+    onChange(input.value);
+  };
+  const commit = (event: Event): void => {
+    const input = event.currentTarget as HTMLInputElement;
+    input.value = normalize(input.value);
+    onChange(input.value);
   };
 
   return html`<input
@@ -176,8 +183,11 @@ export function durationInput(
     type="text"
     inputmode="numeric"
     placeholder="HH:MM:SS"
+    aria-label="Duration (HH:MM:SS)"
     .value=${value}
     @input=${update}
+    @blur=${commit}
+    @change=${commit}
   />`;
 }
 

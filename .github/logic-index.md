@@ -23,25 +23,30 @@ This is a compact map of the integration's main execution flows and decision poi
   - the closed `Command` vocabulary (`CallService`, `TrackTemplate`,
     `TrackInterval`, `Unsubscribe`, `PersistSave`) - the only things
     `core.py` executes against the gateway
-- `custom_components/notification_center/controller/alerts.py`
+- `custom_components/notification_center/controller/features/triggering.py`
   - pure: `register_specs` (what to watch), `on_condition_result` (the
     active/acknowledged/repeat state machine, returns a `TriggerTransition`),
     `record_send_result`, `mark_confirmed`. Operates on a plain `states`
     dict `core.py` owns and persists - no Home Assistant import
-- `custom_components/notification_center/controller/responses.py`
+- `custom_components/notification_center/controller/features/confirmation.py`
   - pure-ish: one session table (`track`/`clear`) covering both real
     alerts and unsaved editor test payloads, `match_action_event` (routes
     an incoming mobile-action event to a pending session), and
     `build_completion_alert` (the post-confirmation completion message)
-- `custom_components/notification_center/controller/actions.py`
+- `custom_components/notification_center/controller/features/follow_up_actions.py`
   - pure: `build_service_calls` renders an alert's configured follow-up
     actions into service-call commands, isolating one bad action's error
     from the others (`ActionResult(index, command, error)`)
-- `custom_components/notification_center/controller/notifications.py`
-  - pure: `compose_send`/`compose_clear` - the entire former `delivery/`
-    folder (rendering, recipient/target expansion, legacy Mobile App
-    resolution, route planning, confirmation-button validation) folded
-    into one module producing `CallService` commands
+- `custom_components/notification_center/controller/features/notification.py`
+  - pure composer: `compose_send`/`compose_clear` - renders notification
+    content, validates confirmation delivery, and produces `CallService`
+    commands through the stable controller-facing interface
+- `custom_components/notification_center/controller/notification_services/`
+  - pure service-selection components: `targets.py` owns shared target
+    expansion and notify-entity matching; `targeted.py` owns generic target
+    notification planning; `mobile_app.py` owns Mobile App
+    entry-name to notify-service resolution and verification. Direct Mobile
+    App lookup does not leak into generic planning.
 - `custom_components/notification_center/controller/rendering.py`
   - pure `render_value`/`remove_none` shared by `notifications.py` and
     `actions.py`, taking an injected `render` callable instead of `hass`
@@ -146,7 +151,7 @@ For most bugs, read in this order:
 - Notification not sent: `controller/notifications.py` (`compose_send`),
   `controller/core.py` (`_send_notification`), `ha/gateway.py`
 - Notification delivery route or notify service failure:
-  `controller/notifications.py`
+  `controller/features/notifications.py`, `controller/notification_services/`
 - Confirmation not handled: `controller/responses.py`, `controller/core.py`
   (`_on_action_event`, `_run_confirmation_effects`)
 

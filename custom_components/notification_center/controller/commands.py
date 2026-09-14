@@ -1,13 +1,4 @@
-"""Home-Assistant-facing commands, the whole vocabulary the kernel executes.
-
-Pure modules (`controller/alerts.py`, `controller/actions.py`,
-`controller/notifications.py`) return lists of these dataclasses to say
-"please do this one HA-facing thing" - they never call Home Assistant
-themselves. `controller/core.py` is the only place that interprets and
-executes them. Keep this set closed and small: add one dataclass here and
-one branch in `core.py`'s `_execute` when a genuinely new kind of
-HA-facing intent is needed, never a generic "run anything" escape hatch.
-"""
+"""Home Assistant commands executed by the controller kernel."""
 
 from __future__ import annotations
 

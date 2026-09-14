@@ -72,6 +72,7 @@ class NormalizationTests(unittest.TestCase):
                 "entity_id": ["light.kitchen"],
                 "device_id": ["phone"],
                 "user_id": ["a-user-id"],
+                "ignored": ["value"],
             },
         )
         self.assertEqual(models.normalize_target(None), {})
@@ -112,6 +113,48 @@ class NormalizationTests(unittest.TestCase):
 
         self.assertNotIn("persistent", notification)
         self.assertFalse(notification["confirmation"]["clear_on_confirmation"])
+
+    def test_feature_fields_are_preserved_during_normalization(self):
+        normalized = models.normalize_alert(
+            {
+                "name": "Extensible",
+                "feature_state": {"enabled": True},
+                "notification": {
+                    "target": {"entity_id": ["notify.phone"]},
+                    "delivery_options": {"priority": "high"},
+                },
+            }
+        )
+
+        self.assertEqual(normalized["feature_state"], {"enabled": True})
+        self.assertEqual(
+            normalized["notification"]["delivery_options"],
+            {"priority": "high"},
+        )
+
+    def test_recipient_types_are_extensible(self):
+        notification = models.normalize_notification(
+            {"target": {"team_id": "on_call", "user_id": ["user_1"]}}
+        )
+
+        self.assertEqual(
+            notification["target"],
+            {"team_id": ["on_call"], "user_id": ["user_1"]},
+        )
+
+    def test_registered_feature_can_add_alert_fields(self):
+        normalizer = models.ConfigNormalizer(
+            [
+                models.AlertFeature(
+                    "test-feature",
+                    lambda alert: {**alert, "feature": {"enabled": True}},
+                )
+            ]
+        )
+
+        normalized = normalizer.normalize_alert_document({"name": "Featured"})
+
+        self.assertEqual(normalized["feature"], {"enabled": True})
 
     def test_confirmation_data_is_preserved(self):
         alert = models.normalize_alert(
@@ -276,10 +319,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(len(normalized["alerts"]), 2)
         self.assertTrue(all(item["enabled"] for item in normalized["alerts"]))
         self.assertTrue(
-            all(
-                item["notification"]["action"] == "notify.default"
-                for item in normalized["alerts"]
-            )
+            all("action" not in item["notification"] for item in normalized["alerts"])
         )
 
     def test_confirmation_actions_have_explicit_enabled_state_and_omit_empty_list(self):
@@ -420,7 +460,7 @@ class ConditionCompilationTests(unittest.TestCase):
                 },
             }
         )
-        self.assertEqual(alert["notification"]["action"], "notify.first")
+        self.assertNotIn("action", alert["notification"])
 
     def test_template_expression_is_not_double_wrapped(self):
         compiled = models.compile_condition(

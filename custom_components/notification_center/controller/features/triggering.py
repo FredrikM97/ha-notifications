@@ -1,15 +1,4 @@
-"""Pure alert-trigger watcher: the active/acknowledged/repeat state machine.
-
-Replaces `runtime/engine.py` + `runtime/state.py`. Operates on a plain
-`states` dict (`{alert_id: {...}}`) that `controller/core.py` loads from
-storage and hands in on every call - this module never persists anything
-and never calls Home Assistant itself. `register_specs()` says what to
-watch; `on_condition_result()` says what happened and what `core.py` should
-do about it via the returned `TriggerTransition`. `core.py` decides how to
-turn that into sends/clears/history by calling
-`controller/notifications.py` and `controller/actions.py` - this module
-never calls them itself.
-"""
+"""Evaluate alert conditions and return trigger transitions."""
 
 from __future__ import annotations
 
@@ -18,14 +7,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from ..const import TransitionKind
-from ..domain.condition_schema import compile_condition
-from ..domain.durations import parse_duration
-from .commands import Command, TrackInterval, TrackTemplate
-
-# ----------------------------------------------------------------------
-# Runtime state (was runtime/state.py)
-# ----------------------------------------------------------------------
+from ...const import TransitionKind
+from ...domain.condition_schema import compile_condition
+from ...domain.durations import parse_duration
+from ..commands import Command, TrackInterval, TrackTemplate
 
 
 def new_alert_state() -> dict[str, Any]:

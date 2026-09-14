@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import Any
 
-from ..const import CONFIG_VERSION, ConditionType
-from .condition_schema import compile_condition as compile_condition
-from .confirmation_schema import normalize_confirmation
+from .const import CONFIG_VERSION
 from .durations import (
     duration_to_mapping as duration_to_mapping,
 )
@@ -20,12 +16,11 @@ from .durations import (
 from .durations import (
     parse_duration as parse_duration,
 )
+from .model_conditions import compile_condition as compile_condition
 
 __all__ = (
     "ConfigNormalizer",
     "DEFAULT_CONFIG_NORMALIZER",
-    "AlertEnvelope",
-    "AlertFeature",
     "compile_condition",
     "duration_to_mapping",
     "duration_to_string",
@@ -36,74 +31,6 @@ __all__ = (
     "normalize_target",
     "parse_duration",
 )
-
-_NOTIFICATION_CORE_KEYS = {
-    "target",
-    "title",
-    "message",
-    "data",
-    "actions",
-    "actions_enabled",
-    "repeat",
-    "confirmation",
-    "action",
-    "persistent",
-}
-_ALERT_CORE_KEYS = {
-    "id",
-    "name",
-    "enabled",
-    "description",
-    "icon",
-    "monitor",
-    "conditions",
-    "notification",
-    "notifications",
-    "logic",
-    "created_at",
-    "updated_at",
-}
-
-
-@dataclass(frozen=True)
-class AlertEnvelope:
-    """Shared alert boundary with feature-owned fields kept in ``extras``."""
-
-    id: str
-    name: str
-    enabled: bool
-    description: str
-    icon: str
-    monitor: dict[str, Any]
-    conditions: list[dict[str, Any]]
-    notification: dict[str, Any]
-    extras: dict[str, Any]
-
-    def to_mapping(self) -> dict[str, Any]:
-        """Return the document shape used by storage and runtime code."""
-
-        result = deepcopy(self.extras)
-        result.update(
-            {
-                "id": self.id,
-                "name": self.name,
-                "enabled": self.enabled,
-                "description": self.description,
-                "icon": self.icon,
-                "monitor": deepcopy(self.monitor),
-                "conditions": deepcopy(self.conditions),
-                "notification": deepcopy(self.notification),
-            }
-        )
-        return result
-
-
-@dataclass(frozen=True)
-class AlertFeature:
-    """A feature-owned normalization hook for an alert document."""
-
-    name: str
-    normalize: Callable[[dict[str, Any]], dict[str, Any]]
 
 
 def _list(value: Any) -> list:
@@ -125,7 +52,10 @@ def _merge(
     result = deepcopy(base)
 
     for key, value in override.items():
-        if isinstance(result.get(key), dict) and isinstance(value, dict):
+        if (
+            isinstance(result.get(key), dict)
+            and isinstance(value, dict)
+        ):
             result[key] = _merge(
                 result[key],
                 value,
@@ -177,7 +107,7 @@ def normalize_condition(
     """Normalize one visual condition."""
     if not isinstance(condition, dict):
         return {
-            "type": ConditionType.TEMPLATE.value,
+            "type": "template",
             "template": str(condition or ""),
         }
 
@@ -185,7 +115,7 @@ def normalize_condition(
 
     result.setdefault(
         "type",
-        ConditionType.TEMPLATE.value,
+        "template",
     )
 
     if result.get("for") is not None:
@@ -246,20 +176,62 @@ def normalize_notification(
     if not isinstance(extra_data, dict):
         extra_data = {}
 
-    normalized_confirmation = normalize_confirmation(merged.get("confirmation"))
+    confirmation_source = merged.get("confirmation", {})
+    if not isinstance(confirmation_source, dict):
+        confirmation_source = {}
+
+    confirmation = confirmation_source
+
+    actions = confirmation.get("actions")
+    if not isinstance(actions, list):
+        actions = []
+
+    actions_enabled = bool(
+        confirmation.get(
+            "actions_enabled",
+            bool(actions),
+        )
+    )
+
+    normalized_confirmation = {
+        "enabled": bool(
+            confirmation.get(
+                "enabled",
+                bool(confirmation.get("button")),
+            )
+        ),
+        "button": str(confirmation.get("button") or ""),
+        "resend_interval": _normalize_duration_value(
+            confirmation.get("resend_interval"),
+            {"minutes": 30},
+        ),
+        "max_attempts": max(
+            1,
+            min(20, int(confirmation.get("max_attempts", 5))),
+        ),
+        "completion_message": str(
+            confirmation.get("completion_message") or ""
+        ),
+        "notify_on_confirmation": bool(
+            confirmation.get("notify_on_confirmation", False)
+        ),
+        "confirmation_message": str(
+            confirmation.get("confirmation_message") or ""
+        ),
+        "clear_on_confirmation": bool(
+            confirmation.get("clear_on_confirmation", True)
+        ),
+        "actions_enabled": actions_enabled,
+    }
+
+    if actions:
+        normalized_confirmation["actions"] = deepcopy(actions)
 
     result = {
-        key: deepcopy(value)
-        for key, value in merged.items()
-        if key not in _NOTIFICATION_CORE_KEYS
-    }
-    result.update(
-        {
         "target": normalize_target(merged.get("target")),
         "title": str(title or ""),
         "message": str(message or ""),
-        }
-    )
+    }
 
     if extra_data:
         result["data"] = deepcopy(extra_data)
@@ -298,7 +270,10 @@ def normalize_alert(
 
     source = deepcopy(alert)
 
-    alert_id = str(source.get("id") or _slug(str(source.get("name", "alert"))))
+    alert_id = str(
+        source.get("id")
+        or _slug(str(source.get("name", "alert")))
+    )
     name = str(source.get("name", alert_id))
 
     monitor = deepcopy(source.get("monitor", {}))
@@ -321,7 +296,9 @@ def normalize_alert(
     if not isinstance(conditions, list):
         raise ValueError("conditions must be a list")
 
-    normalized_conditions = [normalize_condition(item) for item in conditions]
+    normalized_conditions = [
+        normalize_condition(item) for item in conditions
+    ]
 
     notification_input = deepcopy(source.get("notification", {}))
     if not isinstance(notification_input, dict):
@@ -332,22 +309,16 @@ def normalize_alert(
         notification_defaults,
     )
 
-    extras = {
-        key: deepcopy(value)
-        for key, value in source.items()
-        if key not in _ALERT_CORE_KEYS
+    result = {
+        "id": alert_id,
+        "name": name,
+        "enabled": bool(source.get("enabled", True)),
+        "description": str(source.get("description") or ""),
+        "icon": str(source.get("icon") or "mdi:bell-outline"),
+        "monitor": normalized_monitor,
+        "conditions": normalized_conditions,
+        "notification": notification,
     }
-    result = AlertEnvelope(
-        id=alert_id,
-        name=name,
-        enabled=bool(source.get("enabled", True)),
-        description=str(source.get("description") or ""),
-        icon=str(source.get("icon") or "mdi:bell-outline"),
-        monitor=normalized_monitor,
-        conditions=normalized_conditions,
-        notification=notification,
-        extras=extras,
-    ).to_mapping()
 
     logic = source.get("logic")
     if logic in ("any", "or", "all", "and"):
@@ -365,9 +336,6 @@ def normalize_alert(
 
 class ConfigNormalizer:
     """Canonical config normalization interface."""
-
-    def __init__(self, features: Iterable[AlertFeature] = ()) -> None:
-        self._features = tuple(features)
 
     def normalize_config(
         self,
@@ -411,15 +379,19 @@ class ConfigNormalizer:
             alerts,
             dict,
         ):
-            alerts = list(alerts.values())
+            alerts = list(
+                alerts.values()
+            )
 
         if not isinstance(
             alerts,
             list,
         ):
-            raise ValueError("alerts must be a list")
+            raise ValueError(
+                "alerts must be a list"
+            )
 
-        normalized = {
+        return {
             "version": CONFIG_VERSION,
             "alerts": [
                 normalize_alert(
@@ -429,11 +401,6 @@ class ConfigNormalizer:
                 for alert in alerts
             ],
         }
-        for feature in self._features:
-            normalized["alerts"] = [
-                feature.normalize(alert) for alert in normalized["alerts"]
-            ]
-        return normalized
 
     def normalize_alert_document(
         self,
@@ -456,3 +423,4 @@ def normalize_config(
 ) -> dict[str, Any]:
     """Normalize complete configuration."""
     return DEFAULT_CONFIG_NORMALIZER.normalize_config(config)
+

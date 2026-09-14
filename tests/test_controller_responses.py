@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
-responses = importlib.import_module(f"{PACKAGE_NAME}.controller.responses")
+responses = importlib.import_module(f"{PACKAGE_NAME}.controller.features.confirmation")
 
 
 class TrackClearTests(unittest.TestCase):
@@ -153,7 +153,10 @@ class BuildCompletionAlertTests(unittest.IsolatedAsyncioTestCase):
             "id": "a1",
             "name": "Alert",
             "notification": {
-                "confirmation": {"completion_message": "Done by {{ confirmed_by }}"}
+                "confirmation": {
+                    "completion_message": "Done by {{ confirmed_by }}",
+                    "notify_on_confirmation": True,
+                }
             },
         }
         result = await responses.build_completion_alert(
@@ -161,6 +164,19 @@ class BuildCompletionAlertTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["notification"]["message"], "Done by Alice")
         self.assertFalse(result["notification"]["confirmation"]["enabled"])
+
+    async def test_ignores_completion_message_when_notifications_are_disabled(self):
+        alert = {
+            "id": "a1",
+            "name": "Alert",
+            "notification": {
+                "confirmation": {"completion_message": "Do not send this"}
+            },
+        }
+        result = await responses.build_completion_alert(
+            alert, "Alice", datetime(2024, 1, 1), self._render
+        )
+        self.assertIsNone(result)
 
     async def test_notify_on_confirmation_falls_back_to_default_message(self):
         alert = {

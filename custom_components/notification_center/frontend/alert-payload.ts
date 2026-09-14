@@ -42,21 +42,12 @@ function hasRecipients(target: NotificationTarget): boolean {
   );
 }
 
-function notificationServiceForTarget(target: NotificationTarget): string {
-  return hasRecipients(target) ? "notify.send_message" : "";
-}
-
 export function buildAlertPayload(
   original: Alert,
   values: AlertFormValues,
 ): Alert {
   const result = cloneAlert(original);
-  const action =
-    notificationServiceForTarget(values.target) ||
-    result.notification?.action ||
-    "";
-
-  if (!action && !hasRecipients(values.target)) {
+  if (!hasRecipients(values.target)) {
     throw new Error(
       "Select at least one device, area, label, or notification entity in Recipients.",
     );
@@ -80,7 +71,6 @@ export function buildAlertPayload(
   }
 
   result.notification = {
-    action,
     target: values.target,
     title: values.title,
     message: values.message,

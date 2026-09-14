@@ -111,7 +111,7 @@ class AlertEditorController {
 
     this.page = this.root.querySelector<HTMLElement>(".nc-page");
     this.dashboardContent = this.page?.querySelector<HTMLElement>(
-      "#alerts-view, #history-view, #yaml-view",
+      ".nc-alerts, .nc-empty, #history-view, #yaml-view",
     );
     this.dashboardTabs = this.page?.querySelector<HTMLElement>(".nc-tabs");
     this.dashboardActions =
@@ -144,8 +144,7 @@ class AlertEditorController {
     };
 
     this.renderEditor();
-    if (this.page) this.page.append(this.host);
-    else this.root.append(this.host);
+    this.root.append(this.host);
     void fillActionEditors(this.host);
 
     this.visual = this.host.querySelector<HTMLElement>('[data-role="visual"]')!;

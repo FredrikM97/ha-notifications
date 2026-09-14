@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`buildAlertPayload > resolves the generic notify action when recipients are selected 1`] = `
+exports[`buildAlertPayload > omits the delivery action when recipients are selected 1`] = `
 {
   "conditions": [
     {
@@ -18,7 +18,6 @@ exports[`buildAlertPayload > resolves the generic notify action when recipients 
   },
   "name": "Front door open",
   "notification": {
-    "action": "notify.send_message",
     "actions_enabled": false,
     "confirmation": {
       "actions_enabled": false,

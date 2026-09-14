@@ -34,10 +34,10 @@ from ..domain.condition_schema import compile_condition
 from ..ha.gateway import HomeAssistantGateway
 from ..support import history as history_module
 from ..support import storage as storage_module
-from . import actions as actions_module
-from . import alerts as alerts_module
-from . import notifications as notifications_module
-from . import responses as responses_module
+from .features import confirmation as responses_module
+from .features import follow_up_actions as actions_module
+from .features import notification as notifications_module
+from .features import triggering as alerts_module
 from .commands import (
     CallService,
     Command,
@@ -329,38 +329,92 @@ class NotificationCenterController:
             self._state["alerts"], alert, active, error, now, source=source
         )
 
-        if transition.kind == TransitionKind.CONDITION_ERROR:
-            await self._record_history(
-                alert,
-                HistoryEventType.CONDITION_ERROR,
-                "Template evaluation failed.",
-                {"error": transition.error, "source": source},
-            )
-            return
+        await self._dispatch_trigger_transition(alert, transition, now)
 
-        if transition.kind == TransitionKind.NO_CHANGE:
-            return
+    async def _dispatch_trigger_transition(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        now: datetime,
+    ) -> None:
+        handlers = {
+            TransitionKind.CONDITION_ERROR: self._handle_condition_error,
+            TransitionKind.NO_CHANGE: self._handle_no_change,
+            TransitionKind.BECAME_INACTIVE: self._handle_became_inactive,
+            TransitionKind.BECAME_ACTIVE: self._handle_became_active,
+            TransitionKind.SHOULD_SEND: self._handle_should_send,
+        }
+        handler = handlers[transition.kind]
+        await handler(alert, transition, now)
 
-        if transition.kind == TransitionKind.BECAME_INACTIVE:
-            if transition.had_pending_confirmation:
-                await self._clear_notification(alert)
-            await self._record_history(
-                alert,
-                HistoryEventType.CONDITION_INACTIVE,
-                "Condition became false.",
-                {"source": source},
-            )
-            return
+    async def _handle_condition_error(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        _now: datetime,
+    ) -> None:
+        await self._record_history(
+            alert,
+            HistoryEventType.CONDITION_ERROR,
+            "Template evaluation failed.",
+            {"error": transition.error, "source": transition.source},
+        )
 
-        # became_active or should_send
-        if transition.kind == TransitionKind.BECAME_ACTIVE:
-            await self._record_history(
-                alert,
-                HistoryEventType.CONDITION_ACTIVE,
-                "Condition became true.",
-                {"source": source},
-            )
+    async def _handle_no_change(
+        self,
+        _alert: dict[str, Any],
+        _transition: alerts_module.TriggerTransition,
+        _now: datetime,
+    ) -> None:
+        return
 
+    async def _handle_became_inactive(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        _now: datetime,
+    ) -> None:
+        if transition.had_pending_confirmation:
+            await self._clear_notification(alert)
+        await self._record_history(
+            alert,
+            HistoryEventType.CONDITION_INACTIVE,
+            "Condition became false.",
+            {"source": transition.source},
+        )
+
+    async def _handle_became_active(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        _now: datetime,
+    ) -> None:
+        await self._record_history(
+            alert,
+            HistoryEventType.CONDITION_ACTIVE,
+            "Condition became true.",
+            {"source": transition.source},
+        )
+        await self._send_from_transition(alert, transition, replace_existing=False)
+
+    async def _handle_should_send(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        _now: datetime,
+    ) -> None:
+        await self._send_from_transition(
+            alert, transition, replace_existing=transition.replace_existing
+        )
+
+    async def _send_from_transition(
+        self,
+        alert: dict[str, Any],
+        transition: alerts_module.TriggerTransition,
+        *,
+        replace_existing: bool,
+    ) -> None:
+        now = self._gateway.now_utc()
         if transition.new_confirmation_action and transition.confirmation_action_id:
             responses_module.track(
                 self._sessions,
@@ -369,7 +423,7 @@ class NotificationCenterController:
                 alert_id=alert["id"],
             )
 
-        if transition.replace_existing:
+        if replace_existing:
             await self._clear_notification(alert)
 
         await self._send_notification(
@@ -377,7 +431,7 @@ class NotificationCenterController:
         )
 
     # ------------------------------------------------------------------
-    # Sending / clearing (delegates to controller/notifications.py)
+    # Sending / clearing (delegates to the notification feature)
     # ------------------------------------------------------------------
 
     def _send_variables(
@@ -583,7 +637,7 @@ class NotificationCenterController:
         if outcome.is_draft:
             responses_module.clear(self._sessions, outcome.session_id)
             if outcome.draft_alert is not None:
-                await self._run_confirmation_effects(
+                await self._dispatch_confirmation_effects(
                     outcome.draft_alert,
                     confirmed_by,
                     now,
@@ -609,11 +663,11 @@ class NotificationCenterController:
             {"confirmed_by": confirmed_by},
         )
 
-        await self._run_confirmation_effects(
+        await self._dispatch_confirmation_effects(
             alert, confirmed_by, now, test=False, record_history=True
         )
 
-    async def _run_confirmation_effects(
+    async def _dispatch_confirmation_effects(
         self,
         alert: dict[str, Any],
         confirmed_by: str,
@@ -622,53 +676,52 @@ class NotificationCenterController:
         test: bool,
         record_history: bool,
     ) -> None:
-        confirmation = alert["notification"].get("confirmation", {})
-
-        if confirmation.get("clear_on_confirmation", True):
+        async def clear_notification() -> None:
             try:
                 await self._clear_notification(alert)
             except Exception:
                 _LOGGER.exception("Failed to clear notification for %s", alert["id"])
 
-        if confirmation.get("completion_message") or confirmation.get(
-            "notify_on_confirmation", False
-        ):
+        async def send_completion(completion_alert: dict[str, Any]) -> None:
             await self._send_completion_notification(
-                alert, confirmed_by, now, test=test, record_history=record_history
+                alert,
+                completion_alert,
+                now,
+                test=test,
+                record_history=record_history,
             )
 
-        if confirmation.get("actions_enabled", False):
-            confirmation_variables = {
-                "alert_id": alert["id"],
-                "alert_name": alert["name"],
-                "alert_active": True,
-                "confirmed_by": confirmed_by,
-                "now": now,
-            }
+        async def run_follow_up_actions(
+            action_list: list[dict[str, Any]], variables: dict[str, Any]
+        ) -> None:
             await self._run_configured_actions(
                 alert,
-                confirmation.get("actions", []),
-                confirmation_variables,
+                action_list,
+                variables,
                 HistoryEventType.CONFIRMATION_ACTION,
                 HistoryEventType.CONFIRMATION_ACTION_FAILED,
                 record_history=record_history,
             )
 
+        await responses_module.execute_confirmation_effects(
+            alert,
+            confirmed_by,
+            now,
+            self._gateway.render_template,
+            clear_notification=clear_notification,
+            send_completion=send_completion,
+            run_follow_up_actions=run_follow_up_actions,
+        )
+
     async def _send_completion_notification(
         self,
         alert: dict[str, Any],
-        confirmed_by: str,
+        completion_alert: dict[str, Any],
         now: datetime,
         *,
         test: bool,
         record_history: bool,
     ) -> None:
-        completion_alert = await responses_module.build_completion_alert(
-            alert, confirmed_by, now, self._gateway.render_template
-        )
-        if completion_alert is None:
-            return
-
         variables = self._send_variables(completion_alert, 1, None, now, test=test)
         snapshot = await self._fetch_registry_snapshot()
 

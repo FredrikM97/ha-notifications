@@ -8,7 +8,9 @@ import unittest
 from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
-actions = importlib.import_module(f"{PACKAGE_NAME}.controller.actions")
+actions = importlib.import_module(
+    f"{PACKAGE_NAME}.controller.features.follow_up_actions"
+)
 
 
 async def render(source, variables):

@@ -45,7 +45,6 @@ export interface ConfirmationConfig {
 }
 
 export interface NotificationConfig {
-  action: string;
   target: NotificationTarget;
   title: string;
   message: string;
