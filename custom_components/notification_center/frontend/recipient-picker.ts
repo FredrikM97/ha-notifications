@@ -138,9 +138,7 @@ export function createRecipientPicker(
               ${(Object.keys(labels) as FilterType[]).map(
                 (key) =>
                   html`<button
-                    class="nc-recipient-filter ${filter === key
-                      ? "active"
-                      : ""}"
+                    class=${recipientFilterClass(filter === key)}
                     @click=${() => {
                       filter = key;
                       open = true;
@@ -166,33 +164,56 @@ export function createRecipientPicker(
               }
             }}
           >
-            ${matches.length
-              ? matches.map(
-                  (item) =>
-                    html`<button
-                      class="nc-recipient-option"
-                      title=${labels[item.type]}
-                      @mousedown=${(event: Event) => event.preventDefault()}
-                      @click=${() => {
-                        selected.add(`${item.type}:${item.id}`);
-                        notifyChange();
-                        open = false;
-                        renderPicker();
-                      }}
-                    >
-                      ${item.label}
-                    </button>`,
-                )
-              : html`<div class="nc-recipient-empty">
-                  ${query
-                    ? "No matching recipients"
-                    : "No recipients available"}
-                </div>`}
+            ${recipientMatchesTemplate(matches, query)}
           </div>
         </div>
       </div>`,
       host,
     );
+  };
+
+  const recipientFilterClass = (active: boolean): string => {
+    const classes = ["nc-recipient-filter"];
+    if (active) {
+      classes.push("active");
+    }
+
+    return classes.join(" ");
+  };
+
+  const recipientMatchesTemplate = (
+    matches: RecipientItem[],
+    query: string,
+  ) => {
+    if (!matches.length) {
+      return recipientEmptyTemplate(query);
+    }
+
+    return matches.map(
+      (item) =>
+        html`<button
+          class="nc-recipient-option"
+          title=${labels[item.type]}
+          @mousedown=${(event: Event) => event.preventDefault()}
+          @click=${() => {
+            selected.add(`${item.type}:${item.id}`);
+            notifyChange();
+            open = false;
+            renderPicker();
+          }}
+        >
+          ${item.label}
+        </button>`,
+    );
+  };
+
+  const recipientEmptyTemplate = (query: string) => {
+    let message = "No recipients available";
+    if (query) {
+      message = "No matching recipients";
+    }
+
+    return html`<div class="nc-recipient-empty">${message}</div>`;
   };
 
   renderPicker();

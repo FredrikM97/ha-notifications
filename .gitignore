@@ -7,6 +7,10 @@ custom_components/notification_center/frontend/panel.js
 hacs-export/
 *.py[cod]
 *$py.class
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
 
 # Packaging artifacts
 *.egg

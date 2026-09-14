@@ -20,7 +20,8 @@ const editor = readFileSync(
     "custom_components",
     "notification_center",
     "frontend",
-    "editor.ts",
+    "editor",
+    "index.ts",
   ),
   "utf8",
 );
@@ -31,6 +32,17 @@ const yamlView = readFileSync(
     "notification_center",
     "frontend",
     "yaml-view.ts",
+  ),
+  "utf8",
+);
+const editorHelpers = readFileSync(
+  join(
+    root,
+    "custom_components",
+    "notification_center",
+    "frontend",
+    "editor",
+    "helpers.ts",
   ),
   "utf8",
 );
@@ -53,14 +65,14 @@ assert.match(panel, /Post-confirmation actions/);
 assert.match(panel, /Reminder interval/);
 assert.doesNotMatch(panel, /Repeat notification/);
 assert.match(panel, /value\.notification\.repeat && value\.notification\.repeat\.enabled !== false/);
-assert.match(panel, /function hasRequiredCondition/);
+assert.match(panel, /hasRequiredCondition\s*=/);
 assert.match(panel, /Search entity name or ID/);
 assert.match(panel, /No visual conditions configured/);
 assert.match(panel, /Validate condition/);
 assert.match(panel, /Conditions YAML/);
 assert.match(panel, /Validate actions/);
 assert.match(panel, /validate_conditions/);
-assert.match(panel, /switch\.pixi_smart_drinking_fountain_water_pump_reset/);
+assert.match(panel, /switch\.garage_door/);
 assert.match(panel, /YAML list of Home Assistant/);
 assert.doesNotMatch(panel, /YAML lists like/);
 assert.doesNotMatch(panel, /if \(!conditionTemplate\(value\)\.trim\(\)\)/);
@@ -89,12 +101,12 @@ assert.doesNotMatch(
   /post-confirmation actions[\s\S]{0,500}!confirmation\.enabled/,
 );
 assert.match(
-  editor,
+  editorHelpers,
   /function defaultAlert\(\)[\s\S]*?confirmation:\s*\{\s*enabled: true,/,
 );
-assert.match(editor, /parent \? `\$\{parent\} \/ \$\{title\}` : title/);
+assert.match(editor, /sectionLabel\(parent, title\)/);
 assert.match(yamlView, /class="nc-code-editor nc-yaml-editor"/);
 assert.match(
   editor,
-  /confirmation: !alert \|\| Boolean\(alert\.notification\.confirmation\),[\s\S]*?postConfirmationActions: !alert \|\| Boolean\(alert\.notification\.confirmation\),/,
+  /confirmation: !options\.alert \|\| Boolean\(options\.alert\.notification\.confirmation\),[\s\S]*?postConfirmationActions:\s*\n?\s*!options\.alert \|\| Boolean\(options\.alert\.notification\.confirmation\),/,
 );

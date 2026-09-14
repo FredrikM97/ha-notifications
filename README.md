@@ -282,6 +282,19 @@ notification:
 
 Multiple actions can be configured.
 
+Actions run sequentially and can include a Home Assistant-style delay. The
+delay may be an `HH:MM:SS` string or a duration mapping:
+
+```yaml
+notification:
+  actions_enabled: true
+  actions:
+    - delay: "00:10:00"
+    - action: switch.turn_off
+      target:
+        entity_id: switch.water_pump
+```
+
 This makes HA Notifications useful for workflows such as:
 
 ```text

@@ -51,8 +51,10 @@ export function buildAlertPayload(
   values: AlertFormValues,
 ): Alert {
   const result = cloneAlert(original);
-  const action = notificationServiceForTarget(values.target) ||
-    result.notification?.action || "";
+  const action =
+    notificationServiceForTarget(values.target) ||
+    result.notification?.action ||
+    "";
 
   if (!action && !hasRecipients(values.target)) {
     throw new Error(
@@ -72,19 +74,29 @@ export function buildAlertPayload(
   result.monitor = {
     on_change: values.onChange,
     startup: values.startup,
-    ...(values.interval ? { interval: values.interval } : {}),
   };
+  if (values.interval) {
+    result.monitor.interval = values.interval;
+  }
+
   result.notification = {
     action,
     target: values.target,
     title: values.title,
     message: values.message,
-    ...(result.notification?.data ? { data: result.notification.data } : {}),
-    ...(values.repeat ? { repeat: values.repeat } : {}),
     actions_enabled: values.actions_enabled,
-    ...(values.actions?.length ? { actions: values.actions } : {}),
     confirmation: values.confirmation,
   };
+
+  if (original.notification?.data) {
+    result.notification.data = original.notification.data;
+  }
+  if (values.repeat) {
+    result.notification.repeat = values.repeat;
+  }
+  if (values.actions?.length) {
+    result.notification.actions = values.actions;
+  }
 
   return result;
 }

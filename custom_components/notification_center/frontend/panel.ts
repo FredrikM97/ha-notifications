@@ -10,13 +10,13 @@ import {
   testAlertPayload,
   validateConditions,
 } from "./api.js";
-
-import { openEditor } from "./editor.js";
-
+import { openEditor } from "./editor/index.js";
 import { renderHistory } from "./history.js";
-
 import { styles } from "./styles.js";
-import { html, render } from "lit";
+import { showToast as showToastOn, toastListTemplate } from "./toast.js";
+import type { Toast } from "./toast.js";
+import { LitElement, html, render } from "lit";
+import type { TemplateResult } from "lit";
 import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
 import { renderYamlView } from "./yaml-view.js";
 
@@ -38,42 +38,75 @@ interface AlertCardStatus {
   condition: AlertStatus;
 }
 
+interface NotificationCenterCardConfig {
+  type: "custom:ha-notifications-card";
+}
+
 const panelTabs: PanelTabDefinition[] = [
   { key: "alerts", label: "Alerts" },
   { key: "history", label: "History" },
   { key: "yaml", label: "YAML" },
 ];
 
-function tabContent(tab: PanelTab) {
-  if (tab === "alerts") {
-    return html`<div id="alerts-view"></div>`;
-  }
-  if (tab === "history") {
-    return html`<div id="history-view"></div>`;
-  }
-  return html`<div id="yaml-view"></div>`;
-}
-
 function alertStatus(alert: Alert): AlertCardStatus {
+  let enabledStatus = {
+    className: "nc-status disabled",
+    icon: "mdi:pause-circle-outline",
+    label: "Disabled",
+  };
+  if (alert.enabled) {
+    enabledStatus = {
+      className: "nc-status ok",
+      icon: "mdi:check-circle",
+      label: "Enabled",
+    };
+  }
+
+  let conditionStatus = {
+    className: "nc-status idle",
+    icon: "mdi:circle-outline",
+    label: "Idle",
+  };
+  if (alert.runtime?.active) {
+    conditionStatus = {
+      className: "nc-status active",
+      icon: "mdi:alert-circle",
+      label: "Triggered",
+    };
+  }
+
   return {
-    enabled: alert.enabled
-      ? { className: "nc-status ok", icon: "mdi:check-circle", label: "Enabled" }
-      : {
-          className: "nc-status disabled",
-          icon: "mdi:pause-circle-outline",
-          label: "Disabled",
-        },
-    condition: alert.runtime?.active
-      ? {
-          className: "nc-status active",
-          icon: "mdi:alert-circle",
-          label: "Triggered",
-        }
-      : { className: "nc-status idle", icon: "mdi:circle-outline", label: "Idle" },
+    enabled: enabledStatus,
+    condition: conditionStatus,
   };
 }
 
-class NotificationCenterPanel extends HTMLElement {
+function activeTabClass(active: boolean): string {
+  const classes = ["nc-tab"];
+  if (active) {
+    classes.push("active");
+  }
+
+  return classes.join(" ");
+}
+
+function toggleAlertLabel(alert: Alert): string {
+  if (alert.enabled) {
+    return "Disable";
+  }
+
+  return "Enable";
+}
+
+function toggleAlertToast(alert: Alert): string {
+  if (alert.enabled) {
+    return "Alert disabled.";
+  }
+
+  return "Alert enabled.";
+}
+
+class NotificationCenterPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private history: HistoryEntry[] = [];
@@ -86,33 +119,15 @@ class NotificationCenterPanel extends HTMLElement {
   private _registries: Registries | null = null;
   private _registriesPromise: Promise<Registries> | null = null;
   private _initialized = false;
-
-  constructor() {
-    super();
-
-    this.attachShadow({
-      mode: "open",
-    });
-
-    this._hass = null;
-    this.alerts = [];
-    this.history = [];
-    this.historyAlertId = null;
-    this.historyAlertName = null;
-    this.tab = "alerts";
-    this.loading = false;
-    this.refreshing = false;
-    this.refreshTimer = null;
-    this._registries = null;
-    this._registriesPromise = null;
-  }
+  toasts: Toast[] = [];
 
   set hass(value: Hass) {
     this._hass = value;
+    this.requestUpdate();
 
     if (this.isConnected && !this._initialized) {
       this._initialized = true;
-      this.refresh();
+      void this.refresh();
     }
   }
 
@@ -122,6 +137,21 @@ class NotificationCenterPanel extends HTMLElement {
 
   protected isAdmin(): boolean {
     return Boolean(this._hass?.user?.is_admin);
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.startAutoRefresh();
+
+    if (this._hass) {
+      this._initialized = true;
+      void this.refresh();
+    }
+  }
+
+  disconnectedCallback(): void {
+    this.stopAutoRefresh();
+    super.disconnectedCallback();
   }
 
   async getRegistries(): Promise<Registries> {
@@ -144,21 +174,6 @@ class NotificationCenterPanel extends HTMLElement {
     return this._registriesPromise;
   }
 
-  connectedCallback() {
-    this.render();
-    this.startAutoRefresh();
-
-    if (this._hass) {
-      this._initialized = true;
-
-      this.refresh();
-    }
-  }
-
-  disconnectedCallback() {
-    this.stopAutoRefresh();
-  }
-
   private startAutoRefresh(): void {
     if (this.refreshTimer !== null) {
       return;
@@ -179,10 +194,10 @@ class NotificationCenterPanel extends HTMLElement {
   }
 
   private editorOpen(): boolean {
-    return Boolean(this.shadowRoot?.querySelector(".nc-editor-view"));
+    return Boolean(this.renderRoot.querySelector(".nc-editor-view"));
   }
 
-  async refresh({ silent = false }: { silent?: boolean } = {}) {
+  async refresh({ silent = false }: { silent?: boolean } = {}): Promise<void> {
     if (!this._hass || !this.isAdmin() || this.refreshing) {
       return;
     }
@@ -195,17 +210,14 @@ class NotificationCenterPanel extends HTMLElement {
     if (!silent) {
       this.loading = true;
     }
+    this.requestUpdate();
 
     try {
       [this.alerts, this.history] = await Promise.all([
         getAlerts(this._hass),
         getHistory(this._hass, this.historyAlertId, 150),
       ]);
-      if (this.historyAlertId) {
-        this.historyAlertName =
-          this.alerts.find((alert) => alert.id === this.historyAlertId)?.name ||
-          this.historyAlertName;
-      }
+      this.refreshHistoryAlertName();
     } catch (err) {
       if (!silent) {
         this.showToast(errorMessage(err), true);
@@ -215,75 +227,116 @@ class NotificationCenterPanel extends HTMLElement {
       if (!silent) {
         this.loading = false;
       }
-      this.render();
+      this.requestUpdate();
     }
   }
 
-  render(): void {
-    if (!this.shadowRoot) {
-      return;
-    }
+  render() {
     if (!this.isAdmin()) {
-      render(
-        html`<style>
-            ${styles}
-          </style>
-          <div class="nc-page">
-            <div class="nc-card nc-empty">
-              <h2>Administrator access required</h2>
-              <p>
-                HA Notifications alerts can only be viewed and edited by
-                Home Assistant administrators.
-              </p>
-            </div>
-          </div>`,
-        this.shadowRoot,
-      );
+      return html`${this.styleTemplate()}${this.adminRequiredTemplate()}${toastListTemplate(
+        this.toasts,
+      )}`;
+    }
+
+    return html`${this.styleTemplate()}
+      <div class="nc-page">
+        ${this.headerTemplate()}${this.tabsTemplate()}${this.tabTemplate()}
+      </div>
+      ${toastListTemplate(this.toasts)}`;
+  }
+
+  protected updated(): void {
+    this.renderActiveExternalView();
+  }
+
+  private styleTemplate(): TemplateResult {
+    return html`<style>
+      ${styles}
+    </style>`;
+  }
+
+  private adminRequiredTemplate(): TemplateResult {
+    return html`<div class="nc-page">
+      <div class="nc-card nc-empty">
+        <h2>Administrator access required</h2>
+        <p>
+          HA Notifications alerts can only be viewed and edited by Home
+          Assistant administrators.
+        </p>
+      </div>
+    </div>`;
+  }
+
+  private headerTemplate(): TemplateResult {
+    return html`<div class="nc-header">
+      <div class="nc-title">
+        <div class="nc-title-icon">🔔</div>
+        <div>
+          <h1>HA Notifications</h1>
+          <p>Manage alerts, notifications and debug history.</p>
+        </div>
+      </div>
+      <div class="nc-actions">
+        <button class="nc-button" @click=${() => this.addAlert()}>
+          + Add alert
+        </button>
+      </div>
+    </div>`;
+  }
+
+  private tabsTemplate(): TemplateResult {
+    return html`<div class="nc-tabs">
+      ${panelTabs.map(
+        ({ key, label }) =>
+          html`<button
+            class=${activeTabClass(this.tab === key)}
+            @click=${() => this.selectTab(key)}
+          >
+            ${label}
+          </button>`,
+      )}
+    </div>`;
+  }
+
+  private tabTemplate(): TemplateResult {
+    if (this.tab === "alerts") {
+      return this.alertsTemplate();
+    }
+
+    if (this.tab === "history") {
+      return html`<div id="history-view"></div>`;
+    }
+
+    return html`<div id="yaml-view"></div>`;
+  }
+
+  private alertsTemplate(): TemplateResult {
+    if (this.alerts.length) {
+      return html`<div class="nc-alerts">
+        ${this.alerts.map((alert) => this.alertCardTemplate(alert))}
+      </div>`;
+    }
+
+    return html`<div class="nc-card nc-empty">
+      <h2>No alerts yet</h2>
+      <p>
+        Create your first alert. You can trigger it from condition changes, an
+        interval, or both.
+      </p>
+      <button class="nc-button" @click=${() => this.addAlert()}>
+        Create alert
+      </button>
+    </div>`;
+  }
+
+  private renderActiveExternalView(): void {
+    if (!this.isAdmin()) {
       return;
     }
-    const content = tabContent(this.tab);
-    render(
-      html`<style>
-          ${styles}
-        </style>
-        <div class="nc-page">
-          <div class="nc-header">
-            <div class="nc-title">
-              <div class="nc-title-icon">🔔</div>
-              <div>
-                <h1>HA Notifications</h1>
-                <p>Manage alerts, notifications and debug history.</p>
-              </div>
-            </div>
-            <div class="nc-actions">
-              <button class="nc-button" @click=${() => this.addAlert()}>
-                + Add alert
-              </button>
-            </div>
-          </div>
-          <div class="nc-tabs">
-            ${panelTabs.map(
-              ({ key, label }) =>
-                html`<button
-                  class="nc-tab ${this.tab === key ? "active" : ""}"
-                  @click=${() => {
-                    this.tab = key;
-                    this.render();
-                  }}
-                >
-                  ${label}
-                </button>`,
-            )}
-          </div>
-          ${content}
-        </div>`,
-      this.shadowRoot,
-    );
-    if (this.tab === "alerts")
-      this.renderAlerts(this.shadowRoot.querySelector("#alerts-view")!);
-    if (this.tab === "history")
+
+    if (this.tab === "history") {
       renderHistory(
-        this.shadowRoot.querySelector("#history-view")!,
+        this.renderRoot.querySelector("#history-view")!,
         this.history,
         {
           alertName: this.historyAlertName,
@@ -292,45 +345,42 @@ class NotificationCenterPanel extends HTMLElement {
           onShowAll: () => this.showAllHistory(),
         },
       );
-    if (this.tab === "yaml" && this._hass)
+    }
+
+    if (this.tab === "yaml" && this._hass) {
       renderYamlView(
-        this.shadowRoot.querySelector("#yaml-view")!,
+        this.renderRoot.querySelector("#yaml-view")!,
         this._hass,
         (message, error) => this.showToast(message, error),
         () => this.refresh(),
       );
+    }
   }
 
-  renderAlerts(container: HTMLElement): void {
-    render(
-      this.alerts.length
-        ? html`<div class="nc-alerts">
-            ${this.alerts.map((alert) => this.alertCardTemplate(alert))}
-          </div>`
-        : html`<div class="nc-card nc-empty">
-            <h2>No alerts yet</h2>
-            <p>
-              Create your first alert. You can trigger it from condition
-              changes, an interval, or both.
-            </p>
-            <button class="nc-button" @click=${() => this.addAlert()}>
-              Create alert
-            </button>
-          </div>`,
-      container,
-    );
+  private selectTab(tab: PanelTab): void {
+    this.tab = tab;
+    this.requestUpdate();
   }
 
-  private alertCardTemplate(alert: Alert) {
+  private refreshHistoryAlertName(): void {
+    if (!this.historyAlertId) {
+      return;
+    }
+
+    const alert = this.alerts.find((item) => item.id === this.historyAlertId);
+    if (alert) {
+      this.historyAlertName = alert.name;
+    }
+  }
+
+  private alertCardTemplate(alert: Alert): TemplateResult {
     const runtime = alert.runtime || {};
     const status = alertStatus(alert);
-    const monitor =
-      [
-        alert.monitor?.on_change ? "condition changes" : "",
-        alert.monitor?.interval ? `every ${alert.monitor.interval}` : "",
-      ]
-        .filter(Boolean)
-        .join(" + ") || "No trigger";
+    const monitor = this.monitorSummary(alert);
+    const lastNotification = this.lastNotificationSummary(
+      runtime.last_notified,
+    );
+
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
         <ha-icon icon=${alert.icon || "mdi:bell-outline"}></ha-icon>
@@ -339,22 +389,18 @@ class NotificationCenterPanel extends HTMLElement {
         <div class="nc-alert-name">${alert.name}</div>
         <div class="nc-alert-statuses">
           <span class=${status.enabled.className}
-            ><ha-icon icon=${status.enabled.icon}></ha-icon
-            >${status.enabled.label}</span
+            ><ha-icon icon=${status.enabled.icon}></ha-icon>${status.enabled
+              .label}</span
           >
           <span class=${status.condition.className}
-            ><ha-icon icon=${status.condition.icon}></ha-icon
-            >${status.condition.label}</span
+            ><ha-icon icon=${status.condition.icon}></ha-icon>${status.condition
+              .label}</span
           >
         </div>
         <div class="nc-alert-meta">
           ${monitor} · ${this.targetSummary(alert.notification?.target)}
         </div>
-        <div class="nc-alert-meta">
-          ${runtime.last_notified
-            ? `Last notification: ${this.formatTime(runtime.last_notified)}`
-            : "No notification sent yet"}
-        </div>
+        <div class="nc-alert-meta">${lastNotification}</div>
       </div>
       <div class="nc-alert-actions">
         <button
@@ -364,7 +410,7 @@ class NotificationCenterPanel extends HTMLElement {
         >
           Test</button
         ><button class="nc-button" @click=${() => this.toggleAlert(alert)}>
-          ${alert.enabled ? "Disable" : "Enable"}</button
+          ${toggleAlertLabel(alert)}</button
         ><button class="nc-button" @click=${() => this.editAlert(alert)}>
           Edit</button
         ><button class="nc-button" @click=${() => this.showAlertHistory(alert)}>
@@ -379,69 +425,29 @@ class NotificationCenterPanel extends HTMLElement {
     </div>`;
   }
 
-  private async testAlertFromCard(alert: Alert) {
-    try {
-      await testAlert(this._hass, alert.id);
-      this.showToast("Test notification sent.");
-      await this.refresh();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
+  private monitorSummary(alert: Alert): string {
+    const parts: string[] = [];
+    if (alert.monitor?.on_change) {
+      parts.push("condition changes");
     }
+    if (alert.monitor?.interval) {
+      parts.push(`every ${alert.monitor.interval}`);
+    }
+
+    const summary = parts.join(" + ");
+    if (summary) {
+      return summary;
+    }
+
+    return "No trigger";
   }
 
-  private async showAlertHistory(alert: Alert): Promise<void> {
-    await this.showHistoryForAlert(alert.id, alert.name);
-  }
-
-  private async showHistoryForAlert(
-    alertId: string,
-    alertName: string,
-  ): Promise<void> {
-    if (!this._hass) return;
-
-    this.historyAlertId = alertId;
-    this.historyAlertName = alertName;
-    this.tab = "history";
-    this.loading = true;
-    this.render();
-
-    try {
-      this.history = await getHistory(this._hass, alertId, 150);
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    } finally {
-      this.loading = false;
-      this.render();
+  private lastNotificationSummary(lastNotified: string | undefined): string {
+    if (lastNotified) {
+      return `Last notification: ${this.formatTime(lastNotified)}`;
     }
-  }
 
-  private async showAllHistory(): Promise<void> {
-    if (!this._hass) return;
-
-    this.historyAlertId = null;
-    this.historyAlertName = null;
-    this.tab = "history";
-    this.loading = true;
-    this.render();
-
-    try {
-      this.history = await getHistory(this._hass, null, 150);
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    } finally {
-      this.loading = false;
-      this.render();
-    }
-  }
-
-  private async toggleAlert(alert: Alert) {
-    try {
-      await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
-      this.showToast(alert.enabled ? "Alert disabled." : "Alert enabled.");
-      await this.refresh();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    }
+    return "No notification sent yet";
   }
 
   targetSummary(target: Alert["notification"]["target"] = {}): string {
@@ -464,7 +470,7 @@ class NotificationCenterPanel extends HTMLElement {
     return parts.join(", ") || "No target";
   }
 
-  addAlert = async () => {
+  addAlert = async (): Promise<void> => {
     let registries: Registries;
     try {
       registries = await this.getRegistries();
@@ -474,7 +480,7 @@ class NotificationCenterPanel extends HTMLElement {
     }
 
     openEditor({
-      root: this.shadowRoot,
+      root: this.renderRoot as ShadowRoot,
       alert: null,
       registries,
       onTest: async (draft) => {
@@ -491,9 +497,7 @@ class NotificationCenterPanel extends HTMLElement {
       },
       onSave: async (alert) => {
         const saved = await saveAlert(this._hass, alert);
-
         this.showToast("Alert created.");
-
         return saved;
       },
       onSaved: async () => {
@@ -512,7 +516,7 @@ class NotificationCenterPanel extends HTMLElement {
     }
 
     openEditor({
-      root: this.shadowRoot,
+      root: this.renderRoot as ShadowRoot,
       alert,
       registries,
       onTest: async (draft) => {
@@ -529,17 +533,7 @@ class NotificationCenterPanel extends HTMLElement {
       },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
-
-        this.alerts = this.alerts.map((item) =>
-          item.id === saved.id
-            ? {
-                ...item,
-                ...saved,
-                runtime: item.runtime,
-              }
-            : item,
-        );
-
+        this.replaceSavedAlert(saved);
         this.showToast("Alert saved.");
         return saved;
       },
@@ -549,6 +543,90 @@ class NotificationCenterPanel extends HTMLElement {
     });
   }
 
+  private replaceSavedAlert(saved: Alert): void {
+    this.alerts = this.alerts.map((item) => {
+      if (item.id === saved.id) {
+        return {
+          ...item,
+          ...saved,
+          runtime: item.runtime,
+        };
+      }
+
+      return item;
+    });
+    this.requestUpdate();
+  }
+
+  private async testAlertFromCard(alert: Alert): Promise<void> {
+    try {
+      await testAlert(this._hass, alert.id);
+      this.showToast("Test notification sent.");
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
+  private async showAlertHistory(alert: Alert): Promise<void> {
+    await this.showHistoryForAlert(alert.id, alert.name);
+  }
+
+  private async showHistoryForAlert(
+    alertId: string,
+    alertName: string,
+  ): Promise<void> {
+    if (!this._hass) {
+      return;
+    }
+
+    this.historyAlertId = alertId;
+    this.historyAlertName = alertName;
+    this.tab = "history";
+    this.loading = true;
+    this.requestUpdate();
+
+    try {
+      this.history = await getHistory(this._hass, alertId, 150);
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    } finally {
+      this.loading = false;
+      this.requestUpdate();
+    }
+  }
+
+  private async showAllHistory(): Promise<void> {
+    if (!this._hass) {
+      return;
+    }
+
+    this.historyAlertId = null;
+    this.historyAlertName = null;
+    this.tab = "history";
+    this.loading = true;
+    this.requestUpdate();
+
+    try {
+      this.history = await getHistory(this._hass, null, 150);
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    } finally {
+      this.loading = false;
+      this.requestUpdate();
+    }
+  }
+
+  private async toggleAlert(alert: Alert): Promise<void> {
+    try {
+      await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
+      this.showToast(toggleAlertToast(alert));
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
   async removeAlert(alert: Alert): Promise<void> {
     if (!window.confirm(`Delete "${alert.name}"?`)) {
       return;
@@ -556,9 +634,7 @@ class NotificationCenterPanel extends HTMLElement {
 
     try {
       await deleteAlert(this._hass, alert.id);
-
       this.showToast("Alert deleted.");
-
       await this.refresh();
     } catch (err) {
       this.showToast(errorMessage(err), true);
@@ -581,29 +657,12 @@ class NotificationCenterPanel extends HTMLElement {
   }
 
   showToast(message: string, error = false): void {
-    const toast = document.createElement("div");
-
-    toast.className = "nc-toast";
-
-    toast.textContent = message;
-
-    if (error) {
-      toast.style.background = "var(--error-color)";
-      toast.style.color = "white";
-    }
-
-    this.shadowRoot.appendChild(toast);
-
-    setTimeout(() => toast.remove(), 3500);
+    showToastOn(this, message, error);
   }
 }
 
 if (!customElements.get("notification-center-panel")) {
   customElements.define("notification-center-panel", NotificationCenterPanel);
-}
-
-interface NotificationCenterCardConfig {
-  type: "custom:ha-notifications-card";
 }
 
 class NotificationCenterCard extends NotificationCenterPanel {
@@ -614,7 +673,7 @@ class NotificationCenterCard extends NotificationCenterPanel {
       throw new Error("Card type must be custom:ha-notifications-card.");
     }
     this.config = config;
-    this.render();
+    this.requestUpdate();
   }
 
   getCardSize(): number {
@@ -638,7 +697,11 @@ const customCardWindow = window as Window & {
   }>;
 };
 customCardWindow.customCards = customCardWindow.customCards || [];
-if (!customCardWindow.customCards.some((card) => card.type === "ha-notifications-card")) {
+if (
+  !customCardWindow.customCards.some(
+    (card) => card.type === "ha-notifications-card",
+  )
+) {
   customCardWindow.customCards.push({
     type: "ha-notifications-card",
     name: "HA Notifications",

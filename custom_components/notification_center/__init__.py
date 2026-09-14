@@ -23,12 +23,7 @@ from .const import (
     SERVICE_RELOAD,
     SERVICE_TEST,
 )
-from .notifications import NotificationCenter
-from .panel import (
-    async_register_frontend,
-    async_unregister_frontend,
-)
-from .websocket import async_setup as async_setup_websocket
+from .controller.core import NotificationCenterController, build_controller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,18 +34,18 @@ SERVICE_TEST_SCHEMA = vol.Schema(
 )
 
 
-def _get_manager(
+def _get_controller(
     hass: HomeAssistant,
-) -> NotificationCenter:
-    """Get the running HA Notifications manager."""
+) -> NotificationCenterController:
+    """Get the running controller."""
 
     data = hass.data.get(
         DOMAIN,
         {},
     )
 
-    manager = (
-        data.get("manager")
+    controller = (
+        data.get("controller")
         if isinstance(
             data,
             dict,
@@ -59,14 +54,12 @@ def _get_manager(
     )
 
     if not isinstance(
-        manager,
-        NotificationCenter,
+        controller,
+        NotificationCenterController,
     ):
-        raise HomeAssistantError(
-            "HA Notifications is not configured."
-        )
+        raise HomeAssistantError("HA Notifications is not configured.")
 
-    return manager
+    return controller
 
 
 async def async_setup(
@@ -80,31 +73,19 @@ async def async_setup(
         {},
     )
 
-    # WebSocket API exists even before the config entry
-    # is loaded. Calls simply fail cleanly until it is.
-    await async_setup_websocket(
-        hass
-    )
-
     async def handle_reload(
         _call: ServiceCall,
     ) -> None:
         """Reload HA Notifications."""
 
-        await _get_manager(
-            hass
-        ).async_reload()
+        await _get_controller(hass).reload()
 
     async def handle_test(
         call: ServiceCall,
     ) -> None:
         """Test an alert."""
 
-        await _get_manager(
-            hass
-        ).async_test_alert(
-            call.data["alert_id"]
-        )
+        await _get_controller(hass).test_alert(call.data["alert_id"])
 
     if not hass.services.has_service(
         DOMAIN,
@@ -136,25 +117,23 @@ async def async_setup_entry(
 ) -> bool:
     """Set up HA Notifications from a config entry."""
 
-    manager = NotificationCenter(
-        hass
-    )
+    controller = await build_controller(hass)
 
     try:
-        await manager.async_setup()
-
-    except Exception:
-        _LOGGER.exception(
-            "Failed to set up HA Notifications"
+        await controller.async_setup(
+            show_in_sidebar=entry.data.get(
+                CONF_SHOW_SIDEBAR,
+                True,
+            ),
         )
 
+    except Exception:
+        _LOGGER.exception("Failed to set up HA Notifications")
+
         try:
-            await manager.async_unload()
+            await controller.async_unload()
         except Exception:
-            _LOGGER.exception(
-                "Failed cleaning up HA Notifications "
-                "after setup failure"
-            )
+            _LOGGER.exception("Failed cleaning up HA Notifications after setup failure")
 
         raise
 
@@ -163,23 +142,15 @@ async def async_setup_entry(
         {},
     )
 
-    data["manager"] = manager
+    data["controller"] = controller
 
     # ConfigEntry runtime_data is the authoritative runtime
     # location.
-    entry.runtime_data = manager
-
-    await async_register_frontend(
-        hass,
-        show_in_sidebar=entry.data.get(
-            CONF_SHOW_SIDEBAR,
-            True,
-        ),
-    )
+    entry.runtime_data = controller
 
     _LOGGER.info(
         "HA Notifications started with %d alert(s)",
-        len(manager.alerts),
+        len(controller.alerts),
     )
 
     return True
@@ -191,47 +162,31 @@ async def async_unload_entry(
 ) -> bool:
     """Unload HA Notifications."""
 
-    manager = entry.runtime_data
+    controller = entry.runtime_data
 
     if not isinstance(
-        manager,
-        NotificationCenter,
+        controller,
+        NotificationCenterController,
     ):
-        manager = None
+        controller = None
 
     unload_ok = True
 
-    if manager is not None:
+    if controller is not None:
         try:
-            unload_ok = (
-                await manager.async_unload()
-            )
+            unload_ok = await controller.async_unload()
         except Exception:
-            _LOGGER.exception(
-                "Failed to unload HA Notifications"
-            )
+            _LOGGER.exception("Failed to unload HA Notifications")
             unload_ok = False
 
-    try:
-        async_unregister_frontend(
-            hass
-        )
-    except Exception:
-        _LOGGER.exception(
-            "Failed to unregister HA Notifications frontend"
-        )
-        unload_ok = False
-
-    data = hass.data.get(
-        DOMAIN
-    )
+    data = hass.data.get(DOMAIN)
 
     if isinstance(
         data,
         dict,
     ):
         data.pop(
-            "manager",
+            "controller",
             None,
         )
 

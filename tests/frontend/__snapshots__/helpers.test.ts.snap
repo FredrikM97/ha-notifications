@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`durationInputValue > converts an hours/minutes/seconds object 1`] = `"01:05:09"`;
+
+exports[`durationInputValue > falls back for missing/invalid values 1`] = `"00:30:00"`;
+
+exports[`durationInputValue > pads an HH:MM string to HH:MM:SS 1`] = `"01:30:00"`;
+
+exports[`durationInputValue > passes an HH:MM:SS string through unchanged 1`] = `"100:00:00"`;

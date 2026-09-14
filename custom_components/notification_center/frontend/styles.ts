@@ -968,6 +968,12 @@ ha-code-editor.nc-action-editor {
   width: auto;
 }
 
+.nc-duration-input {
+  width: 8em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .nc-subpanel {
   background: transparent;
 }
@@ -1063,16 +1069,27 @@ ha-code-editor.nc-action-editor {
   white-space: pre-wrap;
 }
 
-.nc-toast {
+.nc-toast-list {
   position: fixed;
   right: 20px;
   bottom: 20px;
   z-index: 20000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nc-toast {
   padding: 12px 16px;
   border-radius: 10px;
   background: var(--primary-text-color);
   color: var(--primary-background-color);
   box-shadow: var(--ha-box-shadow);
+}
+
+.nc-toast.error {
+  background: var(--error-color);
+  color: white;
 }
 
 @container (max-width: 700px) {

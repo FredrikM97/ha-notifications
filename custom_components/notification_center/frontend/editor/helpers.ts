@@ -1,0 +1,401 @@
+import { html, nothing, render } from "lit";
+import type { TemplateResult } from "lit";
+import * as YAML from "yaml";
+import type { Alert } from "../types.js";
+import {
+  type CodeEditor,
+  type CodeEditorOptions,
+  type EditorContext,
+  type EditorMode,
+  type FormControl,
+  type OptionalSection,
+  type OptionalSetting,
+  optionalSections,
+} from "./types.js";
+
+export function editorModeFor(value: Alert): EditorMode {
+  if (
+    value.conditions.some((item) =>
+      ["state", "numeric", "attribute"].includes(item.type),
+    )
+  ) {
+    return "visual";
+  }
+
+  return "jinja";
+}
+
+export function sectionForSetting(setting: OptionalSetting): OptionalSection {
+  return optionalSections[setting];
+}
+
+export function isSectionVisible(
+  setting: OptionalSetting | undefined,
+  settings: Record<OptionalSetting, boolean>,
+): boolean {
+  return !setting || settings[setting];
+}
+
+export function defaultAlert(): Alert {
+  return {
+    id: `alert_${Date.now()}`,
+    name: "",
+    enabled: true,
+    description: "",
+    icon: "mdi:bell-outline",
+    conditions: [{ type: "template", template: "" }],
+    monitor: { on_change: true, startup: true },
+    notification: {
+      action: "notify.send_message",
+      target: {},
+      title: "",
+      message: "",
+      actions_enabled: false,
+      confirmation: {
+        enabled: true,
+        button: "",
+        completion_message: "",
+        notify_on_confirmation: false,
+        confirmation_message: "",
+        clear_on_confirmation: true,
+        resend_interval: "00:30:00",
+        max_attempts: 5,
+        actions_enabled: false,
+      },
+    },
+  };
+}
+
+export function conditionTemplate(alert: Alert): string {
+  return (
+    alert.conditions.find((condition) => condition.type === "template")
+      ?.template || ""
+  );
+}
+
+export function conditionsYaml(conditions: Alert["conditions"]): string {
+  if (conditions.length) {
+    return YAML.stringify(conditions);
+  }
+
+  return YAML.stringify([]);
+}
+
+export function actionsYaml(
+  actions: Record<string, unknown>[] | undefined,
+): string {
+  if (actions?.length) {
+    return YAML.stringify(actions);
+  }
+
+  return "";
+}
+
+export function parseConditionsYaml(value: string): Alert["conditions"] {
+  const parsed = YAML.parse(value || "[]");
+  if (!Array.isArray(parsed)) {
+    throw new Error("Conditions YAML must be a list.");
+  }
+  if (!parsed.every((item) => item && typeof item === "object")) {
+    throw new Error("Conditions YAML must contain condition objects.");
+  }
+  return parsed as Alert["conditions"];
+}
+
+export function valueOf(event: Event): string {
+  return (event.currentTarget as FormControl).value;
+}
+
+export function checkedOf(event: Event): boolean {
+  return (event.currentTarget as HTMLInputElement).checked;
+}
+
+export function showEditorToast(
+  root: ShadowRoot,
+  message: string,
+  duration = 6000,
+): void {
+  const toast = document.createElement("div");
+  toast.className = "nc-toast";
+  toast.textContent = message;
+  root.append(toast);
+  window.setTimeout(() => toast.remove(), duration);
+}
+
+export function durationInputValue(
+  value: string | Record<string, number> | undefined,
+  fallback: string,
+): string {
+  if (typeof value === "string") {
+    const parts = value.split(":");
+    if (parts.length === 2) return `${value}:00`;
+    return value;
+  }
+  if (!value || typeof value !== "object") return fallback;
+
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(
+      (Number(value.hours) || 0) * 3600 +
+        (Number(value.minutes) || 0) * 60 +
+        (Number(value.seconds) || 0),
+    ),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+// Native <input type="time"> hands off to the OS clock widget on mobile,
+// which commonly only supports HH:MM (12-hour, with AM/PM), silently drops
+// seconds, caps at 24h, and misreads the hour. A masked plain-text field
+// avoids the native picker entirely: digits fill right-to-left (like a
+// calculator), so "HH:MM:SS" is always captured correctly and hours can
+// exceed 24 (e.g. a 100-hour reminder interval).
+export function durationInput(
+  value: string,
+  onChange: (next: string) => void,
+): TemplateResult {
+  const update = (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const digits = input.value.replace(/\D/g, "") || "0";
+    const seconds = digits.slice(-2).padStart(2, "0");
+    const minutes = digits.slice(-4, -2).padStart(2, "0");
+    const hours = digits.slice(0, -4) || "0";
+    const formatted = `${hours}:${minutes}:${seconds}`;
+    input.value = formatted;
+    onChange(formatted);
+  };
+
+  return html`<input
+    class="nc-duration-input"
+    type="text"
+    inputmode="numeric"
+    placeholder="HH:MM:SS"
+    .value=${value}
+    @input=${update}
+  />`;
+}
+
+export async function fillActionEditors(host: HTMLElement): Promise<void> {
+  await customElements.whenDefined("ha-code-editor");
+
+  const editors = Array.from(
+    host.querySelectorAll<CodeEditor>("ha-code-editor.nc-action-editor"),
+  );
+
+  for (const editor of editors) {
+    await editor.updateComplete;
+    const codeMirror = editor.codemirror?.dom;
+    if (!codeMirror || !editor.isConnected) continue;
+
+    editor.style.height = "280px";
+    codeMirror.style.height = "100%";
+    const scroller = codeMirror.querySelector(
+      ".cm-scroller",
+    ) as HTMLElement | null;
+    if (scroller) scroller.style.height = "100%";
+  }
+}
+
+export function field(
+  label: string,
+  content: TemplateResult,
+  full = false,
+): TemplateResult {
+  let className = "nc-field";
+  if (full) {
+    className = "nc-field full";
+  }
+
+  return html`<div class=${className}><label>${label}</label>${content}</div>`;
+}
+
+export function codeEditor({
+  role,
+  value,
+  placeholder = "",
+  mode,
+  language,
+  label,
+  className = "nc-action-editor",
+  readOnly = false,
+  onInput,
+}: CodeEditorOptions): TemplateResult {
+  return html`<ha-code-editor
+    data-role=${role || nothing}
+    .value=${value}
+    placeholder=${placeholder || nothing}
+    class=${`nc-code-editor ${className}`}
+    mode=${mode}
+    language=${language}
+    aria-label=${label}
+    ?read-only=${readOnly}
+    @input=${onInput || nothing}
+  ></ha-code-editor>`;
+}
+
+export function section(
+  title: string,
+  content: TemplateResult,
+  className = "",
+  controls: TemplateResult | typeof nothing = nothing,
+): TemplateResult {
+  return html`<section class="nc-section ${className}" data-title=${title}>
+    <header class="nc-section-titlebar">
+      <h2>${title}</h2>
+      ${controls}
+    </header>
+    <div class="nc-section-content">${content}</div>
+  </section>`;
+}
+
+export function subpanel(
+  title: string,
+  subtitle: string,
+  content: TemplateResult,
+): TemplateResult {
+  return html`<div class="nc-subpanel">
+    <div class="nc-subpanel-header">
+      <span class="nc-subpanel-heading">
+        <span class="nc-subpanel-title">${title}</span>
+        <span class="nc-subpanel-subtitle">${subtitle}</span>
+      </span>
+    </div>
+    <div class="nc-subpanel-content">${content}</div>
+  </div>`;
+}
+
+export function optionalControls(
+  context: EditorContext,
+  setting: OptionalSetting,
+  enabled: boolean,
+  label: string,
+  onToggle: (enabled: boolean) => void,
+  disabled = false,
+): TemplateResult {
+  const stateText = enabledLabel(enabled);
+  const title = toggleTitle(enabled, label);
+
+  return html`<div class="nc-setting-controls">
+    <span class="nc-setting-state">${stateText}</span>
+    <input
+      class="nc-switch-input"
+      type="checkbox"
+      role="switch"
+      .checked=${enabled}
+      ?disabled=${disabled}
+      aria-label=${`Enable ${label}`}
+      title=${title}
+      @change=${(event: Event) => onToggle(checkedOf(event))}
+    />
+    <button
+      class="nc-icon-button danger"
+      type="button"
+      aria-label=${`Remove ${label}`}
+      title=${`Remove ${label}`}
+      @click=${() => context.removeSetting(setting)}
+    >
+      <ha-icon icon="mdi:trash-can-outline"></ha-icon>
+    </button>
+  </div>`;
+}
+
+export function confirmationNotificationControls(
+  context: EditorContext,
+): TemplateResult {
+  const confirmation = context.value.notification.confirmation;
+  const enabled = Boolean(confirmation.notify_on_confirmation);
+  const stateText = enabledLabel(enabled);
+
+  return html`<label class="nc-switch-label">
+    <span class="nc-setting-state">${stateText}</span>
+    <input
+      class="nc-switch-input"
+      type="checkbox"
+      role="switch"
+      .checked=${enabled}
+      aria-label="Notify recipients when confirmed"
+      title="Notify recipients when confirmed"
+      @change=${(event: Event) => {
+        confirmation.notify_on_confirmation = checkedOf(event);
+        context.markDirty();
+      }}
+    />
+  </label>`;
+}
+
+export function enabledLabel(enabled: boolean): string {
+  return enabled ? "Enabled" : "Disabled";
+}
+
+export function toggleTitle(enabled: boolean, label: string): string {
+  return enabled ? `Disable ${label}` : `Enable ${label}`;
+}
+
+export function showYaml(root: ShadowRoot, alert: Alert): void {
+  const popup = document.createElement("div");
+  const close = (): void => popup.remove();
+  render(
+    html`<div
+      class="nc-modal-backdrop"
+      @click=${(event: MouseEvent) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <section class="nc-modal nc-alert-yaml-modal">
+        <header class="nc-modal-header">
+          <h2>Alert YAML</h2>
+          <button
+            class="nc-icon-button"
+            @click=${close}
+            aria-label="Close YAML"
+            title="Close YAML"
+          >
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        </header>
+        <main class="nc-modal-body">
+          ${codeEditor({
+            value: "",
+            mode: "yaml",
+            language: "yaml",
+            label: "Alert YAML",
+            className: "nc-alert-yaml-editor",
+            readOnly: true,
+          })}
+        </main>
+      </section>
+    </div>`,
+    popup,
+  );
+  const editor = popup.querySelector<CodeEditor>("ha-code-editor");
+  if (!editor) throw new Error("Missing alert YAML editor");
+  editor.value = YAML.stringify(alert);
+  root.append(popup);
+}
+
+export function actionArrayValue(
+  editor: CodeEditor | null,
+  label: string,
+): Record<string, unknown>[] {
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(editor?.value || "[]");
+  } catch {
+    throw new Error(
+      `${label} must be a valid YAML list of action objects. Example: - action: switch.turn_on`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every((item) => item && typeof item === "object")
+  ) {
+    throw new Error(`${label} must be a YAML list of action objects.`);
+  }
+  return parsed as Record<string, unknown>[];
+}

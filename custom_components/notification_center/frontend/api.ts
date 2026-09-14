@@ -49,19 +49,24 @@ export async function call<T>(
 
 async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
   const result = await hass.connection.sendMessagePromise<T[]>({ type });
-  return Array.isArray(result) ? result : [];
+  if (Array.isArray(result)) {
+    return result;
+  }
+
+  return [];
 }
 
 export async function loadRegistries(hass: Hass): Promise<Registries> {
-  const [entities, states, devices, areas, labels, floors, users] = await Promise.all([
-    callRegistry<RegistryEntity>(hass, "config/entity_registry/list"),
-    callRegistry<RegistryState>(hass, "get_states"),
-    callRegistry<RegistryDevice>(hass, "config/device_registry/list"),
-    callRegistry<RegistryArea>(hass, "config/area_registry/list"),
-    callRegistry<RegistryLabel>(hass, "config/label_registry/list"),
-    callRegistry<RegistryFloor>(hass, "config/floor_registry/list"),
-    callRegistry<RegistryUser>(hass, "config/auth/list"),
-  ]);
+  const [entities, states, devices, areas, labels, floors, users] =
+    await Promise.all([
+      callRegistry<RegistryEntity>(hass, "config/entity_registry/list"),
+      callRegistry<RegistryState>(hass, "get_states"),
+      callRegistry<RegistryDevice>(hass, "config/device_registry/list"),
+      callRegistry<RegistryArea>(hass, "config/area_registry/list"),
+      callRegistry<RegistryLabel>(hass, "config/label_registry/list"),
+      callRegistry<RegistryFloor>(hass, "config/floor_registry/list"),
+      callRegistry<RegistryUser>(hass, "config/auth/list"),
+    ]);
   const friendlyNames = new Map(
     states.map((state) => [state.entity_id, state.attributes?.friendly_name]),
   );
@@ -69,7 +74,8 @@ export async function loadRegistries(hass: Hass): Promise<Registries> {
   return {
     entities: entities.map((entity) => ({
       ...entity,
-      friendly_name: friendlyNames.get(entity.entity_id) || entity.friendly_name,
+      friendly_name:
+        friendlyNames.get(entity.entity_id) || entity.friendly_name,
     })),
     devices,
     areas,
@@ -130,10 +136,14 @@ export async function getHistory(
   alertId: string | null = null,
   limit = 100,
 ) {
-  return call<HistoryEntry[]>(hass, "history", {
-    ...(alertId ? { alert_id: alertId } : {}),
+  const data: Record<string, unknown> = {
     limit,
-  });
+  };
+  if (alertId) {
+    data.alert_id = alertId;
+  }
+
+  return call<HistoryEntry[]>(hass, "history", data);
 }
 
 export async function getYaml(hass: Hass): Promise<{ yaml: string }> {

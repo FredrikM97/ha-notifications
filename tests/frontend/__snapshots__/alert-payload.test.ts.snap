@@ -1,0 +1,43 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildAlertPayload > resolves the generic notify action when recipients are selected 1`] = `
+{
+  "conditions": [
+    {
+      "template": "{{ true }}",
+      "type": "template",
+    },
+  ],
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "test_alert",
+  "monitor": {
+    "on_change": true,
+    "startup": true,
+  },
+  "name": "Front door open",
+  "notification": {
+    "action": "notify.send_message",
+    "actions_enabled": false,
+    "confirmation": {
+      "actions_enabled": false,
+      "button": "",
+      "clear_on_confirmation": true,
+      "completion_message": "",
+      "confirmation_message": "",
+      "enabled": false,
+      "max_attempts": 5,
+      "notify_on_confirmation": false,
+      "resend_interval": "00:30:00",
+    },
+    "message": "The front door is open.",
+    "target": {
+      "entity_id": [
+        "notify.mobile_app_phone",
+      ],
+    },
+    "title": "Alert",
+  },
+}
+`;

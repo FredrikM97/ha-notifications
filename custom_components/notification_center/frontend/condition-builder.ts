@@ -1,5 +1,6 @@
 import { html, render } from "lit";
 import type { AlertCondition, Registries } from "./types.js";
+import { durationInput, durationInputValue } from "./editor/helpers.js";
 
 const conditionTypes = [
   ["state", "State"],
@@ -54,7 +55,9 @@ export function visualConditionBuilder(
     const matchingEntity = entities.find((item) => item.entity_id === value);
     if (matchingEntity) return matchingEntity.entity_id;
 
-    const matchingLabel = entities.find((item) => entityLabel(item.entity_id) === value);
+    const matchingLabel = entities.find(
+      (item) => entityLabel(item.entity_id) === value,
+    );
     if (matchingLabel) return matchingLabel.entity_id;
 
     const matchingName = entities.filter(
@@ -87,102 +90,11 @@ export function visualConditionBuilder(
 
   const renderBuilder = (): void => {
     render(
-      html`<div class="nc-condition-rows">
-          ${state.length
-            ? state.map(
-            (condition, index) =>
-              html`<div class="nc-condition-row">
-                <label class="nc-field"
-                  >Type
-                  <select
-                    @change=${(event: Event) => {
-                      condition.type = (
-                        event.currentTarget as HTMLSelectElement
-                      ).value as AlertCondition["type"];
-                      markDirty();
-                      renderBuilder();
-                    }}
-                  >
-                    ${conditionTypes.map(
-                      ([value, label]) =>
-                        html`<option
-                          value=${value}
-                          .selected=${condition.type === value}
-                        >
-                          ${label}
-                        </option>`,
-                    )}
-                  </select>
-                </label>
-                <label class="nc-field"
-                  >Entity
-                  <input
-                    list=${entityListId}
-                    placeholder="Search entity name or ID"
-                    .value=${entityLabel(firstValue(condition.entity_id))}
-                    @input=${(event: Event) => updateEntity(condition, event)}
-                    @change=${(event: Event) => updateEntity(condition, event)}
-                  />
-                </label>
-                ${condition.type === "state"
-                  ? html`<label class="nc-field"
-                      >State<input
-                        value=${firstValue(condition.state)}
-                        @input=${(event: Event) =>
-                          update(condition, "state", event)}
-                    /></label>`
-                  : ""}
-                ${condition.type === "numeric"
-                  ? html`<label class="nc-field"
-                        >Above<input
-                          type="number"
-                          .value=${String(condition.above ?? "")}
-                          @input=${(event: Event) =>
-                            update(condition, "above", event)} /></label
-                      ><label class="nc-field"
-                        >Below<input
-                          type="number"
-                          .value=${String(condition.below ?? "")}
-                          @input=${(event: Event) =>
-                            update(condition, "below", event)}
-                      /></label>`
-                  : ""}
-                ${condition.type === "attribute"
-                  ? html`<label class="nc-field"
-                        >Attribute<input
-                          .value=${condition.attribute || ""}
-                          @input=${(event: Event) =>
-                            update(condition, "attribute", event)} /></label
-                      ><label class="nc-field"
-                        >Expected value<input
-                          .value=${condition.value || ""}
-                          @input=${(event: Event) =>
-                            update(condition, "value", event)}
-                      /></label>`
-                  : ""}
-                <label class="nc-field"
-                  >For<input
-                    type="time"
-                    .value=${firstValue(condition.for)}
-                    @input=${(event: Event) => update(condition, "for", event)}
-                /></label>
-                <button
-                  class="nc-button danger"
-                  @click=${() => {
-                    state.splice(index, 1);
-                    markDirty();
-                    renderBuilder();
-                  }}
-                >
-                  Remove condition
-                </button>
-              </div>`,
-          )
-            : html`<div class="nc-help">No visual conditions configured.</div>`}
-        </div>
+      html`<div class="nc-condition-rows">${conditionRowsTemplate()}</div>
         <datalist id=${entityListId}>
           ${entities.map(
-            (item) => html`<option value=${entityLabel(item.entity_id)}></option>`,
+            (item) =>
+              html`<option value=${entityLabel(item.entity_id)}></option>`,
           )}
         </datalist>
         <button
@@ -199,6 +111,119 @@ export function visualConditionBuilder(
     );
   };
 
+  const conditionRowsTemplate = () => {
+    if (!state.length) {
+      return html`<div class="nc-help">No visual conditions configured.</div>`;
+    }
+
+    return state.map((condition, index) =>
+      conditionRowTemplate(condition, index),
+    );
+  };
+
+  const conditionRowTemplate = (condition: AlertCondition, index: number) =>
+    html` <div class="nc-condition-row">
+      <label class="nc-field"
+        >Type
+        <select
+          @change=${(event: Event) => {
+            condition.type = (event.currentTarget as HTMLSelectElement)
+              .value as AlertCondition["type"];
+            markDirty();
+            renderBuilder();
+          }}
+        >
+          ${conditionTypes.map(
+            ([value, label]) =>
+              html`<option value=${value} .selected=${condition.type === value}>
+                ${label}
+              </option>`,
+          )}
+        </select>
+      </label>
+      <label class="nc-field"
+        >Entity
+        <input
+          list=${entityListId}
+          placeholder="Search entity name or ID"
+          .value=${entityLabel(firstValue(condition.entity_id))}
+          @input=${(event: Event) => updateEntity(condition, event)}
+          @change=${(event: Event) => updateEntity(condition, event)}
+        />
+      </label>
+      ${stateConditionTemplate(condition)}${numericConditionTemplate(
+        condition,
+      )}${attributeConditionTemplate(condition)}
+      <label class="nc-field"
+        >For${durationInput(
+          durationInputValue(condition.for, "00:00:00"),
+          (next) => {
+            condition.for = next;
+            markDirty();
+          },
+        )}</label
+      >
+      <button
+        class="nc-button danger"
+        @click=${() => {
+          state.splice(index, 1);
+          markDirty();
+          renderBuilder();
+        }}
+      >
+        Remove condition
+      </button>
+    </div>`;
+
+  const stateConditionTemplate = (condition: AlertCondition) => {
+    if (condition.type !== "state") {
+      return "";
+    }
+
+    return html`<label class="nc-field"
+      >State<input
+        value=${firstValue(condition.state)}
+        @input=${(event: Event) => update(condition, "state", event)}
+    /></label>`;
+  };
+
+  const numericConditionTemplate = (condition: AlertCondition) => {
+    if (condition.type !== "numeric") {
+      return "";
+    }
+
+    return html`<label class="nc-field"
+        >Above<input
+          type="number"
+          .value=${String(condition.above ?? "")}
+          @input=${(event: Event) =>
+            update(condition, "above", event)} /></label
+      ><label class="nc-field"
+        >Below<input
+          type="number"
+          .value=${String(condition.below ?? "")}
+          @input=${(event: Event) => update(condition, "below", event)}
+      /></label>`;
+  };
+
+  const attributeConditionTemplate = (condition: AlertCondition) => {
+    if (condition.type !== "attribute") {
+      return "";
+    }
+
+    return html`<label class="nc-field"
+        >Attribute<input
+          .value=${condition.attribute || ""}
+          @input=${(event: Event) =>
+            update(condition, "attribute", event)} /></label
+      ><label class="nc-field"
+        >Expected value<input
+          .value=${condition.value || ""}
+          @input=${(event: Event) => update(condition, "value", event)}
+      /></label>`;
+  };
+
   renderBuilder();
-  return () => state.filter((condition) => Boolean(firstValue(condition.entity_id)));
+  return () =>
+    state.filter((condition) => Boolean(firstValue(condition.entity_id)));
 }

@@ -43,110 +43,16 @@ def load_const_and_models():
     """Load the pure configuration modules once for the test process."""
     ensure_package()
     const = load_module(f"{PACKAGE_NAME}.const", INTEGRATION_ROOT / "const.py")
-    models = load_module(f"{PACKAGE_NAME}.models", INTEGRATION_ROOT / "models.py")
+    models = load_module(
+        f"{PACKAGE_NAME}.domain.alert_schema",
+        INTEGRATION_ROOT / "domain" / "alert_schema.py",
+    )
     return const, models
 
 
 def load_storage():
-    """Load storage with minimal Home Assistant storage dependencies."""
+    """Load the pure storage module (no Home Assistant dependency needed)."""
     ensure_package()
-    load_const_and_models()
-
-    homeassistant = sys.modules.setdefault(
-        "homeassistant",
-        types.ModuleType("homeassistant"),
-    )
-    core = sys.modules.setdefault(
-        "homeassistant.core",
-        types.ModuleType("homeassistant.core"),
-    )
-    helpers = sys.modules.setdefault(
-        "homeassistant.helpers",
-        types.ModuleType("homeassistant.helpers"),
-    )
-    helpers_storage = sys.modules.setdefault(
-        "homeassistant.helpers.storage",
-        types.ModuleType("homeassistant.helpers.storage"),
-    )
-
-    class HomeAssistant:
-        pass
-
-    class Store:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-    homeassistant.__path__ = []
-    core.HomeAssistant = HomeAssistant
-    helpers.__path__ = []
-    helpers_storage.Store = Store
-
-    return load_module(f"{PACKAGE_NAME}.storage", INTEGRATION_ROOT / "storage.py")
-
-
-def load_notifications():
-    """Load runtime helpers with minimal Home Assistant dependencies."""
-    ensure_package()
-    load_storage()
-
-    homeassistant = sys.modules["homeassistant"]
-    const = sys.modules.setdefault(
-        "homeassistant.const",
-        types.ModuleType("homeassistant.const"),
-    )
-    core = sys.modules["homeassistant.core"]
-    helpers = sys.modules["homeassistant.helpers"]
-    event = sys.modules.setdefault(
-        "homeassistant.helpers.event",
-        types.ModuleType("homeassistant.helpers.event"),
-    )
-    entity_registry = sys.modules.setdefault(
-        "homeassistant.helpers.entity_registry",
-        types.ModuleType("homeassistant.helpers.entity_registry"),
-    )
-    device_registry = sys.modules.setdefault(
-        "homeassistant.helpers.device_registry",
-        types.ModuleType("homeassistant.helpers.device_registry"),
-    )
-    area_registry = sys.modules.setdefault(
-        "homeassistant.helpers.area_registry",
-        types.ModuleType("homeassistant.helpers.area_registry"),
-    )
-    template = sys.modules.setdefault(
-        "homeassistant.helpers.template",
-        types.ModuleType("homeassistant.helpers.template"),
-    )
-    util = sys.modules.setdefault(
-        "homeassistant.util",
-        types.ModuleType("homeassistant.util"),
-    )
-    dt = sys.modules.setdefault(
-        "homeassistant.util.dt",
-        types.ModuleType("homeassistant.util.dt"),
-    )
-
-    const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
-    core.Context = object
-    core.Event = object
-    core.callback = lambda function: function
-    event.TrackTemplate = object
-    event.TrackTemplateResult = object
-    event.async_track_template_result = lambda *args: None
-    event.async_track_time_interval = lambda *args: None
-    entity_registry.async_get = lambda hass: hass.entity_registry
-    device_registry.async_get = lambda hass: hass.device_registry
-    area_registry.async_get = lambda hass: hass.area_registry
-    template.Template = object
-    template.TemplateError = Exception
-    template.result_as_boolean = bool
-    dt.now = lambda: None
-    dt.utcnow = lambda: None
-    dt.parse_datetime = lambda value: None
-    helpers.__path__ = []
-    util.__path__ = []
-    homeassistant.__path__ = []
-
     return load_module(
-        f"{PACKAGE_NAME}.notifications",
-        INTEGRATION_ROOT / "notifications.py",
+        f"{PACKAGE_NAME}.support.storage", INTEGRATION_ROOT / "support" / "storage.py"
     )

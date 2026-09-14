@@ -1,212 +1,107 @@
-"""Tests for YAML parsing and persistence safeguards."""
+"""Tests for pure YAML/state (de)serialization (storage.py)."""
 
 from __future__ import annotations
 
-import asyncio
-import tempfile
 import unittest
-from pathlib import Path
 
 from test_support import load_storage
 
 storage = load_storage()
 
 
-class FakeStore:
-    def __init__(self, value=None):
-        self.value = value
-        self.saved = []
-        self.delayed = []
-
-    async def async_load(self):
-        return self.value
-
-    def async_delay_save(self, callback, delay):
-        self.delayed.append((callback(), delay))
-
-    async def async_save(self, value):
-        self.saved.append(value)
-
-
-class FakeConfig:
-    def __init__(self, root: Path):
-        self.root = root
-
-    def path(self, filename: str) -> str:
-        return str(self.root / filename)
-
-
-class FakeHass:
-    def __init__(self, root: Path, store_value=None):
-        self.config = FakeConfig(root)
-        self.store = FakeStore(store_value)
-
-    async def async_add_executor_job(self, function, *args):
-        return function(*args)
-
-
-class YAMLHelperTests(unittest.TestCase):
+class YamlTextTests(unittest.TestCase):
     def test_parse_yaml_accepts_empty_and_mapping_documents(self):
-        self.assertEqual(storage._parse_yaml(""), {})
-        self.assertEqual(storage._parse_yaml("alerts: []"), {"alerts": []})
+        self.assertEqual(storage.parse_yaml_text(""), {})
+        self.assertEqual(storage.parse_yaml_text("alerts: []"), {"alerts": []})
 
     def test_parse_yaml_rejects_non_mapping_documents(self):
         with self.assertRaisesRegex(ValueError, "must contain a mapping"):
-            storage._parse_yaml("- alert")
+            storage.parse_yaml_text("- alert")
 
-    def test_write_text_replaces_existing_file(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "nested" / "config.yaml"
-            storage._write_text(path, "alerts: []\n")
-            self.assertEqual(path.read_text(encoding="utf-8"), "alerts: []\n")
-            self.assertFalse(path.with_suffix(".yaml.tmp").exists())
+    def test_default_config_yaml_round_trips(self):
+        text = storage.default_config_yaml_text()
+        self.assertEqual(storage.parse_yaml_text(text), storage.DEFAULT_CONFIG)
 
 
-class NotificationStorageTests(unittest.TestCase):
-    def run_async(self, coroutine):
-        return asyncio.run(coroutine)
+class NormalizeAndValidateTests(unittest.TestCase):
+    def test_validate_does_not_mutate_input_shape_unexpectedly(self):
+        result = storage.normalize_and_validate_yaml(
+            "alerts:\n  - name: Test\n    conditions:\n"
+            "      - type: template\n        template: '{{ true }}'\n"
+        )
+        self.assertEqual(result["alerts"][0]["id"], "test")
 
-    def test_validate_yaml_does_not_write(self):
-        with tempfile.TemporaryDirectory() as directory:
-            hass = FakeHass(Path(directory))
-            instance = storage.NotificationStorage(hass)
-            result = self.run_async(
-                instance.async_validate_yaml_text(
-                    "alerts:\n  - name: Test\n    conditions:\n"
-                    "      - type: template\n        template: '{{ true }}'\n"
-                )
-            )
+    def test_invalid_yaml_raises_without_touching_anything(self):
+        with self.assertRaises(ValueError):
+            storage.normalize_and_validate_yaml("- invalid\n")
 
-            self.assertEqual(result["alerts"][0]["id"], "test")
-            self.assertFalse(instance.yaml_path.exists())
-
-    def test_save_yaml_normalizes_and_persists(self):
-        with tempfile.TemporaryDirectory() as directory:
-            instance = storage.NotificationStorage(FakeHass(Path(directory)))
-            result = self.run_async(
-                instance.async_save_yaml_text(
-                    "alerts:\n  - name: Test\n    conditions:\n"
-                    "      - type: template\n        template: '{{ true }}'\n"
-                )
-            )
-
-            self.assertEqual(result["version"], 1)
-            self.assertTrue(instance.yaml_path.exists())
-            saved = instance.yaml_path.read_text(encoding="utf-8")
-            self.assertIn("version: 1", saved)
-            self.assertIn("id: test", saved)
-
-    def test_saved_yaml_contains_one_canonical_notification_key(self):
-        with tempfile.TemporaryDirectory() as directory:
-            instance = storage.NotificationStorage(FakeHass(Path(directory)))
-            self.run_async(
-                instance.async_save_config(
+    def test_normalize_and_dump_yaml_round_trips(self):
+        normalized, text = storage.normalize_and_dump_yaml(
+            {
+                "version": 1,
+                "alerts": [
                     {
-                        "version": 1,
-                        "alerts": [
+                        "id": "demo",
+                        "name": "Demo",
+                        "conditions": [],
+                        "monitor": {"on_change": True, "startup": True},
+                        "notification": {
+                            "action": "notify.mobile_app_phone",
+                            "target": {"entity_id": ["notify.phone"]},
+                            "title": "Demo",
+                            "message": "Check this",
+                        },
+                        "notifications": [{"action": "notify.legacy"}],
+                    }
+                ],
+            }
+        )
+        self.assertEqual(normalized["version"], 1)
+        self.assertEqual(text.count("notification:"), 1)
+        self.assertNotIn("notifications:", text)
+
+    def test_normalize_and_dump_yaml_repairs_stale_browser_duration_text(self):
+        _, text = storage.normalize_and_dump_yaml(
+            {
+                "version": 1,
+                "alerts": [
+                    {
+                        "id": "demo",
+                        "name": "Demo",
+                        "conditions": [
                             {
-                                "id": "demo",
-                                "name": "Demo",
-                                "conditions": [],
-                                "monitor": {"on_change": True, "startup": True},
-                                "notification": {
-                                    "action": "notify.mobile_app_phone",
-                                    "target": {"entity_id": ["notify.phone"]},
-                                    "title": "Demo",
-                                    "message": "Check this",
-                                },
-                                "notifications": [
-                                    {"action": "notify.legacy"},
-                                ],
+                                "type": "state",
+                                "entity_id": "sensor.water",
+                                "state": "low",
+                                "for": "[object Object]",
                             }
                         ],
+                        "monitor": {"interval": "[object Object]"},
+                        "notification": {
+                            "repeat": {"interval": "[object Object]"},
+                            "confirmation": {
+                                "enabled": True,
+                                "resend_interval": "[object Object]",
+                            },
+                        },
                     }
-                )
-            )
+                ],
+            }
+        )
+        self.assertNotIn("[object Object]", text)
+        self.assertIn("resend_interval:", text)
+        self.assertIn("minutes: 30", text)
 
-            saved = instance.yaml_path.read_text(encoding="utf-8")
-            self.assertEqual(saved.count("notification:"), 1)
-            self.assertNotIn("notifications:", saved)
 
-    def test_saved_yaml_repairs_stale_browser_duration_text(self):
-        with tempfile.TemporaryDirectory() as directory:
-            instance = storage.NotificationStorage(FakeHass(Path(directory)))
-            self.run_async(
-                instance.async_save_config(
-                    {
-                        "version": 1,
-                        "alerts": [
-                            {
-                                "id": "demo",
-                                "name": "Demo",
-                                "conditions": [
-                                    {
-                                        "type": "state",
-                                        "entity_id": "sensor.water",
-                                        "state": "low",
-                                        "for": "[object Object]",
-                                    }
-                                ],
-                                "monitor": {"interval": "[object Object]"},
-                                "notification": {
-                                    "repeat": {"interval": "[object Object]"},
-                                    "confirmation": {
-                                        "enabled": True,
-                                        "resend_interval": "[object Object]",
-                                    },
-                                },
-                            }
-                        ],
-                    }
-                )
-            )
+class RuntimeStateShapeTests(unittest.TestCase):
+    def test_repairs_invalid_shapes(self):
+        state = storage.ensure_runtime_state_shape({"alerts": [], "history": "invalid"})
+        self.assertEqual(state["alerts"], {})
+        self.assertEqual(state["history"], [])
 
-            saved = instance.yaml_path.read_text(encoding="utf-8")
-            self.assertNotIn("[object Object]", saved)
-            self.assertIn("resend_interval:", saved)
-            self.assertIn("minutes: 30", saved)
-
-    def test_invalid_yaml_cannot_replace_existing_file(self):
-        with tempfile.TemporaryDirectory() as directory:
-            instance = storage.NotificationStorage(FakeHass(Path(directory)))
-            self.run_async(instance.async_save_yaml_text("alerts: []\n"))
-            original = instance.yaml_path.read_text(encoding="utf-8")
-
-            with self.assertRaises(ValueError):
-                self.run_async(instance.async_save_yaml_text("- invalid\n"))
-
-            self.assertEqual(
-                instance.yaml_path.read_text(encoding="utf-8"),
-                original,
-            )
-
-    def test_load_state_repairs_invalid_shapes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            hass = FakeHass(
-                Path(directory),
-                store_value={"alerts": [], "history": "invalid"},
-            )
-            instance = storage.NotificationStorage(hass)
-            instance.store = hass.store
-            state = self.run_async(instance.async_load_state())
-
-            self.assertEqual(state["alerts"], {})
-            self.assertEqual(state["history"], [])
-
-    def test_state_saves_use_copies(self):
-        with tempfile.TemporaryDirectory() as directory:
-            hass = FakeHass(Path(directory))
-            instance = storage.NotificationStorage(hass)
-            instance.store = hass.store
-            state = {"alerts": {"one": {"active": True}}, "history": []}
-
-            instance.async_delay_save_state(state)
-            state["alerts"]["one"]["active"] = False
-
-            self.assertTrue(hass.store.delayed[0][0]["alerts"]["one"]["active"])
-
-            self.run_async(instance.async_save_state_now(state))
-            self.assertFalse(hass.store.saved[0]["alerts"]["one"]["active"])
+    def test_defaults_when_not_a_mapping(self):
+        state = storage.ensure_runtime_state_shape(None)
+        self.assertEqual(state, {"alerts": {}, "history": []})
 
 
 if __name__ == "__main__":
