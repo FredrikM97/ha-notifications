@@ -23,6 +23,9 @@ commands_module = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 events_module = importlib.import_module(f"{PACKAGE_NAME}.controller.events")
 gateway_module = importlib.import_module(f"{PACKAGE_NAME}.ha.gateway")
 alert_schema_module = importlib.import_module(f"{PACKAGE_NAME}.domain.alert_schema")
+const_module = importlib.import_module(f"{PACKAGE_NAME}.const")
+
+HistoryEventType = const_module.HistoryEventType
 
 
 class FakeGateway:
@@ -105,6 +108,10 @@ class FakeGateway:
         bus.respond(
             events_module.EVALUATE_CONDITION,
             lambda payload: self.evaluate_condition(payload["source"]),
+        )
+        bus.respond(
+            events_module.GET_STATES,
+            lambda payload: self._answer(self.get_states_all(payload["domain"])),
         )
 
     def register_bus_listeners(self, bus, store):
@@ -278,7 +285,7 @@ class PullBasedEvaluationTests(unittest.IsolatedAsyncioTestCase):
         state = controller._state["alerts"][alert["id"]]
         self.assertTrue(state["active"])
         types = [event["type"] for event in controller._state["history"]]
-        self.assertIn(core_module.HistoryEventType.CONDITION_ACTIVE, types)
+        self.assertIn(HistoryEventType.CONDITION_ACTIVE, types)
 
     async def test_request_condition_check_ignores_unknown_alert(self):
         gateway = FakeGateway()
@@ -321,8 +328,8 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
 
         history = controller._state["history"]
         types = [event["type"] for event in history]
-        self.assertIn(core_module.HistoryEventType.CONDITION_ACTIVE, types)
-        self.assertIn(core_module.HistoryEventType.NOTIFICATION_SENT, types)
+        self.assertIn(HistoryEventType.CONDITION_ACTIVE, types)
+        self.assertIn(HistoryEventType.NOTIFICATION_SENT, types)
 
     async def test_condition_became_inactive_clears_and_records_history(self):
         gateway = FakeGateway()
@@ -338,7 +345,7 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
         state = controller._state["alerts"][alert["id"]]
         self.assertFalse(state["active"])
         types = [event["type"] for event in controller._state["history"]]
-        self.assertIn(core_module.HistoryEventType.CONDITION_INACTIVE, types)
+        self.assertIn(HistoryEventType.CONDITION_INACTIVE, types)
 
     async def test_condition_error_is_recorded_without_sending(self):
         gateway = FakeGateway()
@@ -350,7 +357,7 @@ class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(gateway.service_calls, [])
         types = [event["type"] for event in controller._state["history"]]
-        self.assertIn(core_module.HistoryEventType.CONDITION_ERROR, types)
+        self.assertIn(HistoryEventType.CONDITION_ERROR, types)
 
 
 class ConfirmationFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -395,7 +402,7 @@ class ConfirmationFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(action_id, controller._sessions)
 
         types = [event["type"] for event in controller._state["history"]]
-        self.assertIn(core_module.HistoryEventType.CONFIRMED, types)
+        self.assertIn(HistoryEventType.CONFIRMED, types)
 
 
 class DraftPayloadTests(unittest.IsolatedAsyncioTestCase):

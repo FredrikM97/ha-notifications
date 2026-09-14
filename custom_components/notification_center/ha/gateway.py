@@ -276,6 +276,7 @@ class HomeAssistantGateway:
         bus.respond(ev.HAS_SERVICE, self._answer_has_service)
         bus.respond(ev.FETCH_REGISTRY_SNAPSHOT, self._answer_fetch_registry_snapshot)
         bus.respond(ev.EVALUATE_CONDITION, self._answer_evaluate_condition)
+        bus.respond(ev.GET_STATES, self._answer_get_states)
 
     def register_bus_listeners(self, bus: "EventBus", store: Store) -> None:
         """Register the gateway operations represented by leaf commands."""
@@ -384,6 +385,9 @@ class HomeAssistantGateway:
         self, payload: dict[str, Any]
     ) -> tuple[bool | None, str | None]:
         return await self.evaluate_condition(payload["source"])
+
+    async def _answer_get_states(self, payload: dict[str, Any]) -> list[Any]:
+        return self.get_states_all(payload["domain"])
 
     def now_utc(self):
         """Return the current UTC time."""

@@ -44,7 +44,7 @@ from ..support import history as history_module
 from ..support import storage as storage_module
 from . import events as ev
 from .bus import EventBus
-from .commands import Unsubscribe
+from .commands import PersistSave, Unsubscribe
 from .events import Event
 
 _LOGGER = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class NotificationCenterController:
 
         config = await self._load_config()
         await self._apply_config(config)
-        self._rebuild_sessions()
+        await self._rebuild_sessions()
 
         self._action_event_unsub = self._gateway.bus_listen(
             EVENT_NOTIFICATION_ACTION, self._on_action_event
@@ -242,15 +242,12 @@ class NotificationCenterController:
                 del self._state["alerts"][alert_id]
 
         for alert in self._alerts.values():
-            alerts_module.ensure_runtime_state(self._state["alerts"], alert)
-
             if alert.get("enabled", True):
                 previous = previous_alerts.get(alert["id"])
                 if previous is not None and not previous.get("enabled", True):
                     newly_enabled_alert_ids.add(alert["id"])
 
-                for command in alerts_module.register_specs(alert):
-                    await self._bus.execute(command)
+            await self._bus.publish(Event(ev.ALERT_CONFIGURED, {"alert": alert}))
 
         return newly_enabled_alert_ids
 
@@ -260,7 +257,7 @@ class NotificationCenterController:
         async with self._reload_lock:
             config = await self._load_config()
             newly_enabled_alert_ids = await self._apply_config(config)
-            self._rebuild_sessions()
+            await self._rebuild_sessions()
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
@@ -268,14 +265,21 @@ class NotificationCenterController:
 
                 await self._evaluate_all(source="reload")
 
-    def _rebuild_sessions(self) -> None:
+    async def _rebuild_sessions(self) -> None:
         self._sessions.clear()
         now = self._gateway.now_utc()
         for alert_id, state in self._state["alerts"].items():
             action_id = state.get("confirmation_action_id")
             if action_id:
-                responses_module.track(
-                    self._sessions, action_id, now=now, alert_id=alert_id
+                await self._bus.publish(
+                    Event(
+                        ev.CONFIRMATION_SESSION_STARTED,
+                        {
+                            "session_id": action_id,
+                            "alert_id": alert_id,
+                            "now": now,
+                        },
+                    )
                 )
 
     # ------------------------------------------------------------------
@@ -320,25 +324,16 @@ class NotificationCenterController:
 
     async def _on_action_event(self, event: HassEvent) -> None:
         now = self._gateway.now_utc()
-        confirmed_by = responses_module.resolve_person_name(
-            self._gateway.get_states_all("person"),
-            event.context.user_id if event.context else None,
-        )
         await self._bus.publish(
             Event(
                 ev.ACTION_RECEIVED,
-                {"event_data": event.data, "now": now, "confirmed_by": confirmed_by},
+                {
+                    "event_data": event.data,
+                    "now": now,
+                    "user_id": event.context.user_id if event.context else None,
+                },
             )
         )
-
-    # ------------------------------------------------------------------
-    # Direct history recording - only `delete_alert`/`get_history` still
-    # need `support/history.py`'s pure helpers directly; every recording
-    # flow goes through `features/history.py` listening on the bus.
-    # ------------------------------------------------------------------
-
-    def _persist_state(self) -> None:
-        self._gateway.delay_save_store(self._store, self._state)
 
     # ------------------------------------------------------------------
     # Public operations - called directly by bridge/websocket.py
@@ -413,7 +408,7 @@ class NotificationCenterController:
         )
 
         await self.reload()
-        self._persist_state()
+        await self._bus.execute(PersistSave("runtime_state", self._state))
 
     async def test_alert(self, alert_id: str) -> None:
         """Send a test notification for a saved alert."""
@@ -449,14 +444,13 @@ class NotificationCenterController:
             return None
 
         action_id = f"NC_TEST_CONFIRM_{uuid.uuid4().hex}"
-        state = alerts_module.ensure_runtime_state(self._state["alerts"], alert)
-        state["confirmation_action_id"] = action_id
         await self._bus.publish(
             Event(
                 ev.CONFIRMATION_SESSION_STARTED,
                 {
                     "session_id": action_id,
                     "alert_id": alert["id"],
+                    "set_runtime_action": True,
                     "now": self._gateway.now_utc(),
                 },
             )
@@ -584,8 +578,9 @@ class NotificationCenterController:
     async def validate_conditions(self, alert: dict[str, Any]) -> bool:
         """Validate and evaluate already-normalized alert conditions without saving."""
 
-        active, error = await self._gateway.evaluate_condition(
-            compile_condition(alert)
+        _active, error = await self._bus.ask(
+            ev.EVALUATE_CONDITION,
+            {"source": compile_condition(alert)},
         )
         if error is not None:
             raise ValueError(f"Condition template failed: {error}")

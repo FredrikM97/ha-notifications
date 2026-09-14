@@ -1,9 +1,9 @@
-"""The generic publish/ask event bus - the kernel's dispatch mechanism.
+"""Typed event routing and command dispatch for the integration.
 
 No Home Assistant import, no business logic: `EventBus` only knows how to
-route a published `Event` to its subscribed handlers and a named query to
-its one registered responder. Every decision about *what* an event means
-lives in the feature module that subscribed to it.
+route a published `Event`, dispatch handlers' `Command` results, and answer
+named queries. Events are never commands: cascading publication is represented
+explicitly by the `Emit` command.
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .commands import Emit, RunBatch
+from .commands import Command, Emit, RunBatch
 from .events import Event
 
-Handler = Callable[[Event, "EventBus"], Awaitable[list[Any]]]
+Handler = Callable[[Event, "EventBus"], Awaitable[list[Command]]]
 Responder = Callable[[dict[str, Any]], Awaitable[Any]]
 CommandListener = Callable[[Any], Awaitable[None]]
 
 
 class EventBus:
-    """Two channels: `publish` (fire-and-forget facts) and `ask` (reads)."""
+    """Publish facts, execute typed commands, and answer reads."""
 
     def __init__(self) -> None:
         self._handlers: dict[str, list[Handler]] = {}
@@ -54,7 +54,7 @@ class EventBus:
             for command in commands:
                 await self.execute(command)
 
-    async def execute(self, command: Any) -> None:
+    async def execute(self, command: Command) -> None:
         """Execute bus orchestration or dispatch a leaf command to its listener."""
 
         if isinstance(command, Emit):

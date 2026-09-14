@@ -18,13 +18,12 @@ This is a compact map of the integration's main execution flows and decision poi
     `discard_test_payload`, `get_history`, `get_yaml`, `validate_yaml`,
     `save_yaml`, `validate_conditions`, `reload`)
   - "when does an alert fire, and what happens next" is *not* sequenced or
-    decided here anymore - `core.py` only publishes facts (condition
-    evaluated, action received) and executes the `Command`s that feature
-    handlers return; decisions live in `features/*.py`
+    decided here anymore - `core.py` publishes lifecycle/configuration facts;
+    decisions and command production live in `features/*.py`
 - `custom_components/notification_center/controller/commands.py`
   - the closed `Command` vocabulary (`CallService`, `TrackTemplate`,
     `TrackInterval`, `Unsubscribe`, `PersistSave`, `Emit`, `RunBatch`) -
-    the only things `core.py` executes against the gateway/bus
+    the only effects `EventBus.execute()` dispatches
 - `custom_components/notification_center/controller/events.py`
   - the shared `Event` dataclass plus every fact-event and query-name
     string constant features/core use to publish/subscribe/ask
@@ -40,7 +39,8 @@ This is a compact map of the integration's main execution flows and decision poi
     `on_condition_result` (the active/acknowledged/repeat state machine,
     returns a `TriggerTransition`), `record_send_result`, `mark_confirmed`.
     A thin `register(bus)` + `handle_*` layer translates
-    `condition.evaluated` into `condition.active`/`inactive`/`error` and
+    `alert.configured` into watcher commands, and `condition.evaluated`
+    into `condition.active`/`inactive`/`error` and
     `notification.send_requested` facts, and reacts to
     `notification.sent`/`failed`/`alert.confirmed_fact` for bookkeeping
 - `custom_components/notification_center/features/confirmation.py`
@@ -48,9 +48,9 @@ This is a compact map of the integration's main execution flows and decision poi
     covering both real alerts and unsaved editor test payloads,
     `match_action_event`, `plan_confirmation_effects` (the
     post-confirmation completion message/clear/follow-up decision). A
-    thin adapter layer reacts to `action.received` and
-    `alert.confirmed_effects`, asking the bus for sessions/runtime state
-    instead of holding direct references
+    thin adapter layer reacts to session start/discard, `action.received`,
+    and `alert.confirmed_effects`, asking the bus for sessions/runtime state
+    instead of core mutating confirmation state
 - `custom_components/notification_center/features/follow_up_actions.py`
   - pure: `build_service_calls` renders an alert's configured follow-up
     actions into service-call commands, isolating one bad action's error
@@ -73,8 +73,7 @@ This is a compact map of the integration's main execution flows and decision poi
   - a bus **listener**, not a kernel primitive - subscribes to the same
     fact events other features emit and turns them into entries via
     `support/history.py`, persisted with the ordinary `PersistSave`
-    command. `core.py` has no history-writing logic except the direct
-    carve-out `test_alert` still uses.
+    command. `core.py` has no history-writing logic.
 - `custom_components/notification_center/features/rendering.py`
   - pure `render_value`/`remove_none` shared by `notification.py` and
     `follow_up_actions.py`, taking an injected `render` callable
@@ -87,7 +86,7 @@ This is a compact map of the integration's main execution flows and decision poi
     websocket registration goes through here, called only from
     `controller/core.py`. It also registers itself as the bus's responder
     for `RENDER_TEMPLATE`/`HAS_SERVICE`/`FETCH_REGISTRY_SNAPSHOT`/
-    `EVALUATE_CONDITION` via `register_bus_responders(bus)`. It also listens
+    `EVALUATE_CONDITION`/`GET_STATES` via `register_bus_responders(bus)`. It also listens
     for HA-facing leaf commands and owns template/interval subscriptions,
     so neither reads nor reactive effects pass through `core.py`
 

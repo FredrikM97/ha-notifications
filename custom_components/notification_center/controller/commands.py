@@ -1,4 +1,4 @@
-"""Home Assistant commands executed by the controller kernel."""
+"""Typed effects dispatched by EventBus and executed by registered listeners."""
 
 from __future__ import annotations
 

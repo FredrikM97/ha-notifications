@@ -11,8 +11,8 @@ publishes plain-data facts, `features/*.py` modules subscribe to the
 facts they care about and return `Command`s (including further events,
 which cascade). Feature modules never import `ha.gateway`, never import
 `controller.core`, and never call each other directly - every read they
-need (HA state, runtime state, sessions) comes from asking the bus, which
-only `core.py` answers.
+need (HA state, runtime state, sessions) comes from asking the bus; gateway
+queries are answered by `ha/gateway.py`, and in-memory queries by `core.py`.
 
 For symptom-driven debugging, use [`.github/logic-index.md`](../.github/logic-index.md).
 This document is the structural map and must be updated whenever modules are
@@ -121,7 +121,7 @@ flowchart TB
 Only `Core` (`controller/core.py`) constructs `GW` (`ha/gateway.py`); no
 other module imports it. `GW` additionally registers itself as the bus's
 responder for its own passthrough queries (`RENDER_TEMPLATE`/`HAS_SERVICE`/
-`FETCH_REGISTRY_SNAPSHOT`/`EVALUATE_CONDITION`), so those four reads never
+`FETCH_REGISTRY_SNAPSHOT`/`EVALUATE_CONDITION`/`GET_STATES`), so those reads never
 pass through `Core`.
 `Commands`/`Events` are a shared vocabulary - importing them is not
 coupling, same as before. The key shift from the previous design: arrows
@@ -135,14 +135,12 @@ matters to another (e.g. "a notification was just sent" mattering to both
 actions and `history.py`'s recording), they all independently subscribe to
 the same fact event instead of one calling the other.
 
-The public, one-shot control-plane operations (`save_alert`, `delete_alert`,
-`test_alert`, `test_alert_payload`, YAML load/save/validate, `get_history`)
-remain direct synchronous methods on `core.py` that call into
-`features/*.py`'s pure functions directly (not through the bus) - they need
-immediate return values for the websocket bridge and aren't reactive-engine
-input. `delete_alert` is the one exception that also publishes
-`NOTIFICATION_CLEAR_REQUESTED` to reuse the same clear-composition logic
-`features/notification.py` already owns, rather than duplicating it.
+The public control-plane methods remain on `core.py` because the websocket
+bridge needs immediate return values and errors. Their reactive effects still
+use the bus: config application publishes `ALERT_CONFIGURED`, test delivery
+publishes `NOTIFICATION_SEND_REQUESTED`, confirmation sessions use session
+events, and delete publishes `NOTIFICATION_CLEAR_REQUESTED` plus `PersistSave`.
+Pure YAML/history reads and transformations remain direct calls.
 
 ## Dependency Rules
 
@@ -153,12 +151,12 @@ internal helpers.
 | --- | --- | --- |
 | Frontend to backend communication | `frontend/api.ts` | This is the only frontend module allowed to call `hass.connection.sendMessagePromise`. UI modules import API functions, not websocket message names. |
 | Backend frontend-facing operations | `controller/core.py` (`NotificationCenterController`) | `bridge/websocket.py` calls the controller's public methods directly. It never reaches into `features/` modules for these, and it never imports `ha.gateway`. |
-| Home Assistant access | `ha/gateway.py` (`HomeAssistantGateway`) | The *only* module that imports `homeassistant.*`. It is constructed only by `controller/core.py`. No other module - not even `features/*.py` or `support/storage.py`/`bridge/panel.py` - imports it. Feature modules get HA-touching reads (render a template, check a service, fetch the registry snapshot, evaluate a condition template) by asking the bus; the gateway answers those queries directly via `register_bus_responders(bus)` - `core.py` is not in between for these. `core.py` remains the only responder for queries that need its own in-memory state (`GET_ALERT`/`GET_RUNTIME_STATE`/`GET_STATE`/`GET_SESSIONS`). |
+| Home Assistant access | `ha/gateway.py` (`HomeAssistantGateway`) | The *only* module that imports `homeassistant.*`. It is constructed only by `controller/core.py`. Features obtain HA reads through gateway-owned bus responders (`RENDER_TEMPLATE`, `HAS_SERVICE`, `FETCH_REGISTRY_SNAPSHOT`, `EVALUATE_CONDITION`, `GET_STATES`) and issue typed commands through gateway-owned listeners. `core.py` answers only in-memory queries (`GET_ALERT`, `GET_RUNTIME_STATE`, `GET_STATE`, `GET_SESSIONS`). |
 | Config normalization | `domain/alert_schema.py` (`ConfigNormalizer`/`normalize_config`) | Owns the shared alert document shape, conditions, durations, and YAML safety. Unknown alert and notification fields are preserved for feature-owned extensions; do not add feature-specific field handling here unless it is a shared boundary invariant. |
 | Condition compilation | `domain/condition_schema.py` (`compile_condition`) | The only place visual conditions become Jinja template text. |
 | The event bus | `controller/bus.py` (`EventBus`) | Generic publish/execute/ask dispatch only - no business logic. It interprets `Emit`/`RunBatch` orchestration and dispatches typed leaf commands to registered listeners. |
 | The kernel | `controller/core.py` | Owns lifecycle state, gateway/bus construction, in-memory query responders, setup/reload sequencing, and the public control-plane API. Business decisions and HA command dispatch must not leak in here. |
-| Trigger state machine | `features/triggering.py` | Owns "when does an alert fire": condition/interval watch specs, and the active/acknowledged/repeat decision logic (`TriggerTransition`), translated into fact events (`condition.active`/`condition.inactive`/`condition.error`) and a `notification.send_requested` request. Also records send outcomes (`notification.sent`/`notification.failed`) and marks alerts confirmed (`alert.confirmed_fact`). |
+| Trigger state machine | `features/triggering.py` | Owns alert configuration watcher commands and "when does an alert fire": condition/interval specs plus active/acknowledged/repeat transitions, translated into condition and notification facts. Also records send outcomes and confirmations. |
 | Confirmation/session tracking | `features/confirmation.py` | Owns the one pending-session table (real alerts and unsaved test drafts alike), incoming mobile-action-event routing (`action.received`), and confirmation-effect planning (`alert.confirmed_effects` -> clear/completion/follow-up requests). |
 | Follow-up actions | `features/follow_up_actions.py` (`build_service_calls`) | Renders an alert's configured extra service calls in response to `notification.sent` (post-send) and `actions.run_requested` (post-confirmation); per-action errors are isolated via one `RunBatch` per action so one bad action doesn't stop the others. |
 | Notification composition | `features/notification.py` (`compose_send`/`compose_clear`) | Reacts to `notification.send_requested`/`notification.clear_requested`, composing message content and `CallService` commands. Delegates recipient expansion plus targeted and Mobile App service selection to `features/notification_services/`; those components return plain resolution data, never gateway calls. |

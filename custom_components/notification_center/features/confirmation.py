@@ -241,6 +241,12 @@ async def handle_session_started(event: Event, bus: Any) -> list[Command]:
         draft_alert=payload.get("draft_alert"),
         ttl=payload.get("ttl"),
     )
+    if payload.get("set_runtime_action", False) and payload.get("alert_id"):
+        state = await bus.ask(
+            ev.GET_RUNTIME_STATE, {"alert_id": payload["alert_id"]}
+        )
+        if state is not None:
+            state["confirmation_action_id"] = payload["session_id"]
     return []
 
 
@@ -267,7 +273,8 @@ async def handle_session_discard_requested(
 async def handle_action_received(event: Event, bus: Any) -> list[Command]:
     payload = event.payload
     now = payload["now"]
-    confirmed_by = payload["confirmed_by"]
+    person_states = await bus.ask(ev.GET_STATES, {"domain": "person"})
+    confirmed_by = resolve_person_name(person_states, payload.get("user_id"))
 
     sessions = await bus.ask(ev.GET_SESSIONS)
     outcome = match_action_event(sessions, payload["event_data"], now)

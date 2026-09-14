@@ -349,11 +349,22 @@ def mark_confirmed(
 def register(bus: Any) -> None:
     """Subscribe this module's reactions to the events it owns."""
 
+    bus.subscribe(ev.ALERT_CONFIGURED, handle_alert_configured)
     bus.subscribe(ev.CONDITION_CHECK_REQUESTED, handle_check_requested)
     bus.subscribe(ev.CONDITION_EVALUATED, handle_condition_evaluated)
     bus.subscribe(ev.NOTIFICATION_SENT, handle_notification_sent)
     bus.subscribe(ev.NOTIFICATION_FAILED, handle_notification_failed)
     bus.subscribe(ev.CONFIRMED, handle_confirmed)
+
+
+async def handle_alert_configured(event: Event, bus: Any) -> list[Command]:
+    alert = event.payload["alert"]
+    state_root = await bus.ask(ev.GET_STATE)
+    ensure_runtime_state(state_root["alerts"], alert)
+
+    if not alert.get("enabled", True):
+        return []
+    return register_specs(alert)
 
 
 async def handle_check_requested(event: Event, bus: Any) -> list[Command]:
