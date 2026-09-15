@@ -1,10 +1,21 @@
 name: Release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
+      action:
+        description: What to do
+        required: true
+        type: choice
+        default: update_draft
+        options:
+          - update_draft
+          - publish
       bump:
-        description: Version bump
+        description: Version bump to use when publishing
         required: true
         type: choice
         default: patch
@@ -17,14 +28,89 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    if: github.repository_owner == 'FredrikM97'
+  update_draft:
+    if: |
+      github.repository_owner == 'FredrikM97' &&
+      (github.event_name == 'push' || github.event.inputs.action == 'update_draft')
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Build release notes
+        run: |
+          last_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          range=HEAD
+          if [ -n "$last_tag" ]; then
+            range="$last_tag..HEAD"
+          fi
+
+          {
+            echo "## Changes"
+            git log "$range" --no-merges --pretty=format:'- %s (%an)' || true
+            echo
+            echo
+            if [ -n "$last_tag" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${last_tag}...main"
+            else
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/main"
+            fi
+          } > release-notes.md
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Build HACS package
+        run: |
+          npm ci
+          npm run export:hacs
+          cd hacs-export/custom_components/ha_notifications
+          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
+
+      - name: Update rolling draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view unreleased >/dev/null 2>&1; then
+            gh release edit unreleased \
+              --title "Unreleased" \
+              --notes-file release-notes.md \
+              --target main \
+              --draft
+          else
+            gh release create unreleased \
+              --title "Unreleased" \
+              --notes-file release-notes.md \
+              --target main \
+              --draft
+          fi
+          gh release upload unreleased ha-notifications.zip --clobber
+
+  publish:
+    if: |
+      github.repository_owner == 'FredrikM97' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.action == 'publish'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require an existing draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view unreleased >/dev/null 2>&1; then
+            echo "::error::No draft release found. Push to main first to prepare one."
+            exit 1
+          fi
 
       - name: Determine release version
         id: version
@@ -35,13 +121,20 @@ jobs:
           IFS='.' read -r major minor patch <<EOF
           $base
           EOF
-          case "${{ inputs.bump }}" in
+          case "${{ github.event.inputs.bump }}" in
             major) major=$((major + 1)); minor=0; patch=0 ;;
             minor) minor=$((minor + 1)); patch=0 ;;
             *) patch=$((patch + 1)) ;;
           esac
           echo "tag=v$major.$minor.$patch" >> "$GITHUB_OUTPUT"
           echo "version=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+
+      - name: Reuse draft release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view unreleased --json body --jq '.body' > release-notes.md
+          sed -i "s#\.\.\.main#...${{ steps.version.outputs.tag }}#g; s#/commits/main#/commits/${{ steps.version.outputs.tag }}#g" release-notes.md
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -58,13 +151,15 @@ jobs:
           cd "$package_dir"
           zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
 
-      - name: Create release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-          gh release create "${{ steps.version.outputs.tag }}" ha-notifications.zip \
+          gh release edit unreleased \
+            --tag "${{ steps.version.outputs.tag }}" \
             --title "${{ steps.version.outputs.tag }}" \
-            --generate-notes \
+            --notes-file release-notes.md \
+            --target main \
+            --draft=false \
             --latest
+          gh release upload "${{ steps.version.outputs.tag }}" ha-notifications.zip --clobber
