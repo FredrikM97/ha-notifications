@@ -49,3 +49,30 @@ class HaNotificationsConfigFlow(
                 }
             ),
         )
+
+    async def async_step_reconfigure(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Handle updating the integration settings from Home Assistant."""
+
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="entry_not_found")
+
+        if user_input is not None:
+            self.hass.config_entries.async_update_entry(entry, data=user_input)
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SHOW_SIDEBAR,
+                        default=entry.data.get(CONF_SHOW_SIDEBAR, False),
+                    ): bool,
+                }
+            ),
+        )

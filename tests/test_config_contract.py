@@ -1,10 +1,9 @@
-import unittest
 import json
+import unittest
 from datetime import timedelta
 from pathlib import Path
 
 from homeassistant import config_entries
-
 from test_support import load_const_and_models
 
 from custom_components.ha_notifications import config_flow
@@ -27,6 +26,9 @@ class ConfigContractTests(unittest.TestCase):
         self.assertIs(
             config_entries.HANDLERS[const.DOMAIN],
             config_flow.HaNotificationsConfigFlow,
+        )
+        self.assertTrue(
+            hasattr(config_flow.HaNotificationsConfigFlow, "async_step_reconfigure")
         )
 
     def test_remove_callback_is_defined(self):

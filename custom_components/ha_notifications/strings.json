@@ -7,6 +7,13 @@
         "data": {
           "show_sidebar": "Show in sidebar"
         }
+      },
+      "reconfigure": {
+        "title": "HA Notifications",
+        "description": "Update HA Notifications settings.",
+        "data": {
+          "show_sidebar": "Show in sidebar"
+        }
       }
     }
   }

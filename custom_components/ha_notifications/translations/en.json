@@ -12,6 +12,13 @@
         "data_description": {
           "show_sidebar": "Add HA Notifications to the Home Assistant sidebar. It remains available as a dashboard card either way."
         }
+      },
+      "reconfigure": {
+        "title": "HA Notifications",
+        "description": "Update HA Notifications settings.",
+        "data": {
+          "show_sidebar": "Add HA Notifications to the Home Assistant sidebar. It remains available as a dashboard card either way."
+        }
       }
     },
     "abort": {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from importlib import import_module
@@ -81,6 +82,7 @@ class FeatureServices:
     sessions: dict[str, Any]
     scheduler: Any | None
     configuration_storage: ConfigurationStorage
+    reload_configuration: Callable[[], Awaitable[None]]
 
 
 class Feature(Protocol):
@@ -148,6 +150,7 @@ class FeatureLifecycle:
         self._features = tuple(feature(services) for feature in FeatureBase._registry)
         self._validate_dependencies()
         self._started: list[Feature] = []
+        self._ready = asyncio.Event()
         self._routes = self._collect_routes()
         self._websocket_routes = self._collect_websocket_routes()
         self._reload_configuration = reload_configuration
@@ -171,6 +174,13 @@ class FeatureLifecycle:
         """Request the composition host to reload feature configuration."""
 
         await self._reload_configuration()
+
+    async def wait_until_ready(self) -> None:
+        """Wait until externally callable feature routes are set up."""
+
+        ready = getattr(self, "_ready", None)
+        if ready is not None:
+            await ready.wait()
 
     @staticmethod
     def _load_feature_classes() -> None:
@@ -296,10 +306,17 @@ class FeatureLifecycle:
                 await feature.unload()
             raise
         self._started = started
+        ready = getattr(self, "_ready", None)
+        if ready is None:
+            self._ready = asyncio.Event()
+        self._ready.set()
 
     async def unload(self) -> None:
         """Unload started features in reverse setup order."""
 
+        ready = getattr(self, "_ready", None)
+        if ready is not None:
+            ready.clear()
         for feature in reversed(self._started):
             await feature.unload()
         self._started.clear()

@@ -121,7 +121,7 @@ class AlertFeature(FeatureBase):
             alerts.append(saved_alert)
 
         await self.services.configuration_storage.save({"version": 1, "alerts": alerts})
-        await self.lifecycle.reload()
+        await self.services.reload_configuration()
         return saved_alert
 
     @websocket_route(
@@ -149,6 +149,6 @@ class AlertFeature(FeatureBase):
         self.services.state["history"] = history.remove_alert(
             self.services.state["history"], alert_id
         )
-        await self.lifecycle.reload()
+        await self.services.reload_configuration()
         self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
         return True

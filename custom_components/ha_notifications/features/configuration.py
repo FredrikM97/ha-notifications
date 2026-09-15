@@ -93,7 +93,7 @@ class ConfigurationFeature(FeatureBase):
         """Validate, write, and reload the supplied YAML document."""
 
         mapped = await self.services.configuration_storage.save_yaml(yaml)
-        await self.lifecycle.reload()
+        await self.services.reload_configuration()
         return {"saved": True, "config": mapped}
 
     @websocket_route(
@@ -105,5 +105,5 @@ class ConfigurationFeature(FeatureBase):
     async def reload(self) -> bool:
         """Reload persisted configuration through the lifecycle owner."""
 
-        await self.lifecycle.reload()
+        await self.services.reload_configuration()
         return True

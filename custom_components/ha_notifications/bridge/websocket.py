@@ -41,6 +41,9 @@ def register(
         @websocket_api.async_response
         async def handle(_hass, connection, msg: dict[str, Any]) -> None:
             try:
+                wait_until_ready = getattr(lifecycle, "wait_until_ready", None)
+                if wait_until_ready is not None:
+                    await wait_until_ready()
                 arguments = {
                     argument.name: msg[argument.name]
                     for argument in specification.arguments

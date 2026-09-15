@@ -1,4 +1,4 @@
-import { errorMessage, getYaml, saveYaml, validateYaml } from "./api.js";
+import { errorMessage, getYaml, reload, saveYaml, validateYaml } from "./api.js";
 import { html, render } from "lit";
 import type { Hass } from "./types.js";
 
@@ -33,17 +33,18 @@ export function renderYamlView(
     html`<div class="nc-card nc-yaml">
       <div class="nc-toolbar">
         <div>
-          Advanced editor. Copy this YAML to another system, paste YAML from an
-          existing configuration, or edit the file directly at
+          Advanced editor. Copy this YAML to another system, edit it directly,
+          or use the file at
           /config/ha_notifications.yaml.
         </div>
         <div class="nc-actions">
           <button class="nc-button secondary" @click=${copyYaml}>Copy</button>
-          <button class="nc-button secondary" @click=${pasteYaml}>Paste</button>
           <button class="nc-button secondary" @click=${validateYamlText}>
             Validate
           </button>
-          <button class="nc-button secondary" @click=${load}>Reload</button>
+          <button class="nc-button secondary" @click=${reloadYaml}>
+            Reload
+          </button>
           <button class="nc-button" @click=${saveYamlText}>Save YAML</button>
         </div>
       </div>
@@ -71,12 +72,17 @@ export function renderYamlView(
     }
   }
 
-  async function pasteYaml(): Promise<void> {
+  async function reloadYaml(event: Event): Promise<void> {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
     try {
-      editor.value = await navigator.clipboard.readText();
-      showToast("YAML pasted from clipboard.");
+      await reload(hass);
+      await load();
+      showToast("YAML configuration reloaded.");
     } catch (err) {
       showToast(errorMessage(err), true);
+    } finally {
+      button.disabled = false;
     }
   }
 

@@ -56,6 +56,7 @@ class HaNotificationsController:
             sessions=self._sessions,
             scheduler=None,
             configuration_storage=self._configuration_storage,
+            reload_configuration=self.reload,
         )
         self._feature_lifecycle: FeatureLifecycle | None = None
 
@@ -81,6 +82,7 @@ class HaNotificationsController:
     async def dispatch(self, route: str, *args: Any, **kwargs: Any) -> Any:
         """Invoke one composed feature route without owning its workflow."""
 
+        await self._lifecycle.wait_until_ready()
         return await self._lifecycle.dispatch(route, *args, **kwargs)
 
     # ------------------------------------------------------------------
