@@ -19,3 +19,4 @@ hacs-export/
 *.egg-info/
 build/
 /dist/
+.vscode
