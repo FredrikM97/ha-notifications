@@ -314,6 +314,11 @@ class HomeAssistantGateway:
 
         frontend.add_extra_js_url(self._hass, module_url)
 
+    def unregister_extra_js(self, module_url: str) -> None:
+        """Remove an extra JS module registered by this integration."""
+
+        frontend.remove_extra_js_url(self._hass, module_url)
+
     def panel_exists(self, frontend_url_path: str) -> bool:
         """Return whether a panel is already registered."""
 

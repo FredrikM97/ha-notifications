@@ -58,6 +58,11 @@ class RuntimeStateStorage:
 
         await self._store.async_save(self._state)
 
+    async def remove(self) -> None:
+        """Remove the integration-owned runtime state document."""
+
+        await self._store.async_remove()
+
 
 class ConfigurationStorage:
     """Own loading and saving the integration's YAML configuration document."""

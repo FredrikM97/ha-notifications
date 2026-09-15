@@ -1,14 +1,39 @@
 import unittest
+import json
 from datetime import timedelta
+from pathlib import Path
+
+from homeassistant import config_entries
 
 from test_support import load_const_and_models
 
+from custom_components.ha_notifications import config_flow
 from custom_components.ha_notifications.domain.durations import parse_duration
 
 const, models = load_const_and_models()
 
 
 class ConfigContractTests(unittest.TestCase):
+    def test_ui_config_flow_is_registered(self):
+        manifest_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "ha_notifications"
+            / "manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+
+        self.assertTrue(manifest["config_flow"])
+        self.assertIs(
+            config_entries.HANDLERS[const.DOMAIN],
+            config_flow.HaNotificationsConfigFlow,
+        )
+
+    def test_remove_callback_is_defined(self):
+        from custom_components.ha_notifications import async_remove_entry
+
+        self.assertTrue(callable(async_remove_entry))
+
     def test_config_version_defined(self):
         self.assertEqual(const.CONFIG_VERSION, 1)
 

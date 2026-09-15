@@ -11,7 +11,14 @@ from homeassistant.core import HomeAssistant
 
 from ..bridge import panel as panel_module
 from ..bridge import websocket as frontend_websocket
-from ..const import CONFIG_FILENAME, DOMAIN, STORAGE_KEY, STORAGE_VERSION
+from ..const import (
+    CONFIG_FILENAME,
+    DOMAIN,
+    PANEL_MODULE,
+    STORAGE_KEY,
+    STORAGE_VERSION,
+    VERSION,
+)
 from ..features import confirmation as responses_module
 from ..ha.gateway import HomeAssistantGateway
 from ..support import storage as storage_module
@@ -131,6 +138,7 @@ class HaNotificationsController:
         )
 
     async def _on_home_assistant_started(self, _event: HassEvent) -> None:
+        self._started_unsub = None
         self._started = True
         await self._evaluate_all(source="startup")
 
@@ -149,11 +157,22 @@ class HaNotificationsController:
         except Exception:
             _LOGGER.exception("Failed to unregister HA Notifications frontend")
 
+        try:
+            self._gateway.unregister_extra_js(f"{PANEL_MODULE}?v={VERSION}")
+        except (KeyError, ValueError):
+            pass
+
         await self._runtime_storage.save()
         self._started = False
         self._setup_complete = False
 
         return True
+
+    async def async_remove(self) -> None:
+        """Unload the controller and remove integration-owned runtime state."""
+
+        await self.async_unload()
+        await self._runtime_storage.remove()
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------

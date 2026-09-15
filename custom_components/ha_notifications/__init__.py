@@ -40,27 +40,12 @@ def _get_controller(
 ) -> HaNotificationsController:
     """Get the running controller."""
 
-    data = hass.data.get(
-        DOMAIN,
-        {},
-    )
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        controller = entry.runtime_data
+        if isinstance(controller, HaNotificationsController):
+            return controller
 
-    controller = (
-        data.get("controller")
-        if isinstance(
-            data,
-            dict,
-        )
-        else None
-    )
-
-    if not isinstance(
-        controller,
-        HaNotificationsController,
-    ):
-        raise HomeAssistantError("HA Notifications is not configured.")
-
-    return controller
+    raise HomeAssistantError("HA Notifications is not configured.")
 
 
 async def async_setup(
@@ -68,11 +53,6 @@ async def async_setup(
     config: dict[str, Any],
 ) -> bool:
     """Set up HA Notifications."""
-
-    hass.data.setdefault(
-        DOMAIN,
-        {},
-    )
 
     async def handle_reload(
         _call: ServiceCall,
@@ -143,15 +123,6 @@ async def async_setup_entry(
 
         raise
 
-    data = hass.data.setdefault(
-        DOMAIN,
-        {},
-    )
-
-    data["controller"] = controller
-
-    # ConfigEntry runtime_data is the authoritative runtime
-    # location.
     entry.runtime_data = controller
 
     _LOGGER.info("HA Notifications started")
@@ -182,15 +153,21 @@ async def async_unload_entry(
             _LOGGER.exception("Failed to unload HA Notifications")
             unload_ok = False
 
-    data = hass.data.get(DOMAIN)
-
-    if isinstance(
-        data,
-        dict,
-    ):
-        data.pop(
-            "controller",
-            None,
-        )
-
     return unload_ok
+
+
+async def async_remove_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> None:
+    """Clean up integration-owned runtime state after entry removal."""
+
+    controller = entry.runtime_data
+
+    if isinstance(controller, HaNotificationsController):
+        await controller.async_remove()
+
+    if hass.services.has_service(DOMAIN, SERVICE_RELOAD):
+        hass.services.async_remove(DOMAIN, SERVICE_RELOAD)
+    if hass.services.has_service(DOMAIN, SERVICE_TEST):
+        hass.services.async_remove(DOMAIN, SERVICE_TEST)
