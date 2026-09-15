@@ -30,15 +30,15 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/ha_notifications/features/history.py` — history formatting, queries, deletion cleanup, and recording
 
 ## Frontend/editor surfaces
-- `custom_components/ha_notifications/frontend/api.ts` — API calls for listing/saving alerts (the only transport boundary)
-- `custom_components/ha_notifications/frontend/panel.ts` — dashboard/panel LitElement shell, tab navigation
-- `custom_components/ha_notifications/frontend/editor/index.ts` — `AlertEditorController`: dialog state, dirty tracking, save/test/validate wiring
-- `custom_components/ha_notifications/frontend/sections.ts` — barrel re-exporting one render function per alert-editor section from `frontend/sections/*.ts` (basic, monitor, condition, recipients, notification, reminder interval, confirmation, post-send/post-confirmation actions)
-- `custom_components/ha_notifications/frontend/editor/helpers.ts` — shared render helpers (`field`, `section`, `codeEditor`, `durationInput`, YAML (de)serialization)
-- `custom_components/ha_notifications/frontend/editor/types.ts` — `EditorContext` and other shared editor types/constants
-- `custom_components/ha_notifications/frontend/condition-builder.ts` — visual condition builder
-- `custom_components/ha_notifications/frontend/recipient-picker.ts` — notification target/recipient picker
-- `custom_components/ha_notifications/frontend/styles.ts` — styling and layout
+- `frontend/api.ts` — API calls for listing/saving alerts (the only transport boundary)
+- `frontend/panel.ts` — dashboard/panel LitElement shell, tab navigation
+- `frontend/editor/index.ts` — `AlertEditorController`: dialog state, dirty tracking, save/test/validate wiring
+- `frontend/sections.ts` — barrel re-exporting one render function per alert-editor section from `frontend/sections/*.ts` (basic, monitor, condition, recipients, notification, reminder interval, confirmation, post-send/post-confirmation actions)
+- `frontend/editor/helpers.ts` — shared render helpers (`field`, `section`, `codeEditor`, `durationInput`, YAML (de)serialization)
+- `frontend/editor/types.ts` — `EditorContext` and other shared editor types/constants
+- `frontend/condition-builder.ts` — visual condition builder
+- `frontend/recipient-picker.ts` — notification target/recipient picker
+- `frontend/styles.ts` — styling and layout
 
 ## When changing behavior
 1. Identify the subsystem by symptom: config flow, storage, runtime execution, or frontend editing.

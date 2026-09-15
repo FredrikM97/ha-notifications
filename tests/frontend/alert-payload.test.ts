@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildAlertPayload } from "../../custom_components/ha_notifications/frontend/alert-payload.js";
-import type { AlertFormValues } from "../../custom_components/ha_notifications/frontend/alert-payload.js";
-import { defaultAlert } from "../../custom_components/ha_notifications/frontend/editor/helpers.js";
+import { buildAlertPayload } from "../../frontend/alert-payload.js";
+import type { AlertFormValues } from "../../frontend/alert-payload.js";
+import { defaultAlert } from "../../frontend/editor/helpers.js";
 
 function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
   return {
@@ -21,6 +21,7 @@ function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
       button: "",
       notification: { enabled: false, message: "", clear: true },
       reminders: {
+        enabled: true,
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
@@ -45,13 +46,11 @@ describe("buildAlertPayload", () => {
         },
       }),
     );
-    expect(payload.notification.action).toBeUndefined();
     expect(payload).toMatchSnapshot();
   });
 
   it("throws when there are no recipients", () => {
     const original = defaultAlert();
-    original.notification.action = "";
     expect(() => buildAlertPayload(original, values())).toThrow(
       /Select at least one device, area, label, or notification entity/,
     );

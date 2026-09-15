@@ -3,7 +3,7 @@ import {
   durationInputValue,
   enabledLabel,
   toggleTitle,
-} from "../../custom_components/ha_notifications/frontend/editor/helpers.js";
+} from "../../frontend/editor/helpers.js";
 
 describe("durationInputValue", () => {
   it("pads an HH:MM string to HH:MM:SS", () => {

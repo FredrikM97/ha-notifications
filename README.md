@@ -4,8 +4,8 @@
 
 The integration source lives under `custom_components/ha_notifications`,
 as expected by Home Assistant and HACS. For packaging, run
-`npm install && npm run export:hacs`. The source frontend remains TypeScript;
-the export contains compiled browser output.
+`npm ci && npm run export:hacs`. The source frontend remains TypeScript; the
+export contains compiled browser output.
 
 ## Installation
 
@@ -40,9 +40,10 @@ itself into `custom_components`; `manifest.json` and `dist/panel.js` must be
 directly inside the integration directory. Restart Home Assistant after
 installation.
 
-The release ZIP already contains the compiled frontend. You only need
-`npm run build` when installing from the source repository or developing the
-integration locally.
+The release ZIP already contains the compiled frontend. In the source
+repository, `npm run build` writes the development bundle to `dist/panel.js`;
+the HACS export and local installer copy it into the integration's runtime
+path at `custom_components/ha_notifications/dist/panel.js`.
 
 For local Home Assistant testing, build the frontend in a Node-capable
 environment, then run the Node-free installer to copy the integration into

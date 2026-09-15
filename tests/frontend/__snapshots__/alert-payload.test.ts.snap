@@ -21,6 +21,7 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
       "message": "",
     },
     "reminders": {
+      "enabled": true,
       "interval": 1800,
       "max_attempts": 5,
       "show_attempts": false,

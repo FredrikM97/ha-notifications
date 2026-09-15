@@ -6,8 +6,8 @@ import {
   saveYaml,
   testAlert,
   validateYaml,
-} from "../../custom_components/ha_notifications/frontend/api.js";
-import type { Alert, Hass } from "../../custom_components/ha_notifications/frontend/types.js";
+} from "../../frontend/api.js";
+import type { Alert, Hass } from "../../frontend/types.js";
 
 function hass() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});

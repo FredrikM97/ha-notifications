@@ -13,8 +13,8 @@ This is the compact routing map for the direct-workflow architecture.
 ## Frontend transport
 
 - `custom_components/ha_notifications/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations, legacy command registration during migration, and HA response serialization.
-- `custom_components/ha_notifications/frontend/api.ts`: the only frontend/backend transport module.
-- `custom_components/ha_notifications/frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
+- `frontend/api.ts`: the only frontend/backend transport module.
+- `frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
 
 ## Features
 

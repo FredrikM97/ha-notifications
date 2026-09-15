@@ -4,12 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const dist = join(
-  root,
-  "custom_components",
-  "ha_notifications",
-  "dist",
-);
+const dist = join(root, "dist");
 const panelPath = join(dist, "panel.js");
 assert.ok(existsSync(panelPath), "Missing bundled panel.js");
 
@@ -17,8 +12,6 @@ const panel = readFileSync(panelPath, "utf8");
 const editor = readFileSync(
   join(
     root,
-    "custom_components",
-    "ha_notifications",
     "frontend",
     "editor",
     "index.ts",
@@ -28,8 +21,6 @@ const editor = readFileSync(
 const api = readFileSync(
   join(
     root,
-    "custom_components",
-    "ha_notifications",
     "frontend",
     "api.ts",
   ),
@@ -38,8 +29,6 @@ const api = readFileSync(
 const yamlView = readFileSync(
   join(
     root,
-    "custom_components",
-    "ha_notifications",
     "frontend",
     "yaml-view.ts",
   ),
@@ -48,8 +37,6 @@ const yamlView = readFileSync(
 const editorHelpers = readFileSync(
   join(
     root,
-    "custom_components",
-    "ha_notifications",
     "frontend",
     "editor",
     "helpers.ts",
