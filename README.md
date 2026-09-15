@@ -20,41 +20,9 @@ comes back, the integration can restore the alert workflow and continue
 delivering it to the configured recipients until it is resolved or otherwise
 cleared by its configuration.
 
-## Installation
-
-Install HA Notifications through HACS, or download a release ZIP for a manual
-installation. The compiled frontend is included in both cases; no separate
-Lovelace resource is required.
-
-### HACS
-
-Use the **Add to HACS** button above, or search for **HA Notifications** in
-HACS. HACS installs the integration and its compiled frontend together.
-
-After the integration is installed and Home Assistant is restarted, it
-registers its sidebar panel and frontend module automatically.
-
-### Manual ZIP installation
-
-Download the `ha-notifications.zip` asset from a release, create the
-integration directory, and extract the ZIP contents into your Home Assistant
-configuration directory:
-
-```text
-<config>/custom_components/ha_notifications/
-```
-
-For example:
-
-```bash
-mkdir -p <config>/custom_components/ha_notifications
-unzip ha-notifications.zip -d <config>/custom_components/ha_notifications
-```
-
-The ZIP contains the integration files at its root. `manifest.json` and
-`dist/panel.js` must be directly inside
-`custom_components/ha_notifications/`. Restart Home Assistant after
-installation.
+Use the **Add to HACS** button above to install HA Notifications. HACS
+includes the integration and its compiled frontend; no separate Lovelace
+resource is required. Restart Home Assistant after installation.
 
 ## Lovelace card
 

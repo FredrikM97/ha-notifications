@@ -24,7 +24,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           current_sha=$(git rev-parse --short HEAD)
-          previous_notes=$(gh release view dev --json body --jq '.body' 2>/dev/null || true)
+          base_version=$(python3 -c 'import json; print(json.load(open("custom_components/ha_notifications/manifest.json"))["version"])')
+          dev_tag="v${base_version}-dev"
+          previous_notes=$(gh release view "$dev_tag" --json body --jq '.body' 2>/dev/null || true)
           if printf '%s' "$previous_notes" | grep -Fq "**Commit**: $current_sha"; then
             echo "create=false" >> "$GITHUB_OUTPUT"
           else
@@ -35,7 +37,7 @@ jobs:
         if: steps.changes.outputs.create == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
 
       - name: Build HACS package
@@ -43,6 +45,8 @@ jobs:
         run: |
           npm ci
           npm run export:hacs
+          package_dir=hacs-export/custom_components/ha_notifications
+          node -e 'const fs = require("fs"); const file = process.argv[1]; const manifest = JSON.parse(fs.readFileSync(file, "utf8")); manifest.version = `${manifest.version}-dev`; fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);' "$package_dir/manifest.json"
           cd hacs-export/custom_components/ha_notifications
           zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
 
@@ -51,8 +55,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git tag -f dev
-          git push -f origin dev
+          dev_tag="v$(node -p 'require("./custom_components/ha_notifications/manifest.json").version')-dev"
+          if gh release view dev >/dev/null 2>&1; then
+            gh release delete dev --yes
+          fi
+          if git ls-remote --exit-code --tags origin refs/tags/dev >/dev/null 2>&1; then
+            git push origin :refs/tags/dev
+          fi
+          git tag -f "$dev_tag"
+          git push -f origin "$dev_tag"
           last_stable=$(gh release list --exclude-pre-releases --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
           if [ -n "$last_stable" ]; then
             commit_count=$(git rev-list --count "$last_stable"..HEAD)
@@ -60,8 +71,8 @@ jobs:
             commit_count="N/A"
           fi
           notes="Development build from main branch."$'\n\n'"**Build**: $(date -u '+%Y-%m-%d %H:%M UTC')"$'\n'"**Commit**: $(git rev-parse --short HEAD)"$'\n'"**Changes**: $commit_count commits since the last stable release"
-          if ! gh release view dev >/dev/null 2>&1; then
-            gh release create dev --title "Dev Release" --notes "$notes" --prerelease
+          if ! gh release view "$dev_tag" >/dev/null 2>&1; then
+            gh release create "$dev_tag" --title "Dev Release" --notes "$notes" --prerelease
           fi
-          gh release upload dev ha-notifications.zip --clobber
-          gh release edit dev --notes "$notes" --prerelease
+          gh release upload "$dev_tag" ha-notifications.zip --clobber
+          gh release edit "$dev_tag" --notes "$notes" --prerelease
