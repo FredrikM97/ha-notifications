@@ -58,12 +58,11 @@ const editorHelpers = readFileSync(
 );
 assert.match(panel, /customElements\.define/);
 assert.match(panel, /ha-notifications-card/);
-assert.doesNotMatch(panel, /customElements\.define\(["']ha-notifications-card/);
+assert.match(panel, /customElements\.define\(["']ha-notifications-card["']/);
 assert.doesNotMatch(panel, /LegacyHaNotificationsCard/);
 assert.match(panel, /window\.customCards|customCards/);
 assert.match(panel, /getCardSize/);
 assert.match(panel, /Administrator access required/);
-assert.doesNotMatch(panel, /custom:ha-notifications-card/);
 assert.match(panel, /custom:ha-notifications-card/);
 assert.match(panel, /HA Notifications/);
 assert.doesNotMatch(panel, /from ["']lit["']/);
