@@ -503,13 +503,13 @@ def _recipient_resolution_summary(
                 recipient_resolution.device_ids,
                 has_service,
             )
+            if candidate_legacy.services:
+                valid.append(f"{label} (direct Mobile App service available)")
+                continue
             if not candidate_actions:
                 invalid.append(f"{label} (no notification-capable device found)")
                 continue
-            if candidate_legacy.services:
-                valid.append(f"{label} (direct Mobile App service available)")
-            else:
-                invalid.append(f"{label} (Mobile App notify service is not registered)")
+            invalid.append(f"{label} (Mobile App notify service is not registered)")
 
     if valid and invalid:
         return "Valid: " + "; ".join(valid) + ". Invalid: " + "; ".join(invalid) + "."
