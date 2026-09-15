@@ -104,7 +104,7 @@ assert.match(panel, /must be a valid YAML list/);
 assert.doesNotMatch(panel, /must be a valid JSON array/);
 assert.match(panel, /ha-code-editor/);
 assert.match(panel, /Notify recipients when confirmed/);
-assert.match(panel, /Confirmed by \{\{ confirmed_by \}\}/);
+assert.doesNotMatch(panel, /Confirmed by \{\{ confirmed_by \}\}/);
 assert.match(panel, /discard_test_payload/);
 assert.match(panel, /Draft test notification sent\./);
 assert.match(panel, /nc-switch-input::after/);

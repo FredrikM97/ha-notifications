@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
 
 from ..const import TransitionKind
 from ..controller.lifecycle import FeatureBase, route
@@ -136,7 +136,12 @@ class TriggeringWorkflow:
             return TriggeringWorkflow._send_transition(
                 state, alert, source, False, confirmation_action
             )
-        if source in ("reload", "startup", "interval", "confirmation") and schedule.is_due(state, now):
+        if source in (
+            "reload",
+            "startup",
+            "interval",
+            "confirmation",
+        ) and schedule.is_due(state, now):
             return TriggeringWorkflow._send_transition(
                 state, alert, source, True, confirmation_action
             )

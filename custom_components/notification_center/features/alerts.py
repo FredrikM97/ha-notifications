@@ -13,7 +13,7 @@ from ..controller.lifecycle import (
     websocket_route,
 )
 from . import history
-from .configuration import Alert, AlertRuntime, Configuration
+from .configuration import Alert, AlertRuntime
 
 
 class AlertFeature(FeatureBase):

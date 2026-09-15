@@ -10,9 +10,8 @@ from uuid import uuid4
 import voluptuous as vol
 
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from .confirmation import DRAFT_SESSION_TTL, confirmation_for_alert
 from .configuration import Alert
-from .notification import NotificationConfig
+from .confirmation import DRAFT_SESSION_TTL, confirmation_for_alert
 
 
 def _required_alert_id(value: Any) -> str:

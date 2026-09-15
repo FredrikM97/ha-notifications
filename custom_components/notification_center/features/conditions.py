@@ -6,7 +6,7 @@ import json
 from datetime import timedelta
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from ..const import ConditionType
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route

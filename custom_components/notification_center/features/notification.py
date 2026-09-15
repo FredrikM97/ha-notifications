@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Callable, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
 from ..controller.lifecycle import FeatureBase
 from ..delivery.mobile_app import (
@@ -83,7 +83,11 @@ class NotificationSchedule:
         """Return the cadence for pending confirmation reminders."""
 
         confirmation = self._confirmation
-        if not confirmation or not confirmation.enabled or not confirmation.reminders.enabled:
+        if (
+            not confirmation
+            or not confirmation.enabled
+            or not confirmation.reminders.enabled
+        ):
             return None
         return parse_duration(confirmation.reminders.interval)
 
@@ -408,7 +412,10 @@ async def _render_notification(
         and isinstance(title, str)
         and int(variables.get("attempt", 1)) > 1
     ):
-        title = f"{title} ({variables['attempt']}/{confirmation.reminders.max_attempts or 1})"
+        title = (
+            f"{title} ({variables['attempt']}/"
+            f"{confirmation.reminders.max_attempts or 1})"
+        )
     target = await render_template_values(notification.target, variables, render)
     target, has_user_recipients = resolve_user_notification_target(snapshot, target)
     extra_data = await render_template_values(
