@@ -23,7 +23,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
           </div>`,
         )}
         ${field(
-          "Check every",
+          "Re-evaluate condition every",
           html`<div class="nc-check">
               <input
                 data-role="interval-toggle"
@@ -38,7 +38,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
                   context.markDirty();
                   context.refreshStatuses();
                 }}
-              /><span>Check every</span>
+              /><span>Re-evaluate condition every</span>
             </div>
             ${durationInput(
               durationInputValue(monitor.interval, "12:00:00"),

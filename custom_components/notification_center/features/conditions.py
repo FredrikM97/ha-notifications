@@ -1,4 +1,4 @@
-"""Condition compilation for HA Notifications alerts."""
+"""Validate visual conditions and compile them for Home Assistant."""
 
 from __future__ import annotations
 
@@ -6,8 +6,68 @@ import json
 from datetime import timedelta
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 from ..const import ConditionType
-from .durations import parse_duration
+from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
+from ..domain.durations import parse_duration
+from .configuration_registry import register_alert_feature
+
+
+class ConditionFeature(FeatureBase):
+    """Own condition compilation and frontend validation routes."""
+
+    name = "conditions"
+
+    @websocket_route(
+        "conditions.validate",
+        command="validate_conditions",
+        arguments=(WebsocketArgument("alert", dict),),
+        error_code="condition_invalid",
+        error_message="Condition is invalid.",
+    )
+    async def validate(self, alert: dict[str, Any]) -> bool:
+        """Compile and evaluate a condition without persisting an alert."""
+
+        _active, error = await self.services.gateway.evaluate_condition(
+            compile_condition(alert)
+        )
+        if error is not None:
+            raise ValueError(f"Condition template failed: {error}")
+        return True
+
+class ConditionConfig(BaseModel):
+    """Validated visual condition used by the editor and trigger workflow."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    type: str = ConditionType.TEMPLATE.value
+    template: str | None = None
+    model_for: Any = Field(default=None, alias="for")
+
+    @field_validator("model_for", mode="before")
+    @classmethod
+    def normalize_duration(cls, value: Any) -> Any:
+        if value is None or value == "[object Object]":
+            return None
+        try:
+            parse_duration(value)
+        except ValueError:
+            return None
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return {"template": str(value or "")}
+        values = dict(value)
+        if "for" in values:
+            values["model_for"] = values.pop("for")
+        return values
+
+
+register_alert_feature("conditions", ConditionConfig, default_factory=list)
 
 
 def _seconds(value: Any) -> int:
@@ -55,13 +115,16 @@ def _template_condition_block(template: str, result_name: str) -> str | None:
     return f"{{% set {result_name} = ({stripped}) %}}"
 
 
-def compile_condition(alert: dict[str, Any]) -> str:
+def compile_condition(alert: Any) -> str:
     """Compile visual conditions into one Jinja condition."""
 
     expressions: list[str] = []
     template_blocks: list[str] = []
 
     for condition in alert.get("conditions", []):
+        condition = ConditionConfig.model_validate(condition).model_dump(
+            exclude_none=True, by_alias=True
+        )
         if condition.get("enabled") is False:
             continue
 

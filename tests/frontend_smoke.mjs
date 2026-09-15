@@ -25,6 +25,16 @@ const editor = readFileSync(
   ),
   "utf8",
 );
+const api = readFileSync(
+  join(
+    root,
+    "custom_components",
+    "notification_center",
+    "frontend",
+    "api.ts",
+  ),
+  "utf8",
+);
 const yamlView = readFileSync(
   join(
     root,
@@ -62,9 +72,8 @@ assert.match(panel, /get_states/);
 assert.match(panel, /Users/);
 assert.match(panel, /Post-send actions/);
 assert.match(panel, /Post-confirmation actions/);
-assert.match(panel, /Reminder interval/);
-assert.doesNotMatch(panel, /Repeat notification/);
-assert.match(panel, /value\.notification\.repeat && value\.notification\.repeat\.enabled !== false/);
+assert.doesNotMatch(panel, /Reminder interval/);
+assert.doesNotMatch(panel, /value\.repeat/);
 assert.match(panel, /hasRequiredCondition\s*=/);
 assert.match(panel, /Search entity name or ID/);
 assert.match(panel, /No visual conditions configured/);
@@ -85,6 +94,9 @@ assert.match(panel, /nc-history-alert-link/);
 assert.match(panel, /overflow-x: auto/);
 assert.match(panel, /setInterval/);
 assert.match(panel, /editorOpen/);
+assert.match(api, /call<unknown>\(hass, "list"\)/);
+assert.match(api, /call\(hass, "test",/);
+assert.match(api, /Select an alert before testing it/);
 assert.match(panel, /min-height: min\(420px, 62vh\)/);
 assert.match(panel, /mdi:check-circle/);
 assert.match(panel, /mdi:alert-circle/);
@@ -108,5 +120,5 @@ assert.match(editor, /sectionLabel\(parent, title\)/);
 assert.match(yamlView, /class="nc-code-editor nc-yaml-editor"/);
 assert.match(
   editor,
-  /confirmation: !options\.alert \|\| Boolean\(options\.alert\.notification\.confirmation\),[\s\S]*?postConfirmationActions:\s*\n?\s*!options\.alert \|\| Boolean\(options\.alert\.notification\.confirmation\),/,
+  /confirmation: !options\.alert \|\| Boolean\(options\.alert\.confirmation\),[\s\S]*?postConfirmationActions:\s*\n?\s*!options\.alert \|\| Boolean\(options\.alert\.confirmation\),/,
 );

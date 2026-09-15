@@ -11,7 +11,6 @@ ensure_package()
 notifications = importlib.import_module(
     f"{PACKAGE_NAME}.features.notification"
 )
-commands = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 
 
 class FakeEntity:
@@ -296,6 +295,40 @@ class ComposeClearTests(unittest.IsolatedAsyncioTestCase):
             alert, {}, snapshot, render, has_service_false
         )
         self.assertEqual(result, [])
+
+
+class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_send_workflow_clears_before_composing_replacement(self):
+        alert = _alert(
+            notification={
+                "action": "notify.send_message",
+                "target": {"entity_id": ["notify.somebody"]},
+                "title": "T",
+                "message": "M",
+                "confirmation": {"enabled": False},
+            }
+        )
+        capabilities = notifications.NotificationCapabilitySet(
+            render=render,
+            has_service=has_service_false,
+            snapshot=empty_snapshot(),
+        )
+
+        result = await notifications.send_requested(
+            {
+                "alert": alert,
+                "attempt": 1,
+                "confirmation_action_id": None,
+                "replace_existing": True,
+                "now": "now",
+            },
+            capabilities,
+        )
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].service, "send_message")
+        self.assertEqual(result[0].data["message"], "clear_notification")
+        self.assertEqual(result[1].service, "send_message")
 
 
 if __name__ == "__main__":

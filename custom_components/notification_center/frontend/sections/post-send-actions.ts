@@ -7,7 +7,7 @@ import { actionsYaml, codeEditor, optionalControls, section } from "../editor/he
 export function renderPostSendActionsSection(
   context: EditorContext,
 ): TemplateResult {
-  const notification = context.value.notification;
+  const postSendActions = context.value.post_send_actions;
   return section(
     "Post-send actions",
     html`<div class="nc-help">
@@ -16,7 +16,7 @@ export function renderPostSendActionsSection(
       </div>
       ${codeEditor({
         role: "notification-actions",
-        value: actionsYaml(notification.actions),
+        value: actionsYaml(postSendActions?.actions),
         placeholder: ACTIONS_PLACEHOLDER,
         mode: "yaml",
         language: "yaml",
@@ -35,10 +35,13 @@ export function renderPostSendActionsSection(
       ${optionalControls(
         context,
         "postSendActions",
-        Boolean(notification.actions_enabled),
+        Boolean(postSendActions?.enabled),
         "post-send actions",
         (enabled) => {
-          notification.actions_enabled = enabled;
+          context.value.post_send_actions = {
+            enabled,
+            actions: postSendActions?.actions,
+          };
           context.markDirty();
         },
       )}

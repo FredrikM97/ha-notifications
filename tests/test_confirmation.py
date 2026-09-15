@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import asyncio
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -19,8 +20,9 @@ class TrackClearTests(unittest.TestCase):
     def test_track_real_alert_has_no_expiry(self):
         sessions = {}
         responses.track(sessions, "action_1", now=self.now, alert_id="alert_1")
-        self.assertIsNone(sessions["action_1"]["expires_at"])
-        self.assertEqual(sessions["action_1"]["alert_id"], "alert_1")
+        self.assertIsInstance(sessions["action_1"], responses.ConfirmationSession)
+        self.assertIsNone(sessions["action_1"].expires_at)
+        self.assertEqual(sessions["action_1"].alert_id, "alert_1")
 
     def test_track_draft_gets_ttl_expiry(self):
         sessions = {}
@@ -33,15 +35,15 @@ class TrackClearTests(unittest.TestCase):
             ttl=responses.DRAFT_SESSION_TTL,
         )
         session = sessions["session_x"]
-        self.assertEqual(session["expires_at"], self.now + responses.DRAFT_SESSION_TTL)
-        self.assertEqual(session["draft_alert"]["id"], "session_x")
+        self.assertEqual(session.expires_at, self.now + responses.DRAFT_SESSION_TTL)
+        self.assertEqual(session.draft_alert["id"], "session_x")
 
     def test_draft_alert_is_deep_copied(self):
         sessions = {}
         draft = {"name": "Draft"}
         responses.track(sessions, "s", now=self.now, draft_alert=draft)
         draft["name"] = "Changed"
-        self.assertEqual(sessions["s"]["draft_alert"]["name"], "Draft")
+        self.assertEqual(sessions["s"].draft_alert["name"], "Draft")
 
     def test_clear_removes_session(self):
         sessions = {"a": {}}
@@ -57,9 +59,13 @@ class ExpireDraftsTests(unittest.TestCase):
     def test_only_expired_drafts_are_removed(self):
         now = datetime(2024, 1, 1, tzinfo=timezone.utc)
         sessions = {
-            "expired": {"expires_at": now - timedelta(minutes=1)},
-            "still_good": {"expires_at": now + timedelta(minutes=1)},
-            "real_alert": {"expires_at": None},
+            "expired": responses.ConfirmationSession(
+                created_at=now, expires_at=now - timedelta(minutes=1)
+            ),
+            "still_good": responses.ConfirmationSession(
+                created_at=now, expires_at=now + timedelta(minutes=1)
+            ),
+            "real_alert": responses.ConfirmationSession(created_at=now),
         }
         removed = responses.expire_drafts(sessions, now)
         self.assertEqual(removed, ["expired"])
@@ -116,6 +122,86 @@ class MatchActionEventTests(unittest.TestCase):
         self.assertIsNone(outcome)
 
 
+class DirectActionHandlingTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    def _access(self, sessions, alert=None, state=None):
+        async def get_person_states():
+            return []
+
+        async def get_alert(_alert_id):
+            return alert
+
+        async def get_runtime_state(_alert_id):
+            return state
+
+        return responses.ConfirmationActionAccess(
+            sessions=sessions,
+            get_person_states=get_person_states,
+            get_alert=get_alert,
+            get_runtime_state=get_runtime_state,
+        )
+
+    async def test_draft_action_returns_confirmation_fact_and_clears_session(self):
+        draft = {"id": "draft", "name": "Draft"}
+        sessions = {}
+        responses.track(
+            sessions,
+            "action",
+            now=self.now,
+            draft_alert=draft,
+            ttl=responses.DRAFT_SESSION_TTL,
+        )
+
+        result = await responses.handle_action_event(
+            {"action": "action"},
+            None,
+            self.now,
+            self._access(sessions),
+        )
+
+        self.assertNotIn("action", sessions)
+        self.assertIsNotNone(result)
+        self.assertTrue(result.test)
+
+    async def test_stale_real_action_is_rejected_without_clearing_session(self):
+        alert = {"id": "alert", "name": "Alert", "notification": {}}
+        sessions = {
+            "action": responses.ConfirmationSession(
+                alert_id="alert", created_at=self.now
+            )
+        }
+        state = {"confirmation_action_id": "newer-action"}
+
+        result = await responses.handle_action_event(
+            {"action": "action"},
+            None,
+            self.now,
+            self._access(sessions, alert, state),
+        )
+
+        self.assertIsNone(result)
+        self.assertIn("action", sessions)
+
+    async def test_real_action_emits_acknowledgement_before_effects_fact(self):
+        alert = {"id": "alert", "name": "Alert", "notification": {}}
+        sessions = {}
+        responses.track(sessions, "action", now=self.now, alert_id="alert")
+        state = {"confirmation_action_id": "action"}
+
+        result = await responses.handle_action_event(
+            {"action": "action"},
+            None,
+            self.now,
+            self._access(sessions, alert, state),
+        )
+
+        self.assertNotIn("action", sessions)
+        self.assertEqual(result.alert, alert)
+        self.assertFalse(result.test)
+
+
 class ResolvePersonNameTests(unittest.TestCase):
     def test_resolves_matching_person(self):
         class FakeState:
@@ -131,6 +217,19 @@ class ResolvePersonNameTests(unittest.TestCase):
 
     def test_no_user_id_returns_placeholder(self):
         self.assertEqual(responses.resolve_person_name([], None), "Unknown user")
+
+    def test_auth_user_fallback_resolves_without_person_entity(self):
+        class FakeAuth:
+            async def async_get_user(self, _user_id):
+                return type("User", (), {"name": "Carol"})()
+
+        class FakeHass:
+            auth = FakeAuth()
+
+        result = asyncio.run(
+            responses.resolve_confirmed_by(FakeHass(), [], "u3")
+        )
+        self.assertEqual(result, "Carol")
 
 
 class BuildCompletionAlertTests(unittest.IsolatedAsyncioTestCase):

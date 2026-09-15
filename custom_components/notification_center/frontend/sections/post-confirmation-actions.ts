@@ -7,7 +7,7 @@ import { actionsYaml, codeEditor, optionalControls, section } from "../editor/he
 export function renderPostConfirmationActionsSection(
   context: EditorContext,
 ): TemplateResult {
-  const confirmation = context.value.notification.confirmation;
+  const confirmation = context.value.confirmation!;
   return section(
     "Post-confirmation actions",
     html`<div class="nc-help">
@@ -16,7 +16,7 @@ export function renderPostConfirmationActionsSection(
       </div>
       ${codeEditor({
         role: "actions",
-        value: actionsYaml(confirmation.actions),
+        value: actionsYaml(confirmation.actions.items),
         placeholder: ACTIONS_PLACEHOLDER,
         mode: "yaml",
         language: "yaml",
@@ -35,10 +35,10 @@ export function renderPostConfirmationActionsSection(
       ${optionalControls(
         context,
         "postConfirmationActions",
-        Boolean(confirmation.actions_enabled),
+        Boolean(confirmation.actions.enabled),
         "post-confirmation actions",
         (enabled) => {
-          confirmation.actions_enabled = enabled;
+          confirmation.actions.enabled = enabled;
           context.markDirty();
         },
       )}

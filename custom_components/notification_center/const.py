@@ -6,13 +6,14 @@ from enum import StrEnum
 
 DOMAIN = "notification_center"
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 CONFIG_VERSION = 1
 
 SERVICE_RELOAD = "reload"
 SERVICE_TEST = "test"
 
 EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
+EVENT_RUNTIME_PERSIST_REQUESTED = f"{DOMAIN}_runtime_persist_requested"
 
 CONFIG_FILENAME = "notification_center.yaml"
 
@@ -69,8 +70,8 @@ class TransitionKind(StrEnum):
 
 
 class ConditionType(StrEnum):
-    """Visual/template condition discriminator (`domain/condition_schema.py`,
-    `domain/alert_schema.py`).
+    """Visual/template condition discriminator (`features/conditions.py`,
+    `controller/alert.py`).
     """
 
     TEMPLATE = "template"

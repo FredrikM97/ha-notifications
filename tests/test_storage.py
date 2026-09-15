@@ -23,20 +23,20 @@ class YamlTextTests(unittest.TestCase):
         self.assertEqual(storage.parse_yaml_text(text), storage.DEFAULT_CONFIG)
 
 
-class NormalizeAndValidateTests(unittest.TestCase):
-    def test_validate_does_not_mutate_input_shape_unexpectedly(self):
-        result = storage.normalize_and_validate_yaml(
-            "alerts:\n  - name: Test\n    conditions:\n"
+class ConfigurationStorageTests(unittest.TestCase):
+    def test_parse_config_accepts_declared_alert_shape(self):
+        result = storage.parse_config(
+            "alerts:\n  - id: test\n    name: Test\n    conditions:\n"
             "      - type: template\n        template: '{{ true }}'\n"
         )
-        self.assertEqual(result["alerts"][0]["id"], "test")
+        self.assertEqual(result.alerts[0].id, "test")
 
     def test_invalid_yaml_raises_without_touching_anything(self):
         with self.assertRaises(ValueError):
-            storage.normalize_and_validate_yaml("- invalid\n")
+            storage.parse_config("- invalid\n")
 
     def test_normalize_and_dump_yaml_round_trips(self):
-        normalized, text = storage.normalize_and_dump_yaml(
+        config = storage.Configuration.model_validate(
             {
                 "version": 1,
                 "alerts": [
@@ -51,17 +51,18 @@ class NormalizeAndValidateTests(unittest.TestCase):
                             "title": "Demo",
                             "message": "Check this",
                         },
-                        "notifications": [{"action": "notify.legacy"}],
                     }
                 ],
             }
         )
-        self.assertEqual(normalized["version"], 1)
+        normalized, text = storage.dump_config(config)
+        self.assertEqual(config.version, 1)
         self.assertEqual(text.count("notification:"), 1)
         self.assertNotIn("notifications:", text)
 
-    def test_normalize_and_dump_yaml_repairs_stale_browser_duration_text(self):
-        _, text = storage.normalize_and_dump_yaml(
+    def test_rejects_stale_browser_duration_text(self):
+        with self.assertRaises(ValueError):
+            storage.Configuration.model_validate(
             {
                 "version": 1,
                 "alerts": [
@@ -79,18 +80,15 @@ class NormalizeAndValidateTests(unittest.TestCase):
                         "monitor": {"interval": "[object Object]"},
                         "notification": {
                             "repeat": {"interval": "[object Object]"},
-                            "confirmation": {
-                                "enabled": True,
-                                "resend_interval": "[object Object]",
-                            },
+                        },
+                        "confirmation": {
+                            "enabled": True,
+                            "reminders": {"interval": "[object Object]"},
                         },
                     }
                 ],
             }
-        )
-        self.assertNotIn("[object Object]", text)
-        self.assertIn("resend_interval:", text)
-        self.assertIn("minutes: 30", text)
+            )
 
 
 class RuntimeStateShapeTests(unittest.TestCase):

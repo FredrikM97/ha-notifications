@@ -1,195 +1,223 @@
-"""Record alert history - a listener, not a kernel primitive.
-
-Subscribes to the same fact events other features emit for their own
-reasons and turns them into history entries via `support/history.py`'s
-pure helpers, then persists via the existing generic `PersistSave`
-command - no dedicated "record history" Command is needed.
-"""
+"""Record alert history as an explicit workflow operation."""
 
 from __future__ import annotations
 
+import uuid
+from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
-from ..const import HistoryEventType
-from ..controller.commands import Command, PersistSave
-from ..controller import events as ev
-from ..controller.events import Event
-from ..support import history as history_module
+from ..const import MAX_HISTORY, HistoryEventType
+from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 
 
-def register(bus: Any) -> None:
-    """Subscribe to every fact event worth recording to alert history."""
+class HistoryFeature(FeatureBase):
+    """Own query access to persisted alert history."""
 
-    bus.subscribe(ev.CONDITION_ERROR, _handle_condition_error)
-    bus.subscribe(ev.CONDITION_ACTIVE, _handle_condition_active)
-    bus.subscribe(ev.CONDITION_INACTIVE, _handle_condition_inactive)
-    bus.subscribe(ev.NOTIFICATION_SENT, _handle_notification_sent)
-    bus.subscribe(ev.NOTIFICATION_FAILED, _handle_notification_failed)
-    bus.subscribe(ev.COMPLETION_SENT, _handle_completion_sent)
-    bus.subscribe(ev.COMPLETION_FAILED, _handle_completion_failed)
-    bus.subscribe(ev.CONFIRMED, _handle_confirmed)
-    bus.subscribe(ev.ACTION_EXECUTED, _handle_action_executed)
-    bus.subscribe(ev.ACTION_FAILED, _handle_action_failed)
-    bus.subscribe(ev.NOTIFICATION_TEST_SENT, _handle_test_sent)
+    name = "history"
 
+    def record(
+        self,
+        alert: dict[str, Any],
+        event_type: HistoryEventType,
+        message: str,
+        details: dict[str, Any],
+        now: Any,
+    ) -> bool:
+        """Record one user-visible history event for an active alert."""
 
-async def _handle_condition_error(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.CONDITION_ERROR,
-        "Template evaluation failed.",
-        {"error": payload["error"], "source": payload["source"]},
-        payload["now"],
+        return self._record_event(
+            self.services.state["alerts"].get(alert["id"]),
+            alert,
+            event_type,
+            message,
+            details,
+            now,
+        )
+
+    def _record_event(
+        self,
+        runtime_state: dict[str, Any] | None,
+        alert: dict[str, Any],
+        event_type: HistoryEventType,
+        message: str,
+        details: dict[str, Any],
+        now: Any,
+    ) -> bool:
+        """Append one history entry and update the owning runtime record."""
+
+        if runtime_state is None:
+            return False
+        entry = self._format_entry(
+            alert,
+            event_type,
+            message,
+            details,
+            now,
+            runtime_state.get("flow_id"),
+        )
+        self.services.state["history"] = append_entry(
+            self.services.state["history"], entry
+        )
+        runtime_state["last_event"] = entry
+        return True
+
+    @staticmethod
+    def _format_entry(
+        alert: dict[str, Any],
+        event_type: HistoryEventType,
+        message: str,
+        details: dict[str, Any],
+        now: Any,
+        flow_id: str | None,
+    ) -> dict[str, Any]:
+        """Build one isolated persisted history entry."""
+
+        entry: dict[str, Any] = {
+            "id": uuid.uuid4().hex,
+            "timestamp": now.isoformat(),
+            "alert_id": alert["id"],
+            "alert_name": alert["name"],
+            "type": event_type,
+            "message": message,
+            "details": deepcopy(details),
+        }
+        if flow_id:
+            entry["flow_id"] = flow_id
+        return entry
+
+    @websocket_route(
+        "history.list",
+        command="history",
+        arguments=(
+            WebsocketArgument("alert_id", str, required=False, default=None),
+            WebsocketArgument("limit", int, required=False, default=100),
+        ),
+        error_code="history_failed",
+        error_message="Unable to load history.",
     )
+    async def list_history(
+        self, alert_id: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return persisted history owned by this feature."""
+
+        return list_entries(self.services.state["history"], alert_id, limit)
 
 
-async def _handle_condition_active(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.CONDITION_ACTIVE,
-        "Condition became true.",
-        {"source": payload["source"]},
-        payload["now"],
+def format_entry(
+    alert: dict[str, Any],
+    event_type: HistoryEventType,
+    message: str,
+    details: dict[str, Any],
+    *,
+    now: datetime,
+    flow_id: str | None = None,
+) -> dict[str, Any]:
+    """Build one history event record."""
+
+    event: dict[str, Any] = {
+        "id": uuid.uuid4().hex,
+        "timestamp": now.isoformat(),
+        "alert_id": alert["id"],
+        "alert_name": alert["name"],
+        "type": event_type,
+        "message": message,
+        "details": deepcopy(details),
+    }
+    if flow_id:
+        event["flow_id"] = flow_id
+    return event
+
+
+def append_entry(
+    history: list[dict[str, Any]], entry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Append an entry, trimming to the configured history size."""
+
+    history.append(entry)
+    return history[-MAX_HISTORY:]
+
+
+def list_entries(
+    history: list[dict[str, Any]],
+    alert_id: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Return the newest matching history events first."""
+
+    filtered = history
+    if alert_id:
+        filtered = [item for item in filtered if item.get("alert_id") == alert_id]
+    return list(reversed(filtered[-max(1, min(limit, MAX_HISTORY)) :]))
+
+
+def remove_alert(history: list[dict[str, Any]], alert_id: str) -> list[dict[str, Any]]:
+    """Return history with all events for a deleted alert removed."""
+
+    return [item for item in history if item.get("alert_id") != alert_id]
+
+
+def record_notification_outcome(
+    state_root: dict[str, Any],
+    alert: dict[str, Any],
+    *,
+    success: bool,
+    attempt: int,
+    now: Any,
+    record_history: bool = True,
+    error: str | None = None,
+) -> bool:
+    """Record a notification outcome after its service batch completes."""
+
+    if not record_history:
+        return False
+
+    runtime_state = state_root["alerts"].get(alert["id"])
+    if runtime_state is None:
+        return False
+
+    event_type = (
+        HistoryEventType.NOTIFICATION_SENT
+        if success
+        else HistoryEventType.NOTIFICATION_FAILED
     )
-
-
-async def _handle_condition_inactive(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.CONDITION_INACTIVE,
-        "Condition became false.",
-        {"source": payload["source"]},
-        payload["now"],
+    details: dict[str, Any] = {"attempt": attempt}
+    if not success:
+        details["error"] = error
+    entry = format_entry(
+        alert,
+        event_type,
+        "Notification sent." if success else "Notification failed.",
+        details,
+        now=now,
+        flow_id=runtime_state.get("flow_id"),
     )
+    state_root["history"] = append_entry(state_root["history"], entry)
+    runtime_state["last_event"] = entry
+    return True
 
 
-async def _handle_notification_sent(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.NOTIFICATION_SENT,
-        "Notification sent.",
-        {"attempt": payload["attempt"]},
-        payload["now"],
-    )
-
-
-async def _handle_notification_failed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.NOTIFICATION_FAILED,
-        "Notification failed.",
-        {"attempt": payload["attempt"], "error": payload.get("error")},
-        payload["now"],
-    )
-
-
-async def _handle_completion_sent(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.COMPLETION_SENT,
-        "Completion notification sent.",
-        {},
-        payload["now"],
-    )
-
-
-async def _handle_completion_failed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.COMPLETION_FAILED,
-        "Completion notification failed.",
-        {"error": payload.get("error")},
-        payload["now"],
-    )
-
-
-async def _handle_confirmed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.CONFIRMED,
-        "Notification confirmed.",
-        {"confirmed_by": payload["confirmed_by"]},
-        payload["now"],
-    )
-
-
-async def _handle_action_executed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
-    return await _record(
-        bus,
-        payload["alert"],
-        payload["event_type"],
-        "Action executed.",
-        {"index": payload["index"], "action": payload["action"]},
-        payload.get("now"),
-    )
-
-
-async def _handle_action_failed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
-    return await _record(
-        bus,
-        payload["alert"],
-        payload["event_type"],
-        "Action failed.",
-        {"index": payload["index"], "error": payload.get("error")},
-        payload.get("now"),
-    )
-
-
-async def _handle_test_sent(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _record(
-        bus,
-        payload["alert"],
-        HistoryEventType.TEST,
-        "Test notification sent.",
-        {},
-        payload["now"],
-    )
-
-
-async def _record(
-    bus: Any,
+def record_event(
+    state_root: dict[str, Any],
+    runtime_state: dict[str, Any] | None,
     alert: dict[str, Any],
     event_type: HistoryEventType,
     message: str,
     details: dict[str, Any],
     now: Any,
-) -> list[Command]:
-    state_root = await bus.ask(ev.GET_STATE)
-    runtime_state = await bus.ask(ev.GET_RUNTIME_STATE, {"alert_id": alert["id"]})
+) -> bool:
     if runtime_state is None:
-        return []
+        return False
 
-    entry = history_module.format_entry(
-        alert, event_type, message, details, now=now, flow_id=runtime_state.get("flow_id")
+    entry = format_entry(
+        alert,
+        event_type,
+        message,
+        details,
+        now=now,
+        flow_id=runtime_state.get("flow_id"),
     )
-    state_root["history"] = history_module.append_entry(state_root["history"], entry)
+    state_root["history"] = append_entry(state_root["history"], entry)
     runtime_state["last_event"] = entry
 
-    return [PersistSave(key="runtime_state", data=state_root)]
+    return True

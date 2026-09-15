@@ -24,8 +24,8 @@ def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
             "target": {"entity_id": ["notify.test"]},
             "title": "Title",
             "message": "Message",
-            "confirmation": {"enabled": False},
         },
+        "confirmation": {"enabled": False},
     }
     base.update(overrides)
     return base

@@ -13,16 +13,13 @@ import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from test_support import PACKAGE_NAME, ensure_package
-
 from conftest import make_alert
+from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 core_module = importlib.import_module(f"{PACKAGE_NAME}.controller.core")
-commands_module = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
-events_module = importlib.import_module(f"{PACKAGE_NAME}.controller.events")
 gateway_module = importlib.import_module(f"{PACKAGE_NAME}.ha.gateway")
-alert_schema_module = importlib.import_module(f"{PACKAGE_NAME}.domain.alert_schema")
+alert_module = importlib.import_module(f"{PACKAGE_NAME}.features.alerts")
 const_module = importlib.import_module(f"{PACKAGE_NAME}.const")
 
 HistoryEventType = const_module.HistoryEventType
@@ -63,13 +60,16 @@ class FakeGateway:
         return True, None
 
     def track_template(self, source, on_result):
-        key = f"template::{len(self.condition_callbacks)}"
         self.condition_callbacks[source] = on_result
-        return lambda: None
+        return lambda: self.condition_callbacks.pop(source, None)
 
     def track_interval(self, interval, on_interval):
         self.interval_callbacks[interval] = on_interval
-        return lambda: None
+        return lambda: self.interval_callbacks.pop(interval, None)
+
+    def unsubscribe(self, key):
+        self.condition_callbacks.pop(key, None)
+        self.interval_callbacks.pop(key, None)
 
     # -- registries --
     def entity_registry_snapshot(self):
@@ -98,80 +98,7 @@ class FakeGateway:
             person_states=self.get_states_all("person"),
         )
 
-    def register_bus_responders(self, bus):
-        bus.respond(events_module.RENDER_TEMPLATE, lambda _p: self._answer(self.render_template))
-        bus.respond(events_module.HAS_SERVICE, lambda _p: self._answer(self.has_service))
-        bus.respond(
-            events_module.FETCH_REGISTRY_SNAPSHOT,
-            lambda _p: self._answer(self.fetch_registry_snapshot()),
-        )
-        bus.respond(
-            events_module.EVALUATE_CONDITION,
-            lambda payload: self.evaluate_condition(payload["source"]),
-        )
-        bus.respond(
-            events_module.GET_STATES,
-            lambda payload: self._answer(self.get_states_all(payload["domain"])),
-        )
-
-    def register_bus_listeners(self, bus, store):
-        async def call_service(command):
-            await self.call_service(
-                command.domain, command.service, command.data, command.target
-            )
-
-        async def track_template(command):
-            def on_result(active, error, _event):
-                self.create_task(
-                    bus.publish(
-                        events_module.Event(
-                            events_module.CONDITION_EVALUATED,
-                            {
-                                "alert_id": command.key,
-                                "active": active,
-                                "error": error,
-                                "source": "change",
-                                "now": self.now_utc(),
-                            },
-                        )
-                    )
-                )
-
-            self.track_template(command.template, on_result)
-
-        async def track_interval(command):
-            def on_interval(_now):
-                self.create_task(
-                    bus.publish(
-                        events_module.Event(
-                            events_module.CONDITION_CHECK_REQUESTED,
-                            {
-                                "alert_id": command.key,
-                                "source": "interval",
-                                "now": self.now_utc(),
-                            },
-                        )
-                    )
-                )
-
-            self.track_interval(command.interval, on_interval)
-
-        async def unsubscribe(_command):
-            return None
-
-        async def persist(command):
-            self.delay_save_store(store, command.data)
-
-        bus.listen(commands_module.CallService, call_service)
-        bus.listen(commands_module.TrackTemplate, track_template)
-        bus.listen(commands_module.TrackInterval, track_interval)
-        bus.listen(commands_module.Unsubscribe, unsubscribe)
-        bus.listen(commands_module.PersistSave, persist)
-
-    async def _answer(self, value):
-        return value
-
-    # -- event bus --
+    # -- Home Assistant event listeners --
     def bus_listen(self, event_type, callback_fn):
         return lambda: None
 
@@ -240,17 +167,25 @@ def _make_controller(gateway: FakeGateway) -> core_module.NotificationCenterCont
     controller._state = {"alerts": {}, "history": []}
     controller._alerts = {}
     controller._sessions = {}
-    controller._action_event_unsub = None
     controller._started_unsub = None
     controller._tasks = set()
     controller._started = True
     controller._reload_lock = asyncio.Lock()
-    controller._bus = core_module.EventBus()
-    gateway.register_bus_responders(controller._bus)
-    gateway.register_bus_listeners(controller._bus, controller._store)
-    controller._register_bus_responders()
-    for module in core_module._FEATURE_MODULES:
-        module.register(controller._bus)
+    controller._triggering = core_module.alerts_module.TriggeringWorkflow(
+        gateway,
+        controller._alerts,
+        controller._state,
+        controller._handle_trigger_transition,
+    )
+    controller._triggering_feature = core_module.alerts_module.TriggeringFeature(
+        controller._triggering
+    )
+    controller._confirmation_feature = core_module.responses_module.ConfirmationFeature(
+        controller._sessions, controller._handle_confirmation
+    )
+    controller._feature_lifecycle = core_module.FeatureLifecycle(
+        (controller._triggering_feature, controller._confirmation_feature)
+    )
     return controller
 
 
@@ -259,21 +194,30 @@ def _alert(alert_id="alert_1", **overrides):
 
 
 async def _condition_changed(controller, alert_id, active, error=None):
-    await controller._bus.publish(
-        events_module.Event(
-            events_module.CONDITION_EVALUATED,
-            {
-                "alert_id": alert_id,
-                "active": active,
-                "error": error,
-                "source": "change",
-                "now": controller._gateway.now_utc(),
-            },
-        )
+    await controller._triggering.condition_result(
+        alert_id,
+        active,
+        error,
+        source="change",
+        now=controller._gateway.now_utc(),
     )
 
 
 class PullBasedEvaluationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reconfiguring_alert_replaces_watchers(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        alert = _alert()
+        controller._alerts[alert["id"]] = alert
+
+        await controller._triggering.configure(alert)
+        first_template_sources = set(gateway.condition_callbacks)
+
+        await controller._triggering.configure(alert)
+
+        self.assertEqual(set(gateway.condition_callbacks), first_template_sources)
+        self.assertEqual(len(gateway.interval_callbacks), 0)
+
     async def test_request_condition_check_goes_through_evaluate_condition_query(self):
         gateway = FakeGateway()
         controller = _make_controller(gateway)
@@ -306,6 +250,33 @@ class PullBasedEvaluationTests(unittest.IsolatedAsyncioTestCase):
         await controller._request_condition_check(alert["id"], source="startup")
 
         self.assertNotIn(alert["id"], controller._state["alerts"])
+
+    async def test_template_callback_uses_direct_triggering_workflow(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        alert = _alert()
+        controller._alerts[alert["id"]] = alert
+        await controller._triggering.configure(alert)
+
+        callback = gateway.condition_callbacks[next(iter(gateway.condition_callbacks))]
+        callback(True, None, None)
+        await asyncio.sleep(0)
+
+        self.assertTrue(controller._state["alerts"][alert["id"]]["active"])
+
+    async def test_interval_callback_uses_direct_condition_check(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        alert = _alert(
+            monitor={"on_change": False, "startup": True, "interval": "00:05:00"}
+        )
+        controller._alerts[alert["id"]] = alert
+        await controller._triggering.configure(alert)
+
+        gateway.interval_callbacks[timedelta(minutes=5)](gateway.now_utc())
+        await asyncio.sleep(0)
+
+        self.assertTrue(controller._state["alerts"][alert["id"]]["active"])
 
 
 class SendAndClearTests(unittest.IsolatedAsyncioTestCase):
@@ -375,11 +346,12 @@ class ConfirmationFlowTests(unittest.IsolatedAsyncioTestCase):
                 "confirmation": {
                     "enabled": True,
                     "button": "Ack",
-                    "clear_on_confirmation": True,
+                    "notification": {"clear": True},
                 },
             }
         )
-        controller._alerts[alert["id"]] = alert
+        controller._alerts[alert["id"]] = core_module.Alert.model_validate(alert)
+        controller._triggering.set_alerts({alert["id"]: alert})
 
         await _condition_changed(controller, alert["id"], True)
 
@@ -394,7 +366,14 @@ class ConfirmationFlowTests(unittest.IsolatedAsyncioTestCase):
             class context:
                 user_id = None
 
-        await controller._on_action_event(FakeEvent())
+        await controller._confirmation_feature.setup(
+            core_module.FeatureContext(
+                alerts=controller._alerts,
+                state=controller._state,
+                gateway=gateway,
+            )
+        )
+        await controller._confirmation_feature._on_action_event(FakeEvent())
 
         state = controller._state["alerts"][alert["id"]]
         self.assertTrue(state["acknowledged"])
@@ -409,11 +388,7 @@ class DraftPayloadTests(unittest.IsolatedAsyncioTestCase):
     async def test_test_alert_payload_then_discard(self):
         gateway = FakeGateway()
         controller = _make_controller(gateway)
-        # core.py no longer re-normalizes; simulate what bridge/websocket.py
-        # would have already done to a frontend-originated payload.
-        alert = alert_schema_module.DEFAULT_CONFIG_NORMALIZER.normalize_alert_document(
-            _alert()
-        )
+        alert = _alert()
 
         result = await controller.test_alert_payload(alert)
         session_id = result["session_id"]
@@ -435,6 +410,47 @@ class YamlSafetyTests(unittest.IsolatedAsyncioTestCase):
             await controller.save_yaml("- not a mapping\n")
 
         self.assertEqual(gateway.files[path], "alerts: []\nversion: 1\n")
+
+    async def test_reload_rebuilds_persisted_confirmation_sessions(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        alert = _alert()
+        controller._alerts[alert["id"]] = core_module.Alert.model_validate(alert)
+        action_id = "NC_CONFIRM_alert_1"
+        controller._state["alerts"][alert["id"]] = {
+            "confirmation_action_id": action_id
+        }
+        controller._started = False
+        config, _config_text = core_module.storage_module.dump_config(
+            {"version": 1, "alerts": [alert]}
+        )
+
+        async def load_config():
+            return config
+
+        controller._load_config = load_config
+
+        await controller.reload()
+
+        self.assertIn(action_id, controller._sessions)
+
+    async def test_unload_cancels_tasks_and_persists_state(self):
+        gateway = FakeGateway()
+        controller = _make_controller(gateway)
+        controller._state["history"].append({"type": "test"})
+        started = asyncio.Event()
+
+        async def pending_task():
+            started.set()
+            await asyncio.Event().wait()
+
+        controller._schedule(pending_task())
+        await started.wait()
+
+        await controller.async_unload()
+
+        self.assertEqual(controller._tasks, set())
+        self.assertEqual(gateway.store_data[controller._store], controller._state)
 
 
 if __name__ == "__main__":

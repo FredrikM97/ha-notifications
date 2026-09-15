@@ -5,27 +5,29 @@ import { defaultAlert } from "../../custom_components/notification_center/fronte
 
 function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
   return {
-    name: "Front door open",
-    description: "",
-    condition: "",
-    conditions: [{ type: "template", template: "{{ true }}" }],
-    onChange: true,
-    startup: true,
-    target: {},
-    title: "Alert",
-    message: "The front door is open.",
-    actions_enabled: false,
+    identity: { name: "Front door open", description: "" },
+    monitor: {
+      conditions: [{ type: "template", template: "{{ true }}" }],
+      onChange: true,
+      startup: true,
+    },
+    notification: {
+      target: {},
+      title: "Alert",
+      message: "The front door is open.",
+    },
     confirmation: {
       enabled: false,
       button: "",
-      completion_message: "",
-      notify_on_confirmation: false,
-      confirmation_message: "",
-      clear_on_confirmation: true,
-      resend_interval: "00:30:00",
-      max_attempts: 5,
-      actions_enabled: false,
+      notification: { enabled: false, message: "", clear: true },
+      reminders: {
+        interval: "00:30:00",
+        max_attempts: 5,
+        show_attempts: false,
+      },
+      actions: { enabled: false, items: [] },
     },
+    post_send_actions: { postSendActionsEnabled: false },
     ...overrides,
   };
 }
@@ -36,7 +38,12 @@ describe("buildAlertPayload", () => {
     original.id = "test_alert"; // defaultAlert() ids by Date.now(), not snapshot-stable
     const payload = buildAlertPayload(
       original,
-      values({ target: { entity_id: ["notify.mobile_app_phone"] } }),
+      values({
+        notification: {
+          ...values().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+      }),
     );
     expect(payload.notification.action).toBeUndefined();
     expect(payload).toMatchSnapshot();
@@ -55,7 +62,7 @@ describe("buildAlertPayload", () => {
       buildAlertPayload(
         defaultAlert(),
         values({
-          target: {},
+          notification: { ...values().notification, target: {} },
           confirmation: {
             ...values().confirmation,
             enabled: true,

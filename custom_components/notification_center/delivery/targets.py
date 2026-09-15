@@ -1,4 +1,4 @@
-"""Shared target and registry resolution for notification routes."""
+"""Target and registry resolution for notification delivery."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from ...ha.gateway import RegistrySnapshot
+from ..ha.gateway import RegistrySnapshot
 
 GENERIC_NOTIFY_TARGET_KEYS = (
     "device_id",
@@ -38,8 +38,6 @@ def classify_delivery_type(
     has_legacy_services: bool,
     has_unresolved_recipients: bool,
 ) -> DeliveryType:
-    """Classify delivery from capabilities and recipient shape."""
-
     if has_user_recipients:
         return DeliveryType.GENERIC_NOTIFY
     if has_legacy_services and not has_unresolved_recipients:
@@ -50,16 +48,13 @@ def classify_delivery_type(
 
 
 def target_values(target: dict[str, Any], key: str) -> list[str]:
-    """Return a target field as a non-empty list of strings."""
-
     values = target.get(key, [])
     if not isinstance(values, list):
         values = [values]
     return [str(value) for value in values if value]
 
-def generic_service_target(target: dict[str, Any]) -> dict[str, list[str]]:
-    """Project a resolved target onto Home Assistant notify target keys."""
 
+def generic_service_target(target: dict[str, Any]) -> dict[str, list[str]]:
     return {
         key: target_values(target, key)
         for key in GENERIC_NOTIFY_TARGET_KEYS
@@ -70,8 +65,6 @@ def generic_service_target(target: dict[str, Any]) -> dict[str, list[str]]:
 def resolve_user_notification_target(
     snapshot: RegistrySnapshot, target: Any
 ) -> tuple[dict[str, Any], bool]:
-    """Expand known user devices while retaining unresolved user targets."""
-
     if not isinstance(target, dict):
         return {}, False
 
@@ -202,4 +195,3 @@ def notification_services_for_target(
             services.append(entity.entity_id)
 
     return services
-

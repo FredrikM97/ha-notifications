@@ -3,6 +3,8 @@ from datetime import timedelta
 
 from test_support import load_const_and_models
 
+from custom_components.notification_center.domain.durations import parse_duration
+
 const, models = load_const_and_models()
 
 
@@ -32,7 +34,9 @@ class ConfigContractTests(unittest.TestCase):
             ],
         }
 
-        normalized = models.normalize_config(config)
+        normalized = models.Configuration.model_validate(config).model_dump(
+            exclude_none=True
+        )
         alert = normalized["alerts"][0]
 
         self.assertEqual(normalized["version"], 1)
@@ -43,10 +47,10 @@ class ConfigContractTests(unittest.TestCase):
         self.assertNotIn("notify_on_start", alert)
 
     def test_parse_duration_time_strings(self):
-        self.assertEqual(models.parse_duration("12:00"), timedelta(hours=12))
-        self.assertEqual(models.parse_duration("00:30"), timedelta(minutes=30))
-        self.assertEqual(models.parse_duration("12:00:00"), timedelta(hours=12))
-        self.assertEqual(models.parse_duration("00:30:00"), timedelta(minutes=30))
+        self.assertEqual(parse_duration("12:00"), timedelta(hours=12))
+        self.assertEqual(parse_duration("00:30"), timedelta(minutes=30))
+        self.assertEqual(parse_duration("12:00:00"), timedelta(hours=12))
+        self.assertEqual(parse_duration("00:30:00"), timedelta(minutes=30))
 
 
 if __name__ == "__main__":

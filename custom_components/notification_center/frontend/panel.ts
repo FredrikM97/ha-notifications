@@ -106,6 +106,17 @@ function toggleAlertToast(alert: Alert): string {
   return "Alert enabled.";
 }
 
+function attemptSummary(alert: Alert): string | null {
+  if (
+    !alert.confirmation?.reminders.show_attempts ||
+    !alert.runtime?.attempts
+  ) {
+    return null;
+  }
+
+  return `Attempt ${alert.runtime.attempts}/${alert.confirmation.reminders.max_attempts}`;
+}
+
 class NotificationCenterPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
@@ -194,7 +205,10 @@ class NotificationCenterPanel extends LitElement {
   }
 
   private editorOpen(): boolean {
-    return Boolean(this.renderRoot.querySelector(".nc-editor-view"));
+    return Boolean(
+      this.renderRoot.querySelector(".nc-editor-view") ||
+        this.renderRoot.querySelector("#nc-yaml-editor"),
+    );
   }
 
   async refresh({ silent = false }: { silent?: boolean } = {}): Promise<void> {
@@ -213,14 +227,22 @@ class NotificationCenterPanel extends LitElement {
     this.requestUpdate();
 
     try {
-      [this.alerts, this.history] = await Promise.all([
+      const [alertsResult, historyResult] = await Promise.allSettled([
         getAlerts(this._hass),
         getHistory(this._hass, this.historyAlertId, 150),
       ]);
-      this.refreshHistoryAlertName();
-    } catch (err) {
-      if (!silent) {
-        this.showToast(errorMessage(err), true);
+
+      if (alertsResult.status === "fulfilled") {
+        this.alerts = alertsResult.value;
+        this.refreshHistoryAlertName();
+      } else if (!silent) {
+        this.showToast(errorMessage(alertsResult.reason), true);
+      }
+
+      if (historyResult.status === "fulfilled") {
+        this.history = historyResult.value;
+      } else if (!silent) {
+        this.showToast(errorMessage(historyResult.reason), true);
       }
     } finally {
       this.refreshing = false;
@@ -347,9 +369,15 @@ class NotificationCenterPanel extends LitElement {
       );
     }
 
-    if (this.tab === "yaml" && this._hass) {
+    const yamlView = this.renderRoot.querySelector<HTMLElement>("#yaml-view");
+    if (
+      this.tab === "yaml" &&
+      this._hass &&
+      yamlView &&
+      !yamlView.querySelector("#nc-yaml-editor")
+    ) {
       renderYamlView(
-        this.renderRoot.querySelector("#yaml-view")!,
+        yamlView,
         this._hass,
         (message, error) => this.showToast(message, error),
         () => this.refresh(),
@@ -380,6 +408,7 @@ class NotificationCenterPanel extends LitElement {
     const lastNotification = this.lastNotificationSummary(
       runtime.last_notified,
     );
+    const attempts = attemptSummary(alert);
 
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
@@ -401,6 +430,9 @@ class NotificationCenterPanel extends LitElement {
           ${monitor} · ${this.targetSummary(alert.notification?.target)}
         </div>
         <div class="nc-alert-meta">${lastNotification}</div>
+        ${attempts
+          ? html`<div class="nc-alert-meta">${attempts}</div>`
+          : ""}
       </div>
       <div class="nc-alert-actions">
         <button

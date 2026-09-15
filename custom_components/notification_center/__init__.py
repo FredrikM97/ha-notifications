@@ -23,7 +23,8 @@ from .const import (
     SERVICE_RELOAD,
     SERVICE_TEST,
 )
-from .controller.core import NotificationCenterController, build_controller
+from .controller.core import NotificationCenterController
+from .controller.lifecycle import FeatureLifecycle
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ async def async_setup(
     ) -> None:
         """Test an alert."""
 
-        await _get_controller(hass).test_alert(call.data["alert_id"])
+        await _get_controller(hass).dispatch("testing.saved", call.data["alert_id"])
 
     if not hass.services.has_service(
         DOMAIN,
@@ -117,7 +118,12 @@ async def async_setup_entry(
 ) -> bool:
     """Set up HA Notifications from a config entry."""
 
-    controller = await build_controller(hass)
+    controller = NotificationCenterController(hass)
+    controller.attach_feature_lifecycle(
+        await FeatureLifecycle.async_create(
+            controller.feature_services, controller.reload
+        )
+    )
 
     try:
         await controller.async_setup(
@@ -148,10 +154,7 @@ async def async_setup_entry(
     # location.
     entry.runtime_data = controller
 
-    _LOGGER.info(
-        "HA Notifications started with %d alert(s)",
-        len(controller.alerts),
-    )
+    _LOGGER.info("HA Notifications started")
 
     return True
 

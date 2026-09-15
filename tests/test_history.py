@@ -14,7 +14,8 @@ from test_support import (
 
 load_const_and_models()
 history = load_module(
-    f"{PACKAGE_NAME}.support.history", INTEGRATION_ROOT / "support" / "history.py"
+    f"{PACKAGE_NAME}.features.history",
+    INTEGRATION_ROOT / "features" / "history.py",
 )
 
 

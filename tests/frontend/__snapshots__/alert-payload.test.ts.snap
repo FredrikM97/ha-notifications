@@ -8,6 +8,24 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
       "type": "template",
     },
   ],
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "button": "",
+    "enabled": false,
+    "notification": {
+      "clear": true,
+      "enabled": false,
+      "message": "",
+    },
+    "reminders": {
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
   "description": "",
   "enabled": true,
   "icon": "mdi:bell-outline",
@@ -18,18 +36,6 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
   },
   "name": "Front door open",
   "notification": {
-    "actions_enabled": false,
-    "confirmation": {
-      "actions_enabled": false,
-      "button": "",
-      "clear_on_confirmation": true,
-      "completion_message": "",
-      "confirmation_message": "",
-      "enabled": false,
-      "max_attempts": 5,
-      "notify_on_confirmation": false,
-      "resend_interval": "00:30:00",
-    },
     "message": "The front door is open.",
     "target": {
       "entity_id": [

@@ -5,11 +5,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..controller.commands import CallService, Command, Emit, RunBatch
-from ..controller import events as ev
-from ..controller.events import Event
-from ..const import HistoryEventType
-from .rendering import Render, remove_none, render_value
+from pydantic import BaseModel, ConfigDict, Field
+
+from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, HistoryEventType
+from ..controller.lifecycle import FeatureBase
+from ..domain.service_calls import ServiceCall
+from ..domain.template_values import remove_nulls, render_template_values
+from . import history
+from .configuration_registry import register_alert_feature
+
+
+class FollowUpActionConfig(BaseModel):
+    """One permissive action payload retained for template rendering."""
+
+    model_config = ConfigDict(extra="allow")
+
+    action: Any = None
+    target: Any = Field(default_factory=dict)
+    data: Any = Field(default_factory=dict)
+
+
+class PostSendActionsConfig(BaseModel):
+    """Validated actions executed after a notification is sent."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool | None = None
+    actions: list[dict[str, Any]] | None = None
+
+
+register_alert_feature("post_send_actions", PostSendActionsConfig)
 
 
 @dataclass(frozen=True)
@@ -17,166 +42,138 @@ class ActionResult:
     """One configured action's render outcome, preserving its original index."""
 
     index: int
-    command: Command | None
+    command: ServiceCall | None
     error: str | None
 
 
-async def build_service_calls(
-    actions: list[dict[str, Any]],
-    variables: dict[str, Any],
-    render: Render,
-) -> list[ActionResult]:
-    """Render a configured list of follow-up actions into service calls.
+@dataclass(frozen=True)
+class ActionContext:
+    """Typed template inputs for one follow-up action execution."""
 
-    Each action is rendered independently: one invalid/failing action does
-    not stop the others from rendering, matching the original per-action
-    try/except behaviour. The caller (`core.py`) inspects `.error` on each
-    result to decide what to log.
-    """
+    alert_id: str
+    alert_name: str
+    attempt: int
+    test: bool
+    now: Any
+    confirmation_action_id: str | None
+    confirmed_by: str | None = None
 
-    results: list[ActionResult] = []
+class FollowUpActionsFeature(FeatureBase):
+    """Own follow-up action rendering, execution, and outcome recording."""
 
-    for index, action in enumerate(actions, start=1):
-        try:
-            results.append(
-                ActionResult(index, await _render_one(action, variables, render), None)
-            )
-        except Exception as err:  # noqa: BLE001 - surfaced as a plain result, not raised
-            results.append(ActionResult(index, None, str(err)))
+    name = "follow_up_actions"
 
-    return results
+    async def run(
+        self,
+        alert: dict[str, Any],
+        attempt: int,
+        now: Any,
+        test: bool,
+        record_history: bool,
+        actions: list[dict[str, Any]] | None = None,
+        confirmed_by: str | None = None,
+    ) -> None:
+        """Render, execute, and record post-send or confirmation actions."""
 
-
-async def _render_one(
-    action: dict[str, Any],
-    variables: dict[str, Any],
-    render: Render,
-) -> Command:
-    service = str(await render_value(render, action.get("action"), variables) or "")
-    if not service or "." not in service:
-        raise ValueError("Invalid service action.")
-
-    target = await render_value(render, action.get("target", {}), variables)
-    data = remove_none(await render_value(render, action.get("data", {}), variables))
-
-    service_data = data if isinstance(data, dict) else {}
-    service_target = target if target else None
-
-    domain, service_name = service.split(".", 1)
-    return CallService(domain, service_name, service_data, service_target)
-
-
-# ----------------------------------------------------------------------
-# Event-bus adapter - the only impure part of this module
-# ----------------------------------------------------------------------
-
-
-def register(bus: Any) -> None:
-    """Subscribe this module's reactions to the events it owns."""
-
-    bus.subscribe(ev.NOTIFICATION_SENT, handle_notification_sent)
-    bus.subscribe(ev.ACTIONS_RUN_REQUESTED, handle_actions_run_requested)
-
-
-async def handle_notification_sent(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    alert = payload["alert"]
-    if not alert["notification"].get("actions_enabled", False):
-        return []
-
-    variables = {
-        "alert_id": alert["id"],
-        "alert_name": alert["name"],
-        "alert_active": True,
-        "attempt": payload["attempt"],
-        "test": payload.get("test", False),
-        "now": payload["now"],
-        "notification_id": f"notification_center_{alert['id']}",
-        "confirmation_action_id": payload.get("confirmation_action_id"),
-    }
-    return await _run_actions(
-        bus,
-        alert,
-        alert["notification"].get("actions", []),
-        variables,
-        HistoryEventType.NOTIFICATION_ACTION,
-        HistoryEventType.NOTIFICATION_ACTION_FAILED,
-        record_history=payload.get("record_history", True),
-    )
-
-
-async def handle_actions_run_requested(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    return await _run_actions(
-        bus,
-        payload["alert"],
-        payload["actions"],
-        payload["variables"],
-        HistoryEventType.CONFIRMATION_ACTION,
-        HistoryEventType.CONFIRMATION_ACTION_FAILED,
-        record_history=payload.get("record_history", True),
-    )
-
-
-async def _run_actions(
-    bus: Any,
-    alert: dict[str, Any],
-    action_list: list[dict[str, Any]],
-    variables: dict[str, Any],
-    success_type: HistoryEventType,
-    failure_type: HistoryEventType,
-    *,
-    record_history: bool,
-) -> list[Command]:
-    render = await bus.ask(ev.RENDER_TEMPLATE)
-    results = await build_service_calls(action_list, variables, render)
-    now = variables.get("now")
-
-    commands: list[Command] = []
-    for result in results:
-        if result.command is None:
-            commands.append(
-                Emit(
-                    Event(
-                        ev.ACTION_FAILED,
-                        {
-                            "alert": alert,
-                            "index": result.index,
-                            "error": result.error,
-                            "event_type": failure_type,
-                            "record_history": record_history,
-                            "now": now,
-                        },
-                    )
-                )
-            )
-            continue
-
-        commands.append(
-            RunBatch(
-                [result.command],
-                on_success=Event(
-                    ev.ACTION_EXECUTED,
-                    {
-                        "alert": alert,
-                        "index": result.index,
-                        "action": f"{result.command.domain}.{result.command.service}",
-                        "event_type": success_type,
-                        "record_history": record_history,
-                        "now": now,
-                    },
-                ),
-                on_error=Event(
-                    ev.ACTION_FAILED,
-                    {
-                        "alert": alert,
-                        "index": result.index,
-                        "event_type": failure_type,
-                        "record_history": record_history,
-                        "now": now,
-                    },
-                ),
-            )
+        post_send = PostSendActionsConfig.model_validate(
+            alert.get("post_send_actions") or {}
         )
+        action_list = actions if actions is not None else (post_send.actions or [])
+        if not action_list or (actions is None and not post_send.enabled):
+            return
+        context = ActionContext(
+            alert["id"],
+            alert["name"],
+            attempt,
+            test,
+            now,
+            self.services.state["alerts"].get(alert["id"], {}).get(
+                "confirmation_action_id"
+            ),
+            confirmed_by,
+        )
+        results = await self._render_actions(
+            action_list,
+            context,
+        )
+        for result in results:
+            event_type = HistoryEventType.NOTIFICATION_ACTION
+            message = "Action executed."
+            details = {"index": result.index}
+            if result.command is None:
+                event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
+                message = "Action failed."
+                details["error"] = result.error
+            else:
+                try:
+                    await self.services.gateway.call_service(
+                        result.command.domain,
+                        result.command.service,
+                        result.command.data,
+                        result.command.target,
+                    )
+                    details["action"] = (
+                        f"{result.command.domain}.{result.command.service}"
+                    )
+                except Exception as err:
+                    event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
+                    message = "Action failed."
+                    details["error"] = str(err)
+            if record_history and history.record_event(
+                self.services.state,
+                self.services.state["alerts"].get(alert["id"]),
+                alert,
+                event_type,
+                message,
+                details,
+                now,
+            ):
+                self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
 
-    return commands
+    async def _render_actions(
+        self, actions: list[dict[str, Any]], context: ActionContext
+    ) -> list[ActionResult]:
+        """Render each configured action independently."""
+
+        variables = {
+            "alert_id": context.alert_id,
+            "alert_name": context.alert_name,
+            "alert_active": True,
+            "attempt": context.attempt,
+            "test": context.test,
+            "now": context.now,
+            "notification_id": f"notification_center_{context.alert_id}",
+            "confirmation_action_id": context.confirmation_action_id,
+            "confirmed_by": context.confirmed_by,
+        }
+        results: list[ActionResult] = []
+        for index, action in enumerate(actions, start=1):
+            try:
+                command = await self._render_action(
+                    FollowUpActionConfig.model_validate(action), variables
+                )
+                results.append(ActionResult(index, command, None))
+            except Exception as err:  # noqa: BLE001
+                results.append(ActionResult(index, None, str(err)))
+        return results
+
+    async def _render_action(
+        self, action: FollowUpActionConfig, variables: dict[str, Any]
+    ) -> ServiceCall:
+        render = self.services.gateway.render_template
+        service = str(
+            await render_template_values(action.action, variables, render) or ""
+        )
+        if not service or "." not in service:
+            raise ValueError("Invalid service action.")
+        target = await render_template_values(action.target, variables, render)
+        data = remove_nulls(
+            await render_template_values(action.data, variables, render)
+        )
+        domain, service_name = service.split(".", 1)
+        return ServiceCall(
+            domain=domain,
+            service=service_name,
+            data=data if isinstance(data, dict) else {},
+            target=target if target else None,
+        )

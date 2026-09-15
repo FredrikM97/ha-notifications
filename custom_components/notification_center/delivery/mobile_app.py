@@ -1,4 +1,4 @@
-"""Legacy Mobile App notify-service resolution."""
+"""Legacy Mobile App notify-service resolution for delivery."""
 
 from __future__ import annotations
 

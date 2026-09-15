@@ -144,6 +144,18 @@ select {
   padding: 0 16px 16px;
 }
 
+.nc-child-section .nc-section-titlebar {
+  padding-left: 24px;
+}
+
+.nc-child-section .nc-section-content {
+  padding-left: 24px;
+}
+
+.nc-reminder-options {
+  margin-top: 16px;
+}
+
 .nc-section-status {
   display: inline-flex;
   align-items: center;
@@ -463,12 +475,17 @@ ha-code-editor.nc-code-editor .cm-scroller {
 
 .nc-editor-view {
   width: 100%;
-  padding: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
 .nc-editor-shell {
   background: var(--card-background-color);
   color: var(--primary-text-color);
+  border-radius: 16px;
+  box-shadow: var(--ha-box-shadow);
+  overflow: hidden;
 }
 
 .nc-editor-shell > .nc-modal-header {
@@ -501,14 +518,14 @@ ha-code-editor.nc-code-editor .cm-scroller {
 }
 
 .nc-modal-body {
-  padding: 20px;
+  padding: 24px;
 }
 
 .nc-editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 210px;
+  grid-template-columns: minmax(0, 1fr) 232px;
   grid-template-areas: "content sidebar";
-  gap: 20px;
+  gap: 28px;
 }
 
 .nc-section-header {
@@ -519,7 +536,7 @@ ha-code-editor.nc-code-editor .cm-scroller {
   align-self: start;
   display: grid;
   gap: 2px;
-  padding: 0;
+  padding: 4px 0 4px 14px;
   border-left: 1px solid var(--divider-color);
   background: transparent;
 }
@@ -974,40 +991,6 @@ ha-code-editor.nc-action-editor {
   font-variant-numeric: tabular-nums;
 }
 
-.nc-subpanel {
-  background: transparent;
-}
-
-.nc-subpanel-header {
-  display: flex;
-  align-items: center;
-  min-height: 46px;
-  padding: 8px 12px;
-  color: var(--primary-text-color);
-}
-
-.nc-subpanel-heading {
-  display: grid;
-  gap: 2px;
-}
-
-.nc-subpanel-title {
-  color: var(--primary-text-color);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.nc-subpanel-subtitle {
-  color: var(--secondary-text-color);
-  font-size: 12px;
-}
-
-.nc-subpanel-content {
-  display: grid;
-  gap: 12px;
-  padding: 0 12px 12px;
-}
-
 .nc-help {
   color: var(--secondary-text-color);
   font-size: 12px;
@@ -1097,6 +1080,10 @@ ha-code-editor.nc-action-editor {
     padding: 14px;
   }
 
+  .nc-editor-view {
+    padding: 14px;
+  }
+
   .nc-header {
     align-items: flex-start;
     flex-direction: column;
@@ -1118,7 +1105,7 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-modal-body {
-    padding: 14px;
+    padding: 16px;
   }
 
   .nc-editor-layout {
@@ -1180,7 +1167,7 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-modal-body {
-    padding: 14px;
+    padding: 16px;
   }
 
   .nc-editor-layout {

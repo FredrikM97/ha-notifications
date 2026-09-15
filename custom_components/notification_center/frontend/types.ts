@@ -18,7 +18,7 @@ export interface AlertCondition {
   below?: string | number;
   state?: string | string[];
   value?: string;
-  for?: string | Record<string, number>;
+  for?: string | number | Record<string, number>;
   [key: string]: unknown;
 }
 
@@ -34,14 +34,20 @@ export interface NotificationTarget {
 export interface ConfirmationConfig {
   enabled: boolean;
   button: string;
-  completion_message: string;
-  notify_on_confirmation: boolean;
-  confirmation_message: string;
-  clear_on_confirmation: boolean;
-  resend_interval: string | Record<string, number>;
-  max_attempts: number;
-  actions_enabled: boolean;
-  actions?: Record<string, unknown>[];
+  notification: {
+    enabled: boolean;
+    message: string;
+    clear: boolean;
+  };
+  reminders: {
+    interval: string | number | Record<string, number>;
+    max_attempts: number;
+    show_attempts: boolean;
+  };
+  actions: {
+    enabled: boolean;
+    items?: Record<string, unknown>[];
+  };
 }
 
 export interface NotificationConfig {
@@ -49,20 +55,18 @@ export interface NotificationConfig {
   title: string;
   message: string;
   data?: Record<string, unknown>;
-  repeat?: {
-    interval?: string | Record<string, number>;
-    max_attempts?: number;
-    enabled?: boolean;
-    [key: string]: unknown;
-  };
-  actions_enabled: boolean;
+}
+
+export interface PostSendActionsConfig {
+  enabled: boolean;
   actions?: Record<string, unknown>[];
-  confirmation: ConfirmationConfig;
 }
 
 export interface RuntimeAlertState {
   active?: boolean;
+  attempts?: number;
   last_notified?: string;
+  last_event?: Record<string, unknown>;
 }
 
 export interface Alert {
@@ -75,9 +79,11 @@ export interface Alert {
   monitor: {
     on_change: boolean;
     startup: boolean;
-    interval?: string | Record<string, number>;
+    interval?: string | number | Record<string, number>;
   };
   notification: NotificationConfig;
+  confirmation?: ConfirmationConfig;
+  post_send_actions?: PostSendActionsConfig;
   runtime?: RuntimeAlertState;
   [key: string]: unknown;
 }

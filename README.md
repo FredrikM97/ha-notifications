@@ -268,16 +268,15 @@ An alert can execute Home Assistant actions after confirmation.
 Example:
 
 ```yaml
-notification:
-  confirmation:
-    enabled: true
-    actions_enabled: true
-    actions:
-      - action: switch.turn_on
-        target:
-          entity_id:
-            - switch.water_pump_reset
-            - switch.filter_reset
+confirmation:
+  enabled: true
+  actions_enabled: true
+  actions:
+    - action: switch.turn_on
+      target:
+        entity_id:
+          - switch.water_pump_reset
+          - switch.filter_reset
 ```
 
 Multiple actions can be configured.
@@ -286,7 +285,7 @@ Actions run sequentially and can include a Home Assistant-style delay. The
 delay may be an `HH:MM:SS` string or a duration mapping:
 
 ```yaml
-notification:
+confirmation:
   actions_enabled: true
   actions:
     - delay: "00:10:00"
@@ -320,11 +319,10 @@ Actionable notifications can optionally be resent if they have not been confirme
 For example:
 
 ```yaml
-notification:
-  confirmation:
-    enabled: true
-    resend_interval: "00:30:00"
-    max_attempts: 5
+confirmation:
+  enabled: true
+  resend_interval: "00:30:00"
+  max_attempts: 5
 ```
 
 This allows a notification to behave like:
@@ -377,17 +375,17 @@ alerts:
           - YOUR_DEVICE_ID
       title: Reminder
       message: Something needs your attention.
-      confirmation:
-        enabled: true
-        button: Activity completed
-        resend_interval: "00:30:00"
-        max_attempts: 5
-        actions_enabled: true
-        actions:
-          - action: switch.turn_on
-            target:
-              entity_id:
-                - switch.water_pump_reset
+    confirmation:
+      enabled: true
+      button: Activity completed
+      resend_interval: "00:30:00"
+      max_attempts: 5
+      actions_enabled: true
+      actions:
+        - action: switch.turn_on
+          target:
+            entity_id:
+              - switch.water_pump_reset
 ```
 
 Multiple visual conditions are combined with `AND`. There is no separate `logic` field.

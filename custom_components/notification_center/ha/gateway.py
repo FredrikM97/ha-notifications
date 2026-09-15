@@ -1,23 +1,10 @@
-"""The single module allowed to call Home Assistant framework APIs.
-
-Every other module in this integration reaches Home Assistant only through
-this gateway. Nothing here decides *when* to do anything - it only performs
-the one HA-facing operation it's asked to perform. `controller/core.py`
-drives it imperatively for setup/config/lifecycle, and it also self-registers
-as the `EventBus`'s answer for the handful of read queries that are pure
-passthroughs to it (template rendering, service lookup, registry snapshot,
-condition evaluation) via `register_bus_responders`, so `core.py` doesn't
-need to sit in the middle of those. See docs/architecture.md.
-"""
+"""The single module allowed to call Home Assistant framework APIs."""
 
 from __future__ import annotations
 
 import inspect
-import os
-from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
@@ -27,28 +14,15 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
-    TrackTemplateResult,
     TrackTemplate as HATrackTemplate,
+)
+from homeassistant.helpers.event import (
+    TrackTemplateResult,
     async_track_template_result,
     async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.template import Template, TemplateError, result_as_boolean
-
-from ..controller import events as ev
-from ..controller.commands import (
-    CallService,
-    PersistSave,
-    TrackInterval,
-    TrackTemplate,
-    Unsubscribe as UnsubscribeCommand,
-)
-from ..controller.events import Event as ControllerEvent
-
-if TYPE_CHECKING:
-    from ..controller.bus import EventBus
-
-TemplateResultCallback = Callable[[bool | None, str | None], None]
 
 Unsubscribe = Callable[[], None]
 
@@ -65,21 +39,6 @@ class RegistrySnapshot:
     person_states: list[Any]
 
 
-def _read_text(path: Path) -> str:
-    """Read a text file from disk (runs in the executor)."""
-
-    return path.read_text(encoding="utf-8")
-
-
-def _write_text(path: Path, content: str) -> None:
-    """Atomically write a text file to disk (runs in the executor)."""
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
-
-
 class HomeAssistantGateway:
     """Thin wrapper around every Home Assistant call this integration needs.
 
@@ -89,8 +48,6 @@ class HomeAssistantGateway:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
-        self._condition_unsubs: dict[str, Unsubscribe] = {}
-        self._interval_unsubs: dict[str, Unsubscribe] = {}
 
     # ------------------------------------------------------------------
     # Services
@@ -266,129 +223,6 @@ class HomeAssistantGateway:
         return result_as_boolean(result), None
 
     # ------------------------------------------------------------------
-    # Bus wiring - answers the read queries that are pure passthroughs
-    # ------------------------------------------------------------------
-
-    def register_bus_responders(self, bus: "EventBus") -> None:
-        """Register this gateway as the answer for its own passthrough queries."""
-
-        bus.respond(ev.RENDER_TEMPLATE, self._answer_render_template)
-        bus.respond(ev.HAS_SERVICE, self._answer_has_service)
-        bus.respond(ev.FETCH_REGISTRY_SNAPSHOT, self._answer_fetch_registry_snapshot)
-        bus.respond(ev.EVALUATE_CONDITION, self._answer_evaluate_condition)
-        bus.respond(ev.GET_STATES, self._answer_get_states)
-
-    def register_bus_listeners(self, bus: "EventBus", store: Store) -> None:
-        """Register the gateway operations represented by leaf commands."""
-
-        bus.listen(CallService, self._execute_call_service)
-        bus.listen(
-            TrackTemplate,
-            lambda command: self._execute_track_template(bus, command),
-        )
-        bus.listen(
-            TrackInterval,
-            lambda command: self._execute_track_interval(bus, command),
-        )
-        bus.listen(UnsubscribeCommand, self._execute_unsubscribe)
-        bus.listen(
-            PersistSave,
-            lambda command: self._execute_persist_save(store, command),
-        )
-
-    async def _execute_call_service(self, command: CallService) -> None:
-        await self.call_service(
-            command.domain, command.service, command.data, command.target
-        )
-
-    async def _execute_track_template(
-        self, bus: "EventBus", command: TrackTemplate
-    ) -> None:
-        self._unsubscribe(command.key)
-
-        def on_result(
-            active: bool | None, error: str | None, _event: Event | None
-        ) -> None:
-            self.create_task(
-                bus.publish(
-                    ControllerEvent(
-                        ev.CONDITION_EVALUATED,
-                        {
-                            "alert_id": command.key,
-                            "active": active,
-                            "error": error,
-                            "source": "change",
-                            "now": self.now_utc(),
-                        },
-                    )
-                )
-            )
-
-        self._condition_unsubs[command.key] = self.track_template(
-            command.template, on_result
-        )
-
-    async def _execute_track_interval(
-        self, bus: "EventBus", command: TrackInterval
-    ) -> None:
-        interval_unsub = self._interval_unsubs.pop(command.key, None)
-        if interval_unsub:
-            interval_unsub()
-
-        def on_interval(_now: Any) -> None:
-            self.create_task(
-                bus.publish(
-                    ControllerEvent(
-                        ev.CONDITION_CHECK_REQUESTED,
-                        {
-                            "alert_id": command.key,
-                            "source": "interval",
-                            "now": self.now_utc(),
-                        },
-                    )
-                )
-            )
-
-        self._interval_unsubs[command.key] = self.track_interval(
-            command.interval, on_interval
-        )
-
-    async def _execute_unsubscribe(self, command: UnsubscribeCommand) -> None:
-        self._unsubscribe(command.key)
-
-    async def _execute_persist_save(
-        self, store: Store, command: PersistSave
-    ) -> None:
-        self.delay_save_store(store, command.data)
-
-    def _unsubscribe(self, key: str) -> None:
-        condition_unsub = self._condition_unsubs.pop(key, None)
-        if condition_unsub:
-            condition_unsub()
-
-        interval_unsub = self._interval_unsubs.pop(key, None)
-        if interval_unsub:
-            interval_unsub()
-
-    async def _answer_render_template(self, _payload: dict[str, Any]) -> Any:
-        return self.render_template
-
-    async def _answer_has_service(self, _payload: dict[str, Any]) -> Any:
-        return self.has_service
-
-    async def _answer_fetch_registry_snapshot(
-        self, _payload: dict[str, Any]
-    ) -> RegistrySnapshot:
-        return self.fetch_registry_snapshot()
-
-    async def _answer_evaluate_condition(
-        self, payload: dict[str, Any]
-    ) -> tuple[bool | None, str | None]:
-        return await self.evaluate_condition(payload["source"])
-
-    async def _answer_get_states(self, payload: dict[str, Any]) -> list[Any]:
-        return self.get_states_all(payload["domain"])
-
     def now_utc(self):
         """Return the current UTC time."""
 
@@ -454,46 +288,6 @@ class HomeAssistantGateway:
         """Create a Home Assistant `Store` for a given version/key."""
 
         return Store(self._hass, version, key)
-
-    async def load_store(self, store: Store) -> Any:
-        """Load data from a Home Assistant `Store`."""
-
-        return await store.async_load()
-
-    async def save_store(self, store: Store, data: Any) -> None:
-        """Immediately persist data to a Home Assistant `Store`."""
-
-        await store.async_save(deepcopy(data))
-
-    def delay_save_store(self, store: Store, data: Any, *, delay: float = 1) -> None:
-        """Schedule a delayed save to a Home Assistant `Store`."""
-
-        snapshot = deepcopy(data)
-        store.async_delay_save(lambda: snapshot, delay=delay)
-
-    # ------------------------------------------------------------------
-    # Persistence: plain files (YAML config) and executor jobs
-    # ------------------------------------------------------------------
-
-    def config_path(self, *parts: str) -> str:
-        """Return an absolute path under the Home Assistant config directory."""
-
-        return self._hass.config.path(*parts)
-
-    async def read_text_file(self, path: Path) -> str:
-        """Read a text file from disk."""
-
-        return await self._hass.async_add_executor_job(_read_text, path)
-
-    async def write_text_file(self, path: Path, content: str) -> None:
-        """Atomically write a text file to disk."""
-
-        await self._hass.async_add_executor_job(_write_text, path, content)
-
-    async def run_in_executor(self, func: Callable[..., Any], *args: Any) -> Any:
-        """Run a blocking callable in Home Assistant's executor."""
-
-        return await self._hass.async_add_executor_job(func, *args)
 
     # ------------------------------------------------------------------
     # Tasks

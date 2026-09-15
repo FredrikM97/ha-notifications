@@ -41,10 +41,14 @@ export async function call<T>(
   command: string,
   data: Record<string, unknown> = {},
 ): Promise<T> {
-  return hass.connection.sendMessagePromise<T>({
-    type: `${DOMAIN}/${command}`,
-    ...data,
-  });
+  try {
+    return await hass.connection.sendMessagePromise<T>({
+      type: `${DOMAIN}/${command}`,
+      ...data,
+    });
+  } catch (error) {
+    throw new Error(`${DOMAIN}/${command}: ${errorMessage(error)}`);
+  }
 }
 
 async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
@@ -86,10 +90,18 @@ export async function loadRegistries(hass: Hass): Promise<Registries> {
 }
 
 export async function getAlerts(hass: Hass): Promise<Alert[]> {
-  return call<Alert[]>(hass, "list");
+  const alerts = await call<unknown>(hass, "list");
+  if (!Array.isArray(alerts)) {
+    throw new Error("notification_center/list: expected an alert list.");
+  }
+
+  return alerts as Alert[];
 }
 
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {
+  if (!alert.id || typeof alert.id !== "string") {
+    throw new Error("notification_center/save: alert.id is required.");
+  }
   return call<Alert>(hass, "save", {
     alert,
   });
@@ -105,6 +117,10 @@ export async function deleteAlert(
 }
 
 export async function testAlert(hass: Hass, alertId: string): Promise<unknown> {
+  if (!alertId) {
+    throw new Error("Select an alert before testing it.");
+  }
+
   return call(hass, "test", {
     alert_id: alertId,
   });

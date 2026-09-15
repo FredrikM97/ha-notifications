@@ -35,13 +35,13 @@ import {
 import {
   renderBasicSection,
   renderConditionSection,
-  renderConfirmationNotificationSection,
   renderConfirmationSection,
+  renderConfirmationNotificationSection,
+  renderConfirmationReminderSection,
   renderMonitorSection,
   renderNotificationSection,
   renderPostConfirmationActionsSection,
   renderPostSendActionsSection,
-  renderReminderIntervalSection,
   renderRecipientSection,
 } from "../sections.js";
 
@@ -99,14 +99,17 @@ class AlertEditorController {
     this.onDiscardTest = options.onDiscardTest;
 
     this.value = clone(options.alert || defaultAlert());
-    this.value.notification.confirmation = {
+    this.value.confirmation = {
       enabled: false,
       button: "",
-      completion_message: "",
-      resend_interval: "00:30:00",
-      max_attempts: 5,
-      actions_enabled: false,
-      ...this.value.notification.confirmation,
+      notification: { enabled: false, message: "", clear: true },
+      reminders: {
+        interval: "00:30:00",
+        max_attempts: 5,
+        show_attempts: false,
+      },
+      actions: { enabled: false, items: [] },
+      ...this.value.confirmation,
     };
 
     this.page = this.root.querySelector<HTMLElement>(".nc-page");
@@ -137,10 +140,10 @@ class AlertEditorController {
       validateActions: this.validateActions,
     };
     this.optionalSettings = {
-      confirmation: !options.alert || Boolean(options.alert.notification.confirmation),
+      confirmation: !options.alert || Boolean(options.alert.confirmation),
       postSendActions: true,
       postConfirmationActions:
-        !options.alert || Boolean(options.alert.notification.confirmation),
+        !options.alert || Boolean(options.alert.confirmation),
     };
 
     this.renderEditor();
@@ -193,9 +196,6 @@ class AlertEditorController {
     render(
       html`<div class="nc-editor-view">
         <section class="nc-editor-shell">
-          <header class="nc-modal-header">
-            <h2 data-role="editor-title">${this.value.name || "New alert"}</h2>
-          </header>
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
               <nav class="nc-section-header" aria-label="Alert sections">
@@ -209,7 +209,7 @@ class AlertEditorController {
                     value="confirmation"
                     ?disabled=${optionalSettings.confirmation}
                   >
-                    Confirmation and confirmation notification
+                    Confirmation
                   </option>
                 </select>
                 ${editorSections.map(
@@ -265,7 +265,7 @@ class AlertEditorController {
                   context,
                 )}${renderRecipientSection()}${renderNotificationSection(
                   context,
-                )}${renderReminderIntervalSection(context)}
+                  )}
                 <div
                   class="nc-optional-setting"
                   data-setting="postSendActions"
@@ -279,6 +279,13 @@ class AlertEditorController {
                   ?hidden=${!optionalSettings.confirmation}
                 >
                   ${renderConfirmationSection(context)}
+                </div>
+                <div
+                  class="nc-optional-setting"
+                  data-setting="confirmation"
+                  ?hidden=${!optionalSettings.confirmation}
+                >
+                  ${renderConfirmationReminderSection(context)}
                 </div>
                 <div
                   class="nc-optional-setting"
@@ -322,8 +329,6 @@ class AlertEditorController {
 
   private markDirty = (): void => {
     this.dirty = true;
-    const title = this.host.querySelector('[data-role="editor-title"]');
-    if (title) title.textContent = this.value.name || "New alert";
     this.refreshStatuses();
   };
 
@@ -346,18 +351,10 @@ class AlertEditorController {
     this.conditionsYamlView.hidden = this.context.mode !== "yaml";
     this.jinja.hidden = this.context.mode !== "jinja";
     const enabled: Record<SectionStatus, boolean> = {
-      repeat: Boolean(
-        value.notification.repeat &&
-        value.notification.repeat.enabled !== false,
-      ),
-      postSendActions: Boolean(value.notification.actions_enabled),
-      confirmation: Boolean(value.notification.confirmation.enabled),
-      confirmationUpdate: Boolean(
-        value.notification.confirmation.notify_on_confirmation,
-      ),
+      postSendActions: Boolean(value.post_send_actions?.enabled),
+      confirmation: Boolean(value.confirmation?.enabled),
       postConfirmationActions: Boolean(
-        value.notification.confirmation.enabled &&
-        value.notification.confirmation.actions_enabled,
+        value.confirmation?.enabled && value.confirmation.actions.enabled,
       ),
     };
     this.host
@@ -373,7 +370,7 @@ class AlertEditorController {
 
   private addSetting = (setting: string): void => {
     if (setting === "confirmation") {
-      this.value.notification.confirmation.enabled = true;
+      this.value.confirmation!.enabled = true;
       this.optionalSettings.confirmation = true;
       this.optionalSettings.postConfirmationActions = true;
     } else return;
@@ -402,22 +399,21 @@ class AlertEditorController {
 
   private removeSetting = (setting: OptionalSetting): void => {
     if (setting === "postSendActions") {
-      delete this.value.notification.actions;
-      this.value.notification.actions_enabled = false;
+      delete this.value.post_send_actions;
     } else if (setting === "postConfirmationActions") {
-      delete this.value.notification.confirmation.actions;
-      this.value.notification.confirmation.actions_enabled = false;
+      this.value.confirmation!.actions.items = [];
+      this.value.confirmation!.actions.enabled = false;
     } else {
-      this.value.notification.confirmation = {
+      this.value.confirmation = {
         enabled: false,
         button: "",
-        completion_message: "",
-        notify_on_confirmation: false,
-        confirmation_message: "",
-        clear_on_confirmation: true,
-        resend_interval: "00:30:00",
-        max_attempts: 5,
-        actions_enabled: false,
+        notification: { enabled: false, message: "", clear: true },
+        reminders: {
+          interval: "00:30:00",
+          max_attempts: 5,
+          show_attempts: false,
+        },
+        actions: { enabled: false, items: [] },
       };
       this.optionalSettings.postConfirmationActions = false;
       this.setOptionalSettingVisible("postConfirmationActions", false);
@@ -605,7 +601,6 @@ class AlertEditorController {
         "Post-confirmation actions",
       );
     }
-    const repeat = this.repeatPayload();
     let notificationActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postSendActions) {
       notificationActions = actionArrayValue(
@@ -615,40 +610,52 @@ class AlertEditorController {
         "Post-send actions",
       );
     }
-    const confirmation = value.notification.confirmation!;
+    const confirmation = value.confirmation!;
     const payload: AlertFormValues = {
-      name: value.name,
-      description: value.description,
-      condition: conditionTemplate(value),
-      conditions,
-      onChange: value.monitor.on_change,
-      startup: value.monitor.startup,
-      interval: this.monitorIntervalPayload(),
-      target: this.recipients.target(),
-      title: value.notification.title,
-      message: value.notification.message,
-      repeat,
-      actions_enabled: Boolean(value.notification.actions_enabled),
+      identity: {
+        name: value.name,
+        description: value.description,
+      },
+      monitor: {
+        conditions,
+        onChange: value.monitor.on_change,
+        startup: value.monitor.startup,
+        interval: this.monitorIntervalPayload(),
+      },
+      notification: {
+        target: this.recipients.target(),
+        title: value.notification.title,
+        message: value.notification.message,
+      },
       confirmation: {
         enabled: Boolean(confirmation.enabled),
         button: confirmation.button,
-        completion_message: confirmation.completion_message,
-        notify_on_confirmation: Boolean(confirmation.notify_on_confirmation),
-        confirmation_message: confirmation.confirmation_message,
-        clear_on_confirmation: confirmation.clear_on_confirmation !== false,
-        resend_interval: durationInputValue(
-          confirmation.resend_interval,
-          "00:30:00",
-        ),
-        max_attempts: confirmation.max_attempts,
-        actions_enabled: Boolean(confirmation.actions_enabled),
+        notification: {
+          enabled: Boolean(confirmation.notification.enabled),
+          message: confirmation.notification.message,
+          clear: confirmation.notification.clear !== false,
+        },
+        reminders: {
+          interval: durationInputValue(
+            confirmation.reminders.interval,
+            "00:30:00",
+          ),
+          max_attempts: confirmation.reminders.max_attempts,
+          show_attempts: confirmation.reminders.show_attempts === true,
+        },
+        actions: {
+          enabled: Boolean(confirmation.actions.enabled),
+        },
+      },
+      post_send_actions: {
+        postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
       },
     };
     if (notificationActions.length) {
-      payload.actions = notificationActions;
+      payload.post_send_actions.actions = notificationActions;
     }
     if (actions.length) {
-      payload.confirmation.actions = actions;
+      payload.confirmation.actions.items = actions;
     }
 
     return buildAlertPayload(value, payload);
@@ -686,22 +693,6 @@ class AlertEditorController {
         '[data-role="conditions-yaml-editor"]',
       )?.value || "[]"
     );
-  }
-
-  private repeatPayload() {
-    const repeat = this.value.notification.repeat;
-    if (!repeat) {
-      return undefined;
-    }
-
-    return {
-      interval: durationInputValue(
-        repeat.interval as string | Record<string, number> | undefined,
-        "00:30:00",
-      ),
-      max_attempts: Number(repeat.max_attempts) || 5,
-      enabled: repeat.enabled !== false,
-    };
   }
 
   private monitorIntervalPayload(): string | undefined {

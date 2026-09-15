@@ -3,142 +3,39 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..const import TransitionKind
-from ..controller import events as ev
-from ..controller.commands import Command, Emit, TrackInterval, TrackTemplate
-from ..controller.events import Event
-from ..domain.condition_schema import compile_condition
-from ..domain.durations import parse_duration
+from ..controller.lifecycle import FeatureBase, route
+from ..domain.durations import duration_seconds
+from .conditions import compile_condition
+from .confirmation import confirmation_for_alert
+from .configuration_registry import register_alert_feature
+from .notification import NotificationConfig, NotificationSchedule
+from .trigger_effects import TriggerEffectCoordinator
 
 
-def new_alert_state() -> dict[str, Any]:
-    """Return the default runtime state for one alert."""
+class MonitorConfig(BaseModel):
+    """Validated watcher settings owned by the triggering feature."""
 
-    return {
-        "active": False,
-        "acknowledged": False,
-        "attempts": 0,
-        "notification_id": None,
-        "confirmation_action_id": None,
-        "flow_id": None,
-        "started_at": None,
-        "last_evaluated": None,
-        "last_notified": None,
-        "confirmed_at": None,
-        "confirmed_by": None,
-        "last_error": None,
-        "last_event": None,
-    }
+    model_config = ConfigDict(extra="allow")
+
+    on_change: bool | None = None
+    startup: bool | None = None
+    interval: int | float | None = None
+
+    @field_validator("interval", mode="before")
+    @classmethod
+    def _normalize_interval(cls, value: Any) -> Any:
+        return duration_seconds(value)
 
 
-def ensure_runtime_state(
-    states: dict[str, Any], alert: dict[str, Any]
-) -> dict[str, Any]:
-    """Return existing runtime state for an alert or create defaults."""
-
-    alert_state = states.setdefault(alert["id"], new_alert_state())
-    for key, value in new_alert_state().items():
-        alert_state.setdefault(key, value)
-    return alert_state
-
-
-def _notification_due(
-    notification: dict[str, Any], state: dict[str, Any], now: datetime
-) -> bool:
-    """Determine whether a repeated notification is due."""
-
-    repeat = notification.get("repeat")
-    confirmation = notification.get("confirmation", {})
-
-    if (
-        not repeat
-        and state.get("confirmation_action_id")
-        and confirmation.get("enabled", False)
-    ):
-        repeat = {
-            "interval": confirmation.get("resend_interval"),
-            "max_attempts": confirmation.get("max_attempts", 5),
-        }
-
-    if not repeat or not repeat.get("enabled", True):
-        return False
-
-    attempts = int(state.get("attempts", 0))
-    max_attempts = int(repeat.get("max_attempts", 1))
-    if attempts >= max_attempts:
-        return False
-
-    last_notified = state.get("last_notified")
-    if not last_notified:
-        return True
-
-    try:
-        parsed = datetime.fromisoformat(str(last_notified))
-    except ValueError:
-        return True
-
-    interval = parse_duration(repeat["interval"])
-    if interval is None:
-        return True
-
-    return (now - parsed) >= interval
-
-
-# ----------------------------------------------------------------------
-# Watch specs (was AlertEngine.setup_alert's listener wiring)
-# ----------------------------------------------------------------------
-
-
-def register_specs(alert: dict[str, Any]) -> list[Command]:
-    """Return the Commands needed to start watching one alert."""
-
-    commands: list[Command] = []
-    monitor = alert["monitor"]
-
-    if monitor.get("on_change", True):
-        commands.append(TrackTemplate(alert["id"], compile_condition(alert)))
-
-    interval = _watch_interval(alert)
-    if interval is not None:
-        commands.append(TrackInterval(alert["id"], interval))
-
-    return commands
-
-
-def _watch_interval(alert: dict[str, Any]) -> timedelta | None:
-    """Resolve the interval an alert should be periodically re-checked on.
-
-    Falls back: explicit monitor interval, then the repeat interval (if
-    repeats are enabled), then the confirmation resend interval (if
-    confirmations are enabled) - same order as the original engine.
-    """
-
-    monitor = alert["monitor"]
-    notification = alert["notification"]
-    confirmation = notification.get("confirmation", {})
-    repeat = notification.get("repeat")
-
-    interval = monitor.get("interval")
-
-    if not interval and isinstance(repeat, dict) and repeat.get("enabled", True):
-        interval = repeat.get("interval")
-
-    if not interval and confirmation.get("enabled", False):
-        interval = confirmation.get("resend_interval")
-
-    if not interval:
-        return None
-
-    return parse_duration(interval)
-
-
-# ----------------------------------------------------------------------
-# Trigger decisions (was AlertEngine.process_condition and friends)
-# ----------------------------------------------------------------------
+register_alert_feature("monitor", MonitorConfig)
 
 
 @dataclass(frozen=True)
@@ -155,407 +52,374 @@ class TriggerTransition:
     new_confirmation_action: bool = False
 
 
-def on_condition_result(
-    states: dict[str, Any],
-    alert: dict[str, Any],
-    active: bool | None,
-    error: str | None,
-    now: datetime,
-    *,
-    source: str,
-) -> TriggerTransition:
-    """Process one condition result and drive the active/repeat state machine."""
+class TriggeringGateway(Protocol):
+    """Gateway capabilities used by the direct triggering workflow."""
 
-    if error is not None:
+    async def evaluate_condition(
+        self, source: str
+    ) -> tuple[bool | None, str | None]: ...
+
+    def track_template(
+        self,
+        source: str,
+        on_result: Callable[[bool | None, str | None, Any], None],
+    ) -> Callable[[], None]: ...
+
+    def track_interval(
+        self, interval: timedelta, on_interval: Callable[[Any], None]
+    ) -> Callable[[], None]: ...
+
+    def create_task(self, coroutine: Awaitable[Any]) -> Any: ...
+
+    def now_utc(self) -> datetime: ...
+
+
+class TriggeringWorkflow:
+    """Typed orchestration for watcher callbacks and one-shot checks."""
+
+    def __init__(
+        self,
+        gateway: TriggeringGateway,
+        alerts: dict[str, dict[str, Any]],
+        runtime_for: Callable[[str], dict[str, Any]],
+        on_transition: Callable[
+            [dict[str, Any], TriggerTransition, datetime], Awaitable[None]
+        ],
+        prepare_confirmation: Callable[
+            [dict[str, Any], dict[str, Any]], Awaitable[tuple[bool, str | None]]
+        ],
+    ) -> None:
+        self._gateway = gateway
+        self._alerts = alerts
+        self._watch_unsubs: dict[str, list[Callable[[], None]]] = {}
+        self._runtime_for = runtime_for
+        self._on_transition = on_transition
+        self._prepare_confirmation = prepare_confirmation
+
+    def set_alerts(self, alerts: dict[str, dict[str, Any]]) -> None:
+        """Point the workflow at the controller's current alert mapping."""
+
+        self._alerts = alerts
+
+    @staticmethod
+    def _transition_for(
+        state: dict[str, Any],
+        alert: dict[str, Any],
+        active: bool | None,
+        error: str | None,
+        now: datetime,
+        source: str,
+        confirmation_action: tuple[bool, str | None],
+    ) -> TriggerTransition:
+        if error is not None:
+            return TriggerTransition(
+                kind=TransitionKind.CONDITION_ERROR, error=error, source=source
+            )
+        state["last_evaluated"] = now.isoformat()
+        if not active:
+            return TriggeringWorkflow._inactive_transition(state, source)
+        if not state.get("active", False):
+            return TriggeringWorkflow._active_transition(
+                state, alert, now, source, confirmation_action
+            )
+        if state.get("acknowledged", False):
+            return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
+        attempts = int(state.get("attempts", 0))
+        has_sent = bool(state.get("last_notified") or attempts)
+        monitor = MonitorConfig.model_validate(alert.get("monitor", {}))
+        schedule = NotificationSchedule(
+            NotificationConfig.model_validate(alert["notification"]),
+            confirmation_for_alert(alert),
+        )
+        if source == "startup" and monitor.startup and not has_sent:
+            return TriggeringWorkflow._send_transition(
+                state, alert, source, False, confirmation_action
+            )
+        if source == "enabled" and not has_sent:
+            return TriggeringWorkflow._send_transition(
+                state, alert, source, False, confirmation_action
+            )
+        if source in ("reload", "startup", "interval", "confirmation") and schedule.is_due(state, now):
+            return TriggeringWorkflow._send_transition(
+                state, alert, source, True, confirmation_action
+            )
+        return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
+
+    @staticmethod
+    def _inactive_transition(
+        state: dict[str, Any], source: str
+    ) -> TriggerTransition:
+        if not state.get("active", False):
+            return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
+        had_pending_confirmation = bool(state.get("confirmation_action_id"))
+        state.update(
+            active=False,
+            acknowledged=False,
+            attempts=0,
+            confirmation_action_id=None,
+            notification_id=None,
+            flow_id=None,
+        )
         return TriggerTransition(
-            kind=TransitionKind.CONDITION_ERROR, error=error, source=source
+            kind=TransitionKind.BECAME_INACTIVE,
+            source=source,
+            had_pending_confirmation=had_pending_confirmation,
         )
 
-    state = ensure_runtime_state(states, alert)
-    state["last_evaluated"] = now.isoformat()
-
-    if not active:
-        return _handle_inactive(state, source)
-
-    if not state.get("active", False):
-        return _handle_newly_active(state, now, alert, source)
-
-    if state.get("acknowledged", False):
-        return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
-
-    attempts = int(state.get("attempts", 0))
-    has_sent = bool(state.get("last_notified") or attempts)
-    monitor = alert.get("monitor", {})
-
-    if source == "startup" and monitor.get("startup", True) and not has_sent:
-        return _should_send(state, alert, source, replace_existing=False)
-
-    if source == "enabled" and not has_sent:
-        return _should_send(state, alert, source, replace_existing=False)
-
-    if source in ("reload", "startup", "interval") and _notification_due(
-        alert["notification"], state, now
-    ):
-        return _should_send(state, alert, source, replace_existing=True)
-
-    return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
-
-
-def _handle_inactive(state: dict[str, Any], source: str) -> TriggerTransition:
-    if not state.get("active", False):
-        return TriggerTransition(kind=TransitionKind.NO_CHANGE, source=source)
-
-    had_pending_confirmation = bool(state.get("confirmation_action_id"))
-
-    state["active"] = False
-    state["acknowledged"] = False
-    state["attempts"] = 0
-    state["confirmation_action_id"] = None
-    state["notification_id"] = None
-    state["flow_id"] = None
-
-    return TriggerTransition(
-        kind=TransitionKind.BECAME_INACTIVE,
-        source=source,
-        had_pending_confirmation=had_pending_confirmation,
-    )
-
-
-def _handle_newly_active(
-    state: dict[str, Any],
-    now: datetime,
-    alert: dict[str, Any],
-    source: str,
-) -> TriggerTransition:
-    state["active"] = True
-    state["acknowledged"] = False
-    state["attempts"] = 0
-    state["started_at"] = now.isoformat()
-    state["notification_id"] = (
-        f"notification_center_{alert['id']}_{uuid.uuid4().hex[:10]}"
-    )
-
-    _ensure_flow_id(state, alert)
-    new_action, action_id = _ensure_confirmation_action(state, alert)
-
-    return TriggerTransition(
-        kind=TransitionKind.BECAME_ACTIVE,
-        source=source,
-        attempt=int(state.get("attempts", 0)) + 1,
-        confirmation_action_id=action_id,
-        new_confirmation_action=new_action,
-    )
-
-
-def _should_send(
-    state: dict[str, Any],
-    alert: dict[str, Any],
-    source: str,
-    *,
-    replace_existing: bool,
-) -> TriggerTransition:
-    _ensure_flow_id(state, alert)
-    new_action, action_id = _ensure_confirmation_action(state, alert)
-
-    return TriggerTransition(
-        kind=TransitionKind.SHOULD_SEND,
-        source=source,
-        replace_existing=replace_existing,
-        attempt=int(state.get("attempts", 0)) + 1,
-        confirmation_action_id=action_id,
-        new_confirmation_action=new_action,
-    )
-
-
-def _ensure_flow_id(state: dict[str, Any], alert: dict[str, Any]) -> str:
-    flow_id = state.get("flow_id")
-    if not flow_id:
-        flow_id = f"flow_{alert['id']}_{uuid.uuid4().hex[:8]}"
-        state["flow_id"] = flow_id
-    return str(flow_id)
-
-
-def _ensure_confirmation_action(
-    state: dict[str, Any], alert: dict[str, Any]
-) -> tuple[bool, str | None]:
-    """Ensure an active confirmation alert has a pending action ID.
-
-    Returns ``(newly_created, action_id)`` - callers only need to emit
-    `CONFIRMATION_SESSION_STARTED` when it was newly created.
-    """
-
-    confirmation = alert["notification"].get("confirmation", {})
-    if not confirmation.get("enabled", False):
-        return False, None
-
-    existing = state.get("confirmation_action_id")
-    if existing:
-        return False, existing
-
-    action_id = f"NC_CONFIRM_{alert['id']}_{uuid.uuid4().hex}"
-    state["confirmation_action_id"] = action_id
-    return True, action_id
-
-
-def record_send_result(
-    states: dict[str, Any],
-    alert: dict[str, Any],
-    attempt: int,
-    now: datetime,
-    *,
-    success: bool,
-    error: str | None = None,
-) -> None:
-    """Record the outcome of a send attempt `core.py` just executed."""
-
-    state = ensure_runtime_state(states, alert)
-
-    if not success:
-        state["last_error"] = error
-        return
-
-    state["attempts"] = attempt
-    state["last_notified"] = now.isoformat()
-    state["last_error"] = None
-
-
-def clear_confirmation_action(states: dict[str, Any], alert: dict[str, Any]) -> None:
-    """Clear a resolved confirmation's pending action ID (post-confirmation)."""
-
-    state = ensure_runtime_state(states, alert)
-    state["confirmation_action_id"] = None
-
-
-def mark_confirmed(
-    states: dict[str, Any],
-    alert: dict[str, Any],
-    confirmed_by: str,
-    now: datetime,
-) -> None:
-    """Mark an alert acknowledged after a confirmation action is received."""
-
-    state = ensure_runtime_state(states, alert)
-    state["acknowledged"] = True
-    state["confirmation_action_id"] = None
-    state["confirmed_at"] = now.isoformat()
-    state["confirmed_by"] = confirmed_by
-
-
-# ----------------------------------------------------------------------
-# Event-bus adapter - the only impure part of this module
-# ----------------------------------------------------------------------
-
-
-def register(bus: Any) -> None:
-    """Subscribe this module's reactions to the events it owns."""
-
-    bus.subscribe(ev.ALERT_CONFIGURED, handle_alert_configured)
-    bus.subscribe(ev.CONDITION_CHECK_REQUESTED, handle_check_requested)
-    bus.subscribe(ev.CONDITION_EVALUATED, handle_condition_evaluated)
-    bus.subscribe(ev.NOTIFICATION_SENT, handle_notification_sent)
-    bus.subscribe(ev.NOTIFICATION_FAILED, handle_notification_failed)
-    bus.subscribe(ev.CONFIRMED, handle_confirmed)
-
-
-async def handle_alert_configured(event: Event, bus: Any) -> list[Command]:
-    alert = event.payload["alert"]
-    state_root = await bus.ask(ev.GET_STATE)
-    ensure_runtime_state(state_root["alerts"], alert)
-
-    if not alert.get("enabled", True):
-        return []
-    return register_specs(alert)
-
-
-async def handle_check_requested(event: Event, bus: Any) -> list[Command]:
-    """Turn a pull-based "please check now" request into a `condition.evaluated` fact.
-
-    The push-based path (a tracked template firing) already knows the
-    result and publishes `CONDITION_EVALUATED` directly from the gateway;
-    this is only for startup/reload/interval/enabled sources, which ask
-    the kernel to evaluate the condition right now.
-    """
-
-    payload = event.payload
-    alert = await bus.ask(ev.GET_ALERT, {"alert_id": payload["alert_id"]})
-    if alert is None:
-        return []
-
-    active, error = await bus.ask(
-        ev.EVALUATE_CONDITION, {"source": compile_condition(alert)}
-    )
-    return [
-        Emit(
-            Event(
-                ev.CONDITION_EVALUATED,
-                {
-                    "alert_id": payload["alert_id"],
-                    "active": active,
-                    "error": error,
-                    "source": payload["source"],
-                    "now": payload["now"],
-                },
-            )
+    @staticmethod
+    def _active_transition(
+        state: dict[str, Any],
+        alert: dict[str, Any],
+        now: datetime,
+        source: str,
+        confirmation_action: tuple[bool, str | None],
+    ) -> TriggerTransition:
+        state.update(
+            active=True,
+            acknowledged=False,
+            attempts=0,
+            started_at=now.isoformat(),
+            notification_id=f"notification_center_{alert['id']}_{uuid.uuid4().hex[:10]}",
         )
-    ]
-
-
-async def handle_condition_evaluated(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    alert = await bus.ask(ev.GET_ALERT, {"alert_id": payload["alert_id"]})
-    if alert is None:
-        return []
-
-    state_root = await bus.ask(ev.GET_STATE)
-    now = payload["now"]
-    transition = on_condition_result(
-        state_root["alerts"],
-        alert,
-        payload["active"],
-        payload["error"],
-        now,
-        source=payload["source"],
-    )
-    return _commands_for_transition(alert, transition, now)
-
-
-def _commands_for_transition(
-    alert: dict[str, Any], transition: TriggerTransition, now: datetime
-) -> list[Command]:
-    if transition.kind == TransitionKind.CONDITION_ERROR:
-        return [
-            Emit(
-                Event(
-                    ev.CONDITION_ERROR,
-                    {
-                        "alert": alert,
-                        "error": transition.error,
-                        "source": transition.source,
-                        "now": now,
-                    },
-                )
-            )
-        ]
-
-    if transition.kind == TransitionKind.NO_CHANGE:
-        return []
-
-    if transition.kind == TransitionKind.BECAME_INACTIVE:
-        commands: list[Command] = []
-        if transition.had_pending_confirmation:
-            commands.append(
-                Emit(
-                    Event(
-                        ev.NOTIFICATION_CLEAR_REQUESTED,
-                        {"alert": alert, "now": now},
-                    )
-                )
-            )
-        commands.append(
-            Emit(
-                Event(
-                    ev.CONDITION_INACTIVE,
-                    {"alert": alert, "source": transition.source, "now": now},
-                )
-            )
+        TriggeringWorkflow._ensure_flow_id(state, alert)
+        new_action, action_id = confirmation_action
+        return TriggerTransition(
+            kind=TransitionKind.BECAME_ACTIVE,
+            source=source,
+            attempt=1,
+            confirmation_action_id=action_id,
+            new_confirmation_action=new_action,
         )
-        return commands
 
-    # BECAME_ACTIVE and SHOULD_SEND both end in a notification send request.
-    commands = []
-    if transition.kind == TransitionKind.BECAME_ACTIVE:
-        commands.append(
-            Emit(
-                Event(
-                    ev.CONDITION_ACTIVE,
-                    {"alert": alert, "source": transition.source, "now": now},
-                )
+    @staticmethod
+    def _send_transition(
+        state: dict[str, Any],
+        alert: dict[str, Any],
+        source: str,
+        replace_existing: bool,
+        confirmation_action: tuple[bool, str | None],
+    ) -> TriggerTransition:
+        TriggeringWorkflow._ensure_flow_id(state, alert)
+        new_action, action_id = confirmation_action
+        return TriggerTransition(
+            kind=TransitionKind.SHOULD_SEND,
+            source=source,
+            replace_existing=replace_existing,
+            attempt=int(state.get("attempts", 0)) + 1,
+            confirmation_action_id=action_id,
+            new_confirmation_action=new_action,
+        )
+
+    @staticmethod
+    def _ensure_flow_id(state: dict[str, Any], alert: dict[str, Any]) -> None:
+        if not state.get("flow_id"):
+            state["flow_id"] = f"flow_{alert['id']}_{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
+    def record_send_result(
+        state: dict[str, Any],
+        attempt: int,
+        now: datetime,
+        *,
+        success: bool,
+        error: str | None = None,
+    ) -> None:
+        if not success:
+            state["last_error"] = error
+            return
+        state["attempts"] = attempt
+        state["last_notified"] = now.isoformat()
+        state["last_error"] = None
+
+    async def configure(self, alert: dict[str, Any]) -> None:
+        """Replace an alert's template and interval watchers."""
+
+        alert_id = alert["id"]
+        self.unconfigure(alert_id)
+        self._runtime_for(alert_id)
+        if not alert.get("enabled", True) or not alert.get("notification"):
+            return
+
+        monitor = MonitorConfig.model_validate(alert.get("monitor") or {})
+        if monitor.on_change:
+            template_unsub = self._gateway.track_template(
+                compile_condition(alert),
+                lambda active, error, _event: self._schedule_condition_result(
+                    alert_id, active, error, "change"
+                ),
+            )
+            self._watch_unsubs.setdefault(alert_id, []).append(template_unsub)
+
+        schedule = NotificationSchedule(
+            NotificationConfig.model_validate(alert["notification"]),
+            confirmation_for_alert(alert),
+        )
+        interval = schedule.check_interval(monitor.interval)
+        if interval is not None:
+            interval_unsub = self._gateway.track_interval(
+                interval,
+                lambda _now: self._schedule_check(alert_id, "interval"),
+            )
+            self._watch_unsubs.setdefault(alert_id, []).append(interval_unsub)
+        confirmation_interval = schedule.confirmation_interval()
+        if confirmation_interval is not None:
+            confirmation_unsub = self._gateway.track_interval(
+                confirmation_interval,
+                lambda _now: self._schedule_check(alert_id, "confirmation"),
+            )
+            self._watch_unsubs.setdefault(alert_id, []).append(confirmation_unsub)
+
+    def unconfigure(self, alert_id: str) -> None:
+        """Remove direct watchers for one alert."""
+
+        for unsubscribe in self._watch_unsubs.pop(alert_id, []):
+            unsubscribe()
+
+    async def check(self, alert_id: str, *, source: str, now: datetime) -> None:
+        """Evaluate one configured alert and apply its transition."""
+
+        alert = self._alerts.get(alert_id)
+        if alert is None or not alert.get("notification"):
+            return
+        active, error = await self._gateway.evaluate_condition(compile_condition(alert))
+        await self.condition_result(alert_id, active, error, source=source, now=now)
+
+    async def condition_result(
+        self,
+        alert_id: str,
+        active: bool | None,
+        error: str | None,
+        *,
+        source: str,
+        now: datetime,
+    ) -> None:
+        """Apply a known condition result and dispatch ordered effects."""
+
+        alert = self._alerts.get(alert_id)
+        if alert is None:
+            return
+        runtime = self._runtime_for(alert_id)
+        confirmation_action = await self._prepare_confirmation(alert, runtime)
+        transition = self._transition_for(
+            runtime,
+            alert,
+            active,
+            error,
+            now,
+            source,
+            confirmation_action,
+        )
+        await self._on_transition(alert, transition, now)
+
+    def _schedule_condition_result(
+        self,
+        alert_id: str,
+        active: bool | None,
+        error: str | None,
+        source: str,
+    ) -> None:
+        self._gateway.create_task(
+            self.condition_result(
+                alert_id,
+                active,
+                error,
+                source=source,
+                now=self._gateway.now_utc(),
             )
         )
 
-    if transition.new_confirmation_action and transition.confirmation_action_id:
-        commands.append(
-            Emit(
-                Event(
-                    ev.CONFIRMATION_SESSION_STARTED,
-                    {
-                        "session_id": transition.confirmation_action_id,
-                        "alert_id": alert["id"],
-                        "now": now,
-                    },
-                )
-            )
+    def _schedule_check(self, alert_id: str, source: str) -> None:
+        self._gateway.create_task(
+            self.check(alert_id, source=source, now=self._gateway.now_utc())
         )
 
-    commands.append(
-        Emit(
-            Event(
-                ev.NOTIFICATION_SEND_REQUESTED,
-                {
-                    "alert": alert,
-                    "attempt": transition.attempt,
-                    "confirmation_action_id": transition.confirmation_action_id,
-                    "replace_existing": transition.replace_existing,
-                    "now": now,
-                    "on_sent": Event(
-                        ev.NOTIFICATION_SENT,
-                        {
-                            "alert": alert,
-                            "attempt": transition.attempt,
-                            "now": now,
-                            "record_history": True,
-                            "test": False,
-                            "confirmation_action_id": transition.confirmation_action_id,
-                        },
-                    ),
-                    "on_failed": Event(
-                        ev.NOTIFICATION_FAILED,
-                        {"alert": alert, "attempt": transition.attempt, "now": now},
-                    ),
-                },
-            )
+
+class TriggeringFeature(FeatureBase):
+    """Lifecycle adapter that gives watcher ownership to triggering."""
+
+    name = "triggering"
+    dependencies = ("alerts", "confirmation", "notification", "follow_up_actions")
+
+    def __init__(self, services: Any) -> None:
+        super().__init__(services)
+        self._workflow: TriggeringWorkflow | None = None
+        self._alerts: dict[str, dict[str, Any]] = {}
+        self._confirmation: Any = None
+        self._effects: TriggerEffectCoordinator | None = None
+
+    def set_alerts(self, alerts: dict[str, dict[str, Any]]) -> None:
+        mapped_alerts = {
+            alert.id: alert.model_dump(exclude_none=True)
+            for alert in alerts.values()
+        }
+        self._alerts = mapped_alerts
+        if self._workflow:
+            self._workflow.set_alerts(mapped_alerts)
+
+    def mark_confirmed(
+        self, runtime: dict[str, Any], confirmed_by: str, now: datetime
+    ) -> None:
+        """Update trigger runtime after its confirmation has resolved."""
+
+        runtime["acknowledged"] = True
+        runtime["confirmation_action_id"] = None
+        runtime["confirmed_at"] = now.isoformat()
+        runtime["confirmed_by"] = confirmed_by
+
+    async def on_setup(self) -> None:
+        alert_feature = self.feature("alerts")
+        self._confirmation = self.feature("confirmation")
+        self._effects = TriggerEffectCoordinator(
+            state=self.services.state,
+            runtime_for=alert_feature.runtime,
+            confirmation=self._confirmation,
+            notification=self.feature("notification"),
+            follow_up_actions=self.feature("follow_up_actions"),
+            hass=self.services.hass,
+            record_send_result=TriggeringWorkflow.record_send_result,
         )
-    )
-    return commands
+        self._workflow = TriggeringWorkflow(
+            self.services.gateway,
+            {},
+            alert_feature.runtime,
+            self._handle_transition,
+            self._confirmation.prepare_action,
+        )
+        self.set_alerts(alert_feature.alerts)
+        for alert in self._alerts.values():
+            await self._workflow.configure(alert)
 
+    async def _handle_transition(
+        self, alert: dict[str, Any], transition: TriggerTransition, now: datetime
+    ) -> None:
+        """Delegate ordered effects after the transition decision."""
 
-async def handle_notification_sent(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
+        if self._effects is not None:
+            await self._effects.apply(alert, transition, now)
 
-    state_root = await bus.ask(ev.GET_STATE)
-    record_send_result(
-        state_root["alerts"],
-        payload["alert"],
-        payload["attempt"],
-        payload["now"],
-        success=True,
-    )
-    return []
+    @route("alerts.check")
+    async def check_alert(self, alert_id: str, *, source: str, now: datetime) -> None:
+        """Evaluate one configured alert through its feature-owned workflow."""
 
+        if self._workflow is None:
+            return
+        await self._workflow.check(alert_id, source=source, now=now)
 
-async def handle_notification_failed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    if not payload.get("record_history", True):
-        return []
+    @route("alerts.evaluate_all")
+    async def evaluate_all(self, *, source: str, now: datetime) -> None:
+        """Evaluate eligible alerts for a lifecycle-triggered source."""
 
-    state_root = await bus.ask(ev.GET_STATE)
-    record_send_result(
-        state_root["alerts"],
-        payload["alert"],
-        payload["attempt"],
-        payload["now"],
-        success=False,
-        error=payload.get("error"),
-    )
-    return []
+        for alert in self._alerts.values():
+            if not alert.get("enabled", True):
+                continue
+            monitor = alert.get("monitor") or {}
+            if source == "startup" and not monitor.get("startup", True):
+                continue
+            await self.check_alert(alert["id"], source=source, now=now)
 
-
-async def handle_confirmed(event: Event, bus: Any) -> list[Command]:
-    payload = event.payload
-    state_root = await bus.ask(ev.GET_STATE)
-    mark_confirmed(
-        state_root["alerts"], payload["alert"], payload["confirmed_by"], payload["now"]
-    )
-    return []
+    async def on_unload(self) -> None:
+        if self._workflow is None:
+            return
+        for alert_id in tuple(self._alerts):
+            self._workflow.unconfigure(alert_id)
+        self._workflow = None

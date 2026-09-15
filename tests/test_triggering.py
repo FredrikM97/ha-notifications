@@ -12,64 +12,16 @@ import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from test_support import PACKAGE_NAME, ensure_package
-
 from conftest import make_alert
+from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 alerts = importlib.import_module(f"{PACKAGE_NAME}.features.triggering")
-commands = importlib.import_module(f"{PACKAGE_NAME}.controller.commands")
 const = importlib.import_module(f"{PACKAGE_NAME}.const")
 
 
 def _alert(**overrides):
     return make_alert(**overrides)
-
-
-class RegisterSpecsTests(unittest.TestCase):
-    def test_on_change_only(self):
-        alert = _alert()
-        specs = alerts.register_specs(alert)
-        self.assertEqual(len(specs), 1)
-        self.assertIsInstance(specs[0], commands.TrackTemplate)
-        self.assertEqual(specs[0].key, "alert_1")
-
-    def test_monitor_interval_wins_over_repeat_and_confirmation(self):
-        alert = _alert(
-            monitor={"on_change": False, "startup": True, "interval": "01:00:00"},
-            notification={
-                "action": "notify.send_message",
-                "target": {},
-                "title": "t",
-                "message": "m",
-                "confirmation": {"enabled": True, "resend_interval": "00:05:00"},
-                "repeat": {"enabled": True, "interval": "00:10:00"},
-            },
-        )
-        specs = alerts.register_specs(alert)
-        self.assertEqual(len(specs), 1)
-        self.assertIsInstance(specs[0], commands.TrackInterval)
-        self.assertEqual(specs[0].interval, timedelta(hours=1))
-
-    def test_falls_back_to_confirmation_resend_interval(self):
-        alert = _alert(
-            monitor={"on_change": False, "startup": True},
-            notification={
-                "action": "notify.send_message",
-                "target": {},
-                "title": "t",
-                "message": "m",
-                "confirmation": {"enabled": True, "resend_interval": "00:05:00"},
-            },
-        )
-        specs = alerts.register_specs(alert)
-        self.assertEqual(len(specs), 1)
-        self.assertEqual(specs[0].interval, timedelta(minutes=5))
-
-    def test_no_interval_when_nothing_configured(self):
-        alert = _alert(monitor={"on_change": False, "startup": True})
-        specs = alerts.register_specs(alert)
-        self.assertEqual(specs, [])
 
 
 class OnConditionResultTests(unittest.TestCase):
@@ -160,7 +112,7 @@ class OnConditionResultTests(unittest.TestCase):
                 "title": "t",
                 "message": "m",
                 "confirmation": {"enabled": False},
-                "repeat": {"enabled": True, "interval": "00:10:00", "max_attempts": 5},
+                "repeat": {"enabled": True, "interval": 600, "max_attempts": 5},
             }
         )
         alerts.on_condition_result(states, alert, True, None, self.now, source="change")
@@ -184,7 +136,7 @@ class OnConditionResultTests(unittest.TestCase):
                 "title": "t",
                 "message": "m",
                 "confirmation": {"enabled": False},
-                "repeat": {"enabled": True, "interval": "00:10:00", "max_attempts": 5},
+                "repeat": {"enabled": True, "interval": 600, "max_attempts": 5},
             }
         )
         alerts.on_condition_result(states, alert, True, None, self.now, source="change")

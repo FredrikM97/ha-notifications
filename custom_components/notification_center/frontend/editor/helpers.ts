@@ -49,18 +49,17 @@ export function defaultAlert(): Alert {
       target: {},
       title: "",
       message: "",
-      actions_enabled: false,
-      confirmation: {
-        enabled: true,
-        button: "",
-        completion_message: "",
-        notify_on_confirmation: false,
-        confirmation_message: "",
-        clear_on_confirmation: true,
-        resend_interval: "00:30:00",
+    },
+    confirmation: {
+      enabled: true,
+      button: "",
+      notification: { enabled: false, message: "", clear: true },
+      reminders: {
+        interval: "00:30:00",
         max_attempts: 5,
-        actions_enabled: false,
+        show_attempts: false,
       },
+      actions: { enabled: false, items: [] },
     },
   };
 }
@@ -122,9 +121,18 @@ export function showEditorToast(
 }
 
 export function durationInputValue(
-  value: string | Record<string, number> | undefined,
+  value: string | number | Record<string, number> | undefined,
   fallback: string,
 ): string {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const totalSeconds = Math.max(0, Math.floor(value));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+  }
   if (typeof value === "string") {
     const parts = value.split(":");
     if (parts.length === 2) return `${value}:00`;
@@ -264,20 +272,12 @@ export function section(
   </section>`;
 }
 
-export function subpanel(
+export function childSection(
   title: string,
-  subtitle: string,
   content: TemplateResult,
+  controls: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
-  return html`<div class="nc-subpanel">
-    <div class="nc-subpanel-header">
-      <span class="nc-subpanel-heading">
-        <span class="nc-subpanel-title">${title}</span>
-        <span class="nc-subpanel-subtitle">${subtitle}</span>
-      </span>
-    </div>
-    <div class="nc-subpanel-content">${content}</div>
-  </div>`;
+  return section(title, content, "nc-child-section", controls);
 }
 
 export function optionalControls(
@@ -318,8 +318,8 @@ export function optionalControls(
 export function confirmationNotificationControls(
   context: EditorContext,
 ): TemplateResult {
-  const confirmation = context.value.notification.confirmation;
-  const enabled = Boolean(confirmation.notify_on_confirmation);
+  const confirmation = context.value.confirmation!;
+  const enabled = Boolean(confirmation.notification.enabled);
   const stateText = enabledLabel(enabled);
 
   return html`<label class="nc-switch-label">
@@ -332,7 +332,7 @@ export function confirmationNotificationControls(
       aria-label="Notify recipients when confirmed"
       title="Notify recipients when confirmed"
       @change=${(event: Event) => {
-        confirmation.notify_on_confirmation = checkedOf(event);
+        confirmation.notification.enabled = checkedOf(event);
         context.markDirty();
       }}
     />

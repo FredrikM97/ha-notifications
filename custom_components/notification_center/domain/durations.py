@@ -59,6 +59,33 @@ def parse_duration(
     raise ValueError(f"Unsupported duration: {value!r}")
 
 
+def duration_seconds(value: Any) -> int | float | None:
+    """Normalize an HA-style duration (string/mapping/number) to seconds.
+
+    Used as a `field_validator(mode="before")` for pydantic fields typed
+    `int | float | None` that accept frontend duration strings like
+    "00:30:00" alongside plain numeric seconds.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        return value
+
+    duration = parse_duration(value)
+
+    if duration is None:
+        return None
+
+    seconds = duration.total_seconds()
+
+    if seconds.is_integer():
+        return int(seconds)
+
+    return seconds
+
+
 def duration_to_mapping(value: Any) -> dict[str, int | float]:
     """Convert duration to readable YAML mapping."""
 

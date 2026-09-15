@@ -43,11 +43,11 @@ def load_const_and_models():
     """Load the pure configuration modules once for the test process."""
     ensure_package()
     const = load_module(f"{PACKAGE_NAME}.const", INTEGRATION_ROOT / "const.py")
-    models = load_module(
-        f"{PACKAGE_NAME}.domain.alert_schema",
-        INTEGRATION_ROOT / "domain" / "alert_schema.py",
+    alert = load_module(
+        f"{PACKAGE_NAME}.features.configuration",
+        INTEGRATION_ROOT / "features" / "configuration.py",
     )
-    return const, models
+    return const, alert
 
 
 def load_storage():

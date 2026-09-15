@@ -5,30 +5,29 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Primary entry points
 - `custom_components/notification_center/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
 - `custom_components/notification_center/config_flow.py` — UI config flow and validation logic
-- `custom_components/notification_center/controller/core.py` — `NotificationCenterController`: the kernel. Owns the gateway, the generic `Command` dispatcher, setup/reload sequencing, and every public frontend-facing operation
+- `custom_components/notification_center/controller/core.py` — `NotificationCenterController`: the composition root. Owns the gateway, typed awaited workflow sequencing, direct routing of HA confirmation actions, notification send/clear routing, and every public frontend-facing operation
 - `custom_components/notification_center/bridge/websocket.py` — the frontend-facing interface: registers the 12 `notification_center/*` websocket commands
-- `custom_components/notification_center/bridge/validation.py` — normalizes/validates incoming alert/YAML payloads before they reach the controller
 - `custom_components/notification_center/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
 - `custom_components/notification_center/ha/gateway.py` — `HomeAssistantGateway`: the only module that imports `homeassistant.*`
 
 ## Controller kernel and feature modules
-- `custom_components/notification_center/controller/core.py` — kernel: gateway ownership, setup/reload sequencing, public operations, and command interpretation
-- `custom_components/notification_center/controller/bus.py` — event publication, command execution, and query dispatch
-- `custom_components/notification_center/controller/events.py` — shared event dataclass and event/query vocabulary
-- `custom_components/notification_center/controller/commands.py` — closed command vocabulary executed by the kernel
-- `custom_components/notification_center/features/triggering.py` — trigger registration and alert state-machine decisions
-- `custom_components/notification_center/features/confirmation.py` — confirmation sessions and confirmation effects
-- `custom_components/notification_center/features/notification.py` — notification composition and delivery decisions
+- `custom_components/notification_center/controller/core.py` — kernel: gateway ownership, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
+- `custom_components/notification_center/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
+- `custom_components/notification_center/delivery/` — recipient/channel resolution, generic notify routing, and legacy Mobile App service resolution
+- `custom_components/notification_center/domain/service_calls.py` — plain service-call values passed to the gateway
+- `custom_components/notification_center/features/triggering.py` — monitor model, trigger registration, and alert state-machine decisions
+- `custom_components/notification_center/features/confirmation.py` — confirmation model, typed direct confirmation-action workflow, sessions, and confirmation effects; retains the event adapter for compatibility
+- `custom_components/notification_center/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
 - `custom_components/notification_center/features/follow_up_actions.py` — post-send and post-confirmation service calls
-- `custom_components/notification_center/features/history.py` — history bus listener and persistence requests
-- `custom_components/notification_center/features/notification_services/` — target expansion and Mobile App/generic service resolution
+- `custom_components/notification_center/features/history.py` — explicit history mutation and persistence decisions
 
 ## Shared/support modules
-- `custom_components/notification_center/domain/alert_schema.py` — alert schema, `ConfigNormalizer`/`normalize_config`/`normalize_alert`
-- `custom_components/notification_center/domain/condition_schema.py` — visual condition rows -> Jinja template string
+- `custom_components/notification_center/controller/alert.py` — typed `Alert` and `Configuration` objects used by the controller and storage boundary
+- `custom_components/notification_center/domain/mapping_model.py` — shared Pydantic mapping serialization and extension-field behavior
+- `custom_components/notification_center/features/conditions.py` — visual condition model and condition rows -> Jinja template string
 - `custom_components/notification_center/domain/durations.py` — duration parse/format helpers
 - `custom_components/notification_center/support/storage.py` — YAML (de)serialization and state-shape repair
-- `custom_components/notification_center/support/history.py` — history entry formatting/query helpers
+- `custom_components/notification_center/features/history.py` — history formatting, queries, deletion cleanup, and recording
 
 ## Frontend/editor surfaces
 - `custom_components/notification_center/frontend/api.ts` — API calls for listing/saving alerts (the only transport boundary)
@@ -50,10 +49,10 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 
 ## Good starting points by task
 - Save/edit lifecycle bug: `config_flow.py`, `support/storage.py`, `bridge/websocket.py`
-- Runtime trigger or interval issue: `features/triggering.py`, `controller/core.py`, `ha/gateway.py`, `domain/condition_schema.py`
+- Runtime trigger or interval issue: `features/triggering.py`, `features/conditions.py`, `controller/core.py`, `ha/gateway.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
-- YAML/import or validation issue: `config_flow.py`, `support/storage.py`, `domain/alert_schema.py`
-- Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `features/notification_services/`, `bridge/websocket.py`
+- YAML/import or validation issue: `config_flow.py`, `support/storage.py`, `controller/alert.py`
+- Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `delivery/`, `bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.
