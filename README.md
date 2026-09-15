@@ -79,8 +79,11 @@ npm ci
 npm run build
 ```
 
-The development bundle is written to `dist/panel.js`. To install the current
-source into a local Home Assistant configuration:
+The development bundle is written to `dist/panel.js`, and the build keeps a
+matching runtime copy at `custom_components/ha_notifications/dist/panel.js`.
+The runtime copy is included in repository-based HACS installs, which do not
+run the Node build step. To install the current source into a local Home
+Assistant configuration:
 
 ```bash
 sh scripts/install_local.sh /path/to/home-assistant-config
@@ -92,8 +95,7 @@ For a release-quality HACS package, run:
 npm run export:hacs
 ```
 
-The export copies the bundle into the integration's runtime path and excludes
-the raw TypeScript source.
+The export verifies the runtime bundle and excludes the raw TypeScript source.
 
 ---
 

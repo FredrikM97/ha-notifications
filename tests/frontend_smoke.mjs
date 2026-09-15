@@ -7,8 +7,17 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
 const panelPath = join(dist, "panel.js");
 assert.ok(existsSync(panelPath), "Missing bundled panel.js");
+const runtimePanelPath = join(
+  root,
+  "custom_components",
+  "ha_notifications",
+  "dist",
+  "panel.js",
+);
+assert.ok(existsSync(runtimePanelPath), "Missing runtime panel.js");
 
 const panel = readFileSync(panelPath, "utf8");
+assert.equal(readFileSync(runtimePanelPath, "utf8"), panel);
 const editor = readFileSync(
   join(
     root,
