@@ -58,7 +58,7 @@ A Home Assistant custom integration for creating, managing, and debugging state-
 
 HA Notifications is designed to replace large collections of notification automations and external notification scripts with a single, self-contained integration.
 
-It provides:
+* Optional confirmation completion notification
 
 * A dedicated Home Assistant frontend panel
 * A Lovelace custom card with the full HA Notifications management UI
@@ -92,8 +92,8 @@ The card configuration is:
 type: custom:ha-notifications-card
 ```
 
-Only Home Assistant administrators can access the card's alert data or editing
-controls. Non-administrators see an access-required message. Disabling an
+monitor:
+  interval: "01:00:00"
 already-added confirmation leaves its notification and post-confirmation
 settings intact and editable, so it can be re-enabled without rebuilding it.
 
@@ -116,7 +116,7 @@ Each alert can contain:
 * Notification configuration
 * Notification targets
 * Confirmation settings
-* Completion message
+* Optional confirmation completion notification
 * Actions after confirmation
 
 Alerts can be enabled or disabled without removing their configuration.
@@ -150,8 +150,8 @@ The condition is periodically evaluated.
 Example:
 
 ```yaml
-interval:
-  hours: 1
+monitor:
+  interval: "01:00:00"
 ```
 
 This is useful for conditions based on things such as:
@@ -294,7 +294,8 @@ When the user confirms the notification, HA Notifications can:
 2. Identify the user where possible
 3. Record the confirmation
 4. Clear the active notification
-5. Send an optional completion message
+5. Send an optional completion notification configured under
+  `confirmation.notification.message`
 6. Execute configured follow-up actions
 7. Record the complete operation in the debug history
 
@@ -346,7 +347,7 @@ Clear notification
     ↓
 Run Home Assistant actions
     ↓
-Send completion message
+    Send completion notification
     ↓
 Record result
 ```
