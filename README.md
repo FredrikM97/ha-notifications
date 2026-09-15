@@ -2,21 +2,37 @@
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=FredrikM97&repository=ha-notifications&category=integration)
 
-The integration source lives under `custom_components/ha_notifications`,
-as expected by Home Assistant and HACS. For packaging, run
-`npm ci && npm run export:hacs`. The source frontend remains TypeScript; the
-export contains compiled browser output.
+HA Notifications is a hobby Home Assistant project for creating reliable,
+state-based alerts without maintaining a collection of complex, repetitive
+notification automations or external scripts. Its goal is to replace those
+scattered templates, scripts, and automation branches with one simpler flow:
+define the condition, choose who should be notified, and manage confirmation
+and follow-up behavior in one place.
+
+Create alerts from a dedicated Home Assistant panel, a Lovelace card, or YAML.
+Each alert can evaluate a template or visual condition, notify multiple
+devices and notification services, request confirmation, repeat reminders,
+run follow-up actions, and record its delivery history.
+
+Active alerts and their runtime state are persisted so a Home Assistant reboot
+does not silently dismiss an alert that still needs attention. When the system
+comes back, the integration can restore the alert workflow and continue
+delivering it to the configured recipients until it is resolved or otherwise
+cleared by its configuration.
 
 ## Installation
+
+Install HA Notifications through HACS, or download a release ZIP for a manual
+installation. The compiled frontend is included in both cases; no separate
+Lovelace resource is required.
 
 ### HACS
 
 Use the **Add to HACS** button above, or search for **HA Notifications** in
 HACS. HACS installs the integration and its compiled frontend together.
 
-No separate Lovelace resource or frontend download is required. After the
-integration is installed and Home Assistant is restarted, it registers its
-sidebar panel and frontend module automatically.
+After the integration is installed and Home Assistant is restarted, it
+registers its sidebar panel and frontend module automatically.
 
 ### Manual ZIP installation
 
@@ -35,49 +51,10 @@ mkdir -p <config>/custom_components/ha_notifications
 unzip ha-notifications.zip -d <config>/custom_components/ha_notifications
 ```
 
-The ZIP contains the integration files at its root. Do not copy the ZIP file
-itself into `custom_components`; `manifest.json` and `dist/panel.js` must be
-directly inside the integration directory. Restart Home Assistant after
+The ZIP contains the integration files at its root. `manifest.json` and
+`dist/panel.js` must be directly inside
+`custom_components/ha_notifications/`. Restart Home Assistant after
 installation.
-
-The release ZIP already contains the compiled frontend. In the source
-repository, `npm run build` writes the development bundle to `dist/panel.js`;
-the HACS export and local installer copy it into the integration's runtime
-path at `custom_components/ha_notifications/dist/panel.js`.
-
-For local Home Assistant testing, build the frontend in a Node-capable
-environment, then run the Node-free installer to copy the integration into
-`config/custom_components/ha_notifications`, or pass a different Home
-Assistant configuration directory:
-
-```bash
-npm run build
-sh scripts/install_local.sh /path/to/home-assistant-config
-```
-
-A Home Assistant custom integration for creating, managing, and debugging state-based notifications from a dedicated UI.
-
-HA Notifications is designed to replace large collections of notification automations and external notification scripts with a single, self-contained integration.
-
-* Optional confirmation completion notification
-
-* A dedicated Home Assistant frontend panel
-* A Lovelace custom card with the full HA Notifications management UI
-* Visual alert management
-* YAML editing and import/export
-* Device, area and label notification targets
-* Condition-change monitoring
-* Interval-based condition checking
-* Optional use of both mechanisms
-* Actionable notifications
-* Confirmation handling
-* Follow-up actions
-* Notification history
-* Execution/debug traces
-* Persistent alert state
-* No `configuration.yaml` entry required
-* No external notification script required
-* Configuration stored in Home Assistant storage
 
 ## Lovelace card
 
@@ -93,10 +70,30 @@ The card configuration is:
 type: custom:ha-notifications-card
 ```
 
-monitor:
-  interval: "01:00:00"
-already-added confirmation leaves its notification and post-confirmation
-settings intact and editable, so it can be re-enabled without rebuilding it.
+## Development
+
+Install the Node dependencies and build the frontend from the repository root:
+
+```bash
+npm ci
+npm run build
+```
+
+The development bundle is written to `dist/panel.js`. To install the current
+source into a local Home Assistant configuration:
+
+```bash
+sh scripts/install_local.sh /path/to/home-assistant-config
+```
+
+For a release-quality HACS package, run:
+
+```bash
+npm run export:hacs
+```
+
+The export copies the bundle into the integration's runtime path and excludes
+the raw TypeScript source.
 
 ---
 
@@ -216,7 +213,7 @@ The condition editor supports direct template editing when more advanced logic i
 
 ---
 
-# Notifications
+## Notifications
 
 Notification delivery is built directly into the integration.
 
@@ -277,7 +274,7 @@ Battery warning
 
 ---
 
-# Actionable notifications
+## Actionable notifications
 
 Alerts can optionally contain an action/confirmation button.
 
@@ -355,7 +352,7 @@ Record result
 
 ---
 
-# Notification retry behaviour
+## Notification retry behaviour
 
 Actionable notifications can optionally be resent if they have not been confirmed.
 
@@ -390,9 +387,9 @@ The UI should expose these options without requiring users to manually build the
 
 ---
 
-# YAML support
+## YAML support
 
-## Canonical YAML structure
+### Canonical YAML structure
 
 HA Notifications writes one canonical representation for each alert.
 Configuration uses one `notification`, a `conditions` list, and a `monitor`
