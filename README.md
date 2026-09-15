@@ -1,9 +1,48 @@
 # HA Notifications
 
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=FredrikM97&repository=ha-notifications&category=integration)
+
 The integration source lives under `custom_components/ha_notifications`,
 as expected by Home Assistant and HACS. For packaging, run
 `npm install && npm run export:hacs`. The source frontend remains TypeScript;
 the export contains compiled browser output.
+
+## Installation
+
+### HACS
+
+Use the **Add to HACS** button above, or search for **HA Notifications** in
+HACS. HACS installs the integration and its compiled frontend together.
+
+No separate Lovelace resource or frontend download is required. After the
+integration is installed and Home Assistant is restarted, it registers its
+sidebar panel and frontend module automatically.
+
+### Manual ZIP installation
+
+Download the `ha-notifications.zip` asset from a release, create the
+integration directory, and extract the ZIP contents into your Home Assistant
+configuration directory:
+
+```text
+<config>/custom_components/ha_notifications/
+```
+
+For example:
+
+```bash
+mkdir -p <config>/custom_components/ha_notifications
+unzip ha-notifications.zip -d <config>/custom_components/ha_notifications
+```
+
+The ZIP contains the integration files at its root. Do not copy the ZIP file
+itself into `custom_components`; `manifest.json` and `dist/panel.js` must be
+directly inside the integration directory. Restart Home Assistant after
+installation.
+
+The release ZIP already contains the compiled frontend. You only need
+`npm run build` when installing from the source repository or developing the
+integration locally.
 
 For local Home Assistant testing, build the frontend in a Node-capable
 environment, then run the Node-free installer to copy the integration into
@@ -270,13 +309,14 @@ Example:
 ```yaml
 confirmation:
   enabled: true
-  actions_enabled: true
   actions:
-    - action: switch.turn_on
-      target:
-        entity_id:
-          - switch.water_pump_reset
-          - switch.filter_reset
+    enabled: true
+    items:
+      - action: switch.turn_on
+        target:
+          entity_id:
+            - switch.water_pump_reset
+            - switch.filter_reset
 ```
 
 Multiple actions can be configured.
@@ -286,12 +326,13 @@ delay may be an `HH:MM:SS` string or a duration mapping:
 
 ```yaml
 confirmation:
-  actions_enabled: true
   actions:
-    - delay: "00:10:00"
-    - action: switch.turn_off
-      target:
-        entity_id: switch.water_pump
+    enabled: true
+    items:
+      - delay: "00:10:00"
+      - action: switch.turn_off
+        target:
+          entity_id: switch.water_pump
 ```
 
 This makes HA Notifications useful for workflows such as:
@@ -321,8 +362,10 @@ For example:
 ```yaml
 confirmation:
   enabled: true
-  resend_interval: "00:30:00"
-  max_attempts: 5
+  reminders:
+    enabled: true
+    interval: "00:30:00"
+    max_attempts: 5
 ```
 
 This allows a notification to behave like:
@@ -369,7 +412,6 @@ alerts:
       - type: template
         template: "{{ states('sensor.water_level') | float(100) < 20 }}"
     notification:
-      action: notify.send_message
       target:
         device_id:
           - YOUR_DEVICE_ID
@@ -378,17 +420,21 @@ alerts:
     confirmation:
       enabled: true
       button: Activity completed
-      resend_interval: "00:30:00"
-      max_attempts: 5
-      actions_enabled: true
+      reminders:
+        enabled: true
+        interval: "00:30:00"
+        max_attempts: 5
       actions:
-        - action: switch.turn_on
-          target:
-            entity_id:
-              - switch.water_pump_reset
+        enabled: true
+        items:
+          - action: switch.turn_on
+            target:
+              entity_id:
+                - switch.water_pump_reset
 ```
 
 Multiple visual conditions are combined with `AND`. There is no separate `logic` field.
 
-`actions_enabled` explicitly controls whether follow-up actions are configured. Empty `actions`
-lists are omitted from saved YAML.
+`confirmation.actions.enabled` explicitly controls whether follow-up actions are configured.
+Empty `confirmation.actions.items` lists are omitted from saved YAML when no
+follow-up actions are configured.
