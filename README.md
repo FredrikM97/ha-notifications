@@ -24,6 +24,10 @@ Use the **Add to HACS** button above to install HA Notifications. HACS
 includes the integration and its compiled frontend; no separate Lovelace
 resource is required. Restart Home Assistant after installation.
 
+<img width="1257" height="862" alt="image" src="https://github.com/user-attachments/assets/b1ce380f-d098-4526-97f1-4ae0080b4cd0" />
+
+<img width="1242" height="609" alt="image" src="https://github.com/user-attachments/assets/97ef8118-be42-48fc-b978-493ea7320a7f" />
+
 ## Lovelace card
 
 The integration automatically registers its compiled frontend module with Home
