@@ -35,11 +35,16 @@ export interface EditorContext {
 
 export type OptionalSetting =
   | "confirmation"
+  | "confirmationReminder"
+  | "confirmationNotification"
   | "postSendActions"
   | "postConfirmationActions";
 
 export type OptionalSettings = Record<OptionalSetting, boolean>;
-export type SectionStatus = OptionalSetting;
+export type SectionStatus =
+  | OptionalSetting
+  | "confirmationReminder"
+  | "confirmationNotification";
 
 export interface EditorSection {
   title: string;
@@ -67,11 +72,15 @@ export const editorSections: EditorSection[] = [
   { title: "Confirmation", setting: "confirmation", status: "confirmation" },
   {
     title: "Reminder policy",
+    setting: "confirmationReminder",
     parent: "Confirmation",
+    status: "confirmationReminder",
   },
   {
     title: "Notify recipients when confirmed",
+    setting: "confirmationNotification",
     parent: "Confirmation",
+    status: "confirmationNotification",
   },
   {
     title: "Post-confirmation actions",
@@ -84,6 +93,8 @@ export const editorSections: EditorSection[] = [
 export const optionalSections: Record<OptionalSetting, OptionalSection> = {
   postSendActions: { index: 5 },
   confirmation: { index: 6 },
+  confirmationReminder: { index: 7 },
+  confirmationNotification: { index: 8 },
   postConfirmationActions: { index: 9 },
 };
 

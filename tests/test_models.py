@@ -49,7 +49,7 @@ class DurationTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
-    def test_alert_features_are_registered_by_feature_modules(self):
+    def test_alert_owns_feature_sections_as_extra_fields(self):
         self.assertEqual(
             set(models.Alert.model_fields),
             {
@@ -60,11 +60,6 @@ class ConfigurationTests(unittest.TestCase):
                 "icon",
                 "created_at",
                 "updated_at",
-                "monitor",
-                "conditions",
-                "notification",
-                "confirmation",
-                "post_send_actions",
             },
         )
 
@@ -84,7 +79,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(alert.id, "kitchen_lights")
         self.assertEqual(alert.model_extra["logic"], "any")
         self.assertIn("notifications", mapped)
-        self.assertTrue(alert.confirmation.enabled)
+        self.assertTrue(alert.confirmation["enabled"])
 
     def test_configuration_accepts_supplied_alert_list(self):
         config = models.Configuration.model_validate(
@@ -97,7 +92,7 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(config.version, 1)
         self.assertEqual([alert.name for alert in config.alerts], ["One", "Two"])
-        self.assertIsNone(config.alerts[0].notification)
+        self.assertNotIn("notification", config.alerts[0].model_extra)
 
     def test_feature_models_are_mutable_typed_objects(self):
         confirmation = ConfirmationConfig.model_validate({"button": "Acknowledge"})

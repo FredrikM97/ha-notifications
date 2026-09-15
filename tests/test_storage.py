@@ -60,9 +60,8 @@ class ConfigurationStorageTests(unittest.TestCase):
         self.assertEqual(text.count("notification:"), 1)
         self.assertNotIn("notifications:", text)
 
-    def test_rejects_stale_browser_duration_text(self):
-        with self.assertRaises(ValueError):
-            storage.Configuration.model_validate(
+    def test_preserves_feature_payload_for_feature_validation(self):
+        config = storage.Configuration.model_validate(
             {
                 "version": 1,
                 "alerts": [
@@ -88,7 +87,11 @@ class ConfigurationStorageTests(unittest.TestCase):
                     }
                 ],
             }
-            )
+        )
+        self.assertEqual(
+            config.alerts[0].model_extra["monitor"]["interval"],
+            "[object Object]",
+        )
 
 
 class RuntimeStateShapeTests(unittest.TestCase):

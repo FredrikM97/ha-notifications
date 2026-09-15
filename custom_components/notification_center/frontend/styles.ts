@@ -144,15 +144,9 @@ select {
   padding: 0 16px 16px;
 }
 
-.nc-child-section .nc-section-titlebar {
-  padding-left: 24px;
-}
-
-.nc-child-section .nc-section-content {
-  padding-left: 24px;
-}
-
 .nc-reminder-options {
+  display: grid;
+  gap: 12px;
   margin-top: 16px;
 }
 

@@ -35,7 +35,7 @@ from ..domain.template_values import (
     render_template_values,
 )
 from .confirmation import ConfirmationConfig, confirmation_for_alert
-from .configuration_registry import register_alert_feature
+from .feature_config import AlertFeatureConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def _list(value: Any) -> list[Any]:
     return [value]
 
 
-class NotificationConfig(BaseModel):
+class NotificationConfig(AlertFeatureConfig):
     """Validated notification settings owned by the notification feature."""
 
     model_config = ConfigDict(extra="allow")
@@ -59,9 +59,6 @@ class NotificationConfig(BaseModel):
     title: str | None = None
     message: str | None = None
     data: dict[str, Any] | None = None
-
-
-register_alert_feature("notification", NotificationConfig)
 
 
 class NotificationSchedule:
@@ -86,7 +83,7 @@ class NotificationSchedule:
         """Return the cadence for pending confirmation reminders."""
 
         confirmation = self._confirmation
-        if not confirmation or not confirmation.enabled:
+        if not confirmation or not confirmation.enabled or not confirmation.reminders.enabled:
             return None
         return parse_duration(confirmation.reminders.interval)
 
@@ -97,6 +94,7 @@ class NotificationSchedule:
             not state.get("confirmation_action_id")
             or not confirmation
             or not confirmation.enabled
+            or not confirmation.reminders.enabled
         ):
             return False
 

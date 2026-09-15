@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ..const import ConditionType
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..domain.durations import parse_duration
-from .configuration_registry import register_alert_feature
+from .feature_config import AlertFeatureConfig
 
 
 class ConditionFeature(FeatureBase):
@@ -36,7 +36,7 @@ class ConditionFeature(FeatureBase):
             raise ValueError(f"Condition template failed: {error}")
         return True
 
-class ConditionConfig(BaseModel):
+class ConditionConfig(AlertFeatureConfig):
     """Validated visual condition used by the editor and trigger workflow."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
@@ -65,9 +65,6 @@ class ConditionConfig(BaseModel):
         if "for" in values:
             values["model_for"] = values.pop("for")
         return values
-
-
-register_alert_feature("conditions", ConditionConfig, default_factory=list)
 
 
 def _seconds(value: Any) -> int:

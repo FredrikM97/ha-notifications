@@ -15,12 +15,12 @@ from ..controller.lifecycle import FeatureBase, route
 from ..domain.durations import duration_seconds
 from .conditions import compile_condition
 from .confirmation import confirmation_for_alert
-from .configuration_registry import register_alert_feature
+from .feature_config import AlertFeatureConfig
 from .notification import NotificationConfig, NotificationSchedule
 from .trigger_effects import TriggerEffectCoordinator
 
 
-class MonitorConfig(BaseModel):
+class MonitorConfig(AlertFeatureConfig):
     """Validated watcher settings owned by the triggering feature."""
 
     model_config = ConfigDict(extra="allow")
@@ -33,9 +33,6 @@ class MonitorConfig(BaseModel):
     @classmethod
     def _normalize_interval(cls, value: Any) -> Any:
         return duration_seconds(value)
-
-
-register_alert_feature("monitor", MonitorConfig)
 
 
 @dataclass(frozen=True)

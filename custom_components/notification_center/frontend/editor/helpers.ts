@@ -55,6 +55,7 @@ export function defaultAlert(): Alert {
       button: "",
       notification: { enabled: false, message: "", clear: true },
       reminders: {
+        enabled: true,
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
@@ -272,14 +273,6 @@ export function section(
   </section>`;
 }
 
-export function childSection(
-  title: string,
-  content: TemplateResult,
-  controls: TemplateResult | typeof nothing = nothing,
-): TemplateResult {
-  return section(title, content, "nc-child-section", controls);
-}
-
 export function optionalControls(
   context: EditorContext,
   setting: OptionalSetting,
@@ -313,30 +306,6 @@ export function optionalControls(
       <ha-icon icon="mdi:trash-can-outline"></ha-icon>
     </button>
   </div>`;
-}
-
-export function confirmationNotificationControls(
-  context: EditorContext,
-): TemplateResult {
-  const confirmation = context.value.confirmation!;
-  const enabled = Boolean(confirmation.notification.enabled);
-  const stateText = enabledLabel(enabled);
-
-  return html`<label class="nc-switch-label">
-    <span class="nc-setting-state">${stateText}</span>
-    <input
-      class="nc-switch-input"
-      type="checkbox"
-      role="switch"
-      .checked=${enabled}
-      aria-label="Notify recipients when confirmed"
-      title="Notify recipients when confirmed"
-      @change=${(event: Event) => {
-        confirmation.notification.enabled = checkedOf(event);
-        context.markDirty();
-      }}
-    />
-  </label>`;
 }
 
 export function enabledLabel(enabled: boolean): string {

@@ -2,59 +2,15 @@
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
-from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from .configuration_registry import registered_alert_features
+from .feature_config import AlertFeatureConfig
 
 
-def _load_feature_configurations() -> None:
-    """Import feature modules so their alert fields register themselves."""
-
-    package = importlib.import_module(__package__)
-    ignored = {"configuration", "configuration_registry"}
-    for module in pkgutil.iter_modules(package.__path__):
-        if module.name in ignored:
-            continue
-        module_path = module.module_finder.find_spec(module.name).origin
-        if module_path is None or "register_alert_feature(" not in Path(
-            module_path
-        ).read_text(encoding="utf-8"):
-            continue
-        importlib.import_module(f"{__package__}.{module.name}")
-
-
-def _build_alert_features() -> type[BaseModel]:
-    """Build the flat alert feature model from registered feature fields."""
-
-    fields: dict[str, tuple[Any, Any]] = {}
-    for field_name, (model, default) in registered_alert_features().items():
-        if callable(default):
-            fields[field_name] = (
-                list[model],
-                Field(default_factory=default),
-            )
-        else:
-            fields[field_name] = (model | None, default)
-    return create_model(
-        "AlertFeatures",
-        __config__=ConfigDict(extra="allow"),
-        **fields,
-    )
-
-
-_load_feature_configurations()
-
-
-AlertFeatures = _build_alert_features()
-
-
-class Alert(AlertFeatures):
+class Alert(AlertFeatureConfig):
     """The validated persisted alert document."""
 
     model_config = ConfigDict(extra="allow")

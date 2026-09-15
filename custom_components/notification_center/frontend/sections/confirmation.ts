@@ -2,6 +2,7 @@ import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type { EditorContext } from "../editor/types.js";
 import {
+  checkedOf,
   field,
   optionalControls,
   section,
@@ -30,7 +31,20 @@ export function renderConfirmationSection(
       </div>
       <div class="nc-help">
         Confirmation buttons require at least one Mobile App recipient.
-      </div> `,
+      </div>
+      <label class="nc-switch-label">
+        <input
+          class="nc-switch-input"
+          type="checkbox"
+          role="switch"
+          .checked=${confirmation.notification.clear !== false}
+          @change=${(event: Event) => {
+            confirmation.notification.clear = checkedOf(event);
+            context.markDirty();
+          }}
+        />
+        <span>Clear notifications when acknowledged</span>
+      </label>`,
     "",
     optionalControls(
       context,

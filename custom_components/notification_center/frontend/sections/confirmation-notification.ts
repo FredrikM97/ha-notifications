@@ -4,19 +4,19 @@ import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/t
 import {
   checkedOf,
   codeEditor,
-  confirmationNotificationControls,
-  childSection,
+  optionalControls,
+  section,
 } from "../editor/helpers.js";
 
 export function renderConfirmationNotificationSection(
   context: EditorContext,
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
-  return childSection(
+  return section(
     "Notify recipients when confirmed",
     html`${codeEditor({
         value: confirmation.notification.message || "",
-        placeholder: "Confirmed by {{ confirmed_by }}",
+        placeholder: "",
         mode: "jinja2",
         language: "jinja",
         label: "Confirmation message",
@@ -29,20 +29,18 @@ export function renderConfirmationNotificationSection(
       })}
       <div class="nc-help">
         Optionally send a follow-up message after acknowledgement.
-      </div>`,
-    html`${confirmationNotificationControls(context)}
-      <label class="nc-switch-label">
-        <input
-          class="nc-switch-input"
-          type="checkbox"
-          role="switch"
-          .checked=${confirmation.notification.clear !== false}
-          @change=${(event: Event) => {
-            confirmation.notification.clear = checkedOf(event);
-            context.markDirty();
-          }}
-        />
-        <span>Clear notifications when acknowledged</span>
-      </label>`,
+      </div>
+      `,
+    "",
+    optionalControls(
+      context,
+      "confirmationNotification",
+      confirmation.notification.enabled === true,
+      "confirmation notification",
+      (enabled) => {
+        confirmation.notification.enabled = enabled;
+        context.markDirty();
+      },
+    ),
   );
 }

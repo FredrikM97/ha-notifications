@@ -104,6 +104,7 @@ class AlertEditorController {
       button: "",
       notification: { enabled: false, message: "", clear: true },
       reminders: {
+        enabled: true,
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
@@ -141,6 +142,10 @@ class AlertEditorController {
     };
     this.optionalSettings = {
       confirmation: !options.alert || Boolean(options.alert.confirmation),
+      confirmationReminder:
+        !options.alert || Boolean(options.alert?.confirmation?.reminders),
+      confirmationNotification:
+        !options.alert || Boolean(options.alert?.confirmation?.notification),
       postSendActions: true,
       postConfirmationActions:
         !options.alert || Boolean(options.alert.confirmation),
@@ -282,15 +287,17 @@ class AlertEditorController {
                 </div>
                 <div
                   class="nc-optional-setting"
-                  data-setting="confirmation"
-                  ?hidden=${!optionalSettings.confirmation}
+                  data-setting="confirmationReminder"
+                  ?hidden=${!optionalSettings.confirmationReminder ||
+                  !optionalSettings.confirmation}
                 >
                   ${renderConfirmationReminderSection(context)}
                 </div>
                 <div
                   class="nc-optional-setting"
-                  data-setting="confirmation"
-                  ?hidden=${!optionalSettings.confirmation}
+                  data-setting="confirmationNotification"
+                  ?hidden=${!optionalSettings.confirmationNotification ||
+                  !optionalSettings.confirmation}
                 >
                   ${renderConfirmationNotificationSection(context)}
                 </div>
@@ -356,6 +363,14 @@ class AlertEditorController {
       postConfirmationActions: Boolean(
         value.confirmation?.enabled && value.confirmation.actions.enabled,
       ),
+      confirmationReminder: Boolean(
+        value.confirmation?.enabled &&
+          value.confirmation.reminders.enabled,
+      ),
+      confirmationNotification: Boolean(
+        value.confirmation?.enabled &&
+          value.confirmation.notification.enabled,
+      ),
     };
     this.host
       .querySelectorAll<HTMLElement>(".nc-section-status")
@@ -372,6 +387,8 @@ class AlertEditorController {
     if (setting === "confirmation") {
       this.value.confirmation!.enabled = true;
       this.optionalSettings.confirmation = true;
+      this.optionalSettings.confirmationReminder = true;
+      this.optionalSettings.confirmationNotification = true;
       this.optionalSettings.postConfirmationActions = true;
     } else return;
 
@@ -400,6 +417,10 @@ class AlertEditorController {
   private removeSetting = (setting: OptionalSetting): void => {
     if (setting === "postSendActions") {
       delete this.value.post_send_actions;
+    } else if (setting === "confirmationReminder") {
+      this.value.confirmation!.reminders.enabled = false;
+    } else if (setting === "confirmationNotification") {
+      this.value.confirmation!.notification.enabled = false;
     } else if (setting === "postConfirmationActions") {
       this.value.confirmation!.actions.items = [];
       this.value.confirmation!.actions.enabled = false;
@@ -409,6 +430,7 @@ class AlertEditorController {
         button: "",
         notification: { enabled: false, message: "", clear: true },
         reminders: {
+          enabled: true,
           interval: "00:30:00",
           max_attempts: 5,
           show_attempts: false,
@@ -416,7 +438,11 @@ class AlertEditorController {
         actions: { enabled: false, items: [] },
       };
       this.optionalSettings.postConfirmationActions = false;
+      this.optionalSettings.confirmationReminder = false;
+      this.optionalSettings.confirmationNotification = false;
       this.setOptionalSettingVisible("postConfirmationActions", false);
+      this.setOptionalSettingVisible("confirmationReminder", false);
+      this.setOptionalSettingVisible("confirmationNotification", false);
     }
     this.optionalSettings[setting] = false;
     this.setOptionalSettingVisible(setting, false);
@@ -636,6 +662,7 @@ class AlertEditorController {
           clear: confirmation.notification.clear !== false,
         },
         reminders: {
+          enabled: confirmation.reminders.enabled,
           interval: durationInputValue(
             confirmation.reminders.interval,
             "00:30:00",

@@ -40,6 +40,7 @@ export interface ConfirmationConfig {
     clear: boolean;
   };
   reminders: {
+    enabled: boolean;
     interval: string | number | Record<string, number>;
     max_attempts: number;
     show_attempts: boolean;

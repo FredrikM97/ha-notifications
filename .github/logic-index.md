@@ -33,7 +33,7 @@ This is the compact routing map for the direct-workflow architecture.
 
 ## Domain and support
 
-- `features/configuration.py`: dynamically assembled flat `AlertFeatures`, `Alert`, `Configuration`, and `AlertRuntime` models plus YAML routes. Feature modules register their own alert fields through `features/configuration_registry.py`, so the persisted YAML shape stays unchanged without a central feature-config import list.
+- `features/configuration.py`: flat `Alert`, `Configuration`, and `AlertRuntime` models plus YAML routes. `Alert` inherits the empty `AlertFeatureConfig` marker and preserves feature sections as extra fields; each feature validates its own section at its workflow boundary.
 - `domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
 - `domain/template_values.py`: recursive template rendering and null removal for service-call configuration.
 - `domain/durations.py`: duration parsing and formatting.

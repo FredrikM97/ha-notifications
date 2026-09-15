@@ -22,29 +22,27 @@ export function renderPostSendActionsSection(
         language: "yaml",
         label: "Post-send actions",
         onInput: () => context.markDirty(),
-      })}`,
-    "",
-    html`<div class="nc-setting-controls">
+      })}
       <button
         class="nc-button secondary"
         @click=${() =>
           context.validateActions("notification-actions", "Post-send actions")}
       >
         Validate actions
-      </button>
-      ${optionalControls(
-        context,
-        "postSendActions",
-        Boolean(postSendActions?.enabled),
-        "post-send actions",
-        (enabled) => {
-          context.value.post_send_actions = {
-            enabled,
-            actions: postSendActions?.actions,
-          };
-          context.markDirty();
-        },
-      )}
-    </div>`,
+      </button>`,
+    "",
+    optionalControls(
+      context,
+      "postSendActions",
+      Boolean(postSendActions?.enabled),
+      "post-send actions",
+      (enabled) => {
+        context.value.post_send_actions = {
+          enabled,
+          actions: postSendActions?.actions,
+        };
+        context.markDirty();
+      },
+    ),
   );
 }

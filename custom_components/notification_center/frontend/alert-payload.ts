@@ -74,6 +74,7 @@ export interface AlertConfirmationFormValues {
     clear: boolean;
   };
   reminders: {
+    enabled: boolean;
     interval: string;
     max_attempts: number;
     show_attempts: boolean;

@@ -12,7 +12,7 @@ from ..controller.lifecycle import FeatureBase
 from ..domain.service_calls import ServiceCall
 from ..domain.template_values import remove_nulls, render_template_values
 from . import history
-from .configuration_registry import register_alert_feature
+from .feature_config import AlertFeatureConfig
 
 
 class FollowUpActionConfig(BaseModel):
@@ -25,16 +25,13 @@ class FollowUpActionConfig(BaseModel):
     data: Any = Field(default_factory=dict)
 
 
-class PostSendActionsConfig(BaseModel):
+class PostSendActionsConfig(AlertFeatureConfig):
     """Validated actions executed after a notification is sent."""
 
     model_config = ConfigDict(extra="allow")
 
     enabled: bool | None = None
     actions: list[dict[str, Any]] | None = None
-
-
-register_alert_feature("post_send_actions", PostSendActionsConfig)
 
 
 @dataclass(frozen=True)

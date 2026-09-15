@@ -6,7 +6,8 @@ import {
   durationInput,
   durationInputValue,
   field,
-  childSection,
+  optionalControls,
+  section,
   valueOf,
 } from "../editor/helpers.js";
 
@@ -14,7 +15,7 @@ export function renderConfirmationReminderSection(
   context: EditorContext,
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
-  return childSection(
+  return section(
     "Reminder policy",
     html`<div class="nc-grid">
         ${field(
@@ -62,5 +63,16 @@ export function renderConfirmationReminderSection(
       <div class="nc-help">
         Resend only while this confirmation is still pending.
       </div>`,
+    "",
+    optionalControls(
+      context,
+      "confirmationReminder",
+      confirmation.reminders.enabled !== false,
+      "reminder policy",
+      (enabled) => {
+        confirmation.reminders.enabled = enabled;
+        context.markDirty();
+      },
+    ),
   );
 }

@@ -95,7 +95,7 @@ flowchart LR
 - `features/follow_up_actions.py` owns post-send and post-confirmation action planning.
 - `domain/template_values.py` owns recursive configuration-template rendering and null removal before service calls.
 - `features/history.py` owns history entry formatting, queries, deletion cleanup, recording, and runtime history mutation. Workflows call it directly; history does not depend on subscriber ordering.
-- `features/configuration.py` owns the dynamically assembled flat `AlertFeatures`, `Alert`, `Configuration`, and `AlertRuntime` models because they compose the persisted document and runtime boundary. Feature modules register their own alert field models through `features/configuration_registry.py`; `Alert` inherits the resulting composition, keeping feature fields extensible without nesting them in YAML. `domain/` contains only shared value behavior.
+- `features/configuration.py` owns the flat `Alert`, `Configuration`, and `AlertRuntime` models because they compose the persisted document and runtime boundary. `Alert` inherits the empty `AlertFeatureConfig` marker and preserves feature sections as extra fields; each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model. `domain/` contains only shared value behavior.
 - `features/triggering.py` owns `MonitorConfig`, watcher settings, and trigger decisions.
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
 - `features/confirmation.py` owns `ConfirmationConfig` and confirmation sessions; `features/confirmation_flow.py` owns confirmation effect ordering.

@@ -22,26 +22,24 @@ export function renderPostConfirmationActionsSection(
         language: "yaml",
         label: "Post-confirmation actions",
         onInput: () => context.markDirty(),
-      })}`,
-    "",
-    html`<div class="nc-setting-controls">
+      })}
       <button
         class="nc-button secondary"
         @click=${() =>
           context.validateActions("actions", "Post-confirmation actions")}
       >
         Validate actions
-      </button>
-      ${optionalControls(
-        context,
-        "postConfirmationActions",
-        Boolean(confirmation.actions.enabled),
-        "post-confirmation actions",
-        (enabled) => {
-          confirmation.actions.enabled = enabled;
-          context.markDirty();
-        },
-      )}
-    </div>`,
+      </button>`,
+    "",
+    optionalControls(
+      context,
+      "postConfirmationActions",
+      Boolean(confirmation.actions.enabled),
+      "post-confirmation actions",
+      (enabled) => {
+        confirmation.actions.enabled = enabled;
+        context.markDirty();
+      },
+    ),
   );
 }

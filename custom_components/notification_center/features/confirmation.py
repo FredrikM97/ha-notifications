@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import EVENT_NOTIFICATION_ACTION
 from ..controller.lifecycle import FeatureBase, route
-from .configuration_registry import register_alert_feature
+from .feature_config import AlertFeatureConfig
 
 DRAFT_SESSION_TTL = timedelta(minutes=15)
 
@@ -28,6 +28,7 @@ class ConfirmationNotificationConfig(BaseModel):
 class ConfirmationReminderConfig(BaseModel):
     """Reminder policy for a pending confirmation."""
 
+    enabled: bool = True
     interval: int | float | None = 1800
     max_attempts: int = 5
     show_attempts: bool = False
@@ -40,7 +41,7 @@ class ConfirmationActionsConfig(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class ConfirmationConfig(BaseModel):
+class ConfirmationConfig(AlertFeatureConfig):
     """Validated confirmation prompt and its owned follow-up settings."""
 
     model_config = ConfigDict(extra="allow")
@@ -56,9 +57,6 @@ class ConfirmationConfig(BaseModel):
     actions: ConfirmationActionsConfig = Field(
         default_factory=ConfirmationActionsConfig
     )
-
-
-register_alert_feature("confirmation", ConfirmationConfig)
 
 
 def confirmation_config(value: Any) -> ConfirmationConfig:
