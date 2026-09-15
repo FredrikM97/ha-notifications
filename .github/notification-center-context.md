@@ -1,6 +1,6 @@
 # Notification Center context map
 
-This file is a lightweight map of the repository so agents can narrow to the right files before reading deeper. For a visual component map, see `docs/architecture.md`. For symptom-to-file lookup, see `.github/logic-index.md`.
+This file is a lightweight map of the repository so agents can narrow to the right files before reading deeper. `.github/logic-index.md` is the canonical symptom-to-file and flow router; use this file only for orientation. For a visual component map, see `docs/architecture.md`.
 
 ## Primary entry points
 - `custom_components/notification_center/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
@@ -11,12 +11,17 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/notification_center/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
 - `custom_components/notification_center/ha/gateway.py` — `HomeAssistantGateway`: the only module that imports `homeassistant.*`
 
-## Controller package (the brain)
-- `custom_components/notification_center/controller/alerts.py` — pure: trigger/state-machine logic (when does an alert fire)
-- `custom_components/notification_center/controller/responses.py` — pure-ish: confirmation/session tracking and mobile-action-event routing
-- `custom_components/notification_center/controller/notifications.py` — pure: composes what to send/clear and to whom
-- `custom_components/notification_center/controller/actions.py` — pure: builds post-send/post-confirmation follow-up service calls
-- `custom_components/notification_center/controller/commands.py` — the closed `Command` vocabulary `core.py` executes against the gateway
+## Controller kernel and feature modules
+- `custom_components/notification_center/controller/core.py` — kernel: gateway ownership, setup/reload sequencing, public operations, and command interpretation
+- `custom_components/notification_center/controller/bus.py` — event publication, command execution, and query dispatch
+- `custom_components/notification_center/controller/events.py` — shared event dataclass and event/query vocabulary
+- `custom_components/notification_center/controller/commands.py` — closed command vocabulary executed by the kernel
+- `custom_components/notification_center/features/triggering.py` — trigger registration and alert state-machine decisions
+- `custom_components/notification_center/features/confirmation.py` — confirmation sessions and confirmation effects
+- `custom_components/notification_center/features/notification.py` — notification composition and delivery decisions
+- `custom_components/notification_center/features/follow_up_actions.py` — post-send and post-confirmation service calls
+- `custom_components/notification_center/features/history.py` — history bus listener and persistence requests
+- `custom_components/notification_center/features/notification_services/` — target expansion and Mobile App/generic service resolution
 
 ## Shared/support modules
 - `custom_components/notification_center/domain/alert_schema.py` — alert schema, `ConfigNormalizer`/`normalize_config`/`normalize_alert`
@@ -45,10 +50,10 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 
 ## Good starting points by task
 - Save/edit lifecycle bug: `config_flow.py`, `support/storage.py`, `bridge/websocket.py`
-- Runtime trigger or interval issue: `controller/alerts.py`, `controller/core.py`, `domain/alert_schema.py`
+- Runtime trigger or interval issue: `features/triggering.py`, `controller/core.py`, `ha/gateway.py`, `domain/condition_schema.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
 - YAML/import or validation issue: `config_flow.py`, `support/storage.py`, `domain/alert_schema.py`
-- Notification/confirmation flow: `controller/alerts.py`, `controller/notifications.py`, `controller/responses.py`, `bridge/websocket.py`
+- Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `features/notification_services/`, `bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.

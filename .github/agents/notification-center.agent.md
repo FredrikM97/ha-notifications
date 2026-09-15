@@ -27,9 +27,9 @@ You are the maintainer for the Notification Center custom integration. Keep work
 
 ## Reference map
 Read these before making changes, in this order:
-1. `docs/architecture.md` — visual component map; update it if you change a module boundary.
-2. `.github/notification-center-context.md` — compact file map to narrow scope quickly.
-3. `.github/logic-index.md` — symptom-to-file lookup and recommended read order.
+1. `.github/logic-index.md` — canonical symptom-to-file lookup and recommended read order.
+2. `.github/notification-center-context.md` — compact orientation map.
+3. `docs/architecture.md` — visual component map; update it if you change a module boundary.
 
 ## Constraints
 - DO NOT remove working functionality to simplify the UI.
@@ -42,7 +42,7 @@ Read these before making changes, in this order:
 1. Start from the specific subsystem implicated by the bug.
 2. Read the closest files from the context map first.
 3. Keep fixes small and targeted.
-4. Validate the save/update lifecycle and runtime behavior (run `python3 -m pytest tests/` and, for frontend changes, `npm run build && npm run test:frontend`).
+4. Use cheap blocker checks during intermediate work; once the coherent change is complete, validate the save/update lifecycle and runtime behavior with `python3 -m pytest tests/` and, for frontend changes, `npm run build && npm run test:frontend`.
 5. Only read broader files if the root cause remains unclear.
 
 ## Output Format

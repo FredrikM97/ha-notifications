@@ -14,15 +14,16 @@ You are the frontend specialist for Notification Center. Improve the editor and 
 - `frontend/api.ts` is the only frontend/backend transport module. Add typed API
   wrappers there before using a backend operation from panel, editor, history,
   or YAML views.
-- The alert editor is split by concern under `frontend/editor/`:
-  `index.ts` (`AlertEditorController` class: dialog state/wiring only),
-  `sections.ts` (one render function per section), `helpers.ts` (shared
-  render helpers), and `types.ts` (shared types). Put new section UI in
-  `sections.ts`, not `index.ts`. All frontend↔backend calls go through
+- The alert editor is split by concern under `frontend/editor/` and
+  `frontend/sections/`: `editor/index.ts` (`AlertEditorController` class:
+  dialog state/wiring only), `sections.ts` (barrel), `sections/*.ts` (one
+  render function per section), `editor/helpers.ts` (shared render helpers),
+  and `editor/types.ts` (shared types). Put new section UI in
+  `frontend/sections/*.ts`, not `editor/index.ts`. All frontend↔backend calls go through
   `frontend/api.ts` — do not build websocket messages elsewhere.
 - Never reintroduce native `<input type="time">` for durations — mobile
   browsers commonly drop seconds, misread the hour, and cap at 24h. Use the
-  `durationInput` helper in `editor/helpers.ts` (a single masked HH:MM:SS
+  `durationInput` helper in `frontend/editor/helpers.ts` (a single masked HH:MM:SS
   text field with unbounded hours) for every duration field.
 - Prefer the existing string-literal union types (`EditorMode`,
   `OptionalSetting`, `SectionStatus` in `editor/types.ts`) over new ad-hoc
@@ -36,7 +37,8 @@ You are the frontend specialist for Notification Center. Improve the editor and 
   available tool or non-interactive command can do the job.
 
 ## Reference map
-Read `docs/architecture.md` (diagram) and `.github/notification-center-context.md` (file map) first and narrow to the frontend files they point to.
+Read `.github/logic-index.md` first, then `.github/notification-center-context.md`
+and `docs/architecture.md` only as needed to narrow to the frontend files.
 
 ## Constraints
 - DO NOT remove existing functionality while simplifying the UI.
@@ -48,8 +50,9 @@ Read `docs/architecture.md` (diagram) and `.github/notification-center-context.m
 1. Start from the exact frontend file implicated by the issue.
 2. Check the related storage or API contract before changing UI behavior.
 3. Keep changes small and native-feeling.
-4. Validate the save/edit lifecycle and runtime update flow with
-   `npm run build && npm run test:frontend`.
+4. Use cheap blocker checks during intermediate work; once the coherent UI
+  change is complete, validate the save/edit lifecycle and runtime update flow
+  with `npm run build && npm run test:frontend`.
 
 ## Output Format
 - Brief summary of the frontend change
