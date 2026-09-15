@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && esbuild custom_components/notification_center/frontend/panel.ts --bundle --format=esm --outfile=custom_components/notification_center/dist/panel.js",
+    "build": "tsc -p tsconfig.json --noEmit && esbuild custom_components/ha_notifications/frontend/panel.ts --bundle --format=esm --outfile=custom_components/ha_notifications/dist/panel.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "format": "prettier --write custom_components/notification_center/frontend/*.ts tests/frontend_smoke.mjs",
+    "format": "prettier --write custom_components/ha_notifications/frontend/*.ts tests/frontend_smoke.mjs",
     "test:frontend": "node tests/frontend_smoke.mjs",
     "test:unit": "vitest run",
-    "clean": "rm -rf custom_components/notification_center/dist",
+    "clean": "rm -rf custom_components/ha_notifications/dist",
     "export:hacs": "sh scripts/export_hacs.sh",
     "install:ha": "sh scripts/install_local.sh"
   },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildAlertPayload } from "../../custom_components/notification_center/frontend/alert-payload.js";
-import type { AlertFormValues } from "../../custom_components/notification_center/frontend/alert-payload.js";
-import { defaultAlert } from "../../custom_components/notification_center/frontend/editor/helpers.js";
+import { buildAlertPayload } from "../../custom_components/ha_notifications/frontend/alert-payload.js";
+import type { AlertFormValues } from "../../custom_components/ha_notifications/frontend/alert-payload.js";
+import { defaultAlert } from "../../custom_components/ha_notifications/frontend/editor/helpers.js";
 
 function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
   return {

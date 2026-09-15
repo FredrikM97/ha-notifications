@@ -1,13 +1,13 @@
 # HA Notifications
 
-The integration source lives under `custom_components/notification_center`,
+The integration source lives under `custom_components/ha_notifications`,
 as expected by Home Assistant and HACS. For packaging, run
 `npm install && npm run export:hacs`. The source frontend remains TypeScript;
 the export contains compiled browser output.
 
 For local Home Assistant testing, build the frontend in a Node-capable
 environment, then run the Node-free installer to copy the integration into
-`config/custom_components/notification_center`, or pass a different Home
+`config/custom_components/ha_notifications`, or pass a different Home
 Assistant configuration directory:
 
 ```bash

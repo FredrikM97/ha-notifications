@@ -1,20 +1,20 @@
-# Notification Center logic index
+# HA Notifications logic index
 
 This is the compact routing map for the direct-workflow architecture.
 
 ## Startup and lifecycle
 
-- `custom_components/notification_center/__init__.py`: Home Assistant config-entry and service lifecycle glue.
-- `custom_components/notification_center/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
-- `custom_components/notification_center/controller/core.py`: lifecycle host, gateway construction, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
-- `custom_components/notification_center/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
-- `custom_components/notification_center/ha/gateway.py`: the only Home Assistant API boundary, including service calls, template/timer watchers, external event listeners, persistence, panel, and websocket registration.
+- `custom_components/ha_notifications/__init__.py`: Home Assistant config-entry and service lifecycle glue.
+- `custom_components/ha_notifications/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
+- `custom_components/ha_notifications/controller/core.py`: lifecycle host, gateway construction, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
+- `custom_components/ha_notifications/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
+- `custom_components/ha_notifications/ha/gateway.py`: the only Home Assistant API boundary, including service calls, template/timer watchers, external event listeners, persistence, panel, and websocket registration.
 
 ## Frontend transport
 
-- `custom_components/notification_center/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations, legacy command registration during migration, and HA response serialization.
-- `custom_components/notification_center/frontend/api.ts`: the only frontend/backend transport module.
-- `custom_components/notification_center/frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
+- `custom_components/ha_notifications/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations, legacy command registration during migration, and HA response serialization.
+- `custom_components/ha_notifications/frontend/api.ts`: the only frontend/backend transport module.
+- `custom_components/ha_notifications/frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
 
 ## Features
 

@@ -1,6 +1,6 @@
 # Architecture overview
 
-Notification Center uses a small controller composition root, direct feature workflows, and one Home Assistant gateway. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
+HA Notifications uses a small controller composition root, direct feature workflows, and one Home Assistant gateway. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
 
 ## Layer map
 

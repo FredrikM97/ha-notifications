@@ -9,8 +9,8 @@ from unittest.mock import patch
 import voluptuous as vol
 from homeassistant.components import websocket_api
 
-from custom_components.notification_center.bridge import websocket
-from custom_components.notification_center.controller.lifecycle import (
+from custom_components.ha_notifications.bridge import websocket
+from custom_components.ha_notifications.controller.lifecycle import (
     WebsocketArgument,
     WebsocketRoute,
 )
@@ -69,7 +69,7 @@ class WebsocketTests(unittest.IsolatedAsyncioTestCase):
                 handlers.append,
             )
 
-        validated = vol.Schema(schemas[0])({"type": "notification_center/history"})
+        validated = vol.Schema(schemas[0])({"type": "ha_notifications/history"})
         self.assertIsNone(validated["alert_id"])
 
     def test_registers_all_public_commands(self) -> None:

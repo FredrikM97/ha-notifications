@@ -10,13 +10,13 @@
     "strict": false,
     "noImplicitAny": false,
     "skipLibCheck": true,
-    "rootDir": "./custom_components/notification_center/frontend",
-    "outDir": "./custom_components/notification_center/frontend/dist",
+    "rootDir": "./custom_components/ha_notifications/frontend",
+    "outDir": "./custom_components/ha_notifications/frontend/dist",
     "sourceMap": true,
     "declaration": false,
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["custom_components/notification_center/frontend/**/*.ts"],
-  "exclude": ["custom_components/notification_center/frontend/dist"]
+  "include": ["custom_components/ha_notifications/frontend/**/*.ts"],
+  "exclude": ["custom_components/ha_notifications/frontend/dist"]
 }

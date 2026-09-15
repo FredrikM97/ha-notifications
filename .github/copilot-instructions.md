@@ -1,7 +1,7 @@
-# Notification Center Copilot Instructions
+# HA Notifications Copilot Instructions
 
 ## Project purpose
-This repository is a Home Assistant custom integration named Notification Center. The project should feel like a native Home Assistant feature: simple by default, powerful when needed, and reliable enough to trust.
+This repository is a Home Assistant custom integration named HA Notifications. The project should feel like a native Home Assistant feature: simple by default, powerful when needed, and reliable enough to trust.
 
 ## Core principles
 - Keep the UI compact and native to Home Assistant.
@@ -15,7 +15,7 @@ This repository is a Home Assistant custom integration named Notification Center
 ## Work Routing
 - Start from one concrete anchor: the named file, symbol, failing behavior, test, or command.
 - Avoid expensive models whenever possible. Prefer splitting complex work into smaller, bounded tasks that cheaper models can complete; use an expensive model only when decomposition is impractical or cheaper models cannot reliably handle the remaining reasoning.
-- Use `.github/logic-index.md` as the canonical router and `.github/notification-center-context.md` only for orientation; do not scan the repository broadly before selecting the owning path.
+- Use `.github/logic-index.md` as the canonical router and `.github/ha-notifications-context.md` only for orientation; do not scan the repository broadly before selecting the owning path.
 - Before the first edit, identify one falsifiable local hypothesis and one cheap check that could disconfirm it. Once the control path and check are clear, make the smallest testable edit.
 - After the first substantive edit, run the narrowest relevant validation before reading broadly or opening another edit slice.
 - Do not rerun full suites or repeat the same checks after every small edit. During a coherent feature or breaking migration, use only cheap syntax, import, or targeted blocker checks as needed; run focused and full regression validation when the planned slice is complete.
@@ -127,8 +127,8 @@ Start there to find the relevant models, storage, runtime, frontend, and websock
 
 ## Index Maintenance
 - Keep `.github/logic-index.md` as the canonical codebase index: it owns flow routing, decision points, read order, and symptom-to-file mapping.
-- Keep `.github/notification-center-context.md` as a short orientation map only; do not duplicate detailed ownership or lifecycle explanations there.
-- When a module is moved, split, merged, renamed, or changes ownership, update `logic-index.md`, `notification-center-context.md`, and `docs/architecture.md` in the same change.
+- Keep `.github/ha-notifications-context.md` as a short orientation map only; do not duplicate detailed ownership or lifecycle explanations there.
+- When a module is moved, split, merged, renamed, or changes ownership, update `logic-index.md`, `ha-notifications-context.md`, and `docs/architecture.md` in the same change.
 - Keep index entries compact and current: list real paths and owning symbols, link to architecture documentation for detail, and remove retired paths immediately.
 - Before completing an index change, verify every referenced path exists and search for stale names from the old layout. Do not mark a structural change complete while the index points to retired modules.
 

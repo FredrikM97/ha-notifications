@@ -1,4 +1,4 @@
-"""Shared test helpers for the Notification Center unit tests."""
+"""Shared test helpers for the HA Notifications unit tests."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INTEGRATION_ROOT = ROOT / "custom_components" / "notification_center"
-PACKAGE_NAME = "custom_components.notification_center"
+INTEGRATION_ROOT = ROOT / "custom_components" / "ha_notifications"
+PACKAGE_NAME = "custom_components.ha_notifications"
 
 
 def ensure_package() -> None:

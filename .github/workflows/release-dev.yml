@@ -43,8 +43,8 @@ jobs:
         run: |
           npm ci
           npm run export:hacs
-          cd hacs-export/custom_components/notification_center
-          zip -r ../../../notification_center.zip . -x '*.pyc' '*__pycache__/*'
+          cd hacs-export/custom_components/ha_notifications
+          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
 
       - name: Update dev tag and prerelease
         if: steps.changes.outputs.create == 'true'
@@ -63,5 +63,5 @@ jobs:
           if ! gh release view dev >/dev/null 2>&1; then
             gh release create dev --title "Dev Release" --notes "$notes" --prerelease
           fi
-          gh release upload dev notification_center.zip --clobber
+          gh release upload dev ha-notifications.zip --clobber
           gh release edit dev --notes "$notes" --prerelease

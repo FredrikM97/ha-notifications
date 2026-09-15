@@ -6,8 +6,8 @@ import {
   saveYaml,
   testAlert,
   validateYaml,
-} from "../../custom_components/notification_center/frontend/api.js";
-import type { Alert, Hass } from "../../custom_components/notification_center/frontend/types.js";
+} from "../../custom_components/ha_notifications/frontend/api.js";
+import type { Alert, Hass } from "../../custom_components/ha_notifications/frontend/types.js";
 
 function hass() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});
@@ -27,10 +27,10 @@ describe("frontend API transport", () => {
     await saveAlert(client.hass, alert);
 
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(1, {
-      type: "notification_center/list",
+      type: "ha_notifications/list",
     });
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(2, {
-      type: "notification_center/save",
+      type: "ha_notifications/save",
       alert,
     });
   });
@@ -43,14 +43,14 @@ describe("frontend API transport", () => {
     await saveYaml(client.hass, "alerts: []");
 
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(1, {
-      type: "notification_center/get_yaml",
+      type: "ha_notifications/get_yaml",
     });
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(2, {
-      type: "notification_center/validate_yaml",
+      type: "ha_notifications/validate_yaml",
       yaml: "alerts: []",
     });
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(3, {
-      type: "notification_center/save_yaml",
+      type: "ha_notifications/save_yaml",
       yaml: "alerts: []",
     });
   });
@@ -69,7 +69,7 @@ describe("frontend API transport", () => {
     client.sendMessagePromise.mockResolvedValueOnce({ alerts: [] });
 
     await expect(getAlerts(client.hass)).rejects.toThrow(
-      "notification_center/list: expected an alert list.",
+      "ha_notifications/list: expected an alert list.",
     );
   });
 });

@@ -35,6 +35,12 @@ py-modules = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+pythonpath = ["."]
+filterwarnings = [
+    "ignore:.*pyOpenSSL.*deprecated.*:DeprecationWarning:josepy\..*",
+    "ignore:.*Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning:homeassistant.components.http",
+    "ignore:.*pyOpenSSL.*deprecated.*:DeprecationWarning:acme\..*",
+]
 
 [tool.ruff]
 target-version = "py312"

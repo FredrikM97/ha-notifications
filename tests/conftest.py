@@ -1,4 +1,4 @@
-"""Shared pytest fixtures/helpers for the Notification Center test suite.
+"""Shared pytest fixtures/helpers for the HA Notifications test suite.
 
 Only holds helpers that are genuinely identical across files. Suite-specific
 alert shapes (e.g. `test_controller_notifications.py`'s smaller alert, which

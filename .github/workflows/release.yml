@@ -53,10 +53,10 @@ jobs:
         run: |
           npm ci
           npm run export:hacs
-          package_dir=hacs-export/custom_components/notification_center
+          package_dir=hacs-export/custom_components/ha_notifications
           node -e 'const fs = require("fs"); const file = process.argv[1]; const manifest = JSON.parse(fs.readFileSync(file, "utf8")); manifest.version = process.argv[2]; fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);' "$package_dir/manifest.json" "${{ steps.version.outputs.version }}"
           cd "$package_dir"
-          zip -r ../../../notification_center.zip . -x '*.pyc' '*__pycache__/*'
+          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
 
       - name: Create release
         env:
@@ -64,7 +64,7 @@ jobs:
         run: |
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
-          gh release create "${{ steps.version.outputs.tag }}" notification_center.zip \
+          gh release create "${{ steps.version.outputs.tag }}" ha-notifications.zip \
             --title "${{ steps.version.outputs.tag }}" \
             --generate-notes \
             --latest

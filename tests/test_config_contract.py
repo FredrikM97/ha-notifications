@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from test_support import load_const_and_models
 
-from custom_components.notification_center.domain.durations import parse_duration
+from custom_components.ha_notifications.domain.durations import parse_duration
 
 const, models = load_const_and_models()
 

@@ -7,15 +7,15 @@ from datetime import timedelta
 
 from test_support import load_const_and_models
 
-from custom_components.notification_center.domain.durations import (
+from custom_components.ha_notifications.domain.durations import (
     duration_to_mapping,
     duration_to_string,
     parse_duration,
 )
-from custom_components.notification_center.features.confirmation import (
+from custom_components.ha_notifications.features.confirmation import (
     ConfirmationConfig,
 )
-from custom_components.notification_center.features.notification import (
+from custom_components.ha_notifications.features.notification import (
     NotificationConfig,
 )
 

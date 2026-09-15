@@ -6,7 +6,7 @@ import unittest
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from custom_components.notification_center.controller.lifecycle import FeatureLifecycle
+from custom_components.ha_notifications.controller.lifecycle import FeatureLifecycle
 
 
 class RuntimeStorage:
