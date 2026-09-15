@@ -119,7 +119,7 @@ Example:
 
 ```yaml
 monitor:
-  interval: "01:00:00"
+  interval: 3600
 ```
 
 This is useful for conditions based on things such as:
@@ -141,7 +141,7 @@ For example:
 ```yaml
 monitor:
   on_change: true
-  interval: "00:30:00"
+  interval: 1800
 ```
 
 The condition can therefore be evaluated immediately when relevant entities change while also being periodically rechecked.
@@ -190,7 +190,7 @@ Notification delivery is built directly into the integration.
 You do **not** need a separate notification script such as:
 
 ```text
-script.global_multi_device_actionable_notifie
+script.global_multi_device_actionable_notifier
 ```
 
 HA Notifications can execute notification services itself.
@@ -333,7 +333,7 @@ confirmation:
   enabled: true
   reminders:
     enabled: true
-    interval: "00:30:00"
+    interval: 1800
     max_attempts: 5
 ```
 
@@ -376,7 +376,7 @@ alerts:
     monitor:
       on_change: true
       startup: true
-      interval: "01:00:00"
+      interval: 3600
     conditions:
       - type: template
         template: "{{ states('sensor.water_level') | float(100) < 20 }}"
@@ -391,7 +391,7 @@ alerts:
       button: Activity completed
       reminders:
         enabled: true
-        interval: "00:30:00"
+        interval: 1800
         max_attempts: 5
       actions:
         enabled: true
