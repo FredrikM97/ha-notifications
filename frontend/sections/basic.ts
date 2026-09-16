@@ -37,6 +37,7 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
       ${field(
         "Icon",
         html`<ha-icon-picker
+          appearance="outlined"
           .value=${value.icon || "mdi:bell-outline"}
           aria-label="Icon"
           @value-changed=${(event: CustomEvent<{ value: string }>) => {

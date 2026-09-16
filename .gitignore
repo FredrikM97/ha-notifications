@@ -18,3 +18,4 @@ hacs-export/
 build/
 /dist/
 .vscode
+dist

@@ -12,7 +12,7 @@ import {
   validateConditions,
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
-import { renderHistory } from "./history.js";
+import { renderHistory, type HistoryFilters } from "./history.js";
 import { styles } from "./styles.js";
 import { showToast as showToastOn, toastListTemplate } from "./toast.js";
 import type { Toast } from "./toast.js";
@@ -124,6 +124,12 @@ class HaNotificationsPanel extends LitElement {
   private history: HistoryEntry[] = [];
   private historyAlertId: string | null = null;
   private historyAlertName: string | null = null;
+  private historyFilters: HistoryFilters = {
+    search: "",
+    alertId: "",
+    type: "",
+    severity: "",
+  };
   private tab: PanelTab = "alerts";
   private loading = false;
   private refreshing = false;
@@ -208,7 +214,7 @@ class HaNotificationsPanel extends LitElement {
   private editorOpen(): boolean {
     return Boolean(
       this.renderRoot.querySelector(".nc-editor-view") ||
-        this.renderRoot.querySelector("#nc-yaml-editor"),
+      this.renderRoot.querySelector("#nc-yaml-editor"),
     );
   }
 
@@ -230,10 +236,10 @@ class HaNotificationsPanel extends LitElement {
     try {
       const [alertsResult, runtimeResult, historyResult] =
         await Promise.allSettled([
-        getAlerts(this._hass),
-        getAlertRuntime(this._hass),
-        getHistory(this._hass, this.historyAlertId, 150),
-      ]);
+          getAlerts(this._hass),
+          getAlertRuntime(this._hass),
+          getHistory(this._hass, this.historyAlertId, 150),
+        ]);
 
       if (alertsResult.status === "fulfilled") {
         const runtimeByAlert =
@@ -374,6 +380,18 @@ class HaNotificationsPanel extends LitElement {
         this.history,
         {
           alertName: this.historyAlertName,
+          alerts: this.alerts.map((alert) => ({
+            id: alert.id,
+            name: alert.name,
+          })),
+          filters: this.historyFilters,
+          types: [
+            ...new Set(this.history.map((item) => item.type).filter(Boolean)),
+          ] as string[],
+          onFiltersChanged: (filters) => {
+            this.historyFilters = filters;
+            this.requestUpdate();
+          },
           onAlertSelected: (alertId, alertName) =>
             this.showHistoryForAlert(alertId, alertName),
           onShowAll: () => this.showAllHistory(),
@@ -417,59 +435,79 @@ class HaNotificationsPanel extends LitElement {
     const runtime = alert.runtime || {};
     const status = alertStatus(alert);
     const monitor = this.monitorSummary(alert);
-    const lastNotification = this.lastNotificationSummary(
-      runtime.last_notified,
-    );
-    const lastEvent = this.lastEventSummary(runtime.last_event);
     const attempts = attemptSummary(alert);
-    const confirmation = alert.confirmation?.enabled
-      ? "Confirmation on"
-      : "Confirmation off";
 
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
         <ha-icon icon=${alert.icon || "mdi:bell-outline"}></ha-icon>
       </div>
       <div class="nc-alert-main">
-        <div class="nc-alert-name">${alert.name}</div>
-        <div class="nc-alert-statuses">
-          <span class=${status.enabled.className}
-            ><ha-icon icon=${status.enabled.icon}></ha-icon>${status.enabled
-              .label}</span
-          >
-          <span class=${status.condition.className}
-            ><ha-icon icon=${status.condition.icon}></ha-icon>${status.condition
-              .label}</span
-          >
+        <div class="nc-alert-heading">
+          <div class="nc-alert-name">${alert.name}</div>
+          <div class="nc-alert-statuses">
+            <span class=${status.enabled.className}
+              ><ha-icon icon=${status.enabled.icon}></ha-icon>${status.enabled
+                .label}</span
+            >
+            <span class=${status.condition.className}
+              ><ha-icon icon=${status.condition.icon}></ha-icon>${status
+                .condition.label}</span
+            >
+          </div>
         </div>
         <div class="nc-alert-meta">
-          ${monitor} · ${this.targetSummary(alert.notification?.target)} ·
-          ${confirmation}
+          ${monitor} · ${this.targetSummary(alert.notification?.target)}
         </div>
-        <div class="nc-alert-meta">${lastEvent}</div>
-        <div class="nc-alert-meta">${lastNotification}</div>
-        ${attempts
-          ? html`<div class="nc-alert-meta">${attempts}</div>`
-          : ""}
+        ${attempts ? html`<div class="nc-alert-meta">${attempts}</div>` : ""}
       </div>
       <div class="nc-alert-actions">
         <button
           class="nc-button"
+          title="Test alert"
+          aria-label="Test alert"
           ?disabled=${!alert.enabled}
           @click=${() => this.testAlertFromCard(alert)}
         >
-          Test</button
-        ><button class="nc-button" @click=${() => this.toggleAlert(alert)}>
-          ${toggleAlertLabel(alert)}</button
-        ><button class="nc-button" @click=${() => this.editAlert(alert)}>
-          Edit</button
-        ><button class="nc-button" @click=${() => this.showAlertHistory(alert)}>
-          History</button
+          <ha-icon icon="mdi:send-check-outline"></ha-icon
+          ><span class="nc-button-label">Test</span></button
+        ><button
+          class="nc-button"
+          title=${toggleAlertLabel(alert)}
+          aria-label=${toggleAlertLabel(alert)}
+          @click=${() => this.toggleAlert(alert)}
+        >
+          <ha-icon
+            icon=${alert.enabled
+              ? "mdi:pause-circle-outline"
+              : "mdi:play-circle-outline"}
+          ></ha-icon
+          ><span class="nc-button-label"
+            >${toggleAlertLabel(alert)}</span
+          ></button
+        ><button
+          class="nc-button"
+          title="Edit alert"
+          aria-label="Edit alert"
+          @click=${() => this.editAlert(alert)}
+        >
+          <ha-icon icon="mdi:pencil-outline"></ha-icon
+          ><span class="nc-button-label">Edit</span></button
+        ><button
+          class="nc-button"
+          title="View history"
+          aria-label="View history"
+          @click=${() => this.showAlertHistory(alert)}
+        >
+          <ha-icon icon="mdi:history"></ha-icon
+          ><span class="nc-button-label">History</span></button
         ><button
           class="nc-button danger"
+          title="Delete alert"
+          aria-label="Delete alert"
           @click=${() => this.removeAlert(alert)}
         >
-          Delete
+          <ha-icon icon="mdi:delete-outline"></ha-icon
+          ><span class="nc-button-label">Delete</span>
         </button>
       </div>
     </div>`;
@@ -490,23 +528,6 @@ class HaNotificationsPanel extends LitElement {
     }
 
     return "No trigger";
-  }
-
-  private lastNotificationSummary(lastNotified: string | undefined): string {
-    if (lastNotified) {
-      return `Last notification: ${this.formatTime(lastNotified)}`;
-    }
-
-    return "No notification sent yet";
-  }
-
-  private lastEventSummary(lastEvent: Record<string, unknown> | undefined): string {
-    const timestamp = lastEvent?.timestamp;
-    if (typeof timestamp === "string" && timestamp) {
-      return `Last event: ${this.formatTime(timestamp)}`;
-    }
-
-    return "No event recorded yet";
   }
 
   targetSummary(target: Alert["notification"]["target"] = {}): string {
@@ -641,6 +662,12 @@ class HaNotificationsPanel extends LitElement {
 
     this.historyAlertId = alertId;
     this.historyAlertName = alertName;
+    this.historyFilters = {
+      search: "",
+      alertId: "",
+      type: "",
+      severity: "",
+    };
     this.tab = "history";
     this.loading = true;
     this.requestUpdate();
@@ -662,6 +689,12 @@ class HaNotificationsPanel extends LitElement {
 
     this.historyAlertId = null;
     this.historyAlertName = null;
+    this.historyFilters = {
+      search: "",
+      alertId: "",
+      type: "",
+      severity: "",
+    };
     this.tab = "history";
     this.loading = true;
     this.requestUpdate();
