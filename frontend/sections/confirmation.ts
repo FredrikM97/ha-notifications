@@ -23,9 +23,6 @@ export function renderConfirmationSection(
           ></ha-input>`,
         )}
       </div>
-      <div class="nc-help">
-        Confirmation buttons are included in the notification action data.
-      </div>
       <label class="nc-switch-label">
         <ha-switch
           .checked=${confirmation.notification.clear !== false}

@@ -1,11 +1,7 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/types.js";
-import {
-  checkedOf,
-  codeEditor,
-  section,
-} from "../editor/helpers.js";
+import { codeEditor, section } from "../editor/helpers.js";
 
 export function renderConfirmationNotificationSection(
   context: EditorContext,
@@ -13,17 +9,7 @@ export function renderConfirmationNotificationSection(
   const confirmation = context.value.confirmation!;
   return section(
     "Notify recipients when confirmed",
-    html`<label class="nc-switch-label">
-        <ha-switch
-          .checked=${confirmation.notification.enabled === true}
-          @change=${(event: Event) => {
-            confirmation.notification.enabled = checkedOf(event);
-            context.markDirty();
-          }}
-        ></ha-switch>
-        <span>Send a follow-up notification</span>
-      </label>
-      ${codeEditor({
+    html`${codeEditor({
         value: confirmation.notification.message || "",
         placeholder: "",
         mode: "jinja2",

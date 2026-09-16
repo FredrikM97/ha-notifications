@@ -58,8 +58,6 @@ export function renderConfirmationReminderSection(
           <span>Show attempt count in notification title</span>
         </label>
       </div>
-      <div class="nc-help">
-        Resend only while this confirmation is still pending.
       </div>`,
   );
 }

@@ -56,7 +56,8 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
           Re-evaluate condition every
         </span>`,
         html`<div class="nc-help nc-monitor-help">
-            Checks conditions even when no condition-change event is emitted.
+            Re-checks the condition at this interval, even when no relevant
+            entity-change event occurs.
           </div>
           ${durationInput(
             durationInputValue(monitor.interval, "12:00:00"),
@@ -85,12 +86,13 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
         </span>`,
         monitor.retention?.enabled !== false
           ? html`<label class="nc-subfield">
-              <span>Days</span>
+              <span>Keep history for (days)</span>
               <ha-input
                 class="nc-number-field"
                 type="number"
                 min="1"
                 step="1"
+                aria-label="History retention days"
                 .value=${String(monitor.retention?.days || 30)}
                 @input=${(event: Event) => {
                   monitor.retention = {
@@ -105,6 +107,9 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
                   context.markDirty();
                 }}
               ></ha-input>
+              <span class="nc-help">
+                Completed alert history is removed after this many days.
+              </span>
             </label>`
           : html``,
       )}

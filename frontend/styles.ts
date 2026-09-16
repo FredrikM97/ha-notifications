@@ -1174,7 +1174,7 @@ ha-code-editor.nc-action-editor {
 
 .nc-condition-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: 10px;
   padding: 12px;
@@ -1184,7 +1184,8 @@ ha-code-editor.nc-action-editor {
 }
 
 .nc-condition-row .nc-button {
-  justify-self: start;
+  grid-column: 1 / -1;
+  justify-self: end;
   align-self: end;
   white-space: nowrap;
 }
