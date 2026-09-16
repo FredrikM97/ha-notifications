@@ -6,8 +6,8 @@ import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from conftest import make_alert
-from test_support import PACKAGE_NAME, ensure_package
+from tests.conftest import make_alert
+from tests.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 history_feature = importlib.import_module(f"{PACKAGE_NAME}.features.history")

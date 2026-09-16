@@ -1,0 +1,23 @@
+# serializer version: 1
+# name: test_confirmation_configuration_contract_snapshot
+  dict({
+    'actions': dict({
+      'enabled': False,
+      'items': list([
+      ]),
+    }),
+    'button': 'Confirm',
+    'enabled': True,
+    'notification': dict({
+      'clear': True,
+      'enabled': True,
+      'message': 'Confirmed by {{confirmed_by}}',
+    }),
+    'reminders': dict({
+      'enabled': True,
+      'interval': 2,
+      'max_attempts': 5,
+      'show_attempts': True,
+    }),
+  })
+# ---

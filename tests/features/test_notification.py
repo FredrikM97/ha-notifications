@@ -4,105 +4,25 @@ from __future__ import annotations
 
 import importlib
 import unittest
-from types import SimpleNamespace
+from functools import partial
 
 from homeassistant.components.notify.const import NOTIFY_SERVICE_SCHEMA
-from test_support import PACKAGE_NAME, ensure_package
+
+from tests.conftest import make_notification_alert as alert
+from tests.conftest import notification_snapshot
+from tests.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 notifications = importlib.import_module(f"{PACKAGE_NAME}.features.notification")
 
+mobile_snapshot = partial(notification_snapshot, "mobile")
+mobile_device_registry_snapshot = partial(notification_snapshot, "mobile_device")
+empty_snapshot = partial(notification_snapshot, "empty")
+labeled_device_snapshot = partial(notification_snapshot, "labeled")
+
 
 async def render(source, _variables):
     return source
-
-
-def mobile_snapshot():
-    return notifications.RegistrySnapshot(
-        area_registry=SimpleNamespace(areas={}),
-        device_registry=SimpleNamespace(devices={}),
-        entity_registry=SimpleNamespace(entities={}),
-        mobile_app_entries=[
-            SimpleNamespace(
-                entry_id="mobile_entry",
-                data={"device_id": "phone_device", "device_name": "somebody"},
-            )
-        ],
-        person_states=[],
-    )
-
-
-def mobile_device_registry_snapshot():
-    return notifications.RegistrySnapshot(
-        area_registry=SimpleNamespace(areas={}),
-        device_registry=SimpleNamespace(
-            devices={
-                "phone_device": SimpleNamespace(
-                    id="phone_device",
-                    area_id=None,
-                    labels=set(),
-                    config_entries={"mobile_entry"},
-                )
-            }
-        ),
-        entity_registry=SimpleNamespace(entities={}),
-        mobile_app_entries=[
-            SimpleNamespace(
-                entry_id="mobile_entry",
-                data={"device_name": "somebody"},
-            )
-        ],
-        person_states=[],
-    )
-
-
-def empty_snapshot():
-    return notifications.RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(devices={}),
-            entity_registry=SimpleNamespace(
-                entities={
-                    "notify.somebody": SimpleNamespace(
-                        entity_id="notify.somebody",
-                        device_id=None,
-                        config_entry_id="mobile_entry",
-                        area_id=None,
-                        labels=set(),
-                    )
-                }
-            ),
-        mobile_app_entries=[
-            SimpleNamespace(
-                entry_id="mobile_entry",
-                data={"device_name": "somebody"},
-            )
-        ],
-        person_states=[],
-    )
-
-
-def labeled_device_snapshot():
-    return notifications.RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(devices={}),
-            entity_registry=SimpleNamespace(entities={}),
-        mobile_app_entries=[],
-        person_states=[],
-    )
-
-
-def alert():
-    return {
-        "id": "alert_1",
-        "name": "Alert",
-        "notification": {
-            "action": "notify.send_message",
-            "target": {"entity_id": ["notify.somebody"]},
-            "title": "Title",
-            "message": "Message",
-        },
-        "confirmation": {"enabled": False},
-    }
 
 
 class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -361,6 +281,71 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result, [])
+
+
+async def test_mobile_replacement_contract_snapshot(snapshot):
+    result = await notifications.send_requested(
+        {
+            "alert": alert(),
+            "attempt": 2,
+            "confirmation_action_id": "confirm_1",
+            "replace_existing": True,
+            "test": True,
+            "now": "now",
+        },
+        notifications.NotificationCapabilitySet(
+            render=render,
+            snapshot=empty_snapshot(),
+        ),
+    )
+    normalized = [
+        {
+            "domain": command.domain,
+            "service": command.service,
+            "data": command.data,
+            "target": command.target,
+        }
+        for command in result
+    ]
+
+    assert normalized == snapshot
+
+
+async def test_confirmation_completion_planner_renders_message_and_clear_policy():
+    configured_alert = alert()
+    configured_alert["confirmation"] = {
+        "enabled": True,
+        "notification": {
+            "enabled": True,
+            "message": "{{ confirmed_by }} finished",
+            "clear": False,
+        },
+    }
+
+    async def render_confirmation(source, variables):
+        return source.replace("{{ confirmed_by }}", variables["confirmed_by"])
+
+    plan = await notifications.ConfirmationDeliveryPlanner(
+        configured_alert, "Alice", "now"
+    ).build(render_confirmation)
+
+    assert plan.clear_notification is False
+    assert plan.completion_alert["notification"]["message"] == "Alice finished"
+    assert plan.completion_alert["confirmation"] == {"enabled": False}
+
+
+async def test_notification_planner_rejects_missing_target():
+    configured_alert = alert()
+    configured_alert["notification"]["target"] = None
+
+    with unittest.TestCase().assertRaises(ValueError):
+        await notifications.plan_delivery(
+            configured_alert,
+            {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
+            None,
+            empty_snapshot(),
+            render,
+        )
 
 
 if __name__ == "__main__":

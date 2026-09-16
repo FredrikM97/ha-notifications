@@ -5,10 +5,24 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from test_support import PACKAGE_NAME, load_const_and_models
+from tests.support.test_support import PACKAGE_NAME, load_const_and_models
 
 load_const_and_models()
 history = __import__(f"{PACKAGE_NAME}.features.history", fromlist=["history"])
+
+
+def test_history_entry_contract_snapshot(snapshot):
+    entry = history.format_entry(
+        {"id": "alert_1", "name": "Alert"},
+        "notification_sent",
+        "Notification sent.",
+        {"attempt": 2},
+        now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        flow_id="flow_alert_1_test",
+    )
+    entry["id"] = "<history_id>"
+
+    assert entry == snapshot
 
 
 class FormatEntryTests(unittest.TestCase):

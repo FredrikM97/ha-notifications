@@ -5,8 +5,6 @@ from __future__ import annotations
 import unittest
 from datetime import timedelta
 
-from test_support import load_const_and_models
-
 from custom_components.ha_notifications.domain.durations import (
     parse_duration,
 )
@@ -16,8 +14,21 @@ from custom_components.ha_notifications.features.confirmation import (
 from custom_components.ha_notifications.features.notification import (
     NotificationConfig,
 )
+from tests.conftest import alert_fixture
+from tests.support.test_support import load_const_and_models
 
 _, models = load_const_and_models()
+
+
+def test_configuration_model_contract_snapshot(snapshot):
+    alert = alert_fixture("configuration")
+    configuration = models.Configuration.model_validate(
+        {
+            "alerts": [alert]
+        }
+    )
+
+    assert configuration.model_dump(exclude_none=True) == snapshot
 
 
 class DurationTests(unittest.TestCase):

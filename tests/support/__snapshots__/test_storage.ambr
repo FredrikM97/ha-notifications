@@ -1,0 +1,30 @@
+# serializer version: 1
+# name: test_persisted_configuration_contract_snapshot
+  dict({
+    'alerts': list([
+      dict({
+        'conditions': list([
+        ]),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'demo',
+        'monitor': dict({
+          'on_change': True,
+          'startup': True,
+        }),
+        'name': 'Demo',
+        'notification': dict({
+          'message': 'Check this',
+          'target': dict({
+            'entity_id': list([
+              'notify.phone',
+            ]),
+          }),
+          'title': 'Demo',
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---

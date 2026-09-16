@@ -1,0 +1,15 @@
+# serializer version: 1
+# name: test_compile_condition_contract
+  '''
+  {% set nc_condition_0 = (is_state('x', 'on')) %}
+  {{ ((is_state("binary_sensor.door", "on") or is_state("binary_sensor.door", "open")) and (now() - states["binary_sensor.door"].last_changed).total_seconds() >= 5) or (states("sensor.temperature") | float(0) > 20.0 and states("sensor.temperature") | float(0) < 30.0) or state_attr("light.kitchen", "brightness") == 255 or (nc_condition_0 | bool) }}
+  '''
+# ---
+# name: test_condition_transition_contract_snapshot
+  dict({
+    'error': None,
+    'had_pending_confirmation': False,
+    'kind': 'should_send',
+    'source': 'confirmation',
+  })
+# ---

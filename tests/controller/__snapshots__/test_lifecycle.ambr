@@ -1,0 +1,9 @@
+# serializer version: 1
+# name: test_lifecycle_order_contract_snapshot
+  list([
+    'setup:first',
+    'setup:second',
+    'unload:second',
+    'unload:first',
+  ])
+# ---

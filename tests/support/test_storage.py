@@ -4,9 +4,23 @@ from __future__ import annotations
 
 import unittest
 
-from test_support import load_storage
+from tests.conftest import alert_fixture
+from tests.support.test_support import load_storage
 
 storage = load_storage()
+
+
+def test_persisted_configuration_contract_snapshot(snapshot):
+    alert = alert_fixture("persisted")
+    alert["runtime"] = {"attempts": 4, "active": True}
+    config = storage.Configuration.model_validate(
+        {
+            "version": 1,
+            "alerts": [alert],
+        }
+    )
+
+    assert storage.normalize_config(config) == snapshot
 
 
 class ConfigEntryStorageTests(unittest.TestCase):
@@ -31,23 +45,12 @@ class ConfigEntryStorageTests(unittest.TestCase):
             storage.normalize_config({"alerts": "invalid"})
 
     def test_normalize_and_dump_yaml_round_trips(self):
+        alert = alert_fixture("persisted")
+        alert["notification"]["action"] = "notify.mobile_app_phone"
         config = storage.Configuration.model_validate(
             {
                 "version": 1,
-                "alerts": [
-                    {
-                        "id": "demo",
-                        "name": "Demo",
-                        "conditions": [],
-                        "monitor": {"on_change": True, "startup": True},
-                        "notification": {
-                            "action": "notify.mobile_app_phone",
-                            "target": {"entity_id": ["notify.phone"]},
-                            "title": "Demo",
-                            "message": "Check this",
-                        },
-                    }
-                ],
+                "alerts": [alert],
             }
         )
         normalized = storage.normalize_config(config)
@@ -88,26 +91,15 @@ class ConfigEntryStorageTests(unittest.TestCase):
         )
 
     def test_drops_runtime_state_from_persisted_config(self):
+        alert = alert_fixture("persisted")
+        alert["runtime"] = {
+            "active": True,
+            "attempts": 20,
+            "last_event": {"type": "notification_sent"},
+        }
         config = storage.Configuration.model_validate(
             {
-                "alerts": [
-                    {
-                        "id": "demo",
-                        "name": "Demo",
-                        "conditions": [],
-                        "monitor": {"on_change": True, "startup": True},
-                        "notification": {
-                            "target": {"entity_id": ["notify.phone"]},
-                            "title": "Demo",
-                            "message": "Check this",
-                        },
-                        "runtime": {
-                            "active": True,
-                            "attempts": 20,
-                            "last_event": {"type": "notification_sent"},
-                        },
-                    }
-                ]
+                "alerts": [alert]
             }
         )
 

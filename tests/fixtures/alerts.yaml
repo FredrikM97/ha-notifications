@@ -1,0 +1,89 @@
+base:
+  id: alert_1
+  name: Test alert
+  enabled: true
+  conditions:
+    - type: template
+      template: "{{ true }}"
+  monitor:
+    on_change: true
+    startup: true
+  notification:
+    target:
+      entity_id:
+        - notify.test
+    title: Title
+    message: Message
+  confirmation:
+    enabled: false
+
+confirmation:
+  id: alert_1
+  name: Alert
+  enabled: true
+  conditions:
+    - type: template
+      template: "{{ true }}"
+  notification:
+    title: Testing
+    message: Message
+    target:
+      entity_id:
+        - notify.somebody
+  confirmation:
+    enabled: true
+    button: Confirm
+    reminders:
+      enabled: true
+      interval: 2
+      max_attempts: 5
+      show_attempts: true
+  monitor:
+    on_change: true
+    startup: true
+
+notification:
+  id: alert_1
+  name: Alert
+  notification:
+    action: notify.send_message
+    target:
+      entity_id:
+        - notify.somebody
+    title: Title
+    message: Message
+  confirmation:
+    enabled: false
+
+configuration:
+  id: alert_1
+  name: Alert
+  conditions:
+    - type: template
+      template: "{{ true }}"
+  notification:
+    target:
+      entity_id:
+        - notify.test
+    title: Title
+    message: Message
+  confirmation:
+    enabled: true
+    button: Confirm
+    reminders:
+      interval: 2
+      max_attempts: 5
+
+persisted:
+  id: demo
+  name: Demo
+  conditions: []
+  monitor:
+    on_change: true
+    startup: true
+  notification:
+    target:
+      entity_id:
+        - notify.phone
+    title: Demo
+    message: Check this

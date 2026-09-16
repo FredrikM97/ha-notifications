@@ -93,5 +93,17 @@ class FeatureLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
+
+async def test_lifecycle_order_contract_snapshot(snapshot):
+    log: list[str] = []
+    first = FakeFeature("first", log=log)
+    second = FakeFeature("second", ("first",), log)
+    lifecycle = FeatureLifecycleTests._lifecycle((second, first))
+
+    await lifecycle.setup()
+    await lifecycle.unload()
+
+    assert log == snapshot
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,38 @@
+# serializer version: 1
+# name: test_configuration_model_contract_snapshot
+  dict({
+    'alerts': list([
+      dict({
+        'conditions': list([
+          dict({
+            'template': '{{ true }}',
+            'type': 'template',
+          }),
+        ]),
+        'confirmation': dict({
+          'button': 'Confirm',
+          'enabled': True,
+          'reminders': dict({
+            'interval': 2,
+            'max_attempts': 5,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'alert_1',
+        'name': 'Alert',
+        'notification': dict({
+          'message': 'Message',
+          'target': dict({
+            'entity_id': list([
+              'notify.test',
+            ]),
+          }),
+          'title': 'Title',
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---

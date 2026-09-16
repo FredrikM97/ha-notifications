@@ -4,10 +4,10 @@ from datetime import timedelta
 from pathlib import Path
 
 from homeassistant import config_entries
-from test_support import load_const_and_models
 
 from custom_components.ha_notifications import config_flow
 from custom_components.ha_notifications.domain.durations import parse_duration
+from tests.support.test_support import load_const_and_models
 
 const, models = load_const_and_models()
 
@@ -15,7 +15,7 @@ const, models = load_const_and_models()
 class ConfigContractTests(unittest.TestCase):
     def test_ui_config_flow_is_registered(self):
         manifest_path = (
-            Path(__file__).parents[1]
+            Path(__file__).parents[2]
             / "custom_components"
             / "ha_notifications"
             / "manifest.json"

@@ -1,0 +1,18 @@
+# serializer version: 1
+# name: test_disabled_runtime_reset_contract_snapshot
+  dict({
+    'acknowledged': False,
+    'active': False,
+    'attempts': 0,
+    'confirmation_action_id': None,
+    'confirmed_at': None,
+    'confirmed_by': None,
+    'flow_id': None,
+    'last_error': None,
+    'last_evaluated': None,
+    'last_event': None,
+    'last_notified': None,
+    'notification_id': None,
+    'started_at': None,
+  })
+# ---

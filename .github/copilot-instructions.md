@@ -101,6 +101,11 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   two-branch expression (e.g. `"Enabled" if enabled else "Disabled"`) may use
   a ternary; never chain/nest ternaries - use an `if` block instead once a
   third branch or nested condition appears.
+- In backend tests, use syrupy snapshots for structured contracts and rendered
+  outputs when the complete value is the behavior under test; keep ordinary
+  assertions for focused behavioral invariants and failure conditions. Put
+  reusable alert/configuration data in test fixture files and load it through
+  `tests/conftest.py` rather than repeating templates and payloads in tests.
 - Prefer the available VS Code/search tools or `rg` for read-only discovery.
   Avoid `grep`, interactive commands, and commands that require manual approval
   when an available tool or non-interactive command can do the job.

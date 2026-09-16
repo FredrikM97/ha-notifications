@@ -8,11 +8,33 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from test_support import PACKAGE_NAME, ensure_package
+from tests.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 confirmation = importlib.import_module(f"{PACKAGE_NAME}.features.confirmation")
 testing = importlib.import_module(f"{PACKAGE_NAME}.features.testing")
+
+
+def test_confirmation_configuration_contract_snapshot(snapshot):
+    config = confirmation.confirmation_config(
+        {
+            "enabled": True,
+            "button": "Confirm",
+            "notification": {
+                "enabled": True,
+                "message": "Confirmed by {{confirmed_by}}",
+                "clear": True,
+            },
+            "reminders": {
+                "enabled": True,
+                "interval": 2,
+                "max_attempts": 5,
+                "show_attempts": True,
+            },
+        }
+    )
+
+    assert config.model_dump(exclude_none=True) == snapshot
 
 
 class ConfirmationConfigTests(unittest.TestCase):
@@ -131,6 +153,23 @@ class PersonResolutionTests(unittest.TestCase):
         )
 
         self.assertEqual(result, "Carol")
+
+    def test_person_resolution_handles_missing_and_unknown_users(self):
+        self.assertEqual(confirmation.resolve_person_name([], None), "Unknown user")
+        self.assertEqual(
+            confirmation.resolve_person_name(
+                [SimpleNamespace(attributes={"user_id": "other"}, name="Bob")],
+                "u1",
+            ),
+            "Unknown user",
+        )
+
+    def test_extract_action_id_accepts_only_nonempty_mapping_actions(self):
+        self.assertIsNone(confirmation.extract_action_id(None))
+        self.assertIsNone(confirmation.extract_action_id({}))
+        self.assertEqual(
+            confirmation.extract_action_id({"action": "confirm_1"}), "confirm_1"
+        )
 
 
 if __name__ == "__main__":

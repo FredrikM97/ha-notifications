@@ -1,0 +1,21 @@
+# serializer version: 1
+# name: test_run_renders_and_executes_multiple_actions
+  list([
+    dict({
+      'details': dict({
+        'action': 'light.turn_on',
+        'index': 1,
+      }),
+      'index': 1,
+      'message': 'Action executed.',
+    }),
+    dict({
+      'details': dict({
+        'error': 'Invalid service action.',
+        'index': 2,
+      }),
+      'index': 2,
+      'message': 'Action failed.',
+    }),
+  ])
+# ---

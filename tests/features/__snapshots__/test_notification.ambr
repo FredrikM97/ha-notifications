@@ -1,0 +1,28 @@
+# serializer version: 1
+# name: test_mobile_replacement_contract_snapshot
+  list([
+    dict({
+      'data': dict({
+        'data': dict({
+          'tag': 'ha_notifications_alert_1',
+        }),
+        'message': 'clear_notification',
+      }),
+      'domain': 'notify',
+      'service': 'mobile_app_somebody',
+      'target': None,
+    }),
+    dict({
+      'data': dict({
+        'data': dict({
+          'tag': 'ha_notifications_alert_1',
+        }),
+        'message': 'Message',
+        'title': 'Title',
+      }),
+      'domain': 'notify',
+      'service': 'mobile_app_somebody',
+      'target': None,
+    }),
+  ])
+# ---
