@@ -218,7 +218,11 @@ class TestFeature(FeatureBase):
             return
         confirmation = confirmation_for_alert(alert)
         current_attempt = self._draft_attempts.get(session_id, 0)
-        max_attempts = int(confirmation.reminders.max_attempts or 1) if confirmation else 1
+        max_attempts = (
+            int(confirmation.reminders.max_attempts or 1)
+            if confirmation
+            else 1
+        )
         action_id = self._draft_action_ids.get(session_id)
         if action_id and not self.feature("confirmation").has_pending(action_id):
             self._draft_alerts.pop(session_id, None)

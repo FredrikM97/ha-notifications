@@ -348,5 +348,75 @@ async def test_notification_planner_rejects_missing_target():
         )
 
 
+async def test_notification_feature_executes_registered_service(hass):
+    calls = []
+
+    async def handler(call):
+        calls.append(call)
+
+    hass.services.async_register("notify", "test", handler)
+    feature = notifications.NotificationFeature(hass, {}, None, None)
+    call = notifications.ServiceCall(
+        domain="notify",
+        service="test",
+        data={"message": "Hello"},
+        target=None,
+    )
+
+    await feature._execute([call])
+
+    assert calls[0].data == {"message": "Hello"}
+
+
+async def test_notification_feature_send_and_clear_use_capabilities(hass, monkeypatch):
+    feature = notifications.NotificationFeature(hass, {}, None, None)
+    capabilities = notifications.NotificationCapabilitySet(
+        render=render,
+        snapshot=empty_snapshot(),
+    )
+    sent = []
+
+    async def execute(calls):
+        sent.extend(calls)
+
+    monkeypatch.setattr(feature, "capabilities", lambda: capabilities)
+    monkeypatch.setattr(feature, "_execute", execute)
+
+    assert await feature.send(
+        {
+            "alert": alert(),
+            "attempt": 1,
+            "confirmation_action_id": None,
+            "replace_existing": False,
+            "now": "now",
+        }
+    )
+    await feature.clear(alert(), "now")
+    assert len(sent) == 2
+
+
+async def test_send_requested_propagates_or_swallows_planning_errors(monkeypatch):
+    async def fail(*_args, **_kwargs):
+        raise ValueError("invalid delivery")
+
+    monkeypatch.setattr(notifications, "plan_delivery", fail)
+    payload = {
+        "alert": alert(),
+        "attempt": 1,
+        "confirmation_action_id": None,
+        "replace_existing": False,
+        "now": "now",
+    }
+    capabilities = notifications.NotificationCapabilitySet(
+        render=render, snapshot=empty_snapshot()
+    )
+
+    assert await notifications.send_requested(payload, capabilities) == []
+    with unittest.TestCase().assertRaises(ValueError):
+        await notifications.send_requested(
+            {**payload, "propagate_errors": True}, capabilities
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

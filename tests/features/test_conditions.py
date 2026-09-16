@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from tests.support.test_support import PACKAGE_NAME, ensure_package
 
@@ -16,6 +16,9 @@ TransitionKind = importlib.import_module(
 ConditionFeature = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).ConditionFeature
+ConditionWatchers = importlib.import_module(
+    f"{PACKAGE_NAME}.features.conditions"
+).ConditionWatchers
 compile_condition = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).compile_condition
@@ -60,6 +63,90 @@ def test_compile_condition_defaults_to_true_for_empty_or_disabled_conditions():
         )
         == "{{ true }}"
     )
+
+
+def test_compile_condition_skips_incomplete_conditions_and_renders_block_template():
+    compiled = compile_condition(
+        {
+            "conditions": [
+                {"type": "state", "entity_id": "sensor.one"},
+                {"type": "numeric", "entity_id": "sensor.two"},
+                {
+                    "type": "template",
+                    "template": "{% if is_state('sensor.one', 'on') %}true{% endif %}",
+                },
+            ]
+        }
+    )
+
+    assert "{% set nc_condition_0 %}" in compiled
+    assert "{% endset %}" in compiled
+
+
+def test_compile_condition_normalizes_scalar_and_invalid_condition_inputs():
+    assert (
+        compile_condition({"conditions": [{"type": "template", "template": ""}]})
+        == "{{ true }}"
+    )
+    assert compile_condition({"conditions": ["sensor.test"]}) != "{{ true }}"
+
+
+def test_transition_matrix_covers_activation_acknowledgement_and_reminders():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    alert = {
+        "id": "alert_1",
+        "confirmation": {
+            "enabled": True,
+            "reminders": {"enabled": True, "interval": 60, "max_attempts": 3},
+        },
+        "monitor": {"startup": True},
+    }
+
+    inactive = {}
+    became_active = ConditionFeature._transition_for(
+        inactive, alert, True, None, now, "startup"
+    )
+    assert became_active.kind is TransitionKind.BECAME_ACTIVE
+    assert inactive["flow_id"].startswith("flow_alert_1_")
+
+    acknowledged = {"active": True, "acknowledged": True}
+    assert (
+        ConditionFeature._transition_for(
+            acknowledged, alert, True, None, now, "change"
+        ).kind
+        is TransitionKind.NO_CHANGE
+    )
+
+    pending = {
+        "active": True,
+        "attempts": 1,
+        "confirmation_action_id": "confirm_1",
+        "last_notified": now.isoformat(),
+    }
+    assert (
+        ConditionFeature._transition_for(
+            pending, alert, True, None, now, "confirmation"
+        ).kind
+        is TransitionKind.NO_CHANGE
+    )
+    assert (
+        ConditionFeature._transition_for(
+            pending,
+            alert,
+            True,
+            None,
+            now + timedelta(seconds=60),
+            "confirmation",
+        ).kind
+        is TransitionKind.SHOULD_SEND
+    )
+
+    inactive_transition = ConditionFeature._transition_for(
+        pending, alert, False, None, now, "change"
+    )
+    assert inactive_transition.kind is TransitionKind.BECAME_INACTIVE
+    assert inactive_transition.had_pending_confirmation
+    assert pending["attempts"] == 0
 
 
 def test_condition_transition_contract_snapshot(snapshot):
@@ -140,3 +227,36 @@ class ConditionFeatureTests(unittest.TestCase):
     def test_conditions_depend_on_alert_flow(self):
         conditions = importlib.import_module(f"{PACKAGE_NAME}.features.conditions")
         self.assertIn("alert_flow", conditions.ConditionFeature.dependencies)
+
+    def test_watchers_register_change_and_both_interval_sources(self):
+        calls = []
+        removed = []
+        watchers = ConditionWatchers(None, lambda *args: None, lambda *args: None)
+
+        def track_template(source, callback):
+            calls.append(("template", source, callback))
+            return lambda: removed.append("template")
+
+        def track_interval(interval, callback):
+            calls.append(("interval", interval, callback))
+            return lambda: removed.append("interval")
+
+        watchers._track_template = track_template
+        watchers._track_interval = track_interval
+        watchers.configure(
+            {
+                "id": "alert_1",
+                "enabled": True,
+                "notification": {"message": "Message"},
+                "conditions": [{"type": "template", "template": "{{ true }}"}],
+                "monitor": {"on_change": True, "interval": 30},
+                "confirmation": {
+                    "enabled": True,
+                    "reminders": {"enabled": True, "interval": 60},
+                },
+            }
+        )
+
+        assert [call[0] for call in calls] == ["template", "interval", "interval"]
+        watchers.unconfigure("alert_1")
+        assert removed == ["template", "interval", "interval"]

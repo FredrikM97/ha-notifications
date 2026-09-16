@@ -101,11 +101,23 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   two-branch expression (e.g. `"Enabled" if enabled else "Disabled"`) may use
   a ternary; never chain/nest ternaries - use an `if` block instead once a
   third branch or nested condition appears.
-- In backend tests, use syrupy snapshots for structured contracts and rendered
-  outputs when the complete value is the behavior under test; keep ordinary
-  assertions for focused behavioral invariants and failure conditions. Put
-  reusable alert/configuration data in test fixture files and load it through
-  `tests/conftest.py` rather than repeating templates and payloads in tests.
+- In backend tests, prefer syrupy snapshots over long assertion lists whenever
+  the complete structured value, rendered payload, transition, history entry,
+  or configuration contract is the behavior under test. Keep ordinary
+  assertions for small behavioral invariants, side effects, exception
+  types/messages, and values where only one property matters; do not force
+  snapshots onto those focused checks.
+- Reuse the shared builders and YAML fixtures in `tests/conftest.py`
+  (`alert_fixture`, `make_alert`, `make_confirmation_alert`, and
+  `make_notification_alert`) as the starting point for test data. Apply only
+  the minimum test-specific overrides rather than recreating base alert,
+  notification, monitor, condition, or confirmation dictionaries inside
+  individual tests.
+- When the same test object or payload shape appears in more than one test
+  module, add or extend a named fixture/builder in `tests/conftest.py` and load
+  stable structured data from `tests/fixtures/alerts.yaml`; do not duplicate
+  large literals across tests. Keep deliberately minimal malformed or boundary
+  inputs local when their incompleteness is the behavior being tested.
 - Prefer the available VS Code/search tools or `rg` for read-only discovery.
   Avoid `grep`, interactive commands, and commands that require manual approval
   when an available tool or non-interactive command can do the job.

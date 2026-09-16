@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+
 @dataclass(frozen=True)
 class RegistrySnapshot:
     """Home Assistant registries/state needed to plan one delivery."""

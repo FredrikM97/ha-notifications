@@ -11,6 +11,7 @@ hacs-export/
 .venv/
 .ruff_cache/
 .pytest_cache/
+.coverage
 .mypy_cache/
 
 # Packaging artifacts
@@ -19,4 +20,6 @@ hacs-export/
 build/
 /dist/
 .vscode
+!.vscode/
+!.vscode/settings.json
 dist

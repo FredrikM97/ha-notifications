@@ -222,6 +222,28 @@ def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
     return base
 
 
+def make_runtime_state(**overrides: Any) -> dict[str, Any]:
+    """Build a complete default runtime record with focused test overrides."""
+
+    runtime = {
+        "active": False,
+        "acknowledged": False,
+        "attempts": 0,
+        "notification_id": None,
+        "confirmation_action_id": None,
+        "flow_id": None,
+        "started_at": None,
+        "last_evaluated": None,
+        "last_notified": None,
+        "confirmed_at": None,
+        "confirmed_by": None,
+        "last_error": None,
+        "last_event": None,
+    }
+    runtime.update(overrides)
+    return runtime
+
+
 @pytest.fixture
 def mock_config_entry() -> MockConfigEntry:
     """Return a minimal HA Notifications config entry."""

@@ -6,6 +6,7 @@ import unittest
 from datetime import timedelta
 
 from custom_components.ha_notifications.domain.durations import (
+    duration_seconds,
     parse_duration,
 )
 from custom_components.ha_notifications.features.confirmation import (
@@ -48,6 +49,12 @@ class DurationTests(unittest.TestCase):
     def test_invalid_values_raise(self):
         with self.assertRaises(ValueError):
             parse_duration("nope")
+
+    def test_duration_seconds_normalizes_frontend_values(self):
+        self.assertIsNone(duration_seconds(None))
+        self.assertEqual(duration_seconds("00:30"), 1800)
+        self.assertEqual(duration_seconds({"seconds": 1.5}), 1.5)
+        self.assertEqual(duration_seconds(4), 4)
 
 class ConfigurationTests(unittest.TestCase):
     def test_alert_owns_feature_sections_as_extra_fields(self):

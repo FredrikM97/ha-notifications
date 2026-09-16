@@ -134,6 +134,53 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(session.alert_id)
         self.assertEqual(session.draft_alert, alert)
 
+    async def test_resolve_draft_and_saved_action_events(self):
+        class Hass:
+            class States:
+                @staticmethod
+                def async_all(_domain):
+                    return []
+
+            class Auth:
+                async def async_get_user(self, _user_id):
+                    return None
+
+            states = States()
+            auth = Auth()
+
+        self.feature._hass = Hass()
+        draft = {"id": "draft_1", "name": "Draft"}
+        await self.feature.track(
+            "draft_action", now=self.now, draft_alert=draft
+        )
+        result = await self.feature.resolve_action_event(
+            SimpleNamespace(
+                data={"action": "draft_action"},
+                context=SimpleNamespace(user_id=None),
+            )
+        )
+        self.assertEqual(result.alert, draft)
+        self.assertTrue(result.test)
+        self.assertFalse(self.feature.has_pending("draft_action"))
+
+        alert = SimpleNamespace(
+            model_dump=lambda exclude_none=True: {"id": "alert_1", "name": "Saved"}
+        )
+        self.feature._alerts = {"alert_1": alert}
+        self.feature._state["runtime"] = {
+            "alert_1": {"confirmation_action_id": "saved_action"}
+        }
+        await self.feature.track("saved_action", now=self.now, alert_id="alert_1")
+        result = await self.feature.resolve_action_event(
+            SimpleNamespace(
+                data={"action": "saved_action"},
+                context=SimpleNamespace(user_id=None),
+            )
+        )
+        self.assertEqual(result.alert["name"], "Saved")
+        self.assertFalse(result.test)
+        self.assertTrue(result.record_history)
+
 
 class PersonResolutionTests(unittest.TestCase):
     def test_resolves_matching_person(self):

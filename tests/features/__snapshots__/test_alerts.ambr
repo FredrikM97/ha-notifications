@@ -1,4 +1,21 @@
 # serializer version: 1
+# name: test_acknowledge_updates_confirmation_runtime
+  dict({
+    'acknowledged': True,
+    'active': False,
+    'attempts': 0,
+    'confirmation_action_id': None,
+    'confirmed_at': '2026-01-01T00:00:00+00:00',
+    'confirmed_by': 'Alice',
+    'flow_id': None,
+    'last_error': None,
+    'last_evaluated': None,
+    'last_event': None,
+    'last_notified': None,
+    'notification_id': None,
+    'started_at': None,
+  })
+# ---
 # name: test_disabled_runtime_reset_contract_snapshot
   dict({
     'acknowledged': False,
@@ -14,5 +31,38 @@
     'last_notified': None,
     'notification_id': None,
     'started_at': None,
+  })
+# ---
+# name: test_save_update_preserves_created_at_and_delete_cleans_owned_state
+  dict({
+    'conditions': list([
+      dict({
+        'template': '{{ true }}',
+        'type': 'template',
+      }),
+    ]),
+    'confirmation': dict({
+      'enabled': False,
+    }),
+    'created_at': 'created',
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'alert_1',
+    'monitor': dict({
+      'on_change': True,
+      'startup': True,
+    }),
+    'name': 'New',
+    'notification': dict({
+      'message': 'Message',
+      'target': dict({
+        'entity_id': list([
+          'notify.test',
+        ]),
+      }),
+      'title': 'Title',
+    }),
+    'updated_at': '<timestamp>',
   })
 # ---
