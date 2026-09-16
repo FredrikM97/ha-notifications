@@ -82,6 +82,7 @@ assert.doesNotMatch(panel, /YAML lists like/);
 assert.doesNotMatch(panel, /if \(!conditionTemplate\(value\)\.trim\(\)\)/);
 assert.match(panel, /nc-history-badge/);
 assert.match(panel, /nc-history-flow/);
+assert.match(panel, /\.nc-history-filter[\s\S]*?position: sticky/);
 assert.match(panel, /Details/);
 assert.match(panel, /History for/);
 assert.match(panel, /Show all/);

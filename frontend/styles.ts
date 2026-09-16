@@ -312,7 +312,11 @@ ha-code-editor.nc-code-editor .cm-scroller {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 4px 0 12px;
+  background: var(--card-background-color);
   border-bottom: 1px solid var(--divider-color);
 }
 
