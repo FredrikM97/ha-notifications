@@ -83,6 +83,7 @@ class AlertEditorController {
 
   private dirty = false;
   private draftTestSessionId: string | null = null;
+  private discardDialog: HTMLElement | null = null;
   private activeSectionIndex = 0;
 
   private visual!: HTMLElement;
@@ -701,9 +702,62 @@ class AlertEditorController {
     }
   };
 
+  private showDiscardDialog = (): void => {
+    if (this.discardDialog) return;
+
+    const popup = document.createElement("div");
+    this.discardDialog = popup;
+    const closeDialog = (): void => {
+      popup.remove();
+      if (this.discardDialog === popup) this.discardDialog = null;
+    };
+    const discard = (): void => {
+      closeDialog();
+      this.close({ force: true });
+    };
+
+    render(
+      html`<div
+        class="nc-modal-backdrop"
+        role="presentation"
+        @click=${(event: MouseEvent) => {
+          if (event.target === event.currentTarget) closeDialog();
+        }}
+      >
+        <section
+          class="nc-modal nc-discard-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="nc-discard-title"
+        >
+          <header class="nc-modal-header">
+            <h2 id="nc-discard-title">Unsaved changes</h2>
+          </header>
+          <main class="nc-modal-body">
+            <p>You have unsaved changes. Leave without saving?</p>
+          </main>
+          <footer class="nc-modal-footer">
+            <button class="nc-button secondary" @click=${closeDialog}>
+              Stay
+            </button>
+            <button class="nc-button" @click=${discard}>
+              Discard changes
+            </button>
+          </footer>
+        </section>
+      </div>`,
+      popup,
+    );
+    this.root.append(popup);
+  };
+
   private close = ({ force = false }: { force?: boolean } = {}): boolean => {
-    if (!force && this.dirty && !window.confirm("Discard unsaved changes?"))
+    if (!force && this.dirty) {
+      this.showDiscardDialog();
       return false;
+    }
+    this.discardDialog?.remove();
+    this.discardDialog = null;
     void this.discardDraftTest();
     this.host.remove();
     if (this.dashboardContent) this.dashboardContent.hidden = false;

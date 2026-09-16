@@ -652,6 +652,15 @@ ha-code-editor.nc-code-editor .cm-scroller {
   box-shadow: 0 20px 70px rgba(0,0,0,.35);
 }
 
+.nc-discard-modal {
+  width: min(440px, 100%);
+}
+
+.nc-discard-modal p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .nc-modal-header {
   background: var(--secondary-background-color);
   padding: 20px;
