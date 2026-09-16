@@ -23,7 +23,7 @@ export function renderConfirmationSection(
           ></ha-input>`,
         )}
       </div>
-      <label class="nc-switch-label">
+      <label class="nc-switch-label nc-confirmation-clear">
         <ha-switch
           .checked=${confirmation.notification.clear !== false}
           @change=${(event: Event) => {

@@ -66,7 +66,6 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.markDirty();
             },
             context.hass,
-            "Interval",
           )}`,
       )}
       ${field(
@@ -85,32 +84,29 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
           History retention
         </span>`,
         monitor.retention?.enabled !== false
-          ? html`<label class="nc-subfield">
-              <span>Keep history for (days)</span>
-              <ha-input
-                class="nc-number-field"
-                type="number"
-                min="1"
-                step="1"
-                aria-label="History retention days"
-                .value=${String(monitor.retention?.days || 30)}
-                @input=${(event: Event) => {
-                  monitor.retention = {
-                    ...monitor.retention,
-                    enabled: monitor.retention?.enabled,
-                    days: Math.max(
-                      1,
-                      Number((event.currentTarget as HTMLInputElement).value) ||
-                        30,
-                    ),
-                  };
-                  context.markDirty();
-                }}
-              ></ha-input>
-              <span class="nc-help">
-                Completed alert history is removed after this many days.
-              </span>
-            </label>`
+          ? html`<div class="nc-help">
+              Completed alert history is removed after this period.
+            </div>
+            <ha-input
+              class="nc-number-field"
+              type="number"
+              min="1"
+              step="1"
+              aria-label="History retention days"
+              .value=${String(monitor.retention?.days || 30)}
+              @input=${(event: Event) => {
+                monitor.retention = {
+                  ...monitor.retention,
+                  enabled: monitor.retention?.enabled,
+                  days: Math.max(
+                    1,
+                    Number((event.currentTarget as HTMLInputElement).value) ||
+                      30,
+                  ),
+                };
+                context.markDirty();
+              }}
+            ></ha-input>`
           : html``,
       )}
     </div>`,
