@@ -1,12 +1,7 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type { EditorContext } from "../editor/types.js";
-import {
-  checkedOf,
-  field,
-  section,
-  valueOf,
-} from "../editor/helpers.js";
+import { checkedOf, field, section, valueOf } from "../editor/helpers.js";
 
 export function renderConfirmationSection(
   context: EditorContext,
@@ -18,7 +13,6 @@ export function renderConfirmationSection(
         ${field(
           "Button text",
           html`<ha-input
-            appearance="outlined"
             type="text"
             .value=${confirmation.button}
             placeholder="Activity completed"

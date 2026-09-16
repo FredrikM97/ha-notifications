@@ -1,6 +1,6 @@
-import type { Alert } from "../types.js";
+import type { Alert, Hass } from "../types.js";
 
-export type FormControl = HTMLInputElement | HTMLTextAreaElement;
+export type FormControl = EventTarget & { value: string };
 
 export type CodeEditor = HTMLElement & {
   value: string;
@@ -23,6 +23,7 @@ export interface CodeEditorOptions {
 export type EditorMode = "visual" | "yaml" | "jinja";
 
 export interface EditorContext {
+  hass: Hass;
   value: Alert;
   mode: EditorMode;
   markDirty(): void;

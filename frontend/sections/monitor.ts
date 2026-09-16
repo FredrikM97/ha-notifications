@@ -58,16 +58,15 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
         html`<div class="nc-help nc-monitor-help">
             Checks conditions even when no condition-change event is emitted.
           </div>
-          <label class="nc-subfield">
-          <span>Interval</span>
           ${durationInput(
             durationInputValue(monitor.interval, "12:00:00"),
             (next) => {
               monitor.interval = next;
               context.markDirty();
             },
-          )}
-        </label>`,
+            context.hass,
+            "Interval",
+          )}`,
       )}
       ${field(
         html`<span class="nc-field-heading">
@@ -88,7 +87,6 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
           ? html`<label class="nc-subfield">
               <span>Days</span>
               <ha-input
-                appearance="outlined"
                 class="nc-number-field"
                 type="number"
                 min="1"

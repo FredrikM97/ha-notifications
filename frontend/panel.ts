@@ -12,6 +12,7 @@ import {
   validateConditions,
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
+import { formatLocalDateTime } from "./date-time.js";
 import { renderHistory, type HistoryFilters } from "./history.js";
 import { styles } from "./styles.js";
 import { showToast as showToastOn, toastListTemplate } from "./toast.js";
@@ -380,6 +381,8 @@ class HaNotificationsPanel extends LitElement {
         this.history,
         {
           alertName: this.historyAlertName,
+          hass: this._hass!,
+          locale: this._hass?.locale,
           alerts: this.alerts.map((alert) => ({
             id: alert.id,
             name: alert.name,
@@ -561,6 +564,7 @@ class HaNotificationsPanel extends LitElement {
 
     openEditor({
       root: this.renderRoot as ShadowRoot,
+      hass: this._hass!,
       alert: null,
       registries,
       onTest: async (draft) => {
@@ -597,6 +601,7 @@ class HaNotificationsPanel extends LitElement {
 
     openEditor({
       root: this.renderRoot as ShadowRoot,
+      hass: this._hass!,
       alert,
       registries,
       onTest: async (draft) => {
@@ -734,18 +739,7 @@ class HaNotificationsPanel extends LitElement {
   }
 
   formatTime(value: string | undefined): string {
-    if (!value) {
-      return "—";
-    }
-
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "short",
-        timeStyle: "short",
-      }).format(new Date(value));
-    } catch (_err) {
-      return value;
-    }
+    return formatLocalDateTime(value, false, this._hass?.locale);
   }
 
   showToast(message: string, error = false): void {

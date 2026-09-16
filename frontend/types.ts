@@ -2,9 +2,16 @@ export interface Hass {
   connection: {
     sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
   };
+  locale?: HassLocale;
   user?: {
     is_admin: boolean;
   };
+}
+
+export interface HassLocale {
+  language: string;
+  date_format: string;
+  time_format: string;
 }
 
 export type AlertConditionType = "template" | "state" | "numeric" | "attribute";

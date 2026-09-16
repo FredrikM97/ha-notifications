@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterHistoryEntries,
-  historyMessage,
+  historyDetailSummary,
 } from "../../frontend/history.js";
 import type { HistoryEntry } from "../../frontend/types.js";
 
@@ -52,24 +52,14 @@ describe("filterHistoryEntries", () => {
   });
 });
 
-describe("historyMessage", () => {
-  it("hides the redundant notification sent message when attempt details exist", () => {
-    expect(
-      historyMessage({
-        type: "notification_sent",
-        message: "Notification sent.",
-        details: { attempt: 20 },
-      }),
-    ).toBe("");
+describe("historyDetailSummary", () => {
+  it("hides attempt-only details from the inline preview", () => {
+    expect(historyDetailSummary({ attempt: 20 })).toBe("");
   });
 
-  it("keeps other history messages", () => {
-    expect(
-      historyMessage({
-        type: "delivery_failed",
-        message: "Notification failed.",
-        details: { attempt: 20 },
-      }),
-    ).toBe("Notification failed.");
+  it("keeps meaningful detail summaries visible", () => {
+    expect(historyDetailSummary({ error: "Device unavailable" })).toBe(
+      "Device unavailable",
+    );
   });
 });

@@ -11,7 +11,6 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
       ${field(
         "Name",
         html`<ha-input
-          appearance="outlined"
           type="text"
           .value=${value.name}
           placeholder="Alert name"
@@ -24,20 +23,23 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
       )}
       ${field(
         "Description",
-        html`<textarea
+        html`<ha-selector
+          class="nc-description-input"
+          .hass=${context.hass}
+          .selector=${{ text: { multiline: true } }}
+          aria-label="Description"
           .value=${value.description}
-          @input=${(event: Event) => {
-            value.description = valueOf(event);
+          @value-changed=${(event: CustomEvent<{ value?: string }>) => {
+            value.description = event.detail.value || "";
             context.markDirty();
             context.refreshStatuses();
           }}
-        ></textarea>`,
+        ></ha-selector>`,
         true,
       )}
       ${field(
         "Icon",
         html`<ha-icon-picker
-          appearance="outlined"
           .value=${value.icon || "mdi:bell-outline"}
           aria-label="Icon"
           @value-changed=${(event: CustomEvent<{ value: string }>) => {

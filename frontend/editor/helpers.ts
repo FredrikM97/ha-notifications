@@ -1,7 +1,7 @@
 import { html, nothing, render } from "lit";
 import type { TemplateResult } from "lit";
 import * as YAML from "yaml";
-import type { Alert } from "../types.js";
+import type { Alert, Hass } from "../types.js";
 import {
   type CodeEditor,
   type CodeEditorOptions,
@@ -145,7 +145,8 @@ export function durationInputValue(
   const totalSeconds = Math.max(
     0,
     Math.floor(
-      (Number(value.hours) || 0) * 3600 +
+      (Number(value.days) || 0) * 86400 +
+        (Number(value.hours) || 0) * 3600 +
         (Number(value.minutes) || 0) * 60 +
         (Number(value.seconds) || 0),
     ),
@@ -168,7 +169,32 @@ export function durationInputValue(
 export function durationInput(
   value: string,
   onChange: (next: string) => void,
+  hass?: Hass,
+  label?: string,
 ): TemplateResult {
+  if (hass) {
+    return html`<ha-selector
+      class="nc-duration-input"
+      .hass=${hass}
+      .selector=${{ duration: { enable_day: true, enable_second: true } }}
+      .value=${value}
+      .label=${label || undefined}
+      aria-label="Duration"
+      @value-changed=${(event: CustomEvent<{ value?: unknown }>) => {
+        onChange(
+          durationInputValue(
+            event.detail.value as
+              | string
+              | number
+              | Record<string, number>
+              | undefined,
+            value,
+          ),
+        );
+      }}
+    ></ha-selector>`;
+  }
+
   const normalize = (raw: string): string => {
     const parts = raw.replace(/[^\d:]/g, "").split(":");
     const seconds = Number(parts.pop() || 0);
@@ -189,7 +215,6 @@ export function durationInput(
   };
 
   return html`<ha-input
-    appearance="outlined"
     class="nc-duration-input"
     type="text"
     inputmode="numeric"

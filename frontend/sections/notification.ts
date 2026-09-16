@@ -1,6 +1,9 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
-import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/types.js";
+import type {
+  CodeEditor as CodeEditorElement,
+  EditorContext,
+} from "../editor/types.js";
 import { codeEditor, field, section, valueOf } from "../editor/helpers.js";
 
 export function renderNotificationSection(
@@ -13,7 +16,6 @@ export function renderNotificationSection(
         ${field(
           "Title",
           html`<ha-input
-            appearance="outlined"
             type="text"
             .value=${notification.title}
             placeholder="Notification title"

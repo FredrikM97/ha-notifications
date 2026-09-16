@@ -1,5 +1,6 @@
 import { html, render } from "lit";
-import type { HistoryEntry } from "./types.js";
+import { formatLocalDateTime } from "./date-time.js";
+import type { Hass, HassLocale, HistoryEntry } from "./types.js";
 
 export interface HistoryFilters {
   search: string;
@@ -17,6 +18,8 @@ interface HistoryRenderOptions {
   alertName?: string | null;
   alerts?: HistoryAlertOption[];
   filters?: HistoryFilters;
+  hass?: Hass;
+  locale?: HassLocale;
   types?: string[];
   onFiltersChanged?: (filters: HistoryFilters) => void;
   onAlertSelected?: (alertId: string, alertName: string) => void;
@@ -29,21 +32,6 @@ function historySeverity(type: string | undefined): string {
   if (type.includes("confirmed") || type.includes("sent")) return "success";
   if (type.includes("inactive")) return "muted";
   return "info";
-}
-
-function formatTime(value: string | undefined): string {
-  if (!value) {
-    return "—";
-  }
-
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "short",
-      timeStyle: "medium",
-    }).format(new Date(value));
-  } catch (_err) {
-    return value;
-  }
 }
 
 function formatType(value: string | undefined): string {
@@ -59,10 +47,13 @@ function shortFlowId(value: string | undefined): string {
   return value;
 }
 
-function detailSummary(details: Record<string, unknown> | undefined): string {
+export function historyDetailSummary(
+  details: Record<string, unknown> | undefined,
+): string {
   if (!details || !Object.keys(details).length) return "";
   if (typeof details.error === "string") return details.error;
   if (typeof details.source === "string") return `Source: ${details.source}`;
+  if (Object.keys(details).every((key) => key === "attempt")) return "";
   return JSON.stringify(details);
 }
 
@@ -85,26 +76,13 @@ export function filterHistoryEntries(
       item.message,
       item.type,
       item.flow_id,
-      detailSummary(item.details),
+      historyDetailSummary(item.details),
     ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
     return searchable.includes(search);
   });
-}
-
-export function historyMessage(item: HistoryEntry): string {
-  if (
-    item.type === "notification_sent" &&
-    item.message === "Notification sent." &&
-    item.details &&
-    "attempt" in item.details
-  ) {
-    return "";
-  }
-
-  return item.message || "";
 }
 
 export function renderHistory(
@@ -157,80 +135,95 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
             </div>
             ${showAllButton(options.onShowAll, "Show all")}`
         : html`<div class="nc-history-filter-label">
-            <ha-icon icon="mdi:filter-variant"></ha-icon>
-            <span>Filter history</span>
-          </div>`}
+              <ha-icon icon="mdi:filter-variant"></ha-icon>
+              <span>Filter history</span>
+            </div>
+            ${hasHistoryFilters(filters)
+              ? html`<button
+                  class="nc-button secondary nc-history-clear"
+                  @click=${() =>
+                    options.onFiltersChanged?.(defaultHistoryFilters())}
+                >
+                  Clear
+                </button>`
+              : ""}`}
     </div>
     <div class="nc-history-controls">
-      <input
+      <ha-input
         class="nc-history-search"
         type="search"
-        placeholder="Search history"
+        label="Search history"
         aria-label="Search history"
         .value=${filters.search}
         @input=${(event: InputEvent) =>
           updateHistoryFilter(
             options,
             "search",
-            (event.target as HTMLInputElement).value,
+            (event.currentTarget as HTMLInputElement).value,
           )}
-      />
+      ></ha-input>
       ${options.alerts?.length
-        ? html`<select
+        ? html`<ha-selector
+            .hass=${options.hass}
+            .selector=${{
+              select: {
+                mode: "dropdown",
+                options: [
+                  { value: "", label: "All alerts" },
+                  ...options.alerts.map((alert) => ({
+                    value: alert.id,
+                    label: alert.name,
+                  })),
+                ],
+              },
+            }}
             .value=${filters.alertId}
+            label="Alert"
             aria-label="Filter by alert"
-            @change=${(event: Event) =>
-              updateHistoryFilter(
-                options,
-                "alertId",
-                (event.target as HTMLSelectElement).value,
-              )}
-          >
-            <option value="">All alerts</option>
-            ${options.alerts.map(
-              (alert) => html`<option value=${alert.id}>${alert.name}</option>`,
-            )}
-          </select>`
+            @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+              updateHistoryFilter(options, "alertId", event.detail.value || "")}
+          ></ha-selector>`
         : ""}
-      <select
+      <ha-selector
+        .hass=${options.hass}
+        .selector=${{
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "", label: "All event types" },
+              ...(options.types || []).map((type) => ({
+                value: type,
+                label: formatType(type),
+              })),
+            ],
+          },
+        }}
         .value=${filters.type}
+        label="Event type"
         aria-label="Filter by event type"
-        @change=${(event: Event) =>
-          updateHistoryFilter(
-            options,
-            "type",
-            (event.target as HTMLSelectElement).value,
-          )}
-      >
-        <option value="">All event types</option>
-        ${(options.types || []).map(
-          (type) => html`<option value=${type}>${formatType(type)}</option>`,
-        )}
-      </select>
-      <select
+        @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+          updateHistoryFilter(options, "type", event.detail.value || "")}
+      ></ha-selector>
+      <ha-selector
+        .hass=${options.hass}
+        .selector=${{
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "", label: "All severities" },
+              { value: "error", label: "Error" },
+              { value: "success", label: "Success" },
+              { value: "info", label: "Info" },
+              { value: "muted", label: "Muted" },
+            ],
+          },
+        }}
         .value=${filters.severity}
+        label="Severity"
         aria-label="Filter by severity"
-        @change=${(event: Event) =>
-          updateHistoryFilter(
-            options,
-            "severity",
-            (event.target as HTMLSelectElement).value,
-          )}
-      >
-        <option value="">All severities</option>
-        <option value="error">Error</option>
-        <option value="success">Success</option>
-        <option value="info">Info</option>
-        <option value="muted">Muted</option>
-      </select>
-      ${hasHistoryFilters(filters)
-        ? html`<button
-            class="nc-button secondary nc-history-clear"
-            @click=${() => options.onFiltersChanged?.(defaultHistoryFilters())}
-          >
-            Clear
-          </button>`
-        : ""}
+        @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+          updateHistoryFilter(options, "severity", event.detail.value || "")}
+      ></ha-selector>
     </div>
   </div>`;
 }
@@ -259,10 +252,18 @@ function historyItemTemplate(
   options: HistoryRenderOptions,
 ) {
   const details = item.details as Record<string, unknown> | undefined;
-  const summary = detailSummary(details);
+  const hasDetails = Boolean(details && Object.keys(details).length);
 
-  return html`<div class="nc-history-item">
-    <div class="nc-history-time">${formatTime(item.timestamp)}</div>
+  return html`<div
+    class=${`nc-history-item${hasDetails ? " clickable" : ""}`}
+    ?tabindex=${hasDetails}
+    role=${hasDetails ? "button" : "none"}
+    @click=${hasDetails ? toggleHistoryDetails : undefined}
+    @keydown=${hasDetails ? toggleHistoryDetailsWithKeyboard : undefined}
+  >
+    <div class="nc-history-time">
+      ${formatLocalDateTime(item.timestamp, true, options.locale)}
+    </div>
     <div class="nc-history-main">
       <div class="nc-history-title">
         ${historyAlertTemplate(item, options)}
@@ -275,19 +276,32 @@ function historyItemTemplate(
             >`
           : ""}
       </div>
-      ${historyMessage(item)
-        ? html`<div class="nc-history-message">${historyMessage(item)}</div>`
-        : ""}
-      ${summary
-        ? html`<div>${summary}</div>`
-        : ""}${item.details && Object.keys(item.details).length
-        ? html`<details class="nc-details">
+      ${hasDetails
+        ? html`<details class="nc-details nc-history-details">
             <summary>Details</summary>
-            <pre>${JSON.stringify(item.details, null, 2)}</pre>
+            <pre>${JSON.stringify(details, null, 2)}</pre>
           </details>`
         : ""}
     </div>
   </div>`;
+}
+
+function toggleHistoryDetails(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest("button, summary, details")) return;
+
+  const details =
+    event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.querySelector<HTMLDetailsElement>("details")
+      : null;
+  if (details) details.open = !details.open;
+}
+
+function toggleHistoryDetailsWithKeyboard(event: KeyboardEvent): void {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleHistoryDetails(event);
 }
 
 function historyAlertTemplate(

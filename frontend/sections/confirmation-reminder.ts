@@ -25,12 +25,12 @@ export function renderConfirmationReminderSection(
               confirmation.reminders.interval = next;
               context.markDirty();
             },
+            context.hass,
           ),
         )}
         ${field(
           "Maximum reminders",
           html`<ha-input
-            appearance="outlined"
             class="nc-number-field"
             type="number"
             min="1"
@@ -47,16 +47,16 @@ export function renderConfirmationReminderSection(
         )}
       </div>
       <div class="nc-reminder-options">
-      <label class="nc-switch-label">
-        <ha-switch
-          .checked=${confirmation.reminders.show_attempts === true}
-          @change=${(event: Event) => {
-            confirmation.reminders.show_attempts = checkedOf(event);
-            context.markDirty();
-          }}
-        ></ha-switch>
-        <span>Show attempt count in notification title</span>
-      </label>
+        <label class="nc-switch-label">
+          <ha-switch
+            .checked=${confirmation.reminders.show_attempts === true}
+            @change=${(event: Event) => {
+              confirmation.reminders.show_attempts = checkedOf(event);
+              context.markDirty();
+            }}
+          ></ha-switch>
+          <span>Show attempt count in notification title</span>
+        </label>
       </div>
       <div class="nc-help">
         Resend only while this confirmation is still pending.

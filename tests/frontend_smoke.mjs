@@ -19,37 +19,13 @@ assert.ok(existsSync(runtimePanelPath), "Missing runtime panel.js");
 const panel = readFileSync(panelPath, "utf8");
 assert.equal(readFileSync(runtimePanelPath, "utf8"), panel);
 const editor = readFileSync(
-  join(
-    root,
-    "frontend",
-    "editor",
-    "index.ts",
-  ),
+  join(root, "frontend", "editor", "index.ts"),
   "utf8",
 );
-const api = readFileSync(
-  join(
-    root,
-    "frontend",
-    "api.ts",
-  ),
-  "utf8",
-);
-const yamlView = readFileSync(
-  join(
-    root,
-    "frontend",
-    "yaml-view.ts",
-  ),
-  "utf8",
-);
+const api = readFileSync(join(root, "frontend", "api.ts"), "utf8");
+const yamlView = readFileSync(join(root, "frontend", "yaml-view.ts"), "utf8");
 const editorHelpers = readFileSync(
-  join(
-    root,
-    "frontend",
-    "editor",
-    "helpers.ts",
-  ),
+  join(root, "frontend", "editor", "helpers.ts"),
   "utf8",
 );
 assert.match(panel, /customElements\.define/);
@@ -71,7 +47,7 @@ assert.match(panel, /Post-confirmation actions/);
 assert.doesNotMatch(panel, /Reminder interval/);
 assert.doesNotMatch(panel, /value\.repeat/);
 assert.match(panel, /hasRequiredCondition\s*=/);
-assert.match(panel, /Search entity name or ID/);
+assert.match(panel, /include_entities/);
 assert.match(panel, /No visual conditions configured/);
 assert.match(panel, /Validate condition/);
 assert.match(panel, /Conditions YAML/);

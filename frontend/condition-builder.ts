@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import type { AlertCondition, Registries } from "./types.js";
+import type { AlertCondition, Hass, Registries } from "./types.js";
 import { durationInput, durationInputValue } from "./editor/helpers.js";
 
 const conditionTypes = [
@@ -18,6 +18,7 @@ function firstValue(
 
 export function visualConditionBuilder(
   container: HTMLElement,
+  hass: Hass,
   registries: Registries,
   conditions: AlertCondition[] = [],
   markDirty: () => void,
@@ -31,45 +32,6 @@ export function visualConditionBuilder(
   const entities = registries.entities.filter(
     (item) => !item.entity_id.startsWith("notify."),
   );
-  const entityListId = `nc-condition-entities-${Math.random().toString(36).slice(2)}`;
-
-  const entityName = (entityId: string): string => {
-    const entity = entities.find((item) => item.entity_id === entityId);
-    return (
-      entity?.friendly_name ||
-      entity?.name_by_user ||
-      entity?.name ||
-      entity?.original_name ||
-      entityId
-    );
-  };
-
-  const entityLabel = (entityId: string): string => {
-    const name = entityName(entityId);
-    if (name === entityId) return entityId;
-    return `${name} (${entityId})`;
-  };
-
-  const resolveEntityInput = (input: string): string => {
-    const value = input.trim();
-    const matchingEntity = entities.find((item) => item.entity_id === value);
-    if (matchingEntity) return matchingEntity.entity_id;
-
-    const matchingLabel = entities.find(
-      (item) => entityLabel(item.entity_id) === value,
-    );
-    if (matchingLabel) return matchingLabel.entity_id;
-
-    const matchingName = entities.filter(
-      (item) => entityName(item.entity_id) === value,
-    );
-    if (matchingName.length === 1) return matchingName[0].entity_id;
-
-    const entityIdMatch = value.match(/\(([^)]+)\)$/);
-    if (entityIdMatch?.[1]) return entityIdMatch[1];
-
-    return value;
-  };
 
   const update = (
     condition: AlertCondition,
@@ -81,22 +43,20 @@ export function visualConditionBuilder(
     markDirty();
   };
 
-  const updateEntity = (condition: AlertCondition, event: Event): void => {
-    condition.entity_id = resolveEntityInput(
-      (event.currentTarget as HTMLInputElement).value,
-    );
+  const updateEntity = (
+    condition: AlertCondition,
+    event: CustomEvent<{ value?: string | string[] }>,
+  ): void => {
+    const selected = event.detail.value;
+    condition.entity_id = Array.isArray(selected)
+      ? selected[0] || ""
+      : selected || "";
     markDirty();
   };
 
   const renderBuilder = (): void => {
     render(
       html`<div class="nc-condition-rows">${conditionRowsTemplate()}</div>
-        <datalist id=${entityListId}>
-          ${entities.map(
-            (item) =>
-              html`<option value=${entityLabel(item.entity_id)}></option>`,
-          )}
-        </datalist>
         <button
           class="nc-button secondary"
           @click=${() => {
@@ -125,31 +85,40 @@ export function visualConditionBuilder(
     html` <div class="nc-condition-row">
       <label class="nc-field"
         >Type
-        <select
-          @change=${(event: Event) => {
-            condition.type = (event.currentTarget as HTMLSelectElement)
-              .value as AlertCondition["type"];
+        <ha-selector
+          .hass=${hass}
+          .selector=${{
+            select: {
+              mode: "dropdown",
+              options: conditionTypes.map(([value, label]) => ({
+                value,
+                label,
+              })),
+            },
+          }}
+          .value=${condition.type}
+          @value-changed=${(event: CustomEvent<{ value?: string }>) => {
+            condition.type = (event.detail.value ||
+              "state") as AlertCondition["type"];
             markDirty();
             renderBuilder();
           }}
-        >
-          ${conditionTypes.map(
-            ([value, label]) =>
-              html`<option value=${value} .selected=${condition.type === value}>
-                ${label}
-              </option>`,
-          )}
-        </select>
+        ></ha-selector>
       </label>
       <label class="nc-field"
         >Entity
-        <input
-          list=${entityListId}
-          placeholder="Search entity name or ID"
-          .value=${entityLabel(firstValue(condition.entity_id))}
-          @input=${(event: Event) => updateEntity(condition, event)}
-          @change=${(event: Event) => updateEntity(condition, event)}
-        />
+        <ha-selector
+          .hass=${hass}
+          .selector=${{
+            entity: {
+              include_entities: entities.map((item) => item.entity_id),
+            },
+          }}
+          .value=${firstValue(condition.entity_id)}
+          @value-changed=${(
+            event: CustomEvent<{ value?: string | string[] }>,
+          ) => updateEntity(condition, event)}
+        ></ha-selector>
       </label>
       ${stateConditionTemplate(condition)}${numericConditionTemplate(
         condition,
@@ -161,6 +130,7 @@ export function visualConditionBuilder(
             condition.for = next;
             markDirty();
           },
+          hass,
         )}</label
       >
       <button
@@ -181,10 +151,12 @@ export function visualConditionBuilder(
     }
 
     return html`<label class="nc-field"
-      >State<input
+      >State<ha-input
+        type="text"
         value=${firstValue(condition.state)}
         @input=${(event: Event) => update(condition, "state", event)}
-    /></label>`;
+      ></ha-input
+    ></label>`;
   };
 
   const numericConditionTemplate = (condition: AlertCondition) => {
@@ -193,17 +165,18 @@ export function visualConditionBuilder(
     }
 
     return html`<label class="nc-field"
-        >Above<input
+        >Above<ha-input
           type="number"
           .value=${String(condition.above ?? "")}
-          @input=${(event: Event) =>
-            update(condition, "above", event)} /></label
+          @input=${(event: Event) => update(condition, "above", event)}
+        ></ha-input></label
       ><label class="nc-field"
-        >Below<input
+        >Below<ha-input
           type="number"
           .value=${String(condition.below ?? "")}
           @input=${(event: Event) => update(condition, "below", event)}
-      /></label>`;
+        ></ha-input
+      ></label>`;
   };
 
   const attributeConditionTemplate = (condition: AlertCondition) => {
@@ -212,15 +185,18 @@ export function visualConditionBuilder(
     }
 
     return html`<label class="nc-field"
-        >Attribute<input
+        >Attribute<ha-input
+          type="text"
           .value=${condition.attribute || ""}
-          @input=${(event: Event) =>
-            update(condition, "attribute", event)} /></label
+          @input=${(event: Event) => update(condition, "attribute", event)}
+        ></ha-input></label
       ><label class="nc-field"
-        >Expected value<input
+        >Expected value<ha-input
+          type="text"
           .value=${condition.value || ""}
           @input=${(event: Event) => update(condition, "value", event)}
-      /></label>`;
+        ></ha-input
+      ></label>`;
   };
 
   renderBuilder();

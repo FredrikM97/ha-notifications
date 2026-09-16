@@ -3,7 +3,7 @@ import { buildAlertPayload, type AlertFormValues } from "../alert-payload.js";
 import { visualConditionBuilder } from "../condition-builder.js";
 import { createRecipientPicker } from "../recipient-picker.js";
 import { html, nothing, render } from "lit";
-import type { Alert, Registries } from "../types.js";
+import type { Alert, Hass, Registries } from "../types.js";
 import {
   clone,
   editorSections,
@@ -47,6 +47,7 @@ import {
 
 interface OpenEditorOptions {
   root: ShadowRoot;
+  hass: Hass;
   alert?: Alert;
   registries: Registries;
   onSave: (alert: Alert) => Promise<Alert | void>;
@@ -132,6 +133,7 @@ class AlertEditorController {
     }
 
     this.context = {
+      hass: options.hass,
       value: this.value,
       mode: editorModeFor(this.value),
       markDirty: this.markDirty,
@@ -161,6 +163,7 @@ class AlertEditorController {
     )!;
     this.visualConditions = visualConditionBuilder(
       this.visual,
+      this.context.hass,
       this.registries,
       this.value.conditions,
       this.context.markDirty,
@@ -217,11 +220,11 @@ class AlertEditorController {
                   Boolean(this.value.post_send_actions?.enabled),
                   "post-send actions",
                   (enabled) => {
-                  this.value.post_send_actions = {
-                    enabled,
-                    actions: this.value.post_send_actions?.actions,
-                  };
-                  this.markDirty();
+                    this.value.post_send_actions = {
+                      enabled,
+                      actions: this.value.post_send_actions?.actions,
+                    };
+                    this.markDirty();
                   },
                 ),
               )}
@@ -310,27 +313,29 @@ class AlertEditorController {
                   },
                 )}
               </nav>
-              <select
+              <ha-selector
                 class="nc-section-select"
+                .hass=${this.context.hass}
+                .selector=${{
+                  select: {
+                    mode: "dropdown",
+                    options: editorSections.map(
+                      ({ title, setting, parent }, index) => ({
+                        value: String(index),
+                        label: this.sectionLabel(parent, title),
+                        disabled:
+                          !isSectionVisible(setting, optionalSettings) ||
+                          (parent === "Confirmation" &&
+                            !optionalSettings.confirmation),
+                      }),
+                    ),
+                  },
+                }}
+                .value=${String(this.activeSectionIndex)}
                 aria-label="Alert section"
-                @change=${(event: Event) =>
-                  this.showSection(Number(valueOf(event)))}
-              >
-                ${editorSections.map(
-                  ({ title, setting, parent }, index) =>
-                    html`<option
-                      value=${index}
-                      ?disabled=${!isSectionVisible(
-                        setting,
-                        optionalSettings,
-                      ) ||
-                      (parent === "Confirmation" &&
-                        !optionalSettings.confirmation)}
-                    >
-                      ${this.sectionLabel(parent, title)}
-                    </option>`,
-                )}
-              </select>
+                @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+                  this.showSection(Number(event.detail.value || 0))}
+              ></ha-selector>
               <div class="nc-editor-sections">
                 ${renderBasicSection(context)}${renderMonitorSection(
                   context,
@@ -338,7 +343,7 @@ class AlertEditorController {
                   context,
                 )}${renderRecipientSection()}${renderNotificationSection(
                   context,
-                  )}
+                )}
                 <div
                   class="nc-optional-setting"
                   data-setting="postSendActions"
@@ -380,7 +385,9 @@ class AlertEditorController {
             </div>
           </main>
           <footer class="nc-modal-footer">
-            <span class="nc-editor-state" aria-live="polite">All changes saved</span>
+            <span class="nc-editor-state" aria-live="polite"
+              >All changes saved</span
+            >
             <button
               class="nc-icon-button"
               type="button"
@@ -450,12 +457,10 @@ class AlertEditorController {
         value.confirmation?.enabled && value.confirmation.actions.enabled,
       ),
       confirmationReminder: Boolean(
-        value.confirmation?.enabled &&
-          value.confirmation.reminders.enabled,
+        value.confirmation?.enabled && value.confirmation.reminders.enabled,
       ),
       confirmationNotification: Boolean(
-        value.confirmation?.enabled &&
-          value.confirmation.notification.enabled,
+        value.confirmation?.enabled && value.confirmation.notification.enabled,
       ),
     };
     this.host
@@ -484,7 +489,8 @@ class AlertEditorController {
     const target = this.recipients?.target() || this.value.notification.target;
     const recipientCount = Object.values(target).reduce(
       (total, values) => total + (values?.length || 0),
-    0);
+      0,
+    );
     if (!recipientCount) issues.push("Recipients: add at least one recipient.");
     if (!this.value.monitor.on_change && !this.value.monitor.interval) {
       issues.push("When to check: enable changes, an interval, or both.");
@@ -510,8 +516,9 @@ class AlertEditorController {
         if (active) button.setAttribute("aria-current", "step");
         else button.removeAttribute("aria-current");
       });
-    const select =
-      this.host.querySelector<HTMLSelectElement>(".nc-section-select");
+    const select = this.host.querySelector<HTMLElement & { value: string }>(
+      ".nc-section-select",
+    );
     if (select) select.value = String(index);
     const title = this.host.querySelector<HTMLElement>(
       '[data-role="editor-section-title"]',
@@ -549,7 +556,8 @@ class AlertEditorController {
           enabled = Boolean(this.value.confirmation?.actions.enabled);
         }
 
-        (switchElement as HTMLElement & { checked?: boolean }).checked = enabled;
+        (switchElement as HTMLElement & { checked?: boolean }).checked =
+          enabled;
         state.textContent = enabledLabel(enabled);
       });
   };

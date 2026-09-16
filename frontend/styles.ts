@@ -75,8 +75,8 @@ select {
 
 .nc-button {
   border: 0;
-  border-radius: 10px;
-  padding: 10px 15px;
+  border-radius: var(--ha-border-radius-m, 8px);
+  padding: 8px 12px;
   cursor: pointer;
   background: var(--primary-color);
   color: white;
@@ -103,7 +103,7 @@ select {
   gap: 4px;
   padding: 4px;
   background: var(--secondary-background-color);
-  border-radius: 12px;
+  border-radius: var(--ha-border-radius-m, 8px);
   margin-bottom: 18px;
 }
 
@@ -111,8 +111,8 @@ select {
   flex: 1;
   border: 0;
   background: transparent;
-  padding: 10px;
-  border-radius: 9px;
+  padding: 8px 10px;
+  border-radius: var(--ha-border-radius-s, 4px);
   cursor: pointer;
   color: var(--secondary-text-color);
   font-weight: 600;
@@ -131,8 +131,8 @@ select {
 
 .nc-card {
   background: var(--card-background-color);
-  border-radius: 16px;
-  padding: 18px;
+  border-radius: var(--ha-card-border-radius, 12px);
+  padding: 16px;
   box-shadow: var(--ha-box-shadow);
 }
 
@@ -340,12 +340,13 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-history-filter-heading,
 .nc-history-controls {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .nc-history-filter-heading {
+  align-items: center;
   justify-content: space-between;
 }
 
@@ -363,16 +364,26 @@ ha-code-editor.nc-code-editor .cm-scroller {
   color: var(--primary-color);
 }
 
-.nc-history-controls input,
-.nc-history-controls select {
+.nc-history-filter-heading .nc-history-clear {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--secondary-text-color);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.nc-history-controls ha-input {
+  --ha-input-padding-bottom: 0px;
   min-height: 36px;
   box-sizing: border-box;
-  border: 1px solid var(--divider-color);
-  border-radius: 4px;
-  padding: 6px 9px;
-  background: var(--card-background-color);
-  color: var(--primary-text-color);
-  font: inherit;
+}
+
+.nc-history-controls ha-selector {
+  flex: 0 1 180px;
+  min-width: 150px;
+  min-height: 36px;
+  box-sizing: border-box;
 }
 
 .nc-history-search {
@@ -409,6 +420,15 @@ ha-code-editor.nc-code-editor .cm-scroller {
   border-bottom: 1px solid var(--divider-color);
 }
 
+.nc-history-item.clickable {
+  cursor: pointer;
+}
+
+.nc-history-item.clickable:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
 .nc-history-time {
   color: var(--secondary-text-color);
   font-size: 12px;
@@ -423,7 +443,8 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-history-title {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
   gap: 6px;
   font-weight: 700;
 }
@@ -442,9 +463,16 @@ ha-code-editor.nc-code-editor .cm-scroller {
   text-decoration: underline;
 }
 
-.nc-history-message {
+.nc-history-title .nc-history-alert-link {
   min-width: 0;
-  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-history-title .nc-history-badge,
+.nc-history-title .nc-history-flow {
+  flex: 0 0 auto;
 }
 
 .nc-history-badge {
@@ -499,6 +527,10 @@ ha-code-editor.nc-code-editor .cm-scroller {
 
 .nc-details summary {
   cursor: pointer;
+}
+
+.nc-history-details {
+  margin-top: 0;
 }
 
 .nc-details pre {
@@ -748,11 +780,6 @@ ha-code-editor.nc-code-editor .cm-scroller {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  border: 1px solid var(--divider-color);
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--card-background-color);
-  color: var(--primary-text-color);
 }
 
 .nc-editor-sections {
@@ -898,24 +925,14 @@ ha-code-editor.nc-code-editor .cm-scroller {
   flex: 0 0 auto;
 }
 
-.nc-field input:not([type="number"]):not(.nc-duration-input),
-.nc-field textarea,
-.nc-field select {
-  width: 100%;
-  border: 1px solid var(--divider-color);
-  border-radius: 9px;
-  padding: 10px;
-  background: var(--card-background-color);
-  color: var(--primary-text-color);
-}
-
-.nc-field input[type="number"] {
-  width: min(100%, 10rem);
-}
-
 .nc-field ha-input,
-.nc-field ha-icon-picker {
+.nc-field ha-icon-picker,
+.nc-field ha-selector {
   display: block;
+  width: 100%;
+}
+
+.nc-field ha-selector.nc-description-input {
   width: 100%;
 }
 
@@ -928,15 +945,10 @@ ha-code-editor.nc-code-editor .cm-scroller {
   width: min(100%, 10rem);
 }
 
-.nc-field textarea {
-  min-height: 110px;
-  resize: vertical;
-  font-family: inherit;
-}
-
-.nc-field textarea.code {
-  min-height: 180px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.nc-field ha-selector.nc-duration-input {
+  display: block;
+  width: min(100%, 24rem);
+  max-width: 100%;
 }
 
 ha-code-editor.nc-action-editor {
@@ -970,14 +982,9 @@ ha-code-editor.nc-action-editor {
   gap: 8px;
 }
 
-.nc-recipient-toolbar input {
+.nc-recipient-toolbar ha-input {
   min-width: 0;
   width: 100%;
-  border: 1px solid var(--divider-color);
-  border-radius: 9px;
-  padding: 10px;
-  background: var(--card-background-color);
-  color: var(--primary-text-color);
 }
 
 .nc-recipient-filters {
@@ -1109,9 +1116,10 @@ ha-code-editor.nc-action-editor {
 .nc-subfield {
   display: grid;
   gap: 8px;
-  width: fit-content;
-  color: var(--secondary-text-color);
-  font-size: 13px !important;
+  width: min(100%, 24rem);
+  color: var(--primary-text-color);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .nc-setting-row {
@@ -1124,8 +1132,6 @@ ha-code-editor.nc-action-editor {
 }
 
 .nc-duration-input {
-  width: 8em;
-  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1327,13 +1333,12 @@ ha-code-editor.nc-action-editor {
     grid-template-columns: 1fr 1fr;
   }
 
-  .nc-history-controls .nc-history-search,
-  .nc-history-controls .nc-history-clear {
+  .nc-history-controls .nc-history-search {
     grid-column: 1 / -1;
   }
 
-  .nc-history-controls input,
-  .nc-history-controls select,
+  .nc-history-controls ha-input,
+  .nc-history-controls ha-selector,
   .nc-history-controls .nc-button {
     width: 100%;
   }
@@ -1431,13 +1436,12 @@ ha-code-editor.nc-action-editor {
     grid-template-columns: 1fr 1fr;
   }
 
-  .nc-history-controls .nc-history-search,
-  .nc-history-controls .nc-history-clear {
+  .nc-history-controls .nc-history-search {
     grid-column: 1 / -1;
   }
 
-  .nc-history-controls input,
-  .nc-history-controls select,
+  .nc-history-controls ha-input,
+  .nc-history-controls ha-selector,
   .nc-history-controls .nc-button {
     width: 100%;
   }

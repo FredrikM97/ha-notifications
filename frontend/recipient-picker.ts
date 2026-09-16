@@ -118,8 +118,9 @@ export function createRecipientPicker(
         </div>
         <div class="nc-recipient-input">
           <div class="nc-recipient-toolbar">
-            <input
+            <ha-input
               type="search"
+              class="nc-recipient-search"
               autocomplete="off"
               name="ha-notifications-recipient-search"
               placeholder="Search recipients"
@@ -133,7 +134,7 @@ export function createRecipientPicker(
                 open = true;
                 renderPicker();
               }}
-            />
+            ></ha-input>
             <div class="nc-recipient-filters">
               ${(Object.keys(labels) as FilterType[]).map(
                 (key) =>

@@ -20,6 +20,15 @@ describe("durationInputValue", () => {
     ).toMatchSnapshot();
   });
 
+  it("includes days from a native duration value", () => {
+    expect(
+      durationInputValue(
+        { days: 2, hours: 3, minutes: 4, seconds: 5 },
+        "00:00:00",
+      ),
+    ).toBe("51:04:05");
+  });
+
   it("falls back for missing/invalid values", () => {
     expect(durationInputValue(undefined, "00:30:00")).toMatchSnapshot();
   });
