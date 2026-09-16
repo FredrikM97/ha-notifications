@@ -76,6 +76,25 @@ describe("buildAlertPayload", () => {
     expect(payload.runtime).toBeUndefined();
   });
 
+  it("persists a custom alert icon", () => {
+    const payload = buildAlertPayload(
+      defaultAlert(),
+      values({
+        identity: {
+          name: "Front door open",
+          description: "",
+          icon: "mdi:door-open",
+        },
+        notification: {
+          ...values().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+      }),
+    );
+
+    expect(payload.icon).toBe("mdi:door-open");
+  });
+
   it("throws when confirmation is enabled without recipients", () => {
     expect(() =>
       buildAlertPayload(

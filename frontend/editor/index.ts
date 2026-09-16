@@ -737,6 +737,7 @@ class AlertEditorController {
       identity: {
         name: value.name,
         description: value.description,
+        icon: value.icon || "mdi:bell-outline",
       },
       monitor: {
         conditions,

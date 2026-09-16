@@ -50,6 +50,7 @@ function serializeDurations(result: Alert): void {
 export interface AlertIdentityFormValues {
   name: string;
   description: string;
+  icon?: string;
 }
 
 export interface AlertMonitorFormValues {
@@ -127,6 +128,8 @@ export function buildAlertPayload(
 
   result.name = values.identity.name.trim();
   result.description = values.identity.description;
+  result.icon =
+    values.identity.icon?.trim() || result.icon || "mdi:bell-outline";
   result.conditions = values.monitor.conditions;
   result.monitor = {
     on_change: values.monitor.onChange,

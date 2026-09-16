@@ -849,7 +849,8 @@ ha-code-editor.nc-code-editor .cm-scroller {
   width: min(100%, 10rem);
 }
 
-.nc-field ha-input {
+.nc-field ha-input,
+.nc-field ha-icon-picker {
   display: block;
   width: 100%;
 }

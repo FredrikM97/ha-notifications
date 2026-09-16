@@ -34,6 +34,17 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
         ></textarea>`,
         true,
       )}
+      ${field(
+        "Icon",
+        html`<ha-icon-picker
+          .value=${value.icon || "mdi:bell-outline"}
+          aria-label="Icon"
+          @value-changed=${(event: CustomEvent<{ value: string }>) => {
+            value.icon = event.detail.value;
+            context.markDirty();
+          }}
+        ></ha-icon-picker>`,
+      )}
     </div>`,
   );
 }
