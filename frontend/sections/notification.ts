@@ -12,7 +12,8 @@ export function renderNotificationSection(
     html`<div class="nc-grid">
         ${field(
           "Title",
-          html`<input
+          html`<ha-input
+            appearance="outlined"
             type="text"
             .value=${notification.title}
             placeholder="Notification title"
@@ -21,7 +22,7 @@ export function renderNotificationSection(
               context.markDirty();
               context.refreshStatuses();
             }}
-          />`,
+          ></ha-input>`,
         )}
         ${field(
           "Message",

@@ -7,27 +7,27 @@ import type { Alert, Registries } from "../types.js";
 import {
   clone,
   editorSections,
-  optionalSections,
   type CodeEditor,
   type EditorContext,
   type EditorMode,
-  type OptionalSection,
   type OptionalSetting,
   type OptionalSettings,
   type SectionStatus,
 } from "./types.js";
 import {
   actionArrayValue,
+  checkedOf,
   conditionTemplate,
   conditionsYaml,
   defaultAlert,
   durationInputValue,
+  editorSectionControl,
   editorModeFor,
   enabledLabel,
   fillActionEditors,
   isSectionVisible,
+  optionalControls,
   parseConditionsYaml,
-  sectionForSetting,
   showEditorToast,
   showYaml,
   valueOf,
@@ -82,6 +82,7 @@ class AlertEditorController {
 
   private dirty = false;
   private draftTestSessionId: string | null = null;
+  private activeSectionIndex = 0;
 
   private visual!: HTMLElement;
   private conditionsYamlView!: HTMLElement;
@@ -135,20 +136,16 @@ class AlertEditorController {
       mode: editorModeFor(this.value),
       markDirty: this.markDirty,
       refreshStatuses: this.refreshStatuses,
-      removeSetting: this.removeSetting,
       setMode: this.setMode,
       validateCondition: this.validateCondition,
       validateActions: this.validateActions,
     };
     this.optionalSettings = {
-      confirmation: !options.alert || Boolean(options.alert.confirmation),
-      confirmationReminder:
-        !options.alert || Boolean(options.alert?.confirmation?.reminders),
-      confirmationNotification:
-        !options.alert || Boolean(options.alert?.confirmation?.notification),
+      confirmation: true,
+      confirmationReminder: true,
+      confirmationNotification: true,
       postSendActions: true,
-      postConfirmationActions:
-        !options.alert || Boolean(options.alert.confirmation),
+      postConfirmationActions: true,
     };
 
     this.renderEditor();
@@ -176,6 +173,7 @@ class AlertEditorController {
     recipientMount.replaceChildren(this.recipients.element);
     this.jinja = this.host.querySelector<HTMLElement>('[data-role="jinja"]')!;
 
+    this.refreshEditorHeader();
     this.refreshStatuses();
     this.showSection(0);
   }
@@ -201,22 +199,92 @@ class AlertEditorController {
     render(
       html`<div class="nc-editor-view">
         <section class="nc-editor-shell">
+          <header class="nc-editor-header">
+            <div class="nc-editor-identity">
+              <div class="nc-editor-title-row">
+                <h1 data-role="editor-alert-name">New alert</h1>
+                <span class="nc-editor-title-separator" aria-hidden="true"
+                  >/</span
+                >
+                <h2 data-role="editor-section-title">Basic</h2>
+              </div>
+            </div>
+            <div class="nc-editor-section-controls">
+              ${editorSectionControl(
+                "postSendActions",
+                optionalControls(
+                  context,
+                  Boolean(this.value.post_send_actions?.enabled),
+                  "post-send actions",
+                  (enabled) => {
+                  this.value.post_send_actions = {
+                    enabled,
+                    actions: this.value.post_send_actions?.actions,
+                  };
+                  this.markDirty();
+                  },
+                ),
+              )}
+              ${editorSectionControl(
+                "confirmation",
+                optionalControls(
+                  context,
+                  Boolean(this.value.confirmation?.enabled),
+                  "confirmation",
+                  (enabled) => {
+                    this.value.confirmation!.enabled = enabled;
+                    this.markDirty();
+                  },
+                ),
+              )}
+              ${editorSectionControl(
+                "confirmationReminder",
+                optionalControls(
+                  context,
+                  this.value.confirmation?.reminders.enabled !== false,
+                  "reminder policy",
+                  (enabled) => {
+                    this.value.confirmation!.reminders.enabled = enabled;
+                    this.markDirty();
+                  },
+                ),
+              )}
+              ${editorSectionControl(
+                "confirmationNotification",
+                optionalControls(
+                  context,
+                  this.value.confirmation?.notification.enabled === true,
+                  "confirmation notification",
+                  (enabled) => {
+                    this.value.confirmation!.notification.enabled = enabled;
+                    this.markDirty();
+                  },
+                ),
+              )}
+              ${editorSectionControl(
+                "postConfirmationActions",
+                optionalControls(
+                  context,
+                  Boolean(this.value.confirmation?.actions.enabled),
+                  "post-confirmation actions",
+                  (enabled) => {
+                    this.value.confirmation!.actions.enabled = enabled;
+                    this.markDirty();
+                  },
+                ),
+              )}
+            </div>
+          </header>
+          <div
+            class="nc-editor-validation"
+            data-role="editor-validation"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
               <nav class="nc-section-header" aria-label="Alert sections">
-                <select
-                  class="nc-add-setting"
-                  aria-label="Add setting"
-                  @change=${(event: Event) => this.addSetting(valueOf(event))}
-                >
-                  <option value="">Add setting</option>
-                  <option
-                    value="confirmation"
-                    ?disabled=${optionalSettings.confirmation}
-                  >
-                    Confirmation
-                  </option>
-                </select>
                 ${editorSections.map(
                   ({ title, setting, parent, status }, index) => {
                     const hasChildren = editorSections.some(
@@ -312,6 +380,7 @@ class AlertEditorController {
             </div>
           </main>
           <footer class="nc-modal-footer">
+            <span class="nc-editor-state" aria-live="polite">All changes saved</span>
             <button
               class="nc-icon-button"
               type="button"
@@ -324,6 +393,12 @@ class AlertEditorController {
             </button>
             <button class="nc-button secondary" @click=${() => this.close()}>
               Cancel</button
+            ><button
+              class="nc-button secondary"
+              data-role="editor-validate"
+              @click=${this.validateCurrentSection}
+              hidden
+            ></button
             ><button class="nc-button secondary" @click=${this.test}>
               Test alert</button
             ><button class="nc-button" @click=${this.save}>Save alert</button>
@@ -336,7 +411,18 @@ class AlertEditorController {
 
   private markDirty = (): void => {
     this.dirty = true;
+    const state = this.host.querySelector<HTMLElement>(".nc-editor-state");
+    if (state) state.textContent = "Unsaved changes";
+    this.refreshEditorHeader();
+    this.refreshSectionControls();
     this.refreshStatuses();
+  };
+
+  private refreshEditorHeader = (): void => {
+    const name = this.host.querySelector<HTMLElement>(
+      '[data-role="editor-alert-name"]',
+    );
+    if (name) name.textContent = this.value.name.trim() || "New alert";
   };
 
   private setMode = (mode: EditorMode): void => {
@@ -381,94 +467,36 @@ class AlertEditorController {
         indicator.textContent = this.sectionStatusSymbol(isEnabled);
         indicator.setAttribute("aria-label", enabledLabel(isEnabled));
       });
+    this.refreshValidationSummary();
   };
 
-  private addSetting = (setting: string): void => {
-    if (setting === "confirmation") {
-      this.value.confirmation!.enabled = true;
-      this.optionalSettings.confirmation = true;
-      this.optionalSettings.confirmationReminder = true;
-      this.optionalSettings.confirmationNotification = true;
-      this.optionalSettings.postConfirmationActions = true;
-    } else return;
+  private refreshValidationSummary = (): void => {
+    const validation = this.host.querySelector<HTMLElement>(
+      '[data-role="editor-validation"]',
+    );
+    if (!validation) return;
 
-    this.host
-      .querySelectorAll<HTMLElement>(`[data-setting="${setting}"]`)
-      .forEach((item) => (item.hidden = false));
-    const select =
-      this.host.querySelector<HTMLSelectElement>(".nc-add-setting");
-    const option = select?.querySelector<HTMLOptionElement>(
-      `option[value="${setting}"]`,
-    );
-    if (option) option.disabled = true;
-    const sectionIndex = sectionForSetting(setting as OptionalSetting).index;
-    const mobileOption = this.host.querySelector<HTMLOptionElement>(
-      `.nc-section-select option[value="${sectionIndex}"]`,
-    );
-    if (mobileOption) mobileOption.disabled = false;
-    if (setting === "confirmation") {
-      this.setOptionalSettingVisible("postConfirmationActions", true);
+    const issues: string[] = [];
+    if (!this.value.name.trim()) issues.push("Basic: name is required.");
+    if (!this.hasRequiredCondition()) {
+      issues.push("Condition: add at least one condition.");
     }
-    if (select) select.value = "";
-    this.markDirty();
-    this.refreshStatuses();
-  };
-
-  private removeSetting = (setting: OptionalSetting): void => {
-    if (setting === "postSendActions") {
-      delete this.value.post_send_actions;
-    } else if (setting === "confirmationReminder") {
-      this.value.confirmation!.reminders.enabled = false;
-    } else if (setting === "confirmationNotification") {
-      this.value.confirmation!.notification.enabled = false;
-    } else if (setting === "postConfirmationActions") {
-      this.value.confirmation!.actions.items = [];
-      this.value.confirmation!.actions.enabled = false;
-    } else {
-      this.value.confirmation = {
-        enabled: false,
-        button: "",
-        notification: { enabled: false, message: "", clear: true },
-        reminders: {
-          enabled: true,
-          interval: "00:30:00",
-          max_attempts: 5,
-          show_attempts: false,
-        },
-        actions: { enabled: false, items: [] },
-      };
-      this.optionalSettings.postConfirmationActions = false;
-      this.optionalSettings.confirmationReminder = false;
-      this.optionalSettings.confirmationNotification = false;
-      this.setOptionalSettingVisible("postConfirmationActions", false);
-      this.setOptionalSettingVisible("confirmationReminder", false);
-      this.setOptionalSettingVisible("confirmationNotification", false);
+    const target = this.recipients?.target() || this.value.notification.target;
+    const recipientCount = Object.values(target).reduce(
+      (total, values) => total + (values?.length || 0),
+    0);
+    if (!recipientCount) issues.push("Recipients: add at least one recipient.");
+    if (!this.value.monitor.on_change && !this.value.monitor.interval) {
+      issues.push("When to check: enable changes, an interval, or both.");
     }
-    this.optionalSettings[setting] = false;
-    this.setOptionalSettingVisible(setting, false);
-    this.markDirty();
-    this.showSection(0);
-  };
-
-  private setOptionalSettingVisible = (
-    setting: OptionalSetting,
-    visible: boolean,
-  ): void => {
-    this.host
-      .querySelectorAll<HTMLElement>(`[data-setting="${setting}"]`)
-      .forEach((item) => (item.hidden = !visible));
-    const sectionIndex = sectionForSetting(setting).index;
-    const mobileOption = this.host.querySelector<HTMLOptionElement>(
-      `.nc-section-select option[value="${sectionIndex}"]`,
-    );
-    if (mobileOption) mobileOption.disabled = !visible;
-    const addOption = this.host.querySelector<HTMLOptionElement>(
-      `.nc-add-setting option[value="${setting}"]`,
-    );
-    if (addOption) addOption.disabled = visible;
+    validation.hidden = issues.length === 0;
+    validation.textContent = issues.length
+      ? `Needs attention: ${issues.join(" ")}`
+      : "";
   };
 
   private showSection = (index: number): void => {
+    this.activeSectionIndex = index;
     this.host
       .querySelectorAll<HTMLElement>(".nc-section")
       .forEach((item, itemIndex) =>
@@ -485,6 +513,74 @@ class AlertEditorController {
     const select =
       this.host.querySelector<HTMLSelectElement>(".nc-section-select");
     if (select) select.value = String(index);
+    const title = this.host.querySelector<HTMLElement>(
+      '[data-role="editor-section-title"]',
+    );
+    if (title) {
+      title.textContent = this.sectionLabel(
+        editorSections[index]?.parent,
+        editorSections[index]?.title || "",
+      );
+    }
+    this.refreshValidationAction();
+    this.refreshSectionControls();
+  };
+
+  private refreshSectionControls = (): void => {
+    const setting = editorSections[this.activeSectionIndex]?.setting;
+    this.host
+      .querySelectorAll<HTMLElement>('[data-role="editor-section-control"]')
+      .forEach((control) => {
+        control.hidden = control.dataset.setting !== setting;
+        const switchElement = control.querySelector<HTMLElement>("ha-switch");
+        const state = control.querySelector<HTMLElement>(".nc-setting-state");
+        if (!switchElement || !state) return;
+
+        let enabled = false;
+        if (control.dataset.setting === "postSendActions") {
+          enabled = Boolean(this.value.post_send_actions?.enabled);
+        } else if (control.dataset.setting === "confirmation") {
+          enabled = Boolean(this.value.confirmation?.enabled);
+        } else if (control.dataset.setting === "confirmationReminder") {
+          enabled = this.value.confirmation?.reminders.enabled !== false;
+        } else if (control.dataset.setting === "confirmationNotification") {
+          enabled = this.value.confirmation?.notification.enabled === true;
+        } else if (control.dataset.setting === "postConfirmationActions") {
+          enabled = Boolean(this.value.confirmation?.actions.enabled);
+        }
+
+        (switchElement as HTMLElement & { checked?: boolean }).checked = enabled;
+        state.textContent = enabledLabel(enabled);
+      });
+  };
+
+  private refreshValidationAction = (): void => {
+    const button = this.host.querySelector<HTMLButtonElement>(
+      '[data-role="editor-validate"]',
+    );
+    if (!button) return;
+
+    const sectionTitle = editorSections[this.activeSectionIndex]?.title;
+    if (sectionTitle === "Condition") {
+      button.hidden = false;
+      button.textContent = "Validate condition";
+      button.setAttribute("aria-label", "Validate condition");
+      return;
+    }
+
+    if (
+      sectionTitle === "Post-send actions" ||
+      sectionTitle === "Post-confirmation actions"
+    ) {
+      button.hidden = false;
+      button.textContent = "Validate actions";
+      button.setAttribute("aria-label", "Validate actions");
+      return;
+    }
+
+    button.hidden = true;
+    button.textContent = "";
+    button.removeAttribute("aria-label");
   };
 
   private toggleSidebarChildren = (parent: string): void => {
@@ -759,6 +855,23 @@ class AlertEditorController {
       await this.onValidateCondition(this.conditionPayload());
     } catch (error) {
       showEditorToast(this.root, errorMessage(error));
+    }
+  };
+
+  private validateCurrentSection = async (): Promise<void> => {
+    const sectionTitle = editorSections[this.activeSectionIndex]?.title;
+    if (sectionTitle === "Condition") {
+      await this.validateCondition();
+      return;
+    }
+
+    if (sectionTitle === "Post-send actions") {
+      this.validateActions("notification-actions", "Post-send actions");
+      return;
+    }
+
+    if (sectionTitle === "Post-confirmation actions") {
+      this.validateActions("actions", "Post-confirmation actions");
     }
   };
 

@@ -73,13 +73,7 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
           The condition should evaluate to true or false. Home Assistant
           automatically tracks entities referenced by the template.
         </div>
-      </div>`,
-    "",
-    html`<button
-      class="nc-button secondary"
-      @click=${() => context.validateCondition()}
-    >
-      Validate condition
-    </button>`,
+      </div>
+      `,
   );
 }

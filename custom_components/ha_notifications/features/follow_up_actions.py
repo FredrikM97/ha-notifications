@@ -7,7 +7,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, HistoryEventType
+from ..const import (
+    EVENT_RUNTIME_PERSIST_REQUESTED,
+    HistoryEventType,
+    STATE_RUNTIME,
+)
 from ..controller.lifecycle import FeatureBase
 from ..domain.service_calls import ServiceCall
 from ..domain.template_values import remove_nulls, render_template_values
@@ -84,7 +88,7 @@ class FollowUpActionsFeature(FeatureBase):
             attempt,
             test,
             now,
-            self.services.state["alerts"].get(alert["id"], {}).get(
+                self.services.state[STATE_RUNTIME].get(alert["id"], {}).get(
                 "confirmation_action_id"
             ),
             confirmed_by,
@@ -118,7 +122,7 @@ class FollowUpActionsFeature(FeatureBase):
                     details["error"] = str(err)
             if record_history and history.record_event(
                 self.services.state,
-                self.services.state["alerts"].get(alert["id"]),
+                self.services.state[STATE_RUNTIME].get(alert["id"]),
                 alert,
                 event_type,
                 message,

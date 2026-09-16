@@ -8,9 +8,7 @@ import {
   type EditorContext,
   type EditorMode,
   type FormControl,
-  type OptionalSection,
   type OptionalSetting,
-  optionalSections,
 } from "./types.js";
 
 export function editorModeFor(value: Alert): EditorMode {
@@ -23,10 +21,6 @@ export function editorModeFor(value: Alert): EditorMode {
   }
 
   return "jinja";
-}
-
-export function sectionForSetting(setting: OptionalSetting): OptionalSection {
-  return optionalSections[setting];
 }
 
 export function isSectionVisible(
@@ -44,7 +38,14 @@ export function defaultAlert(): Alert {
     description: "",
     icon: "mdi:bell-outline",
     conditions: [{ type: "template", template: "" }],
-    monitor: { on_change: true, startup: true },
+    monitor: {
+      on_change: true,
+      startup: true,
+      retention: {
+        enabled: true,
+        days: 30,
+      },
+    },
     notification: {
       target: {},
       title: "",
@@ -187,7 +188,8 @@ export function durationInput(
     onChange(input.value);
   };
 
-  return html`<input
+  return html`<ha-input
+    appearance="outlined"
     class="nc-duration-input"
     type="text"
     inputmode="numeric"
@@ -197,7 +199,7 @@ export function durationInput(
     @input=${update}
     @blur=${commit}
     @change=${commit}
-  />`;
+  ></ha-input>`;
 }
 
 export async function fillActionEditors(host: HTMLElement): Promise<void> {
@@ -222,8 +224,8 @@ export async function fillActionEditors(host: HTMLElement): Promise<void> {
 }
 
 export function field(
-  label: string,
-  content: TemplateResult,
+  label: string | TemplateResult,
+  content: TemplateResult = html``,
   full = false,
 ): TemplateResult {
   let className = "nc-field";
@@ -262,20 +264,14 @@ export function section(
   title: string,
   content: TemplateResult,
   className = "",
-  controls: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
   return html`<section class="nc-section ${className}" data-title=${title}>
-    <header class="nc-section-titlebar">
-      <h2>${title}</h2>
-      ${controls}
-    </header>
     <div class="nc-section-content">${content}</div>
   </section>`;
 }
 
 export function optionalControls(
   context: EditorContext,
-  setting: OptionalSetting,
   enabled: boolean,
   label: string,
   onToggle: (enabled: boolean) => void,
@@ -286,25 +282,26 @@ export function optionalControls(
 
   return html`<div class="nc-setting-controls">
     <span class="nc-setting-state">${stateText}</span>
-    <input
-      class="nc-switch-input"
-      type="checkbox"
-      role="switch"
+    <ha-switch
       .checked=${enabled}
       ?disabled=${disabled}
       aria-label=${`Enable ${label}`}
       title=${title}
       @change=${(event: Event) => onToggle(checkedOf(event))}
-    />
-    <button
-      class="nc-icon-button danger"
-      type="button"
-      aria-label=${`Remove ${label}`}
-      title=${`Remove ${label}`}
-      @click=${() => context.removeSetting(setting)}
-    >
-      <ha-icon icon="mdi:trash-can-outline"></ha-icon>
-    </button>
+    ></ha-switch>
+  </div>`;
+}
+
+export function editorSectionControl(
+  setting: OptionalSetting,
+  content: TemplateResult,
+): TemplateResult {
+  return html`<div
+    data-role="editor-section-control"
+    data-setting=${setting}
+    hidden
+  >
+    ${content}
   </div>`;
 }
 

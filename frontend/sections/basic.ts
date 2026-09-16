@@ -10,7 +10,8 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
     html`<div class="nc-grid">
       ${field(
         "Name",
-        html`<input
+        html`<ha-input
+          appearance="outlined"
           type="text"
           .value=${value.name}
           placeholder="Alert name"
@@ -19,7 +20,7 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
             context.markDirty();
             context.refreshStatuses();
           }}
-        />`,
+        ></ha-input>`,
       )}
       ${field(
         "Description",

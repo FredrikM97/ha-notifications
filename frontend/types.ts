@@ -70,6 +70,11 @@ export interface RuntimeAlertState {
   last_event?: Record<string, unknown>;
 }
 
+export interface HistoryRetentionConfig {
+  enabled?: boolean;
+  days?: number;
+}
+
 export interface Alert {
   id: string;
   name: string;
@@ -81,6 +86,7 @@ export interface Alert {
     on_change: boolean;
     startup: boolean;
     interval?: string | number | Record<string, number>;
+    retention?: HistoryRetentionConfig;
   };
   notification: NotificationConfig;
   confirmation?: ConfirmationConfig;

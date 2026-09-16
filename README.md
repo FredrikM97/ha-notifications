@@ -381,6 +381,9 @@ alerts:
       on_change: true
       startup: true
       interval: 3600
+      retention:
+        enabled: true
+        days: 30
     conditions:
       - type: template
         template: "{{ states('sensor.water_level') | float(100) < 20 }}"

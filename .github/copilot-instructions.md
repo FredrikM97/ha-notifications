@@ -83,6 +83,12 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Keep the frontend authored with Lit. `frontend/panel.ts` is the LitElement
   shell, and child views should use Lit templates/rendering rather than ad-hoc
   DOM HTML construction.
+- Prefer Home Assistant native controls for ordinary editor fields: use
+  `ha-input` for single-line, numeric, and duration values, `ha-switch` for
+  binary settings, and native HA selectors where an existing selector fits.
+  Do not use obsolete `ha-textfield` markup. Keep native HTML controls only
+  when Home Assistant has no suitable component, such as multiline text,
+  section navigation, or custom autocomplete/condition-builder interactions.
 - Keep `frontend/api.ts` as the only frontend/backend transport boundary. UI
   modules call typed API wrappers instead of constructing websocket messages or
   calling `hass.connection.sendMessagePromise` directly.

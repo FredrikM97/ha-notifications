@@ -3,6 +3,7 @@ import {
   deleteAlert,
   errorMessage,
   getAlerts,
+  getAlertRuntime,
   getHistory,
   loadRegistries,
   saveAlert,
@@ -227,16 +228,27 @@ class HaNotificationsPanel extends LitElement {
     this.requestUpdate();
 
     try {
-      const [alertsResult, historyResult] = await Promise.allSettled([
+      const [alertsResult, runtimeResult, historyResult] =
+        await Promise.allSettled([
         getAlerts(this._hass),
+        getAlertRuntime(this._hass),
         getHistory(this._hass, this.historyAlertId, 150),
       ]);
 
       if (alertsResult.status === "fulfilled") {
-        this.alerts = alertsResult.value;
+        const runtimeByAlert =
+          runtimeResult.status === "fulfilled" ? runtimeResult.value : {};
+        this.alerts = alertsResult.value.map((alert) => ({
+          ...alert,
+          runtime: runtimeByAlert[alert.id],
+        }));
         this.refreshHistoryAlertName();
       } else if (!silent) {
         this.showToast(errorMessage(alertsResult.reason), true);
+      }
+
+      if (runtimeResult.status === "rejected" && !silent) {
+        this.showToast(errorMessage(runtimeResult.reason), true);
       }
 
       if (historyResult.status === "fulfilled") {
@@ -408,7 +420,11 @@ class HaNotificationsPanel extends LitElement {
     const lastNotification = this.lastNotificationSummary(
       runtime.last_notified,
     );
+    const lastEvent = this.lastEventSummary(runtime.last_event);
     const attempts = attemptSummary(alert);
+    const confirmation = alert.confirmation?.enabled
+      ? "Confirmation on"
+      : "Confirmation off";
 
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
@@ -427,8 +443,10 @@ class HaNotificationsPanel extends LitElement {
           >
         </div>
         <div class="nc-alert-meta">
-          ${monitor} · ${this.targetSummary(alert.notification?.target)}
+          ${monitor} · ${this.targetSummary(alert.notification?.target)} ·
+          ${confirmation}
         </div>
+        <div class="nc-alert-meta">${lastEvent}</div>
         <div class="nc-alert-meta">${lastNotification}</div>
         ${attempts
           ? html`<div class="nc-alert-meta">${attempts}</div>`
@@ -480,6 +498,15 @@ class HaNotificationsPanel extends LitElement {
     }
 
     return "No notification sent yet";
+  }
+
+  private lastEventSummary(lastEvent: Record<string, unknown> | undefined): string {
+    const timestamp = lastEvent?.timestamp;
+    if (typeof timestamp === "string" && timestamp) {
+      return `Last event: ${this.formatTime(timestamp)}`;
+    }
+
+    return "No event recorded yet";
   }
 
   targetSummary(target: Alert["notification"]["target"] = {}): string {

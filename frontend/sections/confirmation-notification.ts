@@ -4,7 +4,6 @@ import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/t
 import {
   checkedOf,
   codeEditor,
-  optionalControls,
   section,
 } from "../editor/helpers.js";
 
@@ -30,17 +29,9 @@ export function renderConfirmationNotificationSection(
       <div class="nc-help">
         Optionally send a follow-up message after acknowledgement.
       </div>
+      <div class="nc-help">
+        Example: <code>Confirmed by {{confirmed_by}}</code>
+      </div>
       `,
-    "",
-    optionalControls(
-      context,
-      "confirmationNotification",
-      confirmation.notification.enabled === true,
-      "confirmation notification",
-      (enabled) => {
-        confirmation.notification.enabled = enabled;
-        context.markDirty();
-      },
-    ),
   );
 }

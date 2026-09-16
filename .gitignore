@@ -2,8 +2,6 @@
 __pycache__/
 node_modules/
 dist/
-!custom_components/ha_notifications/dist/
-!custom_components/ha_notifications/dist/panel.js
 frontend/panel.js
 .ha-config/
 hacs-export/

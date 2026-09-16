@@ -15,6 +15,10 @@ SERVICE_TEST = "test"
 EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
 EVENT_RUNTIME_PERSIST_REQUESTED = f"{DOMAIN}_runtime_persist_requested"
 
+STATE_RUNTIME = "runtime"
+STATE_HISTORY = "history"
+STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
+
 CONFIG_FILENAME = "ha_notifications.yaml"
 
 STORAGE_VERSION = 1
@@ -30,7 +34,7 @@ PANEL_MODULE = f"{FRONTEND_STATIC_URL}/panel.js"
 FRONTEND_REGISTERED_KEY = f"{DOMAIN}_frontend_static_registered"
 FRONTEND_MODULE_REGISTERED_KEY = f"{DOMAIN}_frontend_module_registered"
 
-DEFAULT_CONFIRMATION_INTERVAL = "00:30:00"
+DEFAULT_HISTORY_RETENTION_DAYS = 30
 
 
 class HistoryEventType(StrEnum):

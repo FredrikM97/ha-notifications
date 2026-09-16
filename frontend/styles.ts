@@ -486,6 +486,61 @@ ha-code-editor.nc-code-editor .cm-scroller {
   overflow: hidden;
 }
 
+.nc-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.nc-editor-header h1,
+.nc-editor-header h2 {
+  margin: 0;
+}
+
+.nc-editor-header h1 {
+  font-size: 22px;
+}
+
+.nc-editor-identity {
+  min-width: 0;
+}
+
+.nc-editor-title-row {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 10px;
+}
+
+.nc-editor-title-separator {
+  color: var(--secondary-text-color);
+  font-size: 18px;
+}
+
+.nc-editor-header h2 {
+  color: var(--secondary-text-color);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.nc-editor-section-controls {
+  display: flex;
+  align-items: center;
+  min-width: 118px;
+}
+
+.nc-editor-validation {
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--divider-color);
+  background: color-mix(in srgb, var(--warning-color, #ff9800) 12%, transparent);
+  color: var(--primary-text-color);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .nc-editor-shell > .nc-modal-header {
   background: var(--card-background-color);
   color: var(--primary-text-color);
@@ -571,6 +626,8 @@ ha-code-editor.nc-code-editor .cm-scroller {
   background: var(--secondary-background-color);
   color: var(--primary-text-color);
   box-shadow: none;
+  border-left: 3px solid var(--primary-color);
+  padding-left: 9px;
 }
 
 .nc-section-header .nc-section-nav-button.nc-section-nav-child {
@@ -600,17 +657,6 @@ ha-code-editor.nc-code-editor .cm-scroller {
 
 .nc-section-collapse-button ha-icon {
   --mdc-icon-size: 18px;
-}
-
-.nc-add-setting {
-  width: 100%;
-  border: 1px solid var(--divider-color);
-  border-radius: 8px;
-  padding: 7px 28px 7px 10px;
-  background: var(--card-background-color);
-  color: var(--primary-text-color);
-  cursor: pointer;
-  font-size: 13px;
 }
 
 .nc-optional-setting[hidden] {
@@ -651,11 +697,23 @@ ha-code-editor.nc-code-editor .cm-scroller {
 }
 
 .nc-modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  align-items: center;
+  flex-wrap: wrap;
   padding: 16px 20px;
   border-top: 1px solid var(--divider-color);
+  background: var(--card-background-color);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.nc-editor-state {
+  margin-right: auto;
+  color: var(--secondary-text-color);
+  font-size: 12px;
 }
 
 .nc-yaml-utility {
@@ -671,26 +729,18 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-section {
   border: 0;
   border-radius: 0;
-  padding: 0;
-  margin-bottom: 20px;
-}
-
-.nc-section-titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.nc-section-titlebar h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  padding: 0 0 28px;
+  margin-bottom: 28px;
 }
 
 .nc-section-content {
   padding: 0;
+}
+
+.nc-section-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 18px;
 }
 
 .nc-setting-controls {
@@ -732,13 +782,13 @@ ha-code-editor.nc-code-editor .cm-scroller {
 
 .nc-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
 }
 
 .nc-field {
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
 .nc-field.full {
@@ -747,10 +797,44 @@ ha-code-editor.nc-code-editor .cm-scroller {
 
 .nc-field label {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
 }
 
-.nc-field input,
+.nc-field-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-size: 15px;
+}
+
+.nc-monitor-settings {
+  display: grid;
+  gap: 26px;
+}
+
+.nc-monitor-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 28px;
+}
+
+.nc-monitor-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.nc-monitor-toggle ha-switch,
+.nc-field-heading ha-switch {
+  flex: 0 0 auto;
+}
+
+.nc-field input:not([type="number"]):not(.nc-duration-input),
 .nc-field textarea,
 .nc-field select {
   width: 100%;
@@ -759,6 +843,20 @@ ha-code-editor.nc-code-editor .cm-scroller {
   padding: 10px;
   background: var(--card-background-color);
   color: var(--primary-text-color);
+}
+
+.nc-field input[type="number"] {
+  width: min(100%, 10rem);
+}
+
+.nc-field ha-input {
+  display: block;
+  width: 100%;
+}
+
+.nc-field ha-input.nc-duration-input,
+.nc-field ha-input.nc-number-field {
+  width: min(100%, 10rem);
 }
 
 .nc-field textarea {
@@ -926,61 +1024,34 @@ ha-code-editor.nc-action-editor {
 
 
 
-.nc-switch-input {
-  appearance: none;
-  -webkit-appearance: none;
-  position: relative;
-  width: 42px !important;
-  height: 24px;
-  margin: 0;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 999px;
-  padding: 0;
-  background: var(--divider-color);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.nc-switch-input::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--card-background-color);
-  transition: transform 0.15s ease;
-}
-
-.nc-switch-input:checked {
-  background-color: var(--primary-color);
-}
-
-.nc-switch-input:checked::after {
-  transform: translateX(18px);
-}
-
-.nc-switch-input:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .nc-switch-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: fit-content;
   cursor: pointer;
 }
 
-.nc-confirmation-clear {
-  margin-top: 16px;
+.nc-setting-group {
+  display: grid;
+  gap: 14px;
 }
 
-.nc-check input:not(.nc-switch-input) {
-  width: auto;
+.nc-subfield {
+  display: grid;
+  gap: 8px;
+  width: fit-content;
+  color: var(--secondary-text-color);
+  font-size: 13px !important;
+}
+
+.nc-setting-row {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.nc-confirmation-clear {
+  margin-top: 16px;
 }
 
 .nc-duration-input {
@@ -990,6 +1061,7 @@ ha-code-editor.nc-action-editor {
 }
 
 .nc-help {
+  margin-top: 12px;
   color: var(--secondary-text-color);
   font-size: 12px;
   line-height: 1.5;
@@ -1102,8 +1174,27 @@ ha-code-editor.nc-action-editor {
     grid-template-columns: 1fr;
   }
 
+  .nc-monitor-toggles {
+    grid-template-columns: 1fr;
+  }
+
   .nc-modal-body {
     padding: 16px;
+  }
+
+  .nc-editor-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+  }
+
+  .nc-editor-section-controls {
+    min-width: 0;
+  }
+
+  .nc-editor-validation {
+    padding: 10px 16px;
   }
 
   .nc-editor-layout {
@@ -1116,7 +1207,11 @@ ha-code-editor.nc-action-editor {
 
   .nc-section-select {
     display: block;
+    position: sticky;
+    top: 0;
+    z-index: 10;
     margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   }
 
   .nc-toolbar,

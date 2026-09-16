@@ -10,6 +10,7 @@ from pkgutil import iter_modules
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 if TYPE_CHECKING:
+    from ..support.scheduler import TaskScheduler
     from ..support.storage import ConfigurationStorage
 
 RouteHandler = Callable[..., Awaitable[Any]]
@@ -80,7 +81,7 @@ class FeatureServices:
     hass: Any
     gateway: Any
     sessions: dict[str, Any]
-    scheduler: Any | None
+    scheduler: TaskScheduler
     configuration_storage: ConfigurationStorage
     reload_configuration: Callable[[], Awaitable[None]]
 
@@ -141,10 +142,6 @@ class FeatureLifecycle:
         *,
         feature_classes_loaded: bool = False,
     ) -> None:
-        if services.scheduler is None:
-            from ..support.scheduler import TaskScheduler
-
-            services.scheduler = TaskScheduler(services.hass)
         if not feature_classes_loaded:
             self._load_feature_classes()
         self._features = tuple(feature(services) for feature in FeatureBase._registry)

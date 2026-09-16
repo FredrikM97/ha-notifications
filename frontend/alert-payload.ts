@@ -109,6 +109,7 @@ export function buildAlertPayload(
   values: AlertFormValues,
 ): Alert {
   const result = cloneAlert(original);
+  delete result.runtime;
   if (!hasRecipients(values.notification.target)) {
     throw new Error(
       "Select at least one device, area, label, or notification entity in Recipients.",

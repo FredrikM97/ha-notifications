@@ -10,6 +10,7 @@ import type {
   RegistryLabel,
   RegistryState,
   RegistryUser,
+  RuntimeAlertState,
 } from "./types.js";
 
 const DOMAIN = "ha_notifications";
@@ -98,6 +99,17 @@ export async function getAlerts(hass: Hass): Promise<Alert[]> {
   return alerts as Alert[];
 }
 
+export async function getAlertRuntime(
+  hass: Hass,
+): Promise<Record<string, RuntimeAlertState>> {
+  const runtime = await call<unknown>(hass, "runtime");
+  if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new Error("ha_notifications/runtime: expected a runtime mapping.");
+  }
+
+  return runtime as Record<string, RuntimeAlertState>;
+}
+
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {
   if (!alert.id || typeof alert.id !== "string") {
     throw new Error("ha_notifications/save: alert.id is required.");
@@ -152,9 +164,7 @@ export async function getHistory(
   alertId: string | null = null,
   limit = 100,
 ) {
-  const data: Record<string, unknown> = {
-    limit,
-  };
+  const data: Record<string, unknown> = { limit };
   if (alertId) {
     data.alert_id = alertId;
   }

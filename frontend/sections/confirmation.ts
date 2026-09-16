@@ -4,7 +4,6 @@ import type { EditorContext } from "../editor/types.js";
 import {
   checkedOf,
   field,
-  optionalControls,
   section,
   valueOf,
 } from "../editor/helpers.js";
@@ -18,7 +17,8 @@ export function renderConfirmationSection(
     html`<div class="nc-grid">
         ${field(
           "Button text",
-          html`<input
+          html`<ha-input
+            appearance="outlined"
             type="text"
             .value=${confirmation.button}
             placeholder="Activity completed"
@@ -26,35 +26,21 @@ export function renderConfirmationSection(
               confirmation.button = valueOf(event);
               context.markDirty();
             }}
-          />`,
+          ></ha-input>`,
         )}
       </div>
       <div class="nc-help">
         Confirmation buttons require at least one Mobile App recipient.
       </div>
       <label class="nc-switch-label">
-        <input
-          class="nc-switch-input"
-          type="checkbox"
-          role="switch"
+        <ha-switch
           .checked=${confirmation.notification.clear !== false}
           @change=${(event: Event) => {
             confirmation.notification.clear = checkedOf(event);
             context.markDirty();
           }}
-        />
+        ></ha-switch>
         <span>Clear notifications when acknowledged</span>
       </label>`,
-    "",
-    optionalControls(
-      context,
-      "confirmation",
-      Boolean(confirmation.enabled),
-      "confirmation",
-      (enabled) => {
-        confirmation.enabled = enabled;
-        context.markDirty();
-      },
-    ),
   );
 }

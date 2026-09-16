@@ -64,6 +64,7 @@ assert.match(panel, /HA Notifications/);
 assert.doesNotMatch(panel, /from ["']lit["']/);
 assert.match(panel, /config\/auth\/list/);
 assert.match(panel, /get_states/);
+assert.match(panel, /getAlertRuntime/);
 assert.match(panel, /Users/);
 assert.match(panel, /Post-send actions/);
 assert.match(panel, /Post-confirmation actions/);
@@ -103,7 +104,8 @@ assert.match(panel, /Notify recipients when confirmed/);
 assert.doesNotMatch(panel, /Confirmed by \{\{ confirmed_by \}\}/);
 assert.match(panel, /discard_test_payload/);
 assert.match(panel, /Draft test notification sent\./);
-assert.match(panel, /nc-switch-input::after/);
+assert.match(panel, /<ha-switch/);
+assert.doesNotMatch(panel, /nc-switch-input/);
 assert.doesNotMatch(
   panel,
   /post-confirmation actions[\s\S]{0,500}!confirmation\.enabled/,
@@ -116,5 +118,5 @@ assert.match(editor, /sectionLabel\(parent, title\)/);
 assert.match(yamlView, /class="nc-code-editor nc-yaml-editor"/);
 assert.match(
   editor,
-  /confirmation: !options\.alert \|\| Boolean\(options\.alert\.confirmation\),[\s\S]*?postConfirmationActions:\s*\n?\s*!options\.alert \|\| Boolean\(options\.alert\.confirmation\),/,
+  /confirmation: true,[\s\S]*?confirmationReminder: true,[\s\S]*?confirmationNotification: true,[\s\S]*?postSendActions: true,[\s\S]*?postConfirmationActions: true,/,
 );

@@ -15,6 +15,8 @@ from ..const import (
     CONFIG_FILENAME,
     DOMAIN,
     PANEL_MODULE,
+    STATE_HISTORY,
+    STATE_RUNTIME,
     STORAGE_KEY,
     STORAGE_VERSION,
     VERSION,
@@ -22,6 +24,7 @@ from ..const import (
 from ..features import confirmation as responses_module
 from ..ha.gateway import HomeAssistantGateway
 from ..support import storage as storage_module
+from ..support.scheduler import TaskScheduler
 from .lifecycle import FeatureLifecycle, FeatureServices
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,7 +37,7 @@ class HaNotificationsController:
         self._gateway = HomeAssistantGateway(hass)
         self._store = self._gateway.make_store(STORAGE_VERSION, STORAGE_KEY)
 
-        self._state: dict[str, Any] = {"alerts": {}, "history": []}
+        self._state: dict[str, Any] = {STATE_RUNTIME: {}, STATE_HISTORY: []}
         self._runtime_storage = storage_module.RuntimeStateStorage(
             hass, self._store, self._state
         )
@@ -54,7 +57,7 @@ class HaNotificationsController:
             hass=hass,
             gateway=self._gateway,
             sessions=self._sessions,
-            scheduler=None,
+            scheduler=TaskScheduler(hass),
             configuration_storage=self._configuration_storage,
             reload_configuration=self.reload,
         )
@@ -189,6 +192,7 @@ class HaNotificationsController:
 
     async def _apply_config(self, config: dict[str, Any]) -> set[str]:
         await self._feature_lifecycle.unload()
+        await self._lifecycle.dispatch("history.configure", config)
         return await self._lifecycle.dispatch("alerts.apply", config)
 
     async def reload(self) -> None:
@@ -209,7 +213,7 @@ class HaNotificationsController:
     async def _rebuild_sessions(self) -> None:
         self._sessions.clear()
         now = self._gateway.now_utc()
-        for alert_id, state in self._state["alerts"].items():
+        for alert_id, state in self._state[STATE_RUNTIME].items():
             action_id = state.get("confirmation_action_id")
             if action_id:
                 await self._lifecycle.dispatch(

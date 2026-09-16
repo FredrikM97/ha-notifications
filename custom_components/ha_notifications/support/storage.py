@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from homeassistant.core import HomeAssistant, callback
 
-from ..const import EVENT_RUNTIME_PERSIST_REQUESTED
+from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, STATE_HISTORY, STATE_RUNTIME
 from ..features.configuration import Configuration
 
 DEFAULT_CONFIG: dict[str, Any] = {"version": 1, "alerts": []}
@@ -107,9 +107,9 @@ class ConfigurationStorage:
         """Validate and persist raw YAML without changing its structure."""
 
         document = self.validate_yaml(text)
-        mapped = document.model_dump(exclude_none=True)
+        mapped, yaml_text = dump_config(document)
         await self._hass.async_add_executor_job(
-            _write_text, self._path(), dump_yaml_text(mapped)
+            _write_text, self._path(), yaml_text
         )
         return mapped
 
@@ -174,7 +174,12 @@ def dump_config(config: Configuration | dict[str, Any]) -> tuple[dict[str, Any],
     )
     mapped = document.model_dump(exclude_none=True)
     mapped["alerts"] = [
-        alert.model_dump(exclude_none=True) for alert in document.alerts
+        {
+            key: value
+            for key, value in alert.model_dump(exclude_none=True).items()
+            if key != "runtime"
+        }
+        for alert in document.alerts
     ]
     return mapped, dump_yaml_text(mapped)
 
@@ -183,13 +188,13 @@ def ensure_runtime_state_shape(raw: Any) -> dict[str, Any]:
     """Return a runtime-state mapping with the expected top-level shape."""
 
     state = raw if isinstance(raw, dict) else {}
-    state.setdefault("alerts", {})
-    state.setdefault("history", [])
+    state.setdefault(STATE_RUNTIME, {})
+    state.setdefault(STATE_HISTORY, [])
 
-    if not isinstance(state["alerts"], dict):
-        state["alerts"] = {}
+    if not isinstance(state[STATE_RUNTIME], dict):
+        state[STATE_RUNTIME] = {}
 
-    if not isinstance(state["history"], list):
-        state["history"] = []
+    if not isinstance(state[STATE_HISTORY], list):
+        state[STATE_HISTORY] = []
 
     return state

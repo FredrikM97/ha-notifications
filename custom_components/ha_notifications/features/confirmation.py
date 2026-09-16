@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..const import EVENT_NOTIFICATION_ACTION
+from ..const import EVENT_NOTIFICATION_ACTION, STATE_RUNTIME
 from ..controller.lifecycle import FeatureBase, route
 from .feature_config import AlertFeatureConfig
 
@@ -183,7 +183,7 @@ class ConfirmationFeature(FeatureBase):
         if session.alert_id is None:
             return None
         alert = self._alerts.get(session.alert_id)
-        state = self.services.state["alerts"].get(session.alert_id)
+        state = self.services.state[STATE_RUNTIME].get(session.alert_id)
         if (
             alert is None
             or state is None

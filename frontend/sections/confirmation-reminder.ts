@@ -6,7 +6,6 @@ import {
   durationInput,
   durationInputValue,
   field,
-  optionalControls,
   section,
   valueOf,
 } from "../editor/helpers.js";
@@ -30,7 +29,9 @@ export function renderConfirmationReminderSection(
         )}
         ${field(
           "Maximum reminders",
-          html`<input
+          html`<ha-input
+            appearance="outlined"
+            class="nc-number-field"
             type="number"
             min="1"
             max="20"
@@ -42,37 +43,23 @@ export function renderConfirmationReminderSection(
               );
               context.markDirty();
             }}
-          />`,
+          ></ha-input>`,
         )}
       </div>
       <div class="nc-reminder-options">
       <label class="nc-switch-label">
-        <input
-          class="nc-switch-input"
-          type="checkbox"
-          role="switch"
+        <ha-switch
           .checked=${confirmation.reminders.show_attempts === true}
           @change=${(event: Event) => {
             confirmation.reminders.show_attempts = checkedOf(event);
             context.markDirty();
           }}
-        />
+        ></ha-switch>
         <span>Show attempt count in notification title</span>
       </label>
       </div>
       <div class="nc-help">
         Resend only while this confirmation is still pending.
       </div>`,
-    "",
-    optionalControls(
-      context,
-      "confirmationReminder",
-      confirmation.reminders.enabled !== false,
-      "reminder policy",
-      (enabled) => {
-        confirmation.reminders.enabled = enabled;
-        context.markDirty();
-      },
-    ),
   );
 }

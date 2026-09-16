@@ -27,7 +27,6 @@ export interface EditorContext {
   mode: EditorMode;
   markDirty(): void;
   refreshStatuses(): void;
-  removeSetting(setting: OptionalSetting): void;
   setMode(mode: EditorMode): void;
   validateCondition(): void;
   validateActions(role: string, label: string): void;

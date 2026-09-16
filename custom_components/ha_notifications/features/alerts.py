@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from ..const import EVENT_RUNTIME_PERSIST_REQUESTED
+from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, STATE_HISTORY, STATE_RUNTIME
 from ..controller.lifecycle import (
     FeatureBase,
     WebsocketArgument,
@@ -35,7 +35,7 @@ class AlertFeature(FeatureBase):
     def runtime(self, alert_id: str) -> dict[str, Any]:
         """Return the mutable runtime state for an owned alert."""
 
-        states = self.services.state["alerts"]
+        states = self.services.state[STATE_RUNTIME]
         current = states.get(alert_id)
         runtime = AlertRuntime.model_validate(current or {}).model_dump()
         if current:
@@ -53,9 +53,9 @@ class AlertFeature(FeatureBase):
             alert["id"]: Alert.model_validate(alert) for alert in config["alerts"]
         }
         newly_enabled: set[str] = set()
-        for alert_id in list(self.services.state["alerts"]):
+        for alert_id in list(self.services.state[STATE_RUNTIME]):
             if alert_id not in self._alerts:
-                del self.services.state["alerts"][alert_id]
+                del self.services.state[STATE_RUNTIME][alert_id]
         for alert in self._alerts.values():
             previous = previous_alerts.get(alert.id)
             if alert.enabled and previous is not None and not previous.enabled:
@@ -82,14 +82,25 @@ class AlertFeature(FeatureBase):
         error_message="Unable to load alerts.",
     )
     async def list_alerts(self) -> list[dict[str, Any]]:
-        """Return configured alerts with their current runtime state."""
+        """Return configured alerts without mutable runtime state."""
 
-        result = []
-        for alert in self._alerts.values():
-            mapped = alert.model_dump(exclude_none=True)
-            state = self.runtime(alert.id)
-            result.append({**mapped, "runtime": deepcopy(state)})
-        return result
+        return [
+            alert.model_dump(exclude_none=True) for alert in self._alerts.values()
+        ]
+
+    @websocket_route(
+        "alerts.runtime_list",
+        command="runtime",
+        error_code="runtime_list_failed",
+        error_message="Unable to load alert runtime state.",
+    )
+    async def list_runtime(self) -> dict[str, dict[str, Any]]:
+        """Return mutable runtime state separately from alert configuration."""
+
+        return {
+            alert_id: deepcopy(self.runtime(alert_id))
+            for alert_id in self._alerts
+        }
 
     @websocket_route(
         "alerts.save",
@@ -101,6 +112,7 @@ class AlertFeature(FeatureBase):
     async def save_alert(self, alert: dict[str, Any]) -> dict[str, Any]:
         """Create or update an alert, then request lifecycle reload."""
 
+        alert = {key: value for key, value in alert.items() if key != "runtime"}
         config = await self.services.configuration_storage.load()
         alerts = list(config["alerts"])
         saved_alert = Alert.model_validate(alert).model_dump(exclude_none=True)
@@ -145,9 +157,9 @@ class AlertFeature(FeatureBase):
             item for item in config["alerts"] if item["id"] != alert_id
         ]
         await self.services.configuration_storage.save(config)
-        self.services.state["alerts"].pop(alert_id, None)
-        self.services.state["history"] = history.remove_alert(
-            self.services.state["history"], alert_id
+        self.services.state[STATE_RUNTIME].pop(alert_id, None)
+        self.services.state[STATE_HISTORY] = history.remove_alert(
+            self.services.state[STATE_HISTORY], alert_id
         )
         await self.services.reload_configuration()
         self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)

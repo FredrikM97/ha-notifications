@@ -2,7 +2,7 @@ import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type { EditorContext } from "../editor/types.js";
 import { ACTIONS_PLACEHOLDER } from "../editor/types.js";
-import { actionsYaml, codeEditor, optionalControls, section } from "../editor/helpers.js";
+import { actionsYaml, codeEditor, section } from "../editor/helpers.js";
 
 export function renderPostConfirmationActionsSection(
   context: EditorContext,
@@ -22,24 +22,6 @@ export function renderPostConfirmationActionsSection(
         language: "yaml",
         label: "Post-confirmation actions",
         onInput: () => context.markDirty(),
-      })}
-      <button
-        class="nc-button secondary"
-        @click=${() =>
-          context.validateActions("actions", "Post-confirmation actions")}
-      >
-        Validate actions
-      </button>`,
-    "",
-    optionalControls(
-      context,
-      "postConfirmationActions",
-      Boolean(confirmation.actions.enabled),
-      "post-confirmation actions",
-      (enabled) => {
-        confirmation.actions.enabled = enabled;
-        context.markDirty();
-      },
-    ),
+      })}`,
   );
 }

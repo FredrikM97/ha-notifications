@@ -74,20 +74,18 @@ function historyTemplate(
 }
 
 function historyFilterTemplate(options: HistoryRenderOptions) {
-  if (!options.alertName) {
-    return "";
-  }
-
   return html`<div class="nc-history-filter">
-    <div>
-      <div class="nc-history-filter-title">
-        History for ${options.alertName}
-      </div>
-      <div class="nc-history-filter-subtitle">
-        Showing events for this alert only.
-      </div>
-    </div>
-    ${showAllButton(options.onShowAll, "Show all")}
+    ${options.alertName
+      ? html`<div>
+          <div class="nc-history-filter-title">
+            History for ${options.alertName}
+          </div>
+          <div class="nc-history-filter-subtitle">
+            Showing events for this alert only.
+          </div>
+        </div>
+        ${showAllButton(options.onShowAll, "Show all")}`
+      : html`<div class="nc-history-filter-title">All history</div>`}
   </div>`;
 }
 

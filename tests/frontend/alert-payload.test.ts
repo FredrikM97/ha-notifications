@@ -56,6 +56,26 @@ describe("buildAlertPayload", () => {
     );
   });
 
+  it("does not include runtime state in the editable alert payload", () => {
+    const original = defaultAlert();
+    original.runtime = {
+      active: true,
+      attempts: 20,
+      last_event: { type: "notification_sent" },
+    };
+    const payload = buildAlertPayload(
+      original,
+      values({
+        notification: {
+          ...values().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+      }),
+    );
+
+    expect(payload.runtime).toBeUndefined();
+  });
+
   it("throws when confirmation is enabled without recipients", () => {
     expect(() =>
       buildAlertPayload(

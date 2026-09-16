@@ -4,17 +4,50 @@ from __future__ import annotations
 
 import uuid
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ..const import MAX_HISTORY, HistoryEventType
-from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
+from ..const import (
+    DEFAULT_HISTORY_RETENTION_DAYS,
+    EVENT_RUNTIME_PERSIST_REQUESTED,
+    MAX_HISTORY,
+    STATE_HISTORY,
+    STATE_HISTORY_RETENTION_BY_ALERT,
+    STATE_RUNTIME,
+    HistoryEventType,
+)
+from ..controller.lifecycle import (
+    FeatureBase,
+    WebsocketArgument,
+    route,
+    websocket_route,
+)
 
 
 class HistoryFeature(FeatureBase):
     """Own query access to persisted alert history."""
 
     name = "history"
+
+    @route("history.configure")
+    async def configure(self, config: dict[str, Any]) -> bool:
+        retention_by_alert = {}
+        for alert in config.get("alerts", []):
+            monitor = alert.get("monitor", {})
+            retention = monitor.get("retention", {})
+            if retention.get("enabled", True) is False:
+                retention_by_alert[alert["id"]] = None
+            else:
+                retention_by_alert[alert["id"]] = int(
+                    retention.get("days", DEFAULT_HISTORY_RETENTION_DAYS)
+                )
+        self.services.state[STATE_HISTORY_RETENTION_BY_ALERT] = retention_by_alert
+        history = self.services.state[STATE_HISTORY]
+        pruned = prune_entries_by_alert(history, retention_by_alert)
+        self.services.state[STATE_HISTORY] = pruned
+        if len(pruned) != len(history):
+            self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+        return True
 
     def record(
         self,
@@ -27,7 +60,7 @@ class HistoryFeature(FeatureBase):
         """Record one user-visible history event for an active alert."""
 
         return self._record_event(
-            self.services.state["alerts"].get(alert["id"]),
+            self.services.state[STATE_RUNTIME].get(alert["id"]),
             alert,
             event_type,
             message,
@@ -56,8 +89,10 @@ class HistoryFeature(FeatureBase):
             now,
             runtime_state.get("flow_id"),
         )
-        self.services.state["history"] = append_entry(
-            self.services.state["history"], entry
+        self.services.state[STATE_HISTORY] = append_entry(
+            self.services.state[STATE_HISTORY],
+            entry,
+            retention_for_alert(alert),
         )
         runtime_state["last_event"] = entry
         return True
@@ -101,8 +136,7 @@ class HistoryFeature(FeatureBase):
     ) -> list[dict[str, Any]]:
         """Return persisted history owned by this feature."""
 
-        return list_entries(self.services.state["history"], alert_id, limit)
-
+        return list_entries(self.services.state[STATE_HISTORY], alert_id, limit)
 
 def format_entry(
     alert: dict[str, Any],
@@ -130,12 +164,77 @@ def format_entry(
 
 
 def append_entry(
-    history: list[dict[str, Any]], entry: dict[str, Any]
+    history: list[dict[str, Any]],
+    entry: dict[str, Any],
+    retention_days: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Append an entry, trimming to the configured history size."""
+    """Append an entry, trimming by retention and maximum history size."""
 
     history.append(entry)
+    if retention_days is not None:
+        history = prune_entries(history, retention_days)
     return history[-MAX_HISTORY:]
+
+
+def retention_for_alert(alert: dict[str, Any]) -> int | None:
+    """Return an alert's configured history retention period, if present."""
+
+    monitor = alert.get("monitor")
+    if not isinstance(monitor, dict):
+        return None
+    retention = monitor.get("retention")
+    if not isinstance(retention, dict):
+        return None
+    if retention.get("enabled", True) is False:
+        return None
+    value = retention.get("days")
+    if value is None:
+        return DEFAULT_HISTORY_RETENTION_DAYS
+    return int(value)
+
+
+def prune_entries(
+    history: list[dict[str, Any]], retention_days: int, *, now: datetime | None = None
+) -> list[dict[str, Any]]:
+    """Keep entries newer than the configured retention period."""
+
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(
+        days=max(1, retention_days)
+    )
+    retained: list[dict[str, Any]] = []
+    for entry in history:
+        timestamp = entry.get("timestamp")
+        try:
+            parsed = datetime.fromisoformat(timestamp)
+        except (TypeError, ValueError):
+            retained.append(entry)
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        if parsed >= cutoff:
+            retained.append(entry)
+    return retained
+
+
+def prune_entries_by_alert(
+    history: list[dict[str, Any]], retention_by_alert: dict[str, int | None]
+) -> list[dict[str, Any]]:
+    """Prune each alert's entries using its configured retention period."""
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in history:
+        grouped.setdefault(str(entry.get("alert_id", "")), []).append(entry)
+
+    retained: list[dict[str, Any]] = []
+    for alert_id, entries in grouped.items():
+        retention_days = retention_by_alert.get(
+            alert_id, DEFAULT_HISTORY_RETENTION_DAYS
+        )
+        if retention_days is None:
+            retained.extend(entries)
+        else:
+            retained.extend(prune_entries(entries, retention_days))
+    return retained[-MAX_HISTORY:]
 
 
 def list_entries(
@@ -172,7 +271,7 @@ def record_notification_outcome(
     if not record_history:
         return False
 
-    runtime_state = state_root["alerts"].get(alert["id"])
+    runtime_state = state_root[STATE_RUNTIME].get(alert["id"])
     if runtime_state is None:
         return False
 
@@ -192,7 +291,11 @@ def record_notification_outcome(
         now=now,
         flow_id=runtime_state.get("flow_id"),
     )
-    state_root["history"] = append_entry(state_root["history"], entry)
+    state_root[STATE_HISTORY] = append_entry(
+        state_root[STATE_HISTORY],
+        entry,
+        retention_for_alert(alert),
+    )
     runtime_state["last_event"] = entry
     return True
 
@@ -217,7 +320,11 @@ def record_event(
         now=now,
         flow_id=runtime_state.get("flow_id"),
     )
-    state_root["history"] = append_entry(state_root["history"], entry)
+    state_root[STATE_HISTORY] = append_entry(
+        state_root[STATE_HISTORY],
+        entry,
+        retention_for_alert(alert),
+    )
     runtime_state["last_event"] = entry
 
     return True
