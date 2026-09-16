@@ -136,6 +136,135 @@ def notification_snapshot(kind: str):
     raise ValueError(f"Unknown notification snapshot kind: {kind}")
 
 
+def target_registry_snapshot():
+    """Build registries covering user, device, area, floor, and label targets."""
+
+    from custom_components.ha_notifications.delivery.targets import RegistrySnapshot
+
+    return RegistrySnapshot(
+        area_registry=SimpleNamespace(
+            areas={
+                "area_1": SimpleNamespace(area_id="area_1", floor_id="floor_1")
+            }
+        ),
+        device_registry=SimpleNamespace(
+            devices={
+                "device_1": SimpleNamespace(
+                    id="device_1",
+                    area_id="area_1",
+                    labels={"critical"},
+                    config_entries={"mobile_entry"},
+                )
+            }
+        ),
+        entity_registry=SimpleNamespace(
+            entities={
+                "sensor.tracker": SimpleNamespace(
+                    entity_id="sensor.tracker",
+                    device_id="device_1",
+                    config_entry_id=None,
+                ),
+                "notify.phone": SimpleNamespace(
+                    entity_id="notify.phone",
+                    device_id="device_1",
+                    config_entry_id="mobile_entry",
+                ),
+            }
+        ),
+        mobile_app_entries=[
+            SimpleNamespace(
+                entry_id="mobile_entry",
+                data={
+                    "user_id": "user_1",
+                    "device_id": "device_1",
+                    "device_name": "phone",
+                },
+            )
+        ],
+        person_states=[
+            SimpleNamespace(
+                attributes={
+                    "user_id": "user_1",
+                    "device_trackers": ["sensor.tracker"],
+                }
+            )
+        ],
+        has_service=lambda domain, service: domain == "notify"
+        and service == "mobile_app_phone",
+    )
+
+
+@pytest.fixture
+def real_target_registry(hass: HomeAssistant):
+    """Populate real Home Assistant registries for target-resolution tests."""
+
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.ha_notifications.delivery.targets import RegistrySnapshot
+
+    mobile_entry = MockConfigEntry(
+        domain="mobile_app",
+        entry_id="mobile_entry",
+        data={
+            "user_id": "user_1",
+            "device_id": "device_1",
+            "device_name": "phone",
+        },
+    )
+    mobile_entry.add_to_hass(hass)
+    hass.services.async_register("notify", "mobile_app_phone", lambda _call: None)
+
+    area = ar.async_get(hass).async_create("Living Room", floor_id="floor_1")
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=mobile_entry.entry_id,
+        identifiers={("mobile_app", "device_1")},
+        name="phone",
+    )
+    device = device_registry.async_update_device(
+        device.id,
+        area_id=area.id,
+        labels={"critical"},
+    )
+    entity_registry = er.async_get(hass)
+    tracker = entity_registry.async_get_or_create(
+        "sensor",
+        "mobile_app",
+        "tracker",
+        suggested_object_id="tracker",
+        device_id=device.id,
+    )
+    notify_entity = entity_registry.async_get_or_create(
+        "notify",
+        "mobile_app",
+        "phone",
+        suggested_object_id="phone",
+        config_entry=mobile_entry,
+        device_id=device.id,
+    )
+    hass.states.async_set(
+        "person.user",
+        "home",
+        {"user_id": "user_1", "device_trackers": [tracker.entity_id]},
+    )
+
+    return SimpleNamespace(
+        snapshot=RegistrySnapshot(
+            area_registry=ar.async_get(hass),
+            device_registry=device_registry,
+            entity_registry=entity_registry,
+            mobile_app_entries=[mobile_entry],
+            person_states=list(hass.states.async_all("person")),
+            has_service=hass.services.has_service,
+        ),
+        area_id=area.id,
+        device_id=device.id,
+        notify_entity_id=notify_entity.entity_id,
+    )
+
+
 class _TestNotification:
     def __init__(self) -> None:
         self.payloads: list[dict[str, Any]] = []

@@ -1,78 +1,69 @@
 """Tests for notification target resolution."""
 
-from types import SimpleNamespace
-
 from custom_components.ha_notifications.delivery.targets import (
-    RegistrySnapshot,
     mobile_app_notify_services_for_target,
     resolve_target_devices,
     resolve_user_notification_target,
     target_values,
 )
+from tests.conftest import target_registry_snapshot
 
 
-def snapshot_with_user_and_devices():
-    return RegistrySnapshot(
-        area_registry=SimpleNamespace(
-            areas={"area_1": SimpleNamespace(area_id="area_1", floor_id="floor_1")}
-        ),
-        device_registry=SimpleNamespace(
-            devices={
-                "device_1": SimpleNamespace(
-                    id="device_1",
-                    area_id="area_1",
-                    labels={"critical"},
-                    config_entries={"mobile_entry"},
-                )
-            }
-        ),
-        entity_registry=SimpleNamespace(
-            entities={
-                "sensor.tracker": SimpleNamespace(
-                    entity_id="sensor.tracker",
-                    device_id="device_1",
-                    config_entry_id=None,
-                ),
-                "notify.phone": SimpleNamespace(
-                    entity_id="notify.phone",
-                    device_id="device_1",
-                    config_entry_id="mobile_entry",
-                ),
-            }
-        ),
-        mobile_app_entries=[
-            SimpleNamespace(
-                entry_id="mobile_entry",
-                data={"user_id": "user_1", "device_name": "phone"},
-            )
-        ],
-        person_states=[
-            SimpleNamespace(
-                attributes={"user_id": "user_1", "device_trackers": ["sensor.tracker"]}
-            )
-        ],
-        has_service=lambda domain, service: domain == "notify"
-        and service == "mobile_app_phone",
-    )
-
-
-def test_target_helpers_resolve_user_area_floor_label_and_mobile_service():
-    snapshot = snapshot_with_user_and_devices()
+def test_target_helpers_resolve_all_target_types(snapshot):
+    registry = target_registry_snapshot()
 
     assert target_values({"entity_id": "notify.phone"}, "entity_id") == [
         "notify.phone"
     ]
     resolved_user = resolve_user_notification_target(
-        snapshot, {"user_id": ["user_1"]}
+        registry, {"user_id": ["user_1"]}
     )
-    assert resolved_user["entity_id"] == ["notify.phone"]
+    target_results = {}
+    for target_type, target in {
+        "device": {"device_id": "device_1"},
+        "area": {"area_id": "area_1"},
+        "floor": {"floor_id": "floor_1"},
+        "label": {"label_id": "critical"},
+        "user": resolved_user,
+    }.items():
+        resolved = resolve_target_devices(target, registry)
+        target_results[target_type] = {
+            "device_ids": sorted(resolved.device_ids),
+            "area_ids": sorted(resolved.area_ids),
+            "config_entry_ids": sorted(resolved.config_entry_ids),
+            "services": mobile_app_notify_services_for_target(target, registry),
+        }
 
-    resolved = resolve_target_devices(
-        {"floor_id": "floor_1", "label_id": "critical"}, snapshot
+    assert target_results == snapshot
+
+
+async def test_real_home_assistant_registries_resolve_all_target_types(
+    real_target_registry, snapshot
+):
+    registry = real_target_registry.snapshot
+    resolved_user = resolve_user_notification_target(
+        registry, {"user_id": ["user_1"]}
     )
-    assert resolved.device_ids == {"device_1"}
-    assert resolved.area_ids == {"area_1"}
-    assert resolved.config_entry_ids == {"mobile_entry"}
-    assert mobile_app_notify_services_for_target(
-        {"device_id": ["device_1"]}, snapshot
-    ) == ["notify.mobile_app_phone"]
+    target_results = {}
+    for target_type, target in {
+        "device": {"device_id": real_target_registry.device_id},
+        "area": {"area_id": real_target_registry.area_id},
+        "floor": {"floor_id": "floor_1"},
+        "label": {"label_id": "critical"},
+        "user": resolved_user,
+    }.items():
+        resolved = resolve_target_devices(target, registry)
+        target_results[target_type] = {
+            "device_ids": [
+                "<device>" if value == real_target_registry.device_id else value
+                for value in sorted(resolved.device_ids)
+            ],
+            "area_ids": [
+                "<area>" if value == real_target_registry.area_id else value
+                for value in sorted(resolved.area_ids)
+            ],
+            "config_entry_ids": sorted(resolved.config_entry_ids),
+            "services": mobile_app_notify_services_for_target(target, registry),
+        }
+
+    assert target_results == snapshot

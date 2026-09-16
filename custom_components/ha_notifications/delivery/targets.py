@@ -101,9 +101,9 @@ def resolve_target_devices(
     floor_ids = set(target_values(notification_target, "floor_id"))
     label_ids = set(target_values(notification_target, "label_id"))
     area_ids.update(
-        area.area_id
+        getattr(area, "area_id", getattr(area, "id", None))
         for area in registry_snapshot.area_registry.areas.values()
-        if area.floor_id in floor_ids
+        if getattr(area, "floor_id", None) in floor_ids
     )
     for device in registry_snapshot.device_registry.devices.values():
         if device.area_id in area_ids or label_ids.intersection(

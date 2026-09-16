@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import importlib
 import unittest
+from datetime import datetime, timezone
 from functools import partial
 
 from homeassistant.components.notify.const import NOTIFY_SERVICE_SCHEMA
 
+from tests.conftest import (
+    make_confirmation_alert,
+    notification_snapshot,
+    target_registry_snapshot,
+)
 from tests.conftest import make_notification_alert as alert
-from tests.conftest import notification_snapshot
 from tests.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
@@ -102,6 +107,21 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0].service, "mobile_app_somebody")
         self.assertIsNone(result[0].target)
         self.assertIn("actions", result[0].data["data"])
+
+    async def test_user_target_resolves_to_mobile_service(self):
+        configured_alert = alert()
+        configured_alert["notification"]["target"] = {"user_id": ["user_1"]}
+
+        result = await notifications.plan_delivery(
+            configured_alert,
+            {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
+            None,
+            target_registry_snapshot(),
+            render,
+        )
+
+        self.assertEqual([command.service for command in result], ["mobile_app_phone"])
+        self.assertIsNone(result[0].target)
 
     async def test_registry_device_target_includes_confirmation_action(self):
         configured_alert = alert()
@@ -309,6 +329,69 @@ async def test_mobile_replacement_contract_snapshot(snapshot):
     ]
 
     assert normalized == snapshot
+
+
+async def test_confirmation_reminder_replacement_contract_snapshot(snapshot):
+    result = await notifications.send_requested(
+        {
+            "alert": make_confirmation_alert(),
+            "attempt": 2,
+            "confirmation_action_id": "confirm_1",
+            "replace_existing": True,
+            "test": False,
+            "now": "now",
+        },
+        notifications.NotificationCapabilitySet(
+            render=render,
+            snapshot=empty_snapshot(),
+        ),
+    )
+    normalized = [
+        {
+            "domain": command.domain,
+            "service": command.service,
+            "data": command.data,
+            "target": command.target,
+        }
+        for command in result
+    ]
+
+    assert normalized == snapshot
+
+
+def test_delivery_result_commits_only_successful_attempts():
+    runtime = {
+        "attempts": 1,
+        "last_notified": "previous",
+        "last_error": None,
+    }
+
+    notifications.NotificationFeature.record_delivery_result(
+        runtime,
+        2,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        success=False,
+        error="delivery failed",
+    )
+
+    assert runtime == {
+        "attempts": 1,
+        "last_notified": "previous",
+        "last_error": "delivery failed",
+    }
+
+    notifications.NotificationFeature.record_delivery_result(
+        runtime,
+        2,
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+        success=True,
+    )
+
+    assert runtime == {
+        "attempts": 2,
+        "last_notified": "2026-01-02T00:00:00+00:00",
+        "last_error": None,
+    }
 
 
 async def test_confirmation_completion_planner_renders_message_and_clear_policy():

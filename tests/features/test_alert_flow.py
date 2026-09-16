@@ -54,7 +54,8 @@ class Notification:
 
     @staticmethod
     def record_delivery_result(runtime, attempt, now, *, success, error=None):
-        runtime["attempts"] = attempt
+        if success:
+            runtime["attempts"] = attempt
         runtime["last_error"] = error
 
     async def send(self, payload):
@@ -152,8 +153,30 @@ async def test_failed_delivery_records_failure_without_follow_up():
     )
 
     assert features["notification"].fail
+    assert features["alerts"].values["alert_1"].get("attempts", 0) == 0
     assert not features["follow_up_actions"].calls
     assert features["history"].events[-1][2]["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_reminder_sends_next_attempt_as_replacement():
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    flow, features = build_flow()
+    runtime = features["alerts"].values["alert_1"]
+    runtime["attempts"] = 1
+    runtime["last_notified"] = "2026-01-01T00:00:00+00:00"
+
+    await flow.handle_condition(
+        make_alert(),
+        SimpleNamespace(
+            kind=const.TransitionKind.SHOULD_SEND,
+            source="confirmation",
+        ),
+        now,
+    )
+
+    assert features["notification"].sent[-1]["attempt"] == 2
+    assert features["notification"].sent[-1]["replace_existing"] is True
 
 
 @pytest.mark.asyncio
