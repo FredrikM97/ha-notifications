@@ -6,11 +6,13 @@ import json
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.helpers.template import TemplateError, result_as_boolean
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from ..const import ConditionType
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..domain.durations import parse_duration
+from ..support.templates import render_template
 from .feature_config import AlertFeatureConfig
 
 
@@ -18,6 +20,10 @@ class ConditionFeature(FeatureBase):
     """Own condition compilation and frontend validation routes."""
 
     name = "conditions"
+
+    def __init__(self, hass: Any, *_args: Any) -> None:
+        super().__init__(hass, *_args)
+        self._hass = hass
 
     @websocket_route(
         "conditions.validate",
@@ -29,9 +35,15 @@ class ConditionFeature(FeatureBase):
     async def validate(self, alert: dict[str, Any]) -> bool:
         """Compile and evaluate a condition without persisting an alert."""
 
-        _active, error = await self.services.gateway.evaluate_condition(
-            compile_condition(alert)
-        )
+        try:
+            result = await render_template(
+                self._hass, compile_condition(alert)
+            )
+        except TemplateError as err:
+            error = str(err)
+        else:
+            result_as_boolean(result)
+            error = None
         if error is not None:
             raise ValueError(f"Condition template failed: {error}")
         return True

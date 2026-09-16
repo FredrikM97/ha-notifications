@@ -1,19 +1,18 @@
 # Architecture overview
 
-HA Notifications uses a small controller composition root, direct feature workflows, and one Home Assistant gateway. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
+HA Notifications uses a small controller composition root and direct feature workflows. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
 
 ## Layer map
 
 ```mermaid
 flowchart LR
     HA[Home Assistant\nstate, services, external event bus]
-    Store[HA Store and config files]
+    Store[HA Store and ConfigEntry options]
     Init[__init__.py\nHA lifecycle glue]
     Compose[__init__.py\nfeature construction]
     Core[controller/core.py\nlifecycle host and ordered workflows]
     Life[controller/lifecycle.py\nfeature setup/unload + scheduler]
     WS[bridge/websocket.py\nwebsocket transport]
-    Gateway[ha/gateway.py\nHome Assistant effect boundary]
     Trigger[features/triggering.py\nCondition listeners]
     TriggerEffects[features/trigger_effects.py\ntransition effects]
     Alerts[features/alerts.py\nAlert queries]
@@ -27,7 +26,7 @@ flowchart LR
     History[features/history.py\nhistory and persistence decisions]
     Alert[features/configuration.py\nAlert + Configuration + Runtime]
     Shared[domain/durations.py + durations.py\nshared value behavior]
-    Storage[support/storage.py\nYAML and state shape]
+    Storage[support/storage.py\nConfigEntry options, YAML import/export, and state shape]
     Front[frontend/api.ts + Lit UI]
 
     Init --> Compose
@@ -66,15 +65,16 @@ flowchart LR
     Testing --> Notify
     ConfirmFlow --> Notify
     ConfirmFlow --> Actions
-    Actions --> Gateway
-    Notify --> Gateway
     History --> Storage
     Life --> Trigger
     Life --> Alerts
     Life --> Confirm
     Life --> ConfirmFlow
-    Gateway --> HA
-    Gateway --> Store
+    Core --> HA
+    Trigger --> HA
+    Confirm --> HA
+    Notify --> HA
+    Actions --> HA
     HA -. callbacks .-> Trigger
     HA -. notification actions .-> Confirm
 ```
@@ -82,12 +82,13 @@ flowchart LR
 ## Ownership rules
 
 - `__init__.py` constructs and attaches the feature lifecycle. `controller/core.py` hosts integration lifecycle and shared runtime state but never constructs, initializes, configures, or unloads individual features. `controller/lifecycle.py` owns generic feature setup/unload ordering, rollback, annotated feature/websocket-route dispatch, and the task scheduler.
-- `ha/gateway.py` is the only module that imports Home Assistant APIs. It provides typed service, template, registry, persistence, watcher, panel, and websocket capabilities.
+- Features and the controller access Home Assistant directly for effects they own. There is no gateway or service locator; feature dependencies remain explicit through lifecycle composition.
+- `controller/lifecycle.py` composes each feature with the shared `(hass, state, config_storage)` context; each feature selects only the values it needs and does not retain unused values.
 - `bridge/websocket.py` generates Home Assistant handlers from feature websocket-route declarations and handles HA connection/result serialization. Legacy controller operations remain only until their owning features are migrated; it remains a transport adapter, not a domain router.
 - `features/alerts.py` owns `AlertFeature`, its `alerts.list` and `alerts.save` routes, runtime-state projection, alert validation, timestamps, and reload request.
 - `features/alerts.py` owns typed alerts and `AlertRuntime`; other features request alert runtime through its lifecycle route instead of constructing generic trigger state.
 - `features/triggering.py` owns condition listeners, watcher registration, startup/reload/interval/template callbacks, and transition decisions. It does not normalize frontend values, own alert state, or apply delivery/history effects.
-- `features/trigger_effects.py` owns the ordered effects after a transition: confirmation tracking, notification delivery, history recording, follow-up actions, and runtime persistence.
+- `features/trigger_effects.py` sequences the ordered effects after a transition: confirmation tracking, notification delivery, follow-up actions, and runtime persistence. `HistoryFeature` owns history recording and mutation.
 - `features/confirmation.py` owns confirmation sessions, its Home Assistant action subscription, matching, and resolution into confirmation facts.
 - `features/testing.py` owns saved-alert and draft test delivery, draft confirmation sessions, TTL expiry, disposal, and its websocket routes.
 - `features/confirmation_flow.py` owns ordered reactions to a confirmation fact. It requests notification delivery planning, history recording, and follow-up execution but owns none of their state or composition rules.
@@ -100,7 +101,8 @@ flowchart LR
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
 - `features/confirmation.py` owns `ConfirmationConfig` and confirmation sessions; `features/confirmation_flow.py` owns confirmation effect ordering.
 - `features/conditions.py` owns condition-editor validation and pure condition compilation.
-- `support/storage.py` owns configuration document loading, validation, and saving; core only sequences reload after a feature requests it.
+- `support/storage.py` owns config-entry option loading/saving, YAML import/export validation, and runtime-state persistence; core only sequences reload after a feature requests it.
+- `support/templates.py` owns the small shared adapter for awaitable-aware Home Assistant template rendering; feature workflows still own when rendering occurs.
 - `support/scheduler.py` owns background task tracking and lifecycle cleanup for feature-scheduled work.
 - Feature models remain Pydantic objects at feature boundaries. Mapping output is
     created only at YAML/websocket edges with `model_dump()`.
@@ -114,11 +116,11 @@ flowchart LR
 
 ## Dependencies and validation
 
-Features receive narrow typed capabilities and may depend only on explicitly declared lower-level capabilities. There is no service locator, generic plugin framework, or application-wide router. Dependencies must remain acyclic.
+Features receive the shared application context at construction and may depend only on explicitly declared lower-level feature relationships. There is no service locator, generic plugin framework, or application-wide router. Dependencies must remain acyclic.
 
 Pydantic v2 models own feature configuration defaults, field limits, coercion, and feature-specific validation. `Alert` owns the typed alert graph, while explicit `model_dump()` calls preserve YAML and websocket shapes. Voluptuous remains at the Home Assistant websocket envelope boundary. Whole-document configuration coordination handles only document shape and cross-feature invariants, delegating field semantics to the owning feature.
 
-Invalid configuration is validated before any file write, so invalid YAML cannot replace the last valid configuration. The canonical YAML shape keeps alert-level confirmation separate from notification content; public websocket contracts remain stable.
+Invalid configuration is validated before config-entry options are updated, so invalid YAML cannot replace the last valid configuration. The canonical YAML shape keeps alert-level confirmation separate from notification content; public websocket contracts remain stable.
 
 ## Workflow contracts
 
@@ -146,7 +148,7 @@ Invalid configuration is validated before any file write, so invalid YAML cannot
 
 ## Lifecycle
 
-1. The composition module constructs the gateway host and feature lifecycle.
+1. The composition module constructs the controller host and feature lifecycle.
 2. Core loads persisted state and coordinates configuration reload.
 3. Features configure their watchers, runtime resources, and scheduled jobs.
 4. Core registers external Home Assistant listeners and the frontend transport.
@@ -161,4 +163,4 @@ Add a focused feature module or package containing its configuration model, vali
 
 ## Testing
 
-Pure feature decisions use plain data tests. Controller tests use one fake gateway and verify ordering, persistence, watcher cleanup, reload, confirmation, delivery, and error handling. Backend changes require `python3 -m pytest tests/`; frontend changes additionally require the frontend build and test commands in `docs/todo.md`.
+Pure feature decisions use plain data tests. Controller tests use Home Assistant test doubles and verify ordering, persistence, watcher cleanup, reload, confirmation, delivery, and error handling. Backend changes require `python3 -m pytest tests/`; frontend changes additionally require the frontend build and test commands in `docs/todo.md`.

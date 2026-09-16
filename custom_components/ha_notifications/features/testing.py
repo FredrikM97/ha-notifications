@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
 import voluptuous as vol
+from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from .configuration import Alert
@@ -27,6 +28,16 @@ class TestFeature(FeatureBase):
 
     name = "testing"
     dependencies = ("alerts", "confirmation", "notification")
+
+    def __init__(self, hass: Any, *_args: Any) -> None:
+        super().__init__(hass, *_args)
+        self._hass = hass
+        self._draft_callbacks: dict[str, Callable[[], None]] = {}
+
+    async def on_unload(self) -> None:
+        for cancel in self._draft_callbacks.values():
+            cancel()
+        self._draft_callbacks.clear()
 
     @websocket_route(
         "testing.saved",
@@ -55,7 +66,7 @@ class TestFeature(FeatureBase):
                 "confirmation_action_id": action_id,
                 "replace_existing": False,
                 "test": True,
-                "now": self.services.gateway.now_utc(),
+                "now": dt_util.utcnow(),
             }
         )
         return True
@@ -69,7 +80,7 @@ class TestFeature(FeatureBase):
         runtime["confirmation_action_id"] = action_id
         await self.feature("confirmation").track(
             action_id,
-            now=self.services.gateway.now_utc(),
+            now=dt_util.utcnow(),
             alert_id=alert["id"],
         )
         return action_id
@@ -93,13 +104,13 @@ class TestFeature(FeatureBase):
                 "confirmation_action_id": sessions["confirmation_action_id"],
                 "replace_existing": False,
                 "test": True,
-                "now": self.services.gateway.now_utc(),
+                "now": dt_util.utcnow(),
             }
         )
         return sessions
 
     async def _create_draft(self, alert: dict[str, Any]) -> dict[str, str | None]:
-        now = self.services.gateway.now_utc()
+        now = dt_util.utcnow()
         session_id = f"NC_DRAFT_{uuid4().hex}"
         draft_alert = {**alert, "id": session_id}
         await self.feature("confirmation").track(
@@ -108,10 +119,11 @@ class TestFeature(FeatureBase):
             draft_alert=draft_alert,
             ttl=DRAFT_SESSION_TTL,
         )
-        scheduler = self.services.scheduler
-        if scheduler is None:
-            raise RuntimeError("Test scheduler is unavailable")
-        scheduler.schedule(self._expire_draft(session_id, now + DRAFT_SESSION_TTL))
+        self._draft_callbacks[session_id] = async_call_later(
+            self._hass,
+            DRAFT_SESSION_TTL,
+            lambda _now: self._expire_draft(session_id),
+        )
 
         action_id = None
         confirmation = confirmation_for_alert(draft_alert)
@@ -125,11 +137,7 @@ class TestFeature(FeatureBase):
             )
         return {"session_id": session_id, "confirmation_action_id": action_id}
 
-    async def _expire_draft(self, session_id: str, expires_at: datetime) -> None:
-        seconds = max(
-            0, (expires_at - self.services.gateway.now_utc()).total_seconds()
-        )
-        await asyncio.sleep(seconds)
+    async def _expire_draft(self, session_id: str) -> None:
         await self.discard_payload(session_id)
 
     @websocket_route(
@@ -142,19 +150,9 @@ class TestFeature(FeatureBase):
     async def discard_payload(self, session_id: str) -> bool:
         """Dispose a draft and any confirmation action bound to it."""
 
-        now = self.services.gateway.now_utc()
-        sessions = self.services.sessions
-        stale_ids = [
-            key
-            for key, session in sessions.items()
-            if session.expires_at and session.expires_at <= now
-        ]
-        related_ids = [session_id]
-        related_ids.extend(
-            key
-            for key, session in sessions.items()
-            if session.draft_alert and session.draft_alert.get("id") == session_id
-        )
-        for key in {*stale_ids, *related_ids}:
-            await self.feature("confirmation").clear(key)
+        now = dt_util.utcnow()
+        cancel = self._draft_callbacks.pop(session_id, None)
+        if cancel:
+            cancel()
+        await self.feature("confirmation").discard_draft(session_id, now)
         return True

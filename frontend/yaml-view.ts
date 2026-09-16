@@ -33,9 +33,8 @@ export function renderYamlView(
     html`<div class="nc-card nc-yaml">
       <div class="nc-toolbar">
         <div>
-          Advanced editor. Copy this YAML to another system, edit it directly,
-          or use the file at
-          /config/ha_notifications.yaml.
+          Advanced editor. Copy this YAML to another system or import a
+          validated configuration into Home Assistant.
         </div>
         <div class="nc-actions">
           <button class="nc-button secondary" @click=${copyYaml}>Copy</button>

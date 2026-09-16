@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
-from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, STATE_HISTORY, STATE_RUNTIME
+from ..const import (
+    EVENT_RUNTIME_PERSIST_REQUESTED,
+    STATE_HISTORY,
+    STATE_RUNTIME,
+    StateRoot,
+)
 from ..features.configuration import Configuration
 
 DEFAULT_CONFIG: dict[str, Any] = {"version": 1, "alerts": []}
@@ -17,7 +22,7 @@ DEFAULT_CONFIG: dict[str, Any] = {"version": 1, "alerts": []}
 class RuntimeStateStorage:
     """Own loading and persistence of the mutable runtime state document."""
 
-    def __init__(self, hass: HomeAssistant, store: Any, state: dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, store: Any, state: StateRoot) -> None:
         self._hass = hass
         self._store = store
         self._state = state
@@ -64,67 +69,56 @@ class RuntimeStateStorage:
         await self._store.async_remove()
 
 
-class ConfigurationStorage:
-    """Own loading and saving the integration's YAML configuration document."""
+class ConfigEntryStorage:
+    """Own the configuration document persisted in config-entry options."""
 
-    def __init__(self, hass: HomeAssistant, filename: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._hass = hass
-        self._filename = filename
+        self._entry = entry
 
-    def _path(self) -> Path:
-        return Path(self._hass.config.path(self._filename))
+    def _options_config(self) -> dict[str, Any] | None:
+        options = dict(self._entry.options)
+        if "alerts" not in options:
+            return None
+        return Configuration.model_validate(options).model_dump(exclude_none=True)
 
-    async def load(self) -> dict[str, Any]:
-        """Load and validate the persisted configuration, creating an empty file."""
-
-        path = self._path()
-        if not path.exists():
-            await self._hass.async_add_executor_job(
-                _write_text, path, default_config_yaml_text()
-            )
-            return dict(DEFAULT_CONFIG)
-        text = await self._hass.async_add_executor_job(_read_text, path)
-        return parse_config(text).model_dump(exclude_none=True)
-
-    async def save(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Validate and persist a structured configuration document."""
-
-        mapped, text = dump_config(config)
-        await self._hass.async_add_executor_job(_write_text, self._path(), text)
+    def _save_options(self, config: dict[str, Any]) -> dict[str, Any]:
+        mapped, _text = dump_config(config)
+        self._hass.config_entries.async_update_entry(
+            self._entry,
+            options=mapped,
+        )
         return mapped
 
-    async def get_yaml(self) -> str:
-        """Return the raw YAML document, creating an empty one when absent."""
+    async def load(self) -> dict[str, Any]:
+        """Load the configuration from config-entry options."""
 
-        path = self._path()
-        if not path.exists():
-            await self._hass.async_add_executor_job(
-                _write_text, path, default_config_yaml_text()
-            )
-        return await self._hass.async_add_executor_job(_read_text, path)
+        configured = self._options_config()
+        if configured is not None:
+            return configured
+        return self._save_options(dict(DEFAULT_CONFIG))
+
+    async def save(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist structured config-entry options."""
+
+        return self._save_options(config)
+
+    async def get_yaml(self) -> str:
+        """Return the current config-entry options as YAML."""
+
+        _mapped, text = dump_config(await self.load())
+        return text
 
     async def save_yaml(self, text: str) -> dict[str, Any]:
         """Validate and persist raw YAML without changing its structure."""
 
         document = self.validate_yaml(text)
-        mapped, yaml_text = dump_config(document)
-        await self._hass.async_add_executor_job(
-            _write_text, self._path(), yaml_text
-        )
-        return mapped
+        return self._save_options(document.model_dump(exclude_none=True))
 
     def validate_yaml(self, text: str) -> Configuration:
         """Validate raw YAML without reading or changing the stored document."""
 
         return parse_config(text)
-
-
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def _write_text(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
 
 
 def parse_yaml_text(text: str) -> dict[str, Any]:
@@ -152,12 +146,6 @@ def dump_yaml_text(config: dict[str, Any]) -> str:
     )
 
 
-def default_config_yaml_text() -> str:
-    """Return the YAML text for a brand-new, empty configuration."""
-
-    return dump_yaml_text(DEFAULT_CONFIG)
-
-
 def parse_config(text: str) -> Configuration:
     """Parse and validate YAML into the controller's typed configuration."""
 
@@ -173,18 +161,16 @@ def dump_config(config: Configuration | dict[str, Any]) -> tuple[dict[str, Any],
         else Configuration.model_validate(config)
     )
     mapped = document.model_dump(exclude_none=True)
-    mapped["alerts"] = [
-        {
-            key: value
-            for key, value in alert.model_dump(exclude_none=True).items()
-            if key != "runtime"
-        }
-        for alert in document.alerts
-    ]
+    mapped_alerts = []
+    for alert in document.alerts:
+        mapped_alert = alert.model_dump(exclude_none=True)
+        mapped_alert.pop("runtime", None)
+        mapped_alerts.append(mapped_alert)
+    mapped["alerts"] = mapped_alerts
     return mapped, dump_yaml_text(mapped)
 
 
-def ensure_runtime_state_shape(raw: Any) -> dict[str, Any]:
+def ensure_runtime_state_shape(raw: Any) -> StateRoot:
     """Return a runtime-state mapping with the expected top-level shape."""
 
     state = raw if isinstance(raw, dict) else {}
@@ -197,4 +183,4 @@ def ensure_runtime_state_shape(raw: Any) -> dict[str, Any]:
     if not isinstance(state[STATE_HISTORY], list):
         state[STATE_HISTORY] = []
 
-    return state
+    return cast(StateRoot, state)

@@ -2,37 +2,103 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, HistoryEventType, TransitionKind
-from . import history
+from homeassistant.core import HomeAssistant
+
+from ..const import (
+    EVENT_RUNTIME_PERSIST_REQUESTED,
+    HistoryEventType,
+    TransitionKind,
+)
+
+if TYPE_CHECKING:
+    from .triggering import TriggerTransition
 
 
-class TriggerEffectCoordinator:
-    """Keep delivery, history, and persistence out of trigger decisions."""
+class ConfirmationEffects(Protocol):
+    async def track(
+        self, session_id: str, *, now: datetime, alert_id: str
+    ) -> None: ...
+
+
+class NotificationEffects(Protocol):
+    async def send(self, payload: dict[str, Any]) -> bool: ...
+
+    async def clear(self, alert: dict[str, Any], now: datetime) -> None: ...
+
+
+class FollowUpEffects(Protocol):
+    async def run(
+        self,
+        alert: dict[str, Any],
+        attempt: int,
+        now: datetime,
+        test: bool,
+        record_history: bool,
+    ) -> None: ...
+
+
+class HistoryEffects(Protocol):
+    def record_event(
+        self,
+        runtime_state: dict[str, Any] | None,
+        alert: dict[str, Any],
+        event_type: HistoryEventType,
+        message: str,
+        details: dict[str, Any],
+        now: datetime,
+    ) -> bool: ...
+
+    def record_notification_outcome(
+        self,
+        alert: dict[str, Any],
+        *,
+        success: bool,
+        attempt: int,
+        now: datetime,
+        error: str | None = None,
+    ) -> bool: ...
+
+
+class SendResultRecorder(Protocol):
+    def __call__(
+        self,
+        runtime: dict[str, Any],
+        attempt: int,
+        now: datetime,
+        *,
+        success: bool,
+        error: str | None = None,
+    ) -> None: ...
+
+
+class TriggerTransitionEffects:
+    """Sequence feature effects after a trigger transition is decided."""
 
     def __init__(
         self,
         *,
-        state: dict[str, Any],
-        runtime_for: Any,
-        confirmation: Any,
-        notification: Any,
-        follow_up_actions: Any,
-        hass: Any,
-        record_send_result: Any,
+        runtime_for: Callable[[str], dict[str, Any]],
+        confirmation: ConfirmationEffects,
+        notification: NotificationEffects,
+        follow_up_actions: FollowUpEffects,
+        history: HistoryEffects,
+        hass: HomeAssistant,
+        record_send_result: SendResultRecorder,
     ) -> None:
-        self._state = state
         self._runtime_for = runtime_for
         self._confirmation = confirmation
         self._notification = notification
         self._follow_up_actions = follow_up_actions
+        self._history = history
         self._hass = hass
         self._record_send_result = record_send_result
 
     async def apply(
-        self, alert: dict[str, Any], transition: Any, now: datetime
+        self, alert: dict[str, Any], transition: TriggerTransition, now: datetime
     ) -> None:
         if transition.kind == TransitionKind.NO_CHANGE:
             return
@@ -88,8 +154,7 @@ class TriggerEffectCoordinator:
             self._record_send_result(
                 runtime, transition.attempt, now, success=False, error=str(err)
             )
-            history.record_notification_outcome(
-                self._state,
+            self._history.record_notification_outcome(
                 alert,
                 success=False,
                 attempt=transition.attempt,
@@ -99,8 +164,7 @@ class TriggerEffectCoordinator:
             self._persist()
             return
         self._record_send_result(runtime, transition.attempt, now, success=True)
-        history.record_notification_outcome(
-            self._state,
+        self._history.record_notification_outcome(
             alert,
             success=True,
             attempt=transition.attempt,
@@ -120,8 +184,7 @@ class TriggerEffectCoordinator:
         details: dict[str, Any],
         now: datetime,
     ) -> None:
-        if history.record_event(
-            self._state,
+        if self._history.record_event(
             runtime,
             alert,
             event_type,

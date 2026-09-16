@@ -6,13 +6,17 @@ import asyncio
 import logging
 from typing import Any
 
+from homeassistant.components import frontend, panel_custom, websocket_api
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event as HassEvent
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from ..bridge import panel as panel_module
 from ..bridge import websocket as frontend_websocket
 from ..const import (
-    CONFIG_FILENAME,
     DOMAIN,
     PANEL_MODULE,
     STATE_HISTORY,
@@ -20,12 +24,10 @@ from ..const import (
     STORAGE_KEY,
     STORAGE_VERSION,
     VERSION,
+    StateRoot,
 )
-from ..features import confirmation as responses_module
-from ..ha.gateway import HomeAssistantGateway
 from ..support import storage as storage_module
-from ..support.scheduler import TaskScheduler
-from .lifecycle import FeatureLifecycle, FeatureServices
+from .lifecycle import FeatureLifecycle
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,41 +35,34 @@ _LOGGER = logging.getLogger(__name__)
 class HaNotificationsController:
     """The brain: wiring, setup, delegation decisions, public API."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        self._gateway = HomeAssistantGateway(hass)
-        self._store = self._gateway.make_store(STORAGE_VERSION, STORAGE_KEY)
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self._hass = hass
+        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
-        self._state: dict[str, Any] = {STATE_RUNTIME: {}, STATE_HISTORY: []}
+        self._state: StateRoot = {STATE_RUNTIME: {}, STATE_HISTORY: []}
         self._runtime_storage = storage_module.RuntimeStateStorage(
             hass, self._store, self._state
         )
-        self._configuration_storage = storage_module.ConfigurationStorage(
-            hass, CONFIG_FILENAME
-        )
-        self._sessions: dict[str, responses_module.ConfirmationSession] = {}
-
+        self._entry = entry
+        self._config_storage = storage_module.ConfigEntryStorage(hass, entry)
         self._started_unsub: Any = None
+        self._entry_update_unsub: Any = None
 
         self._started = False
         self._setup_complete = False
         self._reload_lock = asyncio.Lock()
 
-        self._services = FeatureServices(
-            state=self._state,
-            hass=hass,
-            gateway=self._gateway,
-            sessions=self._sessions,
-            scheduler=TaskScheduler(hass),
-            configuration_storage=self._configuration_storage,
-            reload_configuration=self.reload,
-        )
         self._feature_lifecycle: FeatureLifecycle | None = None
 
-    @property
-    def feature_services(self) -> FeatureServices:
-        """Return the shared capability set for external composition."""
+    async def create_feature_lifecycle(self) -> FeatureLifecycle:
+        """Compose feature instances with their explicit dependencies."""
 
-        return self._services
+        return await FeatureLifecycle.async_create(
+            self._hass,
+            self._state,
+            self._config_storage,
+            self.reload,
+        )
 
     def attach_feature_lifecycle(self, lifecycle: FeatureLifecycle) -> None:
         """Attach the independently composed lifecycle before setup."""
@@ -88,6 +83,11 @@ class HaNotificationsController:
         await self._lifecycle.wait_until_ready()
         return await self._lifecycle.dispatch(route, *args, **kwargs)
 
+    def _register_websocket_command(self, handler: Any) -> None:
+        """Register a frontend websocket handler with Home Assistant."""
+
+        websocket_api.async_register_command(self._hass, handler)
+
     # ------------------------------------------------------------------
     # Setup / unload
     # ------------------------------------------------------------------
@@ -105,23 +105,26 @@ class HaNotificationsController:
             config = await self._load_config()
             await self._apply_config(config)
             await self._lifecycle.setup()
-            await self._rebuild_sessions()
+            await self._lifecycle.dispatch("confirmation.rebuild")
 
             await self._register_frontend(show_in_sidebar=show_in_sidebar)
             frontend_websocket.register(
                 self._lifecycle,
-                self._gateway.register_websocket_command,
+                self._register_websocket_command,
             )
 
-            if self._gateway.is_running:
+            if self._hass.is_running:
                 self._started = True
                 await self._evaluate_all(source="startup")
             else:
-                self._started_unsub = self._gateway.bus_listen_once(
+                self._started_unsub = self._hass.bus.async_listen_once(
                     "homeassistant_started", self._on_home_assistant_started
                 )
 
             self._setup_complete = True
+            self._entry_update_unsub = self._entry.add_update_listener(
+                self._on_entry_updated
+            )
             _LOGGER.info("HA Notifications loaded")
         except Exception:
             await self.async_unload()
@@ -129,12 +132,17 @@ class HaNotificationsController:
 
     async def _register_frontend(self, *, show_in_sidebar: bool) -> None:
         plan = panel_module.registration_plan(show_in_sidebar=show_in_sidebar)
-        await self._gateway.register_static_path(plan.static_url, plan.static_directory)
-        self._gateway.register_extra_js(plan.module_url)
+        await self._hass.http.async_register_static_paths(
+            [StaticPathConfig(plan.static_url, plan.static_directory, False)]
+        )
+        frontend.add_extra_js_url(self._hass, plan.module_url)
 
-        if self._gateway.panel_exists(plan.frontend_url_path):
-            self._gateway.unregister_panel(plan.frontend_url_path)
-        await self._gateway.register_panel(
+        if plan.frontend_url_path in self._hass.data.get(frontend.DATA_PANELS, {}):
+            frontend.async_remove_panel(
+                self._hass, plan.frontend_url_path, warn_if_unknown=False
+            )
+        await panel_custom.async_register_panel(
+            hass=self._hass,
             frontend_url_path=plan.frontend_url_path,
             webcomponent_name=plan.webcomponent_name,
             module_url=plan.module_url,
@@ -150,26 +158,30 @@ class HaNotificationsController:
     async def async_unload(self) -> bool:
         """Unload the controller."""
 
+        self._setup_complete = False
+
         if self._started_unsub:
             self._started_unsub()
             self._started_unsub = None
+        if self._entry_update_unsub:
+            self._entry_update_unsub()
+            self._entry_update_unsub = None
 
         await self._lifecycle.unload()
         self._runtime_storage.stop()
 
         try:
-            self._gateway.unregister_panel(DOMAIN)
+            frontend.async_remove_panel(self._hass, DOMAIN, warn_if_unknown=False)
         except Exception:
             _LOGGER.exception("Failed to unregister HA Notifications frontend")
 
         try:
-            self._gateway.unregister_extra_js(f"{PANEL_MODULE}?v={VERSION}")
+            frontend.remove_extra_js_url(self._hass, f"{PANEL_MODULE}?v={VERSION}")
         except (KeyError, ValueError):
             pass
 
         await self._runtime_storage.save()
         self._started = False
-        self._setup_complete = False
 
         return True
 
@@ -180,19 +192,23 @@ class HaNotificationsController:
         await self._runtime_storage.remove()
 
     # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
     # Config load/apply/reload
     # ------------------------------------------------------------------
 
-    async def _load_config(self) -> dict[str, Any]:
-        return await self._configuration_storage.load()
+    async def _on_entry_updated(
+        self, _hass: HomeAssistant, _entry: ConfigEntry
+    ) -> None:
+        """Apply configuration changes made through ConfigEntry options."""
 
-    async def _save_config(self, config: dict[str, Any]) -> dict[str, Any]:
-        return await self._configuration_storage.save(config)
+        if not self._setup_complete:
+            return
+        await self.reload()
+
+    async def _load_config(self) -> dict[str, Any]:
+        return await self._config_storage.load()
 
     async def _apply_config(self, config: dict[str, Any]) -> set[str]:
-        await self._feature_lifecycle.unload()
-        await self._lifecycle.dispatch("history.configure", config)
+        await self._lifecycle.unload()
         return await self._lifecycle.dispatch("alerts.apply", config)
 
     async def reload(self) -> None:
@@ -202,7 +218,7 @@ class HaNotificationsController:
             config = await self._load_config()
             newly_enabled_alert_ids = await self._apply_config(config)
             await self._lifecycle.setup()
-            await self._rebuild_sessions()
+            await self._lifecycle.dispatch("confirmation.rebuild")
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
@@ -210,23 +226,13 @@ class HaNotificationsController:
 
                 await self._evaluate_all(source="reload")
 
-    async def _rebuild_sessions(self) -> None:
-        self._sessions.clear()
-        now = self._gateway.now_utc()
-        for alert_id, state in self._state[STATE_RUNTIME].items():
-            action_id = state.get("confirmation_action_id")
-            if action_id:
-                await self._lifecycle.dispatch(
-                    "confirmation.track", action_id, now=now, alert_id=alert_id
-                )
-
     # ------------------------------------------------------------------
     # Trigger evaluation - scheduling only, decisions live in features/
     # ------------------------------------------------------------------
 
     async def _evaluate_all(self, *, source: str) -> None:
         await self._lifecycle.dispatch(
-            "alerts.evaluate_all", source=source, now=self._gateway.now_utc()
+            "alerts.evaluate_all", source=source, now=dt_util.utcnow()
         )
 
     async def _request_condition_check(self, alert_id: str, *, source: str) -> None:
@@ -234,7 +240,7 @@ class HaNotificationsController:
 
         Pull-based (startup/reload/interval/enabled) - the push-based path
         (a tracked template firing) already knows the result and publishes
-        `CONDITION_EVALUATED` directly from the gateway listener.
+        `CONDITION_EVALUATED` directly from the Home Assistant listener.
         """
 
         if not self._started:
@@ -244,7 +250,7 @@ class HaNotificationsController:
             "alerts.check",
             alert_id,
             source=source,
-            now=self._gateway.now_utc(),
+            now=dt_util.utcnow(),
         )
 
     # ------------------------------------------------------------------

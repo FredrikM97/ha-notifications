@@ -9,9 +9,12 @@ from importlib import import_module
 from pkgutil import iter_modules
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
+from ..const import StateRoot
+
 if TYPE_CHECKING:
-    from ..support.scheduler import TaskScheduler
-    from ..support.storage import ConfigurationStorage
+    from homeassistant.core import HomeAssistant
+
+    from ..support.storage import ConfigEntryStorage
 
 RouteHandler = Callable[..., Awaitable[Any]]
 
@@ -73,19 +76,6 @@ def websocket_route(
     return decorate
 
 
-@dataclass
-class FeatureServices:
-    """Application capabilities shared by lifecycle-managed features."""
-
-    state: dict[str, Any]
-    hass: Any
-    gateway: Any
-    sessions: dict[str, Any]
-    scheduler: TaskScheduler
-    configuration_storage: ConfigurationStorage
-    reload_configuration: Callable[[], Awaitable[None]]
-
-
 class Feature(Protocol):
     name: str
     dependencies: tuple[str, ...]
@@ -108,8 +98,7 @@ class FeatureBase:
         if not cls.__dict__.get("abstract", False):
             FeatureBase._registry.append(cls)
 
-    def __init__(self, services: FeatureServices) -> None:
-        self.services = services
+    def __init__(self, *_args: Any) -> None:
         self.lifecycle: FeatureLifecycle | None = None
 
     async def setup(self, lifecycle: FeatureLifecycle) -> None:
@@ -137,14 +126,24 @@ class FeatureLifecycle:
 
     def __init__(
         self,
-        services: FeatureServices,
+        hass: HomeAssistant,
+        state: StateRoot,
+        config_storage: ConfigEntryStorage,
         reload_configuration: Callable[[], Awaitable[None]],
         *,
         feature_classes_loaded: bool = False,
     ) -> None:
         if not feature_classes_loaded:
             self._load_feature_classes()
-        self._features = tuple(feature(services) for feature in FeatureBase._registry)
+        self._features = tuple(
+            self._construct_feature(
+                feature_class,
+                hass,
+                state,
+                config_storage,
+            )
+            for feature_class in FeatureBase._registry
+        )
         self._validate_dependencies()
         self._started: list[Feature] = []
         self._ready = asyncio.Event()
@@ -155,17 +154,32 @@ class FeatureLifecycle:
     @classmethod
     async def async_create(
         cls,
-        services: FeatureServices,
+        hass: HomeAssistant,
+        state: StateRoot,
+        config_storage: ConfigEntryStorage,
         reload_configuration: Callable[[], Awaitable[None]],
     ) -> FeatureLifecycle:
         """Discover and import feature modules outside Home Assistant's loop."""
 
-        await services.hass.async_add_executor_job(cls._load_feature_classes)
+        await hass.async_add_executor_job(cls._load_feature_classes)
         return cls(
-            services,
+            hass,
+            state,
+            config_storage,
             reload_configuration,
             feature_classes_loaded=True,
         )
+
+    @staticmethod
+    def _construct_feature(
+        feature_class: type[FeatureBase],
+        hass: HomeAssistant,
+        state: StateRoot,
+        config_storage: ConfigEntryStorage,
+    ) -> FeatureBase:
+        """Compose each feature with the shared application context."""
+
+        return feature_class(hass, state, config_storage)
 
     async def reload(self) -> None:
         """Request the composition host to reload feature configuration."""
@@ -317,7 +331,3 @@ class FeatureLifecycle:
         for feature in reversed(self._started):
             await feature.unload()
         self._started.clear()
-        if self._features:
-            scheduler = self._features[0].services.scheduler
-            if scheduler is not None:
-                await scheduler.unload()

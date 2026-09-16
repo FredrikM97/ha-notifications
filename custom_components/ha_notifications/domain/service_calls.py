@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ServiceCall(BaseModel):
-    """One service call ready for the Home Assistant gateway."""
+    """One service call ready for Home Assistant execution."""
 
     model_config = ConfigDict(frozen=True)
 

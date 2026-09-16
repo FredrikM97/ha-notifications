@@ -19,11 +19,11 @@ class YamlTextTests(unittest.TestCase):
             storage.parse_yaml_text("- alert")
 
     def test_default_config_yaml_round_trips(self):
-        text = storage.default_config_yaml_text()
+        text = storage.dump_yaml_text(storage.DEFAULT_CONFIG)
         self.assertEqual(storage.parse_yaml_text(text), storage.DEFAULT_CONFIG)
 
 
-class ConfigurationStorageTests(unittest.TestCase):
+class ConfigEntryStorageTests(unittest.TestCase):
     def test_parse_config_accepts_declared_alert_shape(self):
         result = storage.parse_config(
             "alerts:\n  - id: test\n    name: Test\n    conditions:\n"
@@ -125,7 +125,9 @@ class ConfigurationStorageTests(unittest.TestCase):
 
 class RuntimeStateShapeTests(unittest.TestCase):
     def test_repairs_invalid_shapes(self):
-        state = storage.ensure_runtime_state_shape({"runtime": [], "history": "invalid"})
+        state = storage.ensure_runtime_state_shape(
+            {"runtime": [], "history": "invalid"}
+        )
         self.assertEqual(state["runtime"], {})
         self.assertEqual(state["history"], [])
 

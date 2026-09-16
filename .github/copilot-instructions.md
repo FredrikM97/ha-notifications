@@ -95,7 +95,7 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Keep delivery layered: `features/notification.py` decides message
   content/recipients/route, `features/follow_up_actions.py` builds post-send and
   post-confirmation service-call plans, an application workflow sequences those
-  plans, and `ha/gateway.py` remains the only Home Assistant effect boundary.
+  plans, and each owning feature performs its Home Assistant effects directly.
 - Prefer straightforward `if` blocks over ternary/conditional-expression
   style for anything with real branching logic. A simple, non-nested
   two-branch expression (e.g. `"Enabled" if enabled else "Disabled"`) may use

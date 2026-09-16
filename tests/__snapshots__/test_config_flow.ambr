@@ -1,0 +1,21 @@
+# serializer version: 1
+# name: test_user_flow_schema_and_entry
+  dict({
+    'data_schema': "{'show_sidebar': <class 'bool'>}",
+    'handler': 'ha_notifications',
+    'step_id': 'user',
+    'type': <FlowResultType.FORM: 'form'>,
+  })
+# ---
+# name: test_user_flow_schema_and_entry.1
+  dict({
+    'data': dict({
+      'show_sidebar': True,
+    }),
+    'handler': 'ha_notifications',
+    'minor_version': 0,
+    'title': 'HA Notifications',
+    'type': <FlowResultType.CREATE_ENTRY: 'create_entry'>,
+    'version': 1,
+  })
+# ---

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import importlib
 import unittest
-from datetime import datetime, timezone
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from conftest import make_alert
 from test_support import PACKAGE_NAME, ensure_package

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from .feature_config import AlertFeatureConfig
+
+if TYPE_CHECKING:
+    from ..support.storage import ConfigEntryStorage
 
 
 class Alert(AlertFeatureConfig):
@@ -58,6 +61,12 @@ class ConfigurationFeature(FeatureBase):
 
     name = "configuration"
 
+    def __init__(
+        self, hass: Any, state: dict[str, Any], config_storage: ConfigEntryStorage
+    ) -> None:
+        super().__init__(hass, state, config_storage)
+        self._config_storage = config_storage
+
     @websocket_route(
         "configuration.get_yaml",
         command="get_yaml",
@@ -65,9 +74,9 @@ class ConfigurationFeature(FeatureBase):
         error_message="Unable to load YAML.",
     )
     async def get_yaml(self) -> dict[str, str]:
-        """Return raw YAML, creating the empty document when absent."""
+        """Return the current ConfigEntry options formatted as YAML."""
 
-        return {"yaml": await self.services.configuration_storage.get_yaml()}
+        return {"yaml": await self._config_storage.get_yaml()}
 
     @websocket_route(
         "configuration.validate_yaml",
@@ -79,7 +88,7 @@ class ConfigurationFeature(FeatureBase):
     async def validate_yaml(self, yaml: str) -> bool:
         """Validate YAML without changing its saved document."""
 
-        self.services.configuration_storage.validate_yaml(yaml)
+        self._config_storage.validate_yaml(yaml)
         return True
 
     @websocket_route(
@@ -90,10 +99,9 @@ class ConfigurationFeature(FeatureBase):
         error_message="Unable to save YAML.",
     )
     async def save_yaml(self, yaml: str) -> dict[str, Any]:
-        """Validate, write, and reload the supplied YAML document."""
+        """Validate and persist the supplied YAML document."""
 
-        mapped = await self.services.configuration_storage.save_yaml(yaml)
-        await self.services.reload_configuration()
+        mapped = await self._config_storage.save_yaml(yaml)
         return {"saved": True, "config": mapped}
 
     @websocket_route(
@@ -105,5 +113,7 @@ class ConfigurationFeature(FeatureBase):
     async def reload(self) -> bool:
         """Reload persisted configuration through the lifecycle owner."""
 
-        await self.services.reload_configuration()
+        if self.lifecycle is None:
+            raise RuntimeError("Configuration feature has not been set up")
+        await self.lifecycle.reload()
         return True

@@ -6,6 +6,7 @@ from typing import Any
 
 from ..const import EVENT_RUNTIME_PERSIST_REQUESTED, HistoryEventType
 from ..controller.lifecycle import FeatureBase, route
+from ..support.templates import render_template
 from . import confirmation, notification
 
 
@@ -21,6 +22,10 @@ class ConfirmationFlow(FeatureBase):
         "triggering",
         "history",
     )
+
+    def __init__(self, hass: Any, *_args: Any) -> None:
+        super().__init__(hass, *_args)
+        self._hass = hass
 
     @route("flows.confirmation")
     async def handle(self, result: confirmation.ConfirmationResult) -> None:
@@ -47,7 +52,7 @@ class ConfirmationFlow(FeatureBase):
             alert,
             result.confirmed_by,
             result.now,
-        ).build(self.services.gateway.render_template)
+        ).build(self._render_template)
         if delivery.clear_notification:
             await self.feature("notification").clear(alert, result.now)
         if delivery.completion_alert is not None:
@@ -65,7 +70,12 @@ class ConfirmationFlow(FeatureBase):
             follow_up_actions,
             result.confirmed_by,
         )
-        self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+        self._hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+
+    async def _render_template(
+        self, source: str, variables: dict[str, Any] | None = None
+    ) -> Any:
+        return await render_template(self._hass, source, variables)
 
     async def _send_completion(
         self, completion_alert: dict[str, Any], result: confirmation.ConfirmationResult

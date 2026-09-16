@@ -36,8 +36,10 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.sessions = {}
         self.feature = confirmation.ConfirmationFeature(
-            SimpleNamespace(sessions=self.sessions)
+            None,
+            {},
         )
+        self.sessions = self.feature._sessions
         self.now = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
     async def test_prepare_action_requires_enabled_confirmation(self):

@@ -24,7 +24,6 @@ from .const import (
     SERVICE_TEST,
 )
 from .controller.core import HaNotificationsController
-from .controller.lifecycle import FeatureLifecycle
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,11 +97,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up HA Notifications from a config entry."""
 
-    controller = HaNotificationsController(hass)
+    controller = HaNotificationsController(hass, entry)
     controller.attach_feature_lifecycle(
-        await FeatureLifecycle.async_create(
-            controller.feature_services, controller.reload
-        )
+        await controller.create_feature_lifecycle()
     )
 
     try:
@@ -136,7 +133,7 @@ async def async_unload_entry(
 ) -> bool:
     """Unload HA Notifications."""
 
-    controller = entry.runtime_data
+    controller = getattr(entry, "runtime_data", None)
 
     if not isinstance(
         controller,
@@ -162,7 +159,7 @@ async def async_remove_entry(
 ) -> None:
     """Clean up integration-owned runtime state after entry removal."""
 
-    controller = entry.runtime_data
+    controller = getattr(entry, "runtime_data", None)
 
     if isinstance(controller, HaNotificationsController):
         await controller.async_remove()

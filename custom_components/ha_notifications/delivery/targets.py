@@ -7,7 +7,17 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from ..ha.gateway import RegistrySnapshot
+
+@dataclass(frozen=True)
+class RegistrySnapshot:
+    """Home Assistant registries/state needed to plan one delivery."""
+
+    area_registry: Any
+    device_registry: Any
+    entity_registry: Any
+    mobile_app_entries: list[Any]
+    mobile_app_entry_ids: set[str]
+    person_states: list[Any]
 
 GENERIC_NOTIFY_TARGET_KEYS = (
     "device_id",

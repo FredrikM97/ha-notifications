@@ -5,18 +5,10 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from test_support import (
-    INTEGRATION_ROOT,
-    PACKAGE_NAME,
-    load_const_and_models,
-    load_module,
-)
+from test_support import PACKAGE_NAME, load_const_and_models
 
 load_const_and_models()
-history = load_module(
-    f"{PACKAGE_NAME}.features.history",
-    INTEGRATION_ROOT / "features" / "history.py",
-)
+history = __import__(f"{PACKAGE_NAME}.features.history", fromlist=["history"])
 
 
 class FormatEntryTests(unittest.TestCase):

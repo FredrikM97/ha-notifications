@@ -9,12 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import (
     EVENT_RUNTIME_PERSIST_REQUESTED,
-    HistoryEventType,
     STATE_RUNTIME,
+    HistoryEventType,
+    StateRoot,
 )
 from ..controller.lifecycle import FeatureBase
 from ..domain.service_calls import ServiceCall
 from ..domain.template_values import remove_nulls, render_template_values
+from ..support.templates import render_template
 from . import history
 from .feature_config import AlertFeatureConfig
 
@@ -64,6 +66,11 @@ class FollowUpActionsFeature(FeatureBase):
 
     name = "follow_up_actions"
 
+    def __init__(self, hass: Any, state: StateRoot, *_args: Any) -> None:
+        super().__init__(hass, state, *_args)
+        self._hass = hass
+        self._state = state
+
     async def run(
         self,
         alert: dict[str, Any],
@@ -88,7 +95,7 @@ class FollowUpActionsFeature(FeatureBase):
             attempt,
             test,
             now,
-                self.services.state[STATE_RUNTIME].get(alert["id"], {}).get(
+                self._state[STATE_RUNTIME].get(alert["id"], {}).get(
                 "confirmation_action_id"
             ),
             confirmed_by,
@@ -107,11 +114,12 @@ class FollowUpActionsFeature(FeatureBase):
                 details["error"] = result.error
             else:
                 try:
-                    await self.services.gateway.call_service(
+                    await self._hass.services.async_call(
                         result.command.domain,
                         result.command.service,
-                        result.command.data,
-                        result.command.target,
+                        service_data=result.command.data,
+                        target=result.command.target,
+                        blocking=True,
                     )
                     details["action"] = (
                         f"{result.command.domain}.{result.command.service}"
@@ -121,15 +129,15 @@ class FollowUpActionsFeature(FeatureBase):
                     message = "Action failed."
                     details["error"] = str(err)
             if record_history and history.record_event(
-                self.services.state,
-                self.services.state[STATE_RUNTIME].get(alert["id"]),
+                self._state,
+                self._state[STATE_RUNTIME].get(alert["id"]),
                 alert,
                 event_type,
                 message,
                 details,
                 now,
             ):
-                self.services.hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+                self._hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
 
     async def _render_actions(
         self, actions: list[dict[str, Any]], context: ActionContext
@@ -161,9 +169,16 @@ class FollowUpActionsFeature(FeatureBase):
     async def _render_action(
         self, action: FollowUpActionConfig, variables: dict[str, Any]
     ) -> ServiceCall:
-        render = self.services.gateway.render_template
+        async def render(source: str, values: dict[str, Any]) -> Any:
+            return await render_template(self._hass, source, values)
+
         service = str(
-            await render_template_values(action.action, variables, render) or ""
+            await render_template_values(
+                action.action,
+                variables,
+                render,
+            )
+            or ""
         )
         if not service or "." not in service:
             raise ValueError("Invalid service action.")

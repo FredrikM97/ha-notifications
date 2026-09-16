@@ -8,9 +8,10 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+from homeassistant.util import dt as dt_util
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..const import EVENT_NOTIFICATION_ACTION, STATE_RUNTIME
+from ..const import EVENT_NOTIFICATION_ACTION, STATE_RUNTIME, StateRoot
 from ..controller.lifecycle import FeatureBase, route
 from .feature_config import AlertFeatureConfig
 
@@ -91,15 +92,22 @@ class ConfirmationFeature(FeatureBase):
     name = "confirmation"
     dependencies = ("alerts",)
 
-    def __init__(self, services: Any) -> None:
-        super().__init__(services)
-        self._sessions = services.sessions
+    def __init__(
+        self,
+        hass: Any,
+        state: StateRoot,
+        *_args: Any,
+    ) -> None:
+        super().__init__(hass, state, *_args)
+        self._hass = hass
+        self._state = state
+        self._sessions: dict[str, ConfirmationSession] = {}
         self._alerts: dict[str, Any] = {}
         self._unsubscribe: Callable[[], None] | None = None
 
     async def on_setup(self) -> None:
         self._alerts = self.feature("alerts").alerts
-        self._unsubscribe = self.services.gateway.bus_listen(
+        self._unsubscribe = self._hass.bus.async_listen(
             EVENT_NOTIFICATION_ACTION, self._on_action_event
         )
 
@@ -107,6 +115,7 @@ class ConfirmationFeature(FeatureBase):
         if self._unsubscribe:
             self._unsubscribe()
             self._unsubscribe = None
+        self._sessions.clear()
 
     async def _on_action_event(self, event: Any) -> None:
         if self.lifecycle is None:
@@ -140,6 +149,30 @@ class ConfirmationFeature(FeatureBase):
 
         self._sessions.pop(session_id, None)
 
+    @route("confirmation.rebuild")
+    async def rebuild(self) -> None:
+        """Restore pending saved-alert confirmations from runtime state."""
+
+        self._sessions.clear()
+        now = dt_util.utcnow()
+        for alert_id, state in self._state[STATE_RUNTIME].items():
+            action_id = state.get("confirmation_action_id")
+            if action_id:
+                await self.track(action_id, now=now, alert_id=alert_id)
+
+    async def discard_draft(self, session_id: str, now: datetime) -> None:
+        """Discard a draft and every confirmation action bound to it."""
+
+        await self.expire_drafts(now)
+        related_ids = [session_id]
+        related_ids.extend(
+            key
+            for key, session in self._sessions.items()
+            if session.draft_alert and session.draft_alert.get("id") == session_id
+        )
+        for key in set(related_ids):
+            await self.clear(key)
+
     @route("confirmation.expire_drafts")
     async def expire_drafts(self, now: datetime) -> list[str]:
         """Discard expired editor-draft confirmation sessions."""
@@ -162,7 +195,7 @@ class ConfirmationFeature(FeatureBase):
         if not action_id:
             return None
 
-        now = self.services.gateway.now_utc()
+        now = dt_util.utcnow()
         await self.expire_drafts(now)
         session = self._sessions.get(action_id)
         if session is None:
@@ -170,8 +203,8 @@ class ConfirmationFeature(FeatureBase):
 
         user_id = event.context.user_id if event.context else None
         confirmed_by = await resolve_confirmed_by(
-            self.services.hass,
-            self.services.hass.states.async_all("person"),
+            self._hass,
+            self._hass.states.async_all("person"),
             user_id,
         )
         if session.draft_alert is not None:
@@ -183,7 +216,7 @@ class ConfirmationFeature(FeatureBase):
         if session.alert_id is None:
             return None
         alert = self._alerts.get(session.alert_id)
-        state = self.services.state[STATE_RUNTIME].get(session.alert_id)
+        state = self._state[STATE_RUNTIME].get(session.alert_id)
         if (
             alert is None
             or state is None

@@ -1,7 +1,7 @@
 """Pure frontend panel registration data - no Home Assistant import.
 
 `controller/core.py` performs the actual registration calls via
-`ha/gateway.py`, using the plan this module builds. This is the explicit
+the controller, using the plan this module builds. This is the explicit
 "loading the frontend" exception: no application data, no backend
 dependency - just static registration facts.
 """

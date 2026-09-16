@@ -6,9 +6,8 @@ This is the compact routing map for the direct-workflow architecture.
 
 - `custom_components/ha_notifications/__init__.py`: Home Assistant config-entry and service lifecycle glue.
 - `custom_components/ha_notifications/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
-- `custom_components/ha_notifications/controller/core.py`: lifecycle host, gateway construction, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
+- `custom_components/ha_notifications/controller/core.py`: lifecycle host, direct Home Assistant lifecycle effects, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
 - `custom_components/ha_notifications/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
-- `custom_components/ha_notifications/ha/gateway.py`: the only Home Assistant API boundary, including service calls, template/timer watchers, external event listeners, persistence, panel, and websocket registration.
 
 ## Frontend transport
 
@@ -20,7 +19,7 @@ This is the compact routing map for the direct-workflow architecture.
 
 - `features/alerts.py`: `AlertFeature` owns typed alerts, `AlertRuntime`, and the `alerts.apply`/`alerts.get`/`alerts.runtime`/`alerts.list`/`alerts.save` routes.
 - `features/triggering.py`: `TriggeringFeature` owns condition listeners and transition decisions only; it obtains runtime records from `AlertFeature`, confirmation action preparation from `ConfirmationFeature`, and scheduling policy from notification.
-- `features/trigger_effects.py`: applies trigger transitions through notification delivery, confirmation tracking, history, follow-up actions, and runtime persistence.
+- `features/trigger_effects.py`: sequences trigger-transition effects through notification delivery, confirmation tracking, follow-up actions, and runtime persistence; `HistoryFeature` owns history mutation.
 - `features/notification.py`: `NotificationSchedule` owns repeat and confirmation-resend interval/due policy.
 - `features/conditions.py`: condition-editor Pydantic model, legacy condition mapping compatibility, and HA template compilation.
 - `features/confirmation.py`: `ConfirmationFeature` owns confirmation session state, Home Assistant action subscription lifecycle, action matching, and resolution into confirmation facts.
@@ -38,7 +37,8 @@ This is the compact routing map for the direct-workflow architecture.
 - `domain/template_values.py`: recursive template rendering and null removal for service-call configuration.
 - `domain/durations.py`: duration parsing and formatting.
 - `domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
-- `support/storage.py`: YAML serialization, validation coordination, and runtime-state shape repair.
+- `support/storage.py`: config-entry option persistence, YAML import/export serialization, validation coordination, and runtime-state shape repair.
+- `support/templates.py`: shared awaitable-aware Home Assistant template rendering adapter.
 - `support/scheduler.py`: `TaskScheduler` owns tracked feature background tasks and lifecycle cleanup.
 
 ## Main flows
@@ -49,11 +49,11 @@ This is the compact routing map for the direct-workflow architecture.
 
 ### Trigger and delivery
 
-Home Assistant startup/template/timer callback -> `TriggeringWorkflow` -> pure transition decision -> core ordered workflow -> notification composition -> gateway service calls -> history and follow-up actions -> persisted runtime state.
+Home Assistant startup/template/timer callback -> `TriggeringWorkflow` -> pure transition decision -> core ordered workflow -> notification composition -> Home Assistant service calls -> history and follow-up actions -> persisted runtime state.
 
 ### Confirmation
 
-Home Assistant notification-action callback -> `ConfirmationFeature.resolve_action_event()` -> `ConfirmationFlow` -> notification clear/completion plan -> gateway calls -> follow-up actions -> history and persistence.
+Home Assistant notification-action callback -> `ConfirmationFeature.resolve_action_event()` -> `ConfirmationFlow` -> notification clear/completion plan -> Home Assistant service calls -> follow-up actions -> history and persistence.
 
 ### Frontend test payload
 
@@ -63,8 +63,8 @@ Websocket transport -> `DraftFeature` draft session creation -> direct notificat
 
 - Required ordered steps use direct awaited calls, not internal events.
 - Home Assistant's external event bus remains for genuine external callbacks.
-- The composition module constructs features; core only hosts their lifecycle. Stateful features own their workflows, resources, and cleanup details. Stateless feature functions remain direct typed operations.
-- Features receive narrow typed capabilities and must not import Home Assistant or the whole controller.
+- The composition module constructs features with the shared `(hass, state, config_storage)` context; each feature selects only the values it needs. Core only hosts their lifecycle. Stateful features own their workflows, resources, and cleanup details. Stateless feature functions remain direct typed operations.
+- Features may access the Home Assistant instance directly for effects they own; they must not import the whole controller or use a capability aggregate.
 - Pydantic v2 owns feature/domain models; Voluptuous remains for HA websocket envelopes during migration.
 - Invalid YAML is validated before writing and cannot replace valid saved configuration.
 

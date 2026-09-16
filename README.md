@@ -51,6 +51,21 @@ npm ci
 npm run build
 ```
 
+Install the Python test dependencies and run the test suite with Home
+Assistant's custom-component pytest fixtures:
+
+```bash
+python3 -m pip install -e '.[test]'
+python3 -m pytest
+```
+
+Snapshots use Syrupy with Home Assistant-aware serialization. Review snapshot
+changes explicitly with:
+
+```bash
+python3 -m pytest --snapshot-update
+```
+
 The development bundle is written to `dist/panel.js`, and the build keeps a
 matching runtime copy at `custom_components/ha_notifications/dist/panel.js`.
 The runtime copy is included in repository-based HACS installs, which do not

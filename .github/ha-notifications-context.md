@@ -5,16 +5,15 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Primary entry points
 - `custom_components/ha_notifications/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
 - `custom_components/ha_notifications/config_flow.py` — UI config flow and validation logic
-- `custom_components/ha_notifications/controller/core.py` — `HaNotificationsController`: the composition root. Owns the gateway, typed awaited workflow sequencing, direct routing of HA confirmation actions, notification send/clear routing, and every public frontend-facing operation
+- `custom_components/ha_notifications/controller/core.py` — `HaNotificationsController`: the composition root. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, direct routing of HA confirmation actions, notification send/clear routing, and every public frontend-facing operation
 - `custom_components/ha_notifications/bridge/websocket.py` — the frontend-facing interface: registers the 12 `ha_notifications/*` websocket commands
 - `custom_components/ha_notifications/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
-- `custom_components/ha_notifications/ha/gateway.py` — `HomeAssistantGateway`: the only module that imports `homeassistant.*`
 
 ## Controller kernel and feature modules
-- `custom_components/ha_notifications/controller/core.py` — kernel: gateway ownership, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
+- `custom_components/ha_notifications/controller/core.py` — kernel: Home Assistant lifecycle effects, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
 - `custom_components/ha_notifications/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
 - `custom_components/ha_notifications/delivery/` — recipient/channel resolution, generic notify routing, and legacy Mobile App service resolution
-- `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to the gateway
+- `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
 - `custom_components/ha_notifications/features/triggering.py` — monitor model, trigger registration, and alert state-machine decisions
 - `custom_components/ha_notifications/features/confirmation.py` — confirmation model, typed direct confirmation-action workflow, sessions, and confirmation effects; retains the event adapter for compatibility
 - `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
@@ -49,7 +48,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 
 ## Good starting points by task
 - Save/edit lifecycle bug: `config_flow.py`, `support/storage.py`, `bridge/websocket.py`
-- Runtime trigger or interval issue: `features/triggering.py`, `features/conditions.py`, `controller/core.py`, `ha/gateway.py`
+- Runtime trigger or interval issue: `features/triggering.py`, `features/conditions.py`, `controller/core.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
 - YAML/import or validation issue: `config_flow.py`, `support/storage.py`, `controller/alert.py`
 - Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `delivery/`, `bridge/websocket.py`

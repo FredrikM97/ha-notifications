@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Callable, Protocol
 
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pydantic import ConfigDict
 
 from ..controller.lifecycle import FeatureBase
@@ -34,6 +37,7 @@ from ..domain.template_values import (
     remove_nulls,
     render_template_values,
 )
+from ..support.templates import render_template
 from .confirmation import ConfirmationConfig, confirmation_for_alert
 from .feature_config import AlertFeatureConfig
 
@@ -204,19 +208,43 @@ class NotificationFeature(FeatureBase):
 
     name = "notification"
 
-    def capabilities(self) -> NotificationCapabilitySet:
-        """Build the gateway values required for one delivery plan."""
+    def __init__(self, hass: Any, *_args: Any) -> None:
+        super().__init__(hass, *_args)
+        self._hass = hass
 
+    def capabilities(self) -> NotificationCapabilitySet:
+        """Build the Home Assistant values required for one delivery plan."""
+
+        hass = self._hass
+        mobile_app_entries = list(hass.config_entries.async_entries("mobile_app"))
         return NotificationCapabilitySet(
-            render=self.services.gateway.render_template,
-            has_service=self.services.gateway.has_service,
-            snapshot=self.services.gateway.fetch_registry_snapshot(),
+            render=self._render_template,
+            has_service=hass.services.has_service,
+            snapshot=RegistrySnapshot(
+                area_registry=ar.async_get(hass),
+                device_registry=dr.async_get(hass),
+                entity_registry=er.async_get(hass),
+                mobile_app_entries=mobile_app_entries,
+                mobile_app_entry_ids={
+                    entry.entry_id for entry in mobile_app_entries
+                },
+                person_states=list(hass.states.async_all("person")),
+            ),
         )
+
+    async def _render_template(
+        self, source: str, variables: dict[str, Any] | None = None
+    ) -> Any:
+        return await render_template(self._hass, source, variables)
 
     async def _execute(self, calls: list[ServiceCall]) -> None:
         for call in calls:
-            await self.services.gateway.call_service(
-                call.domain, call.service, call.data, call.target
+            await self._hass.services.async_call(
+                call.domain,
+                call.service,
+                service_data=call.data,
+                target=call.target,
+                blocking=True,
             )
 
     async def send(self, payload: dict[str, Any]) -> bool:

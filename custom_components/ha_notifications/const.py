@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any, TypedDict
 
 DOMAIN = "ha_notifications"
 
@@ -19,7 +20,12 @@ STATE_RUNTIME = "runtime"
 STATE_HISTORY = "history"
 STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
 
-CONFIG_FILENAME = "ha_notifications.yaml"
+
+class StateRoot(TypedDict):
+    """Persisted runtime and history state shared by feature workflows."""
+
+    runtime: dict[str, dict[str, Any]]
+    history: list[dict[str, Any]]
 
 STORAGE_VERSION = 1
 STORAGE_KEY = "ha_notifications"

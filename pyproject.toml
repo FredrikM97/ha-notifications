@@ -18,6 +18,9 @@ test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "homeassistant>=2025.1",
+    "home-assistant-frontend==20250109.2",
+    "pytest-homeassistant-custom-component==0.13.205",
+    "syrupy==4.8.0",
 ]
 quality = [
     "ruff>=0.8",
@@ -26,6 +29,9 @@ all = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "homeassistant>=2025.1",
+    "home-assistant-frontend==20250109.2",
+    "pytest-homeassistant-custom-component==0.13.205",
+    "syrupy==4.8.0",
     "ruff>=0.8",
 ]
 
@@ -36,6 +42,8 @@ py-modules = []
 testpaths = ["tests"]
 addopts = "-ra"
 pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     'ignore:.*pyOpenSSL.*deprecated.*:DeprecationWarning:josepy\..*',
     "ignore:.*Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning:homeassistant.components.http",

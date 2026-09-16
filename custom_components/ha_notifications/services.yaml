@@ -1,6 +1,6 @@
 reload:
   name: Reload
-  description: Reload HA Notifications configuration from ha_notifications.yaml.
+  description: Reload HA Notifications configuration from Home Assistant config-entry options.
 
 test:
   name: Test alert

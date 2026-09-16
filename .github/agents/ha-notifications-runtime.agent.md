@@ -17,7 +17,7 @@ You are the runtime and backend specialist for HA Notifications. Keep alert exec
   `features/confirmation.py`.
 - Only `features/notification.py` (`compose_send`/`compose_clear`) decides
   notification content, recipients, and route. Application workflows execute
-  its plans through narrow capabilities implemented by `ha/gateway.py`. If you
+  its plans through direct Home Assistant service calls owned by the feature. If you
   need to send or clear a notification, update that feature and its owning
   workflow rather than adding another direct `notify.*` call site.
 - Prefer explicit awaited workflow calls for ordered internal sequencing. Use

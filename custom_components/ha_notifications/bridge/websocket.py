@@ -22,8 +22,8 @@ def register(
 ) -> None:
     """Register the feature-declared `ha_notifications/*` websocket commands.
 
-    ``register_command`` is `ha/gateway.py`'s `register_websocket_command` -
-    this module never imports `ha.gateway` itself.
+    ``register_command`` is the controller's Home Assistant registration
+    callback; this module remains a transport adapter.
     """
 
     def feature_handler(specification: WebsocketRoute) -> Any:
