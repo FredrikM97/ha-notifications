@@ -172,25 +172,30 @@ export async function getHistory(
   return call<HistoryEntry[]>(hass, "history", data);
 }
 
-export async function getYaml(hass: Hass): Promise<{ yaml: string }> {
-  return call<{ yaml: string }>(hass, "get_yaml");
+export async function getConfig(
+  hass: Hass,
+): Promise<Record<string, unknown>> {
+  return call<Record<string, unknown>>(hass, "get_config");
 }
 
-export async function validateYaml(hass: Hass, yaml: string): Promise<unknown> {
-  return call(hass, "validate_yaml", {
-    yaml,
+export async function validateConfig(
+  hass: Hass,
+  config: Record<string, unknown>,
+): Promise<unknown> {
+  return call(hass, "validate_config", {
+    config,
   });
 }
 
-export async function saveYaml(
+export async function saveConfig(
   hass: Hass,
-  yaml: string,
+  config: Record<string, unknown>,
 ): Promise<{ saved: boolean; config: Record<string, unknown> }> {
   return call<{ saved: boolean; config: Record<string, unknown> }>(
     hass,
-    "save_yaml",
+    "save_config",
     {
-      yaml,
+      config,
     },
   );
 }

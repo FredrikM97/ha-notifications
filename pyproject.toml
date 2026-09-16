@@ -8,7 +8,6 @@ version = "0.4.0"
 description = "Home Assistant HA Notifications custom integration"
 requires-python = ">=3.12"
 dependencies = [
-    "PyYAML>=6.0",
     "pydantic>=2.7,<3",
     "voluptuous>=0.13",
 ]

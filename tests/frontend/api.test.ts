@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getAlerts,
-  getYaml,
+  getAlertRuntime,
+  getConfig,
   saveAlert,
-  saveYaml,
+  saveConfig,
   testAlert,
-  validateYaml,
+  validateConfig,
 } from "../../frontend/api.js";
 import type { Alert, Hass } from "../../frontend/types.js";
 
@@ -18,6 +19,18 @@ function hass() {
 }
 
 describe("frontend API transport", () => {
+  it("uses the runtime command for alert runtime state", async () => {
+    const client = hass();
+    const runtime = { door: { active: true } };
+    client.sendMessagePromise.mockResolvedValueOnce(runtime);
+
+    await expect(getAlertRuntime(client.hass)).resolves.toEqual(runtime);
+
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "ha_notifications/runtime",
+    });
+  });
+
   it("namespaces alert list and save commands", async () => {
     const client = hass();
     const alert = { id: "door", name: "Door" } as Alert;
@@ -35,23 +48,24 @@ describe("frontend API transport", () => {
     });
   });
 
-  it("uses yaml as the YAML route payload key", async () => {
+  it("uses structured config for configuration routes", async () => {
     const client = hass();
+    const config = { version: 1, alerts: [] };
 
-    await getYaml(client.hass);
-    await validateYaml(client.hass, "alerts: []");
-    await saveYaml(client.hass, "alerts: []");
+    await getConfig(client.hass);
+    await validateConfig(client.hass, config);
+    await saveConfig(client.hass, config);
 
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(1, {
-      type: "ha_notifications/get_yaml",
+      type: "ha_notifications/get_config",
     });
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(2, {
-      type: "ha_notifications/validate_yaml",
-      yaml: "alerts: []",
+      type: "ha_notifications/validate_config",
+      config,
     });
     expect(client.sendMessagePromise).toHaveBeenNthCalledWith(3, {
-      type: "ha_notifications/save_yaml",
-      yaml: "alerts: []",
+      type: "ha_notifications/save_config",
+      config,
     });
   });
 

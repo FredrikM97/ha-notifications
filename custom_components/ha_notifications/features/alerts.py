@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.util import dt as dt_util
 
 from ..const import (
-    EVENT_RUNTIME_PERSIST_REQUESTED,
     STATE_HISTORY,
     STATE_RUNTIME,
     StateRoot,
@@ -19,6 +18,7 @@ from ..controller.lifecycle import (
     route,
     websocket_route,
 )
+from ..support.storage import RuntimeStateStorage
 from . import history
 from .configuration import Alert, AlertRuntime
 
@@ -30,12 +30,16 @@ class AlertFeature(FeatureBase):
     dependencies = ("notification",)
 
     def __init__(
-        self, hass: Any, state: StateRoot, config_storage: Any
+        self,
+        _hass: Any,
+        state: StateRoot,
+        config_storage: Any,
+        runtime_storage: RuntimeStateStorage,
     ) -> None:
-        super().__init__(hass, state, config_storage)
+        super().__init__()
         self._state = state
-        self._hass = hass
         self._config_storage = config_storage
+        self._runtime_storage = runtime_storage
         self._alerts: dict[str, Alert] = {}
 
     @property
@@ -72,6 +76,21 @@ class AlertFeature(FeatureBase):
             previous = previous_alerts.get(alert.id)
             if alert.enabled and previous is not None and not previous.enabled:
                 newly_enabled.add(alert.id)
+            if previous is not None and alert.enabled != previous.enabled:
+                runtime = self.runtime(alert.id)
+                runtime.update(
+                    active=False,
+                    acknowledged=False,
+                    attempts=0,
+                    notification_id=None,
+                    confirmation_action_id=None,
+                    flow_id=None,
+                    started_at=None,
+                    last_notified=None,
+                    confirmed_at=None,
+                    confirmed_by=None,
+                    last_error=None,
+                )
         return newly_enabled
 
     @route("alerts.get")
@@ -86,6 +105,17 @@ class AlertFeature(FeatureBase):
         """Return the runtime record owned by one configured alert."""
 
         return self.runtime(alert_id)
+
+    @websocket_route(
+        "alerts.runtime_mapping",
+        command="runtime",
+        error_code="runtime_failed",
+        error_message="Unable to load alert runtime.",
+    )
+    async def get_runtime_mapping(self) -> dict[str, dict[str, Any]]:
+        """Return runtime records for all configured alerts."""
+
+        return {alert_id: self.runtime(alert_id) for alert_id in self._alerts}
 
     @websocket_route(
         "alerts.list",
@@ -160,5 +190,16 @@ class AlertFeature(FeatureBase):
         self._state[STATE_HISTORY] = history.remove_alert(
             self._state[STATE_HISTORY], alert_id
         )
-        self._hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+        self._runtime_storage.persist()
         return True
+
+    def acknowledge(
+        self, alert_id: str, confirmed_by: str, now: Any
+    ) -> None:
+        """Apply a resolved confirmation to the owned alert runtime."""
+
+        runtime = self.runtime(alert_id)
+        runtime["acknowledged"] = True
+        runtime["confirmation_action_id"] = None
+        runtime["confirmed_at"] = now.isoformat()
+        runtime["confirmed_by"] = confirmed_by

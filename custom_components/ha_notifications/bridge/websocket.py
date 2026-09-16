@@ -1,8 +1,7 @@
-"""The only frontend-facing interface: registers the 12 websocket commands.
+"""The only frontend-facing interface: registers feature websocket commands.
 
 Feature routes declare their public command metadata. This module turns those
-declarations into Home Assistant websocket handlers and retains legacy
-controller commands while their owning features are migrated.
+declarations into Home Assistant websocket handlers.
 """
 
 from __future__ import annotations

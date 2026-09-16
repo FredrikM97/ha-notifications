@@ -1,4 +1,4 @@
-"""Feature-owned YAML configuration routes."""
+"""Feature-owned structured configuration routes."""
 
 from __future__ import annotations
 
@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from .feature_config import AlertFeatureConfig
 
 if TYPE_CHECKING:
     from ..support.storage import ConfigEntryStorage
 
 
-class Alert(AlertFeatureConfig):
+class Alert(BaseModel):
     """The validated persisted alert document."""
 
     model_config = ConfigDict(extra="allow")
@@ -57,51 +56,55 @@ class AlertRuntime(BaseModel):
 
 
 class ConfigurationFeature(FeatureBase):
-    """Own YAML read, validation, and replacement workflows."""
+    """Own structured configuration read, validation, and replacement workflows."""
 
     name = "configuration"
 
     def __init__(
-        self, hass: Any, state: dict[str, Any], config_storage: ConfigEntryStorage
+        self,
+        hass: Any,
+        state: dict[str, Any],
+        config_storage: ConfigEntryStorage,
+        _runtime_storage: Any,
     ) -> None:
-        super().__init__(hass, state, config_storage)
+        super().__init__()
         self._config_storage = config_storage
 
     @websocket_route(
-        "configuration.get_yaml",
-        command="get_yaml",
-        error_code="get_yaml_failed",
-        error_message="Unable to load YAML.",
+        "configuration.get_config",
+        command="get_config",
+        error_code="get_config_failed",
+        error_message="Unable to load configuration.",
     )
-    async def get_yaml(self) -> dict[str, str]:
-        """Return the current ConfigEntry options formatted as YAML."""
+    async def get_config(self) -> dict[str, Any]:
+        """Return the current structured configuration document."""
 
-        return {"yaml": await self._config_storage.get_yaml()}
+        return await self._config_storage.load()
 
     @websocket_route(
-        "configuration.validate_yaml",
-        command="validate_yaml",
-        arguments=(WebsocketArgument("yaml", str),),
-        error_code="validate_yaml_failed",
-        error_message="Invalid YAML.",
+        "configuration.validate_config",
+        command="validate_config",
+        arguments=(WebsocketArgument("config", dict),),
+        error_code="validate_config_failed",
+        error_message="Invalid configuration.",
     )
-    async def validate_yaml(self, yaml: str) -> bool:
-        """Validate YAML without changing its saved document."""
+    async def validate_config(self, config: dict[str, Any]) -> bool:
+        """Validate configuration without changing its saved document."""
 
-        self._config_storage.validate_yaml(yaml)
+        self._config_storage.validate(config)
         return True
 
     @websocket_route(
-        "configuration.save_yaml",
-        command="save_yaml",
-        arguments=(WebsocketArgument("yaml", str),),
-        error_code="save_yaml_failed",
-        error_message="Unable to save YAML.",
+        "configuration.save_config",
+        command="save_config",
+        arguments=(WebsocketArgument("config", dict),),
+        error_code="save_config_failed",
+        error_message="Unable to save configuration.",
     )
-    async def save_yaml(self, yaml: str) -> dict[str, Any]:
-        """Validate and persist the supplied YAML document."""
+    async def save_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate and persist the supplied configuration document."""
 
-        mapped = await self._config_storage.save_yaml(yaml)
+        mapped = await self._config_storage.save(config)
         return {"saved": True, "config": mapped}
 
     @websocket_route(

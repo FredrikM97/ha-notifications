@@ -282,6 +282,7 @@ export function codeEditor({
     aria-label=${label}
     ?read-only=${readOnly}
     @input=${onInput || nothing}
+    @value-changed=${onInput || nothing}
   ></ha-code-editor>`;
 }
 

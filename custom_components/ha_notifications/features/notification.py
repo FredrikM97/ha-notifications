@@ -5,32 +5,23 @@ from __future__ import annotations
 import logging
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from enum import StrEnum
-from typing import Any, Callable, Protocol
+from datetime import datetime
+from typing import Any
 
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from ..controller.lifecycle import FeatureBase
-from ..delivery.mobile_app import (
-    LegacyMobileAppResolution,
-    resolve_legacy_mobile_app_services,
-)
 from ..delivery.targets import (
     GENERIC_NOTIFY_SERVICE,
     GENERIC_NOTIFY_TARGET_KEYS,
-    DeliveryType,
     RegistrySnapshot,
-    classify_delivery_type,
-    notification_services_for_target,
-    resolve_target_devices,
+    mobile_app_notify_services_for_target,
     resolve_user_notification_target,
     target_values,
 )
-from ..domain.durations import parse_duration
 from ..domain.service_calls import ServiceCall
 from ..domain.template_values import (
     TemplateRenderer,
@@ -39,22 +30,10 @@ from ..domain.template_values import (
 )
 from ..support.templates import render_template
 from .confirmation import ConfirmationConfig, confirmation_for_alert
-from .feature_config import AlertFeatureConfig
 
 _LOGGER = logging.getLogger(__name__)
 
-HasService = Callable[[str, str], bool]
-
-
-def _list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    return [value]
-
-
-class NotificationConfig(AlertFeatureConfig):
+class NotificationConfig(BaseModel):
     """Validated notification settings owned by the notification feature."""
 
     model_config = ConfigDict(extra="allow")
@@ -63,62 +42,6 @@ class NotificationConfig(AlertFeatureConfig):
     title: str | None = None
     message: str | None = None
     data: dict[str, Any] | None = None
-
-
-class NotificationSchedule:
-    """Own condition-check and confirmation resend policy."""
-
-    def __init__(
-        self,
-        notification: NotificationConfig,
-        confirmation: ConfirmationConfig | None = None,
-    ) -> None:
-        self._notification = notification
-        self._confirmation = confirmation
-
-    def check_interval(self, monitor_interval: int | float | None) -> timedelta | None:
-        """Return the configured condition-monitoring cadence."""
-
-        if monitor_interval is None:
-            return None
-        return parse_duration(monitor_interval)
-
-    def confirmation_interval(self) -> timedelta | None:
-        """Return the cadence for pending confirmation reminders."""
-
-        confirmation = self._confirmation
-        if (
-            not confirmation
-            or not confirmation.enabled
-            or not confirmation.reminders.enabled
-        ):
-            return None
-        return parse_duration(confirmation.reminders.interval)
-
-    def is_due(self, state: dict[str, Any], now: datetime) -> bool:
-        """Return whether a pending confirmation resend is now due."""
-        confirmation = self._confirmation
-        if (
-            not state.get("confirmation_action_id")
-            or not confirmation
-            or not confirmation.enabled
-            or not confirmation.reminders.enabled
-        ):
-            return False
-
-        interval = confirmation.reminders.interval
-        max_attempts = confirmation.reminders.max_attempts
-        if int(state.get("attempts", 0)) >= int(max_attempts or 1):
-            return False
-        last_notified = state.get("last_notified")
-        if not last_notified:
-            return True
-        try:
-            previous = datetime.fromisoformat(str(last_notified))
-        except ValueError:
-            return True
-        duration = parse_duration(interval)
-        return duration is None or now - previous >= duration
 
 
 @dataclass(frozen=True)
@@ -186,20 +109,11 @@ class ConfirmationDeliveryPlanner:
 
 
 
-class NotificationCapabilities(Protocol):
-    """Home Assistant capabilities needed by notification workflows."""
-
-    render: TemplateRenderer
-    has_service: HasService
-    snapshot: RegistrySnapshot
-
-
 @dataclass(frozen=True)
 class NotificationCapabilitySet:
-    """Concrete capability values supplied by the controller."""
+    """Home Assistant values needed by notification delivery planning."""
 
     render: TemplateRenderer
-    has_service: HasService
     snapshot: RegistrySnapshot
 
 
@@ -208,8 +122,14 @@ class NotificationFeature(FeatureBase):
 
     name = "notification"
 
-    def __init__(self, hass: Any, *_args: Any) -> None:
-        super().__init__(hass, *_args)
+    def __init__(
+        self,
+        hass: Any,
+        _state: Any,
+        _config_storage: Any,
+        _runtime_storage: Any,
+    ) -> None:
+        super().__init__()
         self._hass = hass
 
     def capabilities(self) -> NotificationCapabilitySet:
@@ -219,16 +139,13 @@ class NotificationFeature(FeatureBase):
         mobile_app_entries = list(hass.config_entries.async_entries("mobile_app"))
         return NotificationCapabilitySet(
             render=self._render_template,
-            has_service=hass.services.has_service,
             snapshot=RegistrySnapshot(
                 area_registry=ar.async_get(hass),
                 device_registry=dr.async_get(hass),
                 entity_registry=er.async_get(hass),
                 mobile_app_entries=mobile_app_entries,
-                mobile_app_entry_ids={
-                    entry.entry_id for entry in mobile_app_entries
-                },
                 person_states=list(hass.states.async_all("person")),
+                has_service=hass.services.has_service,
             ),
         )
 
@@ -246,6 +163,30 @@ class NotificationFeature(FeatureBase):
                 target=call.target,
                 blocking=True,
             )
+
+    @staticmethod
+    def next_attempt(runtime: dict[str, Any]) -> int:
+        """Return the next delivery attempt without mutating runtime state."""
+
+        return int(runtime.get("attempts", 0)) + 1
+
+    @staticmethod
+    def record_delivery_result(
+        runtime: dict[str, Any],
+        attempt: int,
+        now: datetime,
+        *,
+        success: bool,
+        error: str | None = None,
+    ) -> None:
+        """Own delivery outcome state for notification attempts."""
+
+        if not success:
+            runtime["last_error"] = error
+            return
+        runtime["attempts"] = attempt
+        runtime["last_notified"] = now.isoformat()
+        runtime["last_error"] = None
 
     async def send(self, payload: dict[str, Any]) -> bool:
         """Plan and execute a notification request."""
@@ -270,13 +211,6 @@ class NotificationFeature(FeatureBase):
             )
 
 
-class NotificationRoute(StrEnum):
-    """How a notification was resolved to concrete notify service calls."""
-
-    LEGACY_MOBILE_APP = "legacy_mobile_app"
-    GENERIC_NOTIFY = "generic_notify"
-
-
 # ----------------------------------------------------------------------
 # Plain data
 # ----------------------------------------------------------------------
@@ -289,7 +223,6 @@ class _RenderedNotification:
     target: dict[str, Any]
     extra_data: dict[str, Any]
     confirmation: ConfirmationConfig | None
-    has_user_recipients: bool
 
 
 # ----------------------------------------------------------------------
@@ -303,7 +236,6 @@ async def plan_delivery(
     confirmation_action_id: str | None,
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
-    has_service: HasService,
 ) -> list[ServiceCall]:
     """Build the Home Assistant service calls that send one notification."""
 
@@ -321,45 +253,27 @@ async def plan_delivery(
         and rendered.confirmation.enabled
     )
 
-    resolution = resolve_target_devices(rendered.target, snapshot)
-    resolved_actions = notification_services_for_target(
-        snapshot, rendered.target, resolution
-    )
-    legacy = resolve_legacy_mobile_app_services(
-        snapshot, resolved_actions, resolution.device_ids, has_service
-    )
-    requested_counts = _requested_target_counts(rendered.target)
-    recipient_summary = _recipient_resolution_summary(
-        snapshot, rendered.target, has_service
-    )
-    route_name, actions_to_call = _notification_route(
-        snapshot,
-        rendered,
-        legacy.services,
-        "Invalid:" in recipient_summary,
-        has_service,
-    )
+    if not rendered.target:
+        raise ValueError("At least one notification target is required.")
 
-    _log_plan(alert["id"], route_name, actions_to_call, requested_counts, legacy)
-    _validate_confirmation_delivery(
-        alert["id"],
-        has_confirmation,
-        route_name,
-        legacy,
-        snapshot,
-        rendered.target,
-        has_service,
-    )
+    requested_counts = _requested_target_counts(rendered.target)
+    actions_to_call = [f"notify.{GENERIC_NOTIFY_SERVICE}"]
+    target = rendered.target
+    mobile_services = mobile_app_notify_services_for_target(rendered.target, snapshot)
+    if mobile_services:
+        actions_to_call = mobile_services
+        target = None
+    _log_plan(alert["id"], actions_to_call, requested_counts)
 
     service_data = _service_data_for_notification(
-        rendered, confirmation_action_id, has_confirmation
+        rendered,
+        confirmation_action_id,
+        has_confirmation,
+        include_extra_data=bool(mobile_services),
+        notification_id=str(
+            variables.get("notification_id", f"ha_notifications_{alert['id']}")
+        ),
     )
-    target = (
-        None
-        if route_name in (NotificationRoute.LEGACY_MOBILE_APP,)
-        else rendered.target
-    )
-
     commands: list[ServiceCall] = []
     for action_to_call in actions_to_call:
         if "." not in action_to_call:
@@ -382,41 +296,35 @@ async def plan_clear(
     variables: dict[str, Any],
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
-    has_service: HasService,
 ) -> list[ServiceCall]:
     """Build the Home Assistant service calls that clear one notification."""
 
     notification = NotificationConfig.model_validate(alert["notification"])
     target = await render_template_values(notification.target, variables, render)
-    if not isinstance(target, dict):
-        target = {}
+    target = resolve_user_notification_target(snapshot, target)
+    if not target:
+        return []
 
-    resolution = resolve_target_devices(target, snapshot)
-    resolved_actions = notification_services_for_target(snapshot, target, resolution)
-    legacy = resolve_legacy_mobile_app_services(
-        snapshot, resolved_actions, resolution.device_ids, has_service
-    )
-    if legacy.services:
-        actions_to_call = [f"notify.{service}" for service in legacy.services]
-        clear_target = None
-    elif target:
-        actions_to_call = [f"notify.{GENERIC_NOTIFY_SERVICE}"]
-        clear_target = target
-    else:
-        actions_to_call = []
-        clear_target = target or None
+    actions_to_call = mobile_app_notify_services_for_target(target, snapshot)
+    if not actions_to_call:
+        _LOGGER.debug(
+            "Skipping notification clear for %s: no Mobile App service resolved",
+            alert["id"],
+        )
+        return []
+
+    clear_target = None
 
     commands: list[ServiceCall] = []
     for action_to_call in actions_to_call:
         domain, service = action_to_call.split(".", 1)
+        data = {"message": "clear_notification"}
+        data["data"] = {"tag": f"ha_notifications_{alert['id']}"}
         commands.append(
             ServiceCall(
                 domain=domain,
                 service=service,
-                data={
-                    "message": "clear_notification",
-                    "data": {"tag": f"ha_notifications_{alert['id']}"},
-                },
+                data=data,
                 target=clear_target,
             )
         )
@@ -445,18 +353,13 @@ async def _render_notification(
             f"{confirmation.reminders.max_attempts or 1})"
         )
     target = await render_template_values(notification.target, variables, render)
-    target, has_user_recipients = resolve_user_notification_target(snapshot, target)
+    target = resolve_user_notification_target(snapshot, target)
     extra_data = await render_template_values(
         notification.data or {}, variables, render
     )
 
     return _RenderedNotification(
-        title,
-        message,
-        target,
-        _normalized_extra_data(extra_data),
-        confirmation,
-        has_user_recipients,
+        title, message, target, _normalized_extra_data(extra_data), confirmation
     )
 
 
@@ -469,91 +372,6 @@ def _normalized_extra_data(extra_data: Any) -> dict[str, Any]:
 # ----------------------------------------------------------------------
 # Route planning
 # ----------------------------------------------------------------------
-
-
-def _notification_route(
-    snapshot: RegistrySnapshot,
-    rendered: _RenderedNotification,
-    legacy_services: list[str],
-    has_unresolved_recipients: bool,
-    has_service: HasService,
-) -> tuple[str, list[str]]:
-    delivery_type = classify_delivery_type(
-        rendered.target,
-        rendered.has_user_recipients,
-        bool(legacy_services),
-        has_unresolved_recipients,
-    )
-    if delivery_type == DeliveryType.LEGACY_MOBILE_APP:
-        return NotificationRoute.LEGACY_MOBILE_APP, [
-            f"notify.{service}" for service in legacy_services
-        ]
-
-    if delivery_type == DeliveryType.GENERIC_NOTIFY:
-        return NotificationRoute.GENERIC_NOTIFY, [f"notify.{GENERIC_NOTIFY_SERVICE}"]
-
-    raise ValueError(
-        "No valid notify service was found for the selected recipients. "
-        + _recipient_resolution_summary(snapshot, rendered.target, has_service)
-    )
-
-
-def _recipient_resolution_summary(
-    snapshot: RegistrySnapshot,
-    target: dict[str, Any],
-    has_service: HasService,
-) -> str:
-    """Explain which selected recipients can resolve to a direct service."""
-
-    valid: list[str] = []
-    invalid: list[str] = []
-    entity_services = {
-        entity.entity_id
-        for entity in snapshot.entity_registry.entities.values()
-        if entity.entity_id.startswith("notify.")
-    }
-
-    for key in GENERIC_NOTIFY_TARGET_KEYS:
-        for value in target_values(target, key):
-            label = _recipient_label(snapshot, key, value)
-            if key == "entity_id" and value not in entity_services:
-                invalid.append(f"{label} (notification entity not found)")
-                continue
-
-            recipient_target = {key: [value]}
-            recipient_resolution = resolve_target_devices(recipient_target, snapshot)
-            candidate_actions = notification_services_for_target(
-                snapshot, recipient_target, recipient_resolution
-            )
-            candidate_legacy = resolve_legacy_mobile_app_services(
-                snapshot,
-                candidate_actions,
-                recipient_resolution.device_ids,
-                has_service,
-            )
-            if candidate_legacy.services:
-                valid.append(f"{label} (direct Mobile App service available)")
-                continue
-            if not candidate_actions:
-                invalid.append(f"{label} (no notification-capable device found)")
-                continue
-            invalid.append(f"{label} (Mobile App notify service is not registered)")
-
-    if valid and invalid:
-        return "Valid: " + "; ".join(valid) + ". Invalid: " + "; ".join(invalid) + "."
-    if invalid:
-        return "Invalid: " + "; ".join(invalid) + "."
-    return "No recipient details were available."
-
-
-def _recipient_label(snapshot: RegistrySnapshot, key: str, value: str) -> str:
-    registry_map = {
-        "device_id": snapshot.device_registry.devices,
-        "area_id": snapshot.area_registry.areas,
-    }
-    item = registry_map.get(key, {}).get(value)
-    name = getattr(item, "name_by_user", None) or getattr(item, "name", None)
-    return f"{key} '{name or value}'"
 
 
 def _requested_target_counts(target: dict[str, Any]) -> dict[str, int]:
@@ -570,7 +388,7 @@ def _requested_target_counts(target: dict[str, Any]) -> dict[str, int]:
 
 
 async def send_requested(
-    payload: dict[str, Any], capabilities: NotificationCapabilities
+    payload: dict[str, Any], capabilities: NotificationCapabilitySet
 ) -> list[ServiceCall]:
     alert = payload["alert"]
     now = payload["now"]
@@ -588,18 +406,17 @@ async def send_requested(
     }
 
     render = capabilities.render
-    has_service = capabilities.has_service
     snapshot = capabilities.snapshot
 
     commands: list[ServiceCall] = []
     if payload.get("replace_existing"):
         commands.extend(
-            await _clear_commands(alert, now, snapshot, render, has_service)
+            await _clear_commands(alert, now, snapshot, render)
         )
 
     try:
         send_commands = await plan_delivery(
-            alert, variables, confirmation_action_id, snapshot, render, has_service
+            alert, variables, confirmation_action_id, snapshot, render
         )
     except Exception:  # noqa: BLE001 - reported as an event, not re-raised
         if payload.get("propagate_errors", False):
@@ -612,7 +429,7 @@ async def send_requested(
 
 
 async def clear_requested(
-    payload: dict[str, Any], capabilities: NotificationCapabilities
+    payload: dict[str, Any], capabilities: NotificationCapabilitySet
 ) -> list[ServiceCall]:
     alert = payload["alert"]
     now = payload.get("now")
@@ -622,7 +439,6 @@ async def clear_requested(
         now,
         capabilities.snapshot,
         capabilities.render,
-        capabilities.has_service,
     )
 
 
@@ -631,11 +447,10 @@ async def _clear_commands(
     now: Any,
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
-    has_service: HasService,
 ) -> list[ServiceCall]:
     variables = {"alert_id": alert["id"], "alert_name": alert["name"], "now": now}
     try:
-        commands = await plan_clear(alert, variables, snapshot, render, has_service)
+        commands = await plan_clear(alert, variables, snapshot, render)
     except Exception:
         _LOGGER.exception("Failed clearing notification for %s", alert["id"])
         return []
@@ -643,28 +458,13 @@ async def _clear_commands(
     return commands
 
 
-def _validate_confirmation_delivery(
-    alert_id: str,
-    has_confirmation: bool,
-    route_name: str,
-    legacy: LegacyMobileAppResolution,
-    snapshot: RegistrySnapshot,
-    target: dict[str, Any],
-    has_service: HasService,
-) -> None:
-    if has_confirmation and route_name not in (NotificationRoute.LEGACY_MOBILE_APP,):
-        raise ValueError(
-            "Confirmation buttons require a resolved Mobile App direct service; "
-            f"resolved devices: {len(legacy.device_ids)}, services: "
-            f"{len(legacy.services)}. "
-            + _recipient_resolution_summary(snapshot, target, has_service)
-        )
-
-
 def _service_data_for_notification(
     rendered: _RenderedNotification,
     confirmation_action_id: str | None,
     has_confirmation: bool,
+    *,
+    include_extra_data: bool,
+    notification_id: str,
 ) -> dict[str, Any]:
     extra_data = rendered.extra_data
     if has_confirmation:
@@ -682,30 +482,26 @@ def _service_data_for_notification(
     service_data: dict[str, Any] = {"message": str(rendered.message)}
     if rendered.title:
         service_data["title"] = str(rendered.title)
-    if extra_data:
-        service_data["data"] = extra_data
+    if include_extra_data and extra_data:
+        service_data["data"] = {**extra_data, "tag": notification_id}
+    elif include_extra_data:
+        service_data["data"] = {"tag": notification_id}
 
     return remove_nulls(service_data)
 
 
 def _log_plan(
     alert_id: str,
-    route_name: str,
     actions_to_call: list[str],
     requested_counts: dict[str, int],
-    legacy: LegacyMobileAppResolution,
 ) -> None:
     _LOGGER.debug(
-        "Notification delivery plan alert_id=%s requested=%s "
-        "resolved_devices=%d candidate_legacy_services=%s",
+        "Notification delivery plan alert_id=%s requested=%s",
         alert_id,
         requested_counts,
-        len(legacy.device_ids),
-        legacy.services,
     )
     _LOGGER.info(
-        "Notification delivery alert_id=%s route=%s recipients=%d",
+        "Notification delivery alert_id=%s recipients=%d",
         alert_id,
-        route_name,
         len(actions_to_call),
     )

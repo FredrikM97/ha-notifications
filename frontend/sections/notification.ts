@@ -47,7 +47,7 @@ export function renderNotificationSection(
       </div>
       <div class="nc-help">
         Recipients on selected devices, areas, floors, and labels receive direct
-        Mobile App notifications when a matching notifier is available.
+        notifications through Home Assistant's standard Notify service.
       </div>`,
   );
 }

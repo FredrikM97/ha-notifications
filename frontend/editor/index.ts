@@ -483,15 +483,6 @@ class AlertEditorController {
 
     const issues: string[] = [];
     if (!this.value.name.trim()) issues.push("Basic: name is required.");
-    if (!this.hasRequiredCondition()) {
-      issues.push("Condition: add at least one condition.");
-    }
-    const target = this.recipients?.target() || this.value.notification.target;
-    const recipientCount = Object.values(target).reduce(
-      (total, values) => total + (values?.length || 0),
-      0,
-    );
-    if (!recipientCount) issues.push("Recipients: add at least one recipient.");
     if (!this.value.monitor.on_change && !this.value.monitor.interval) {
       issues.push("When to check: enable changes, an interval, or both.");
     }

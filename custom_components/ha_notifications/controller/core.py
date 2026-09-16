@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Protocol, cast
 
 from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import StaticPathConfig
@@ -32,6 +32,28 @@ from .lifecycle import FeatureLifecycle
 _LOGGER = logging.getLogger(__name__)
 
 
+class AlertConfigurationPort(Protocol):
+    """Typed configuration workflow used by the controller host."""
+
+    async def apply_config(self, config: dict[str, Any]) -> set[str]: ...
+
+
+class ConfirmationRebuildPort(Protocol):
+    """Typed confirmation lifecycle operation used during setup/reload."""
+
+    async def rebuild(self) -> None: ...
+
+
+class ConditionsPort(Protocol):
+    """Typed condition checks used by lifecycle callbacks."""
+
+    async def check_alert(
+        self, alert_id: str, *, source: str, now: Any
+    ) -> None: ...
+
+    async def evaluate_all(self, *, source: str, now: Any) -> None: ...
+
+
 class HaNotificationsController:
     """The brain: wiring, setup, delegation decisions, public API."""
 
@@ -41,7 +63,7 @@ class HaNotificationsController:
 
         self._state: StateRoot = {STATE_RUNTIME: {}, STATE_HISTORY: []}
         self._runtime_storage = storage_module.RuntimeStateStorage(
-            hass, self._store, self._state
+            self._store, self._state
         )
         self._entry = entry
         self._config_storage = storage_module.ConfigEntryStorage(hass, entry)
@@ -61,6 +83,7 @@ class HaNotificationsController:
             self._hass,
             self._state,
             self._config_storage,
+            self._runtime_storage,
             self.reload,
         )
 
@@ -100,12 +123,14 @@ class HaNotificationsController:
 
         try:
             await self._runtime_storage.load()
-            self._runtime_storage.start()
 
             config = await self._load_config()
             await self._apply_config(config)
             await self._lifecycle.setup()
-            await self._lifecycle.dispatch("confirmation.rebuild")
+            await cast(
+                ConfirmationRebuildPort,
+                self._lifecycle.feature("confirmation"),
+            ).rebuild()
 
             await self._register_frontend(show_in_sidebar=show_in_sidebar)
             frontend_websocket.register(
@@ -168,7 +193,6 @@ class HaNotificationsController:
             self._entry_update_unsub = None
 
         await self._lifecycle.unload()
-        self._runtime_storage.stop()
 
         try:
             frontend.async_remove_panel(self._hass, DOMAIN, warn_if_unknown=False)
@@ -209,7 +233,10 @@ class HaNotificationsController:
 
     async def _apply_config(self, config: dict[str, Any]) -> set[str]:
         await self._lifecycle.unload()
-        return await self._lifecycle.dispatch("alerts.apply", config)
+        return await cast(
+            AlertConfigurationPort,
+            self._lifecycle.feature("alerts"),
+        ).apply_config(config)
 
     async def reload(self) -> None:
         """Reload configuration from disk."""
@@ -218,7 +245,10 @@ class HaNotificationsController:
             config = await self._load_config()
             newly_enabled_alert_ids = await self._apply_config(config)
             await self._lifecycle.setup()
-            await self._lifecycle.dispatch("confirmation.rebuild")
+            await cast(
+                ConfirmationRebuildPort,
+                self._lifecycle.feature("confirmation"),
+            ).rebuild()
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
@@ -231,27 +261,26 @@ class HaNotificationsController:
     # ------------------------------------------------------------------
 
     async def _evaluate_all(self, *, source: str) -> None:
-        await self._lifecycle.dispatch(
-            "alerts.evaluate_all", source=source, now=dt_util.utcnow()
-        )
+        await cast(
+            ConditionsPort,
+            self._lifecycle.feature("conditions"),
+        ).evaluate_all(source=source, now=dt_util.utcnow())
 
     async def _request_condition_check(self, alert_id: str, *, source: str) -> None:
-        """Ask `features/triggering.py` to evaluate one alert's condition now.
+        """Ask the condition feature to evaluate one alert now.
 
         Pull-based (startup/reload/interval/enabled) - the push-based path
-        (a tracked template firing) already knows the result and publishes
-        `CONDITION_EVALUATED` directly from the Home Assistant listener.
+        (a tracked template firing) already knows the result and sends it
+        directly to the condition feature.
         """
 
         if not self._started:
             return
 
-        await self._lifecycle.dispatch(
-            "alerts.check",
-            alert_id,
-            source=source,
-            now=dt_util.utcnow(),
-        )
+        await cast(
+            ConditionsPort,
+            self._lifecycle.feature("conditions"),
+        ).check_alert(alert_id, source=source, now=dt_util.utcnow())
 
     # ------------------------------------------------------------------
     # Public operations - called directly by bridge/websocket.py

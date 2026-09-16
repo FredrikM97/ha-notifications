@@ -14,8 +14,6 @@ SERVICE_RELOAD = "reload"
 SERVICE_TEST = "test"
 
 EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
-EVENT_RUNTIME_PERSIST_REQUESTED = f"{DOMAIN}_runtime_persist_requested"
-
 STATE_RUNTIME = "runtime"
 STATE_HISTORY = "history"
 STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
@@ -67,8 +65,8 @@ class HistoryEventType(StrEnum):
 
 
 class TransitionKind(StrEnum):
-    """What happened to one alert's condition (`features/triggering.py`'s
-    `TriggerTransition.kind`), used only internally by that module to pick
+    """What happened to one alert's condition (`features/conditions.py`'s
+    `ConditionTransition.kind`), used only internally by that module to pick
     which fact events to emit.
     """
 

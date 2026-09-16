@@ -59,7 +59,7 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   config load/save; a lifecycle-managed scheduler owns feature tasks; saved and
   draft test delivery, TTL expiry, disposal, and routes belong to the test feature.
   Core has no alert/notification/confirmation business decisions.
-  Trigger/state-machine logic belongs in `features/triggering.py`;
+  Trigger/state-machine logic belongs in `features/conditions.py`;
   confirmation session tracking and confirmation-effect planning belongs
   in `features/confirmation.py`; notification composition belongs in
   `features/notification.py`; follow-up action rendering belongs in

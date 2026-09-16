@@ -24,7 +24,7 @@ export function renderConfirmationSection(
         )}
       </div>
       <div class="nc-help">
-        Confirmation buttons require at least one Mobile App recipient.
+        Confirmation buttons are included in the notification action data.
       </div>
       <label class="nc-switch-label">
         <ha-switch

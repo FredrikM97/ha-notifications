@@ -8,7 +8,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import (
-    EVENT_RUNTIME_PERSIST_REQUESTED,
     STATE_RUNTIME,
     HistoryEventType,
     StateRoot,
@@ -16,9 +15,8 @@ from ..const import (
 from ..controller.lifecycle import FeatureBase
 from ..domain.service_calls import ServiceCall
 from ..domain.template_values import remove_nulls, render_template_values
+from ..support.storage import RuntimeStateStorage
 from ..support.templates import render_template
-from . import history
-from .feature_config import AlertFeatureConfig
 
 
 class FollowUpActionConfig(BaseModel):
@@ -31,7 +29,7 @@ class FollowUpActionConfig(BaseModel):
     data: Any = Field(default_factory=dict)
 
 
-class PostSendActionsConfig(AlertFeatureConfig):
+class PostSendActionsConfig(BaseModel):
     """Validated actions executed after a notification is sent."""
 
     model_config = ConfigDict(extra="allow")
@@ -61,15 +59,24 @@ class ActionContext:
     confirmation_action_id: str | None
     confirmed_by: str | None = None
 
+
 class FollowUpActionsFeature(FeatureBase):
     """Own follow-up action rendering, execution, and outcome recording."""
 
     name = "follow_up_actions"
+    dependencies = ("history",)
 
-    def __init__(self, hass: Any, state: StateRoot, *_args: Any) -> None:
-        super().__init__(hass, state, *_args)
+    def __init__(
+        self,
+        hass: Any,
+        state: StateRoot,
+        _config_storage: Any,
+        runtime_storage: RuntimeStateStorage,
+    ) -> None:
+        super().__init__()
         self._hass = hass
         self._state = state
+        self._runtime_storage = runtime_storage
 
     async def run(
         self,
@@ -95,7 +102,7 @@ class FollowUpActionsFeature(FeatureBase):
             attempt,
             test,
             now,
-                self._state[STATE_RUNTIME].get(alert["id"], {}).get(
+            self._state[STATE_RUNTIME].get(alert["id"], {}).get(
                 "confirmation_action_id"
             ),
             confirmed_by,
@@ -109,7 +116,6 @@ class FollowUpActionsFeature(FeatureBase):
             message = "Action executed."
             details = {"index": result.index}
             if result.command is None:
-                event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
                 message = "Action failed."
                 details["error"] = result.error
             else:
@@ -128,8 +134,7 @@ class FollowUpActionsFeature(FeatureBase):
                     event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
                     message = "Action failed."
                     details["error"] = str(err)
-            if record_history and history.record_event(
-                self._state,
+            if record_history and self.feature("history").record_event(
                 self._state[STATE_RUNTIME].get(alert["id"]),
                 alert,
                 event_type,
@@ -137,7 +142,7 @@ class FollowUpActionsFeature(FeatureBase):
                 details,
                 now,
             ):
-                self._hass.bus.async_fire(EVENT_RUNTIME_PERSIST_REQUESTED)
+                self._runtime_storage.persist()
 
     async def _render_actions(
         self, actions: list[dict[str, Any]], context: ActionContext

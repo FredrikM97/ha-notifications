@@ -1,15 +1,13 @@
-"""YAML and runtime-state storage owned by explicit storage classes."""
+"""Configuration and runtime-state storage owned by explicit storage classes."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 
-import yaml
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 
 from ..const import (
-    EVENT_RUNTIME_PERSIST_REQUESTED,
     STATE_HISTORY,
     STATE_RUNTIME,
     StateRoot,
@@ -22,29 +20,9 @@ DEFAULT_CONFIG: dict[str, Any] = {"version": 1, "alerts": []}
 class RuntimeStateStorage:
     """Own loading and persistence of the mutable runtime state document."""
 
-    def __init__(self, hass: HomeAssistant, store: Any, state: StateRoot) -> None:
-        self._hass = hass
+    def __init__(self, store: Any, state: StateRoot) -> None:
         self._store = store
         self._state = state
-        self._unsubscribe: Any = None
-
-    def start(self) -> None:
-        """Listen for runtime persistence requests from feature workflows."""
-
-        @callback
-        def _persist_on_event(_event: Any) -> None:
-            self.persist()
-
-        self._unsubscribe = self._hass.bus.async_listen(
-            EVENT_RUNTIME_PERSIST_REQUESTED, _persist_on_event
-        )
-
-    def stop(self) -> None:
-        """Remove the persistence listener during lifecycle unload."""
-
-        if self._unsubscribe:
-            self._unsubscribe()
-            self._unsubscribe = None
 
     async def load(self) -> None:
         """Replace state contents with the persisted runtime document."""
@@ -83,7 +61,7 @@ class ConfigEntryStorage:
         return Configuration.model_validate(options).model_dump(exclude_none=True)
 
     def _save_options(self, config: dict[str, Any]) -> dict[str, Any]:
-        mapped, _text = dump_config(config)
+        mapped = normalize_config(config)
         self._hass.config_entries.async_update_entry(
             self._entry,
             options=mapped,
@@ -103,57 +81,14 @@ class ConfigEntryStorage:
 
         return self._save_options(config)
 
-    async def get_yaml(self) -> str:
-        """Return the current config-entry options as YAML."""
+    def validate(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Validate structured configuration without persisting it."""
 
-        _mapped, text = dump_config(await self.load())
-        return text
-
-    async def save_yaml(self, text: str) -> dict[str, Any]:
-        """Validate and persist raw YAML without changing its structure."""
-
-        document = self.validate_yaml(text)
-        return self._save_options(document.model_dump(exclude_none=True))
-
-    def validate_yaml(self, text: str) -> Configuration:
-        """Validate raw YAML without reading or changing the stored document."""
-
-        return parse_config(text)
+        return normalize_config(config)
 
 
-def parse_yaml_text(text: str) -> dict[str, Any]:
-    """Parse YAML text into a mapping."""
-
-    loaded = yaml.safe_load(text)
-
-    if loaded is None:
-        loaded = {}
-
-    if not isinstance(loaded, dict):
-        raise ValueError("HA Notifications YAML must contain a mapping.")
-
-    return loaded
-
-
-def dump_yaml_text(config: dict[str, Any]) -> str:
-    """Format a config mapping as YAML text."""
-
-    return yaml.safe_dump(
-        config,
-        allow_unicode=True,
-        sort_keys=False,
-        default_flow_style=False,
-    )
-
-
-def parse_config(text: str) -> Configuration:
-    """Parse and validate YAML into the controller's typed configuration."""
-
-    return Configuration.model_validate(parse_yaml_text(text))
-
-
-def dump_config(config: Configuration | dict[str, Any]) -> tuple[dict[str, Any], str]:
-    """Validate a configuration and format its persisted mapping as YAML."""
+def normalize_config(config: Configuration | dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize the structured configuration document."""
 
     document = (
         config
@@ -167,7 +102,7 @@ def dump_config(config: Configuration | dict[str, Any]) -> tuple[dict[str, Any],
         mapped_alert.pop("runtime", None)
         mapped_alerts.append(mapped_alert)
     mapped["alerts"] = mapped_alerts
-    return mapped, dump_yaml_text(mapped)
+    return mapped
 
 
 def ensure_runtime_state_shape(raw: Any) -> StateRoot:

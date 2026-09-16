@@ -15,6 +15,7 @@ from ..const import (
     StateRoot,
 )
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
+from ..support.storage import RuntimeStateStorage
 
 
 class HistoryFeature(FeatureBase):
@@ -22,9 +23,16 @@ class HistoryFeature(FeatureBase):
 
     name = "history"
 
-    def __init__(self, _hass: Any, state: StateRoot, *_args: Any) -> None:
-        super().__init__(_hass, state, *_args)
+    def __init__(
+        self,
+        _hass: Any,
+        state: StateRoot,
+        _config_storage: Any,
+        runtime_storage: RuntimeStateStorage,
+    ) -> None:
+        super().__init__()
         self._state = state
+        self._runtime_storage = runtime_storage
 
     def record(
         self,

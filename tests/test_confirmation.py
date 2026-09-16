@@ -12,6 +12,7 @@ from test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 confirmation = importlib.import_module(f"{PACKAGE_NAME}.features.confirmation")
+testing = importlib.import_module(f"{PACKAGE_NAME}.features.testing")
 
 
 class ConfirmationConfigTests(unittest.TestCase):
@@ -38,6 +39,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.feature = confirmation.ConfirmationFeature(
             None,
             {},
+            None,
+            None,
         )
         self.sessions = self.feature._sessions
         self.now = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -87,6 +90,27 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         await self.feature.clear("action")
 
         self.assertNotIn("action", self.sessions)
+
+    async def test_test_confirmation_is_not_bound_to_saved_runtime(self):
+        alert = {"id": "alert_1", "confirmation": {"enabled": True}}
+
+        class Lifecycle:
+            feature_instance = self.feature
+
+            def feature(self, name):
+                if name != "confirmation":
+                    raise AssertionError(name)
+                return self.feature_instance
+
+        test_feature = testing.TestFeature(None, {}, None, None)
+        test_feature.lifecycle = Lifecycle()
+        action_id = await test_feature._prepare_test_action(alert)
+
+        self.assertIsNotNone(action_id)
+        session = self.sessions[action_id]
+
+        self.assertIsNone(session.alert_id)
+        self.assertEqual(session.draft_alert, alert)
 
 
 class PersonResolutionTests(unittest.TestCase):

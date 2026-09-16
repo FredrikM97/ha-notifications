@@ -12,10 +12,10 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Controller kernel and feature modules
 - `custom_components/ha_notifications/controller/core.py` — kernel: Home Assistant lifecycle effects, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
 - `custom_components/ha_notifications/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
-- `custom_components/ha_notifications/delivery/` — recipient/channel resolution, generic notify routing, and legacy Mobile App service resolution
+- `custom_components/ha_notifications/delivery/` — recipient resolution for Home Assistant's generic Notify service
 - `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
-- `custom_components/ha_notifications/features/triggering.py` — monitor model, trigger registration, and alert state-machine decisions
-- `custom_components/ha_notifications/features/confirmation.py` — confirmation model, typed direct confirmation-action workflow, sessions, and confirmation effects; retains the event adapter for compatibility
+- `custom_components/ha_notifications/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
+- `custom_components/ha_notifications/features/confirmation.py` — confirmation model, direct confirmation-action workflow, sessions, and confirmation effects
 - `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
 - `custom_components/ha_notifications/features/follow_up_actions.py` — post-send and post-confirmation service calls
 - `custom_components/ha_notifications/features/history.py` — explicit history mutation and persistence decisions
@@ -25,7 +25,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/ha_notifications/domain/mapping_model.py` — shared Pydantic mapping serialization and extension-field behavior
 - `custom_components/ha_notifications/features/conditions.py` — visual condition model and condition rows -> Jinja template string
 - `custom_components/ha_notifications/domain/durations.py` — duration parse/format helpers
-- `custom_components/ha_notifications/support/storage.py` — YAML (de)serialization and state-shape repair
+- `custom_components/ha_notifications/support/storage.py` — structured config persistence, validation, and state-shape repair
 - `custom_components/ha_notifications/features/history.py` — history formatting, queries, deletion cleanup, and recording
 
 ## Frontend/editor surfaces
@@ -33,7 +33,8 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `frontend/panel.ts` — dashboard/panel LitElement shell, tab navigation
 - `frontend/editor/index.ts` — `AlertEditorController`: dialog state, dirty tracking, save/test/validate wiring
 - `frontend/sections.ts` — barrel re-exporting one render function per alert-editor section from `frontend/sections/*.ts` (basic, monitor, condition, recipients, notification, reminder interval, confirmation, post-send/post-confirmation actions)
-- `frontend/editor/helpers.ts` — shared render helpers (`field`, `section`, `codeEditor`, `durationInput`, YAML (de)serialization)
+- `frontend/editor/helpers.ts` — shared render helpers (`field`, `section`, `codeEditor`, `durationInput`)
+- `frontend/yaml-view.ts` — frontend-only YAML parsing, formatting, validation, and import/export
 - `frontend/editor/types.ts` — `EditorContext` and other shared editor types/constants
 - `frontend/condition-builder.ts` — visual condition builder
 - `frontend/recipient-picker.ts` — notification target/recipient picker
@@ -48,9 +49,9 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 
 ## Good starting points by task
 - Save/edit lifecycle bug: `config_flow.py`, `support/storage.py`, `bridge/websocket.py`
-- Runtime trigger or interval issue: `features/triggering.py`, `features/conditions.py`, `controller/core.py`
+- Runtime trigger or interval issue: `features/conditions.py`, `controller/core.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
-- YAML/import or validation issue: `config_flow.py`, `support/storage.py`, `controller/alert.py`
+- YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `features/configuration.py`, `support/storage.py`
 - Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `delivery/`, `bridge/websocket.py`
 
 ## Keep it narrow

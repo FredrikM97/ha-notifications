@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 from custom_components.ha_notifications.controller.lifecycle import FeatureLifecycle
 
@@ -44,10 +43,6 @@ class FeatureLifecycleTests(unittest.IsolatedAsyncioTestCase):
         lifecycle._routes = {}
         lifecycle._websocket_routes = ()
         lifecycle._reload_configuration = lambda: None
-        for feature in features:
-            feature.services = SimpleNamespace(
-                runtime_storage=RuntimeStorage(), scheduler=None
-            )
         lifecycle._validate_dependencies()
         return lifecycle
 
@@ -97,7 +92,6 @@ class FeatureLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     FakeFeature("second", ("first",), []),
                 )
             )
-
 
 if __name__ == "__main__":
     unittest.main()

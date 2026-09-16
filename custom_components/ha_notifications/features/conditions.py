@@ -2,28 +2,413 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
-from datetime import timedelta
+import uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
-from homeassistant.helpers.template import TemplateError, result_as_boolean
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers.event import (
+    TrackTemplate,
+    TrackTemplateResult,
+    async_track_template_result,
+    async_track_time_interval,
+)
+from homeassistant.helpers.template import (
+    Template,
+    TemplateError,
+    result_as_boolean,
+)
+from homeassistant.util import dt as dt_util
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..const import ConditionType
+from ..const import ConditionType, TransitionKind
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..domain.durations import parse_duration
 from ..support.templates import render_template
-from .feature_config import AlertFeatureConfig
+
+
+class MonitorConfig(BaseModel):
+    """Validated watcher settings for one alert."""
+
+    model_config = ConfigDict(extra="allow")
+
+    on_change: bool | None = None
+    startup: bool | None = None
+    interval: int | float | None = None
+
+    @field_validator("interval", mode="before")
+    @classmethod
+    def _normalize_interval(cls, value: Any) -> Any:
+        from ..domain.durations import duration_seconds
+
+        return duration_seconds(value)
+
+
+@dataclass(frozen=True)
+class ConditionTransition:
+    """Fact produced when an alert condition changes or needs attention."""
+
+    kind: TransitionKind
+    error: str | None = None
+    source: str = ""
+    had_pending_confirmation: bool = False
+
+
+class ConditionWatchers:
+    """Own Home Assistant listeners for configured alert conditions."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        on_condition_result: Callable[
+            [str, bool | None, str | None, str], None
+        ],
+        on_check: Callable[[str, str], None],
+    ) -> None:
+        self._hass = hass
+        self._on_condition_result = on_condition_result
+        self._on_check = on_check
+        self._unsubscribers: dict[str, list[Callable[[], None]]] = {}
+
+    def _track_template(
+        self,
+        source: str,
+        on_result: Callable[[bool | None, str | None, Event | None], None],
+    ) -> Callable[[], None]:
+        template = Template(source, self._hass)
+
+        @callback
+        def template_callback(
+            event: Event | None,
+            updates: list[TrackTemplateResult],
+        ) -> None:
+            for update in updates:
+                if update.template is not template:
+                    continue
+                if isinstance(update.result, TemplateError):
+                    on_result(None, str(update.result), event)
+                else:
+                    on_result(result_as_boolean(update.result), None, event)
+
+        return async_track_template_result(
+            self._hass,
+            [TrackTemplate(template, None)],
+            template_callback,
+        ).async_remove
+
+    def _track_interval(
+        self, interval: timedelta, on_interval: Callable[[datetime], None]
+    ) -> Callable[[], None]:
+        @callback
+        def interval_callback(now: datetime) -> None:
+            on_interval(now)
+
+        return async_track_time_interval(self._hass, interval_callback, interval)
+
+    def configure(self, alert: dict[str, Any]) -> None:
+        alert_id = alert["id"]
+        self.unconfigure(alert_id)
+        if not alert.get("enabled", True) or not alert.get("notification"):
+            return
+
+        monitor = MonitorConfig.model_validate(alert.get("monitor") or {})
+        unsubscribers: list[Callable[[], None]] = []
+        if monitor.on_change:
+            unsubscribers.append(
+                self._track_template(
+                    compile_condition(alert),
+                    lambda active, error, _event: self._on_condition_result(
+                        alert_id, active, error, "change"
+                    ),
+                )
+            )
+
+        from .confirmation import confirmation_for_alert
+
+        interval = parse_duration(monitor.interval)
+        if interval is not None:
+            unsubscribers.append(
+                self._track_interval(
+                    interval, lambda _now: self._on_check(alert_id, "interval")
+                )
+            )
+        confirmation = confirmation_for_alert(alert)
+        confirmation_interval = None
+        if (
+            confirmation
+            and confirmation.enabled
+            and confirmation.reminders.enabled
+        ):
+            confirmation_interval = parse_duration(confirmation.reminders.interval)
+        if confirmation_interval is not None:
+            unsubscribers.append(
+                self._track_interval(
+                    confirmation_interval,
+                    lambda _now: self._on_check(alert_id, "confirmation"),
+                )
+            )
+        self._unsubscribers[alert_id] = unsubscribers
+
+    def unconfigure(self, alert_id: str) -> None:
+        for unsubscribe in self._unsubscribers.pop(alert_id, []):
+            unsubscribe()
 
 
 class ConditionFeature(FeatureBase):
-    """Own condition compilation and frontend validation routes."""
+    """Own condition compilation, evaluation, and condition watchers."""
 
     name = "conditions"
+    dependencies = ("alerts", "alert_flow")
 
-    def __init__(self, hass: Any, *_args: Any) -> None:
-        super().__init__(hass, *_args)
+    def __init__(
+        self,
+        hass: Any,
+        _state: Any,
+        _config_storage: Any,
+        _runtime_storage: Any,
+    ) -> None:
+        super().__init__()
         self._hass = hass
+        self._alerts: dict[str, dict[str, Any]] = {}
+        self._watchers: ConditionWatchers | None = None
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._tasks: dict[str, set[asyncio.Task[Any]]] = {}
+        self._runtime_for: Callable[[str], dict[str, Any]] | None = None
+        self._on_transition: Callable[
+            [dict[str, Any], ConditionTransition, datetime], Awaitable[None]
+        ] | None = None
+
+    def set_alerts(self, alerts: dict[str, Any]) -> None:
+        mapped_alerts = {
+            alert.id: alert.model_dump(exclude_none=True)
+            for alert in alerts.values()
+        }
+        self._alerts = mapped_alerts
+
+    async def on_setup(self) -> None:
+        alert_feature = self.feature("alerts")
+        self._runtime_for = alert_feature.runtime
+        self._on_transition = self.feature("alert_flow").handle_condition
+        self._watchers = ConditionWatchers(
+            self._hass, self._schedule_condition_result, self._schedule_check
+        )
+        self.set_alerts(alert_feature.alerts)
+        for alert in self._alerts.values():
+            await self._configure(alert)
+
+    async def on_unload(self) -> None:
+        for alert_id in tuple(self._alerts):
+            await self._unconfigure(alert_id)
+        self._watchers = None
+        self._locks.clear()
+        self._tasks.clear()
+        self._on_transition = None
+
+    async def check_alert(
+        self, alert_id: str, *, source: str, now: datetime
+    ) -> None:
+        lock = self._locks.setdefault(alert_id, asyncio.Lock())
+        async with lock:
+            await self._check(alert_id, source=source, now=now)
+
+    async def evaluate_all(self, *, source: str, now: datetime) -> None:
+        if self._watchers is None:
+            return
+        for alert in self._alerts.values():
+            if not alert.get("enabled", True):
+                continue
+            monitor = alert.get("monitor") or {}
+            if source == "startup" and not monitor.get("startup", True):
+                continue
+            await self.check_alert(alert["id"], source=source, now=now)
+
+    async def _configure(self, alert: dict[str, Any]) -> None:
+        await self._unconfigure(alert["id"])
+        self._runtime_for(alert["id"])
+        if self._watchers is not None:
+            self._watchers.configure(alert)
+
+    async def _unconfigure(self, alert_id: str) -> None:
+        if self._watchers is not None:
+            self._watchers.unconfigure(alert_id)
+        tasks = self._tasks.pop(alert_id, set())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._locks.pop(alert_id, None)
+
+    async def _check(self, alert_id: str, *, source: str, now: datetime) -> None:
+        alert = self._alerts.get(alert_id)
+        if alert is None or not alert.get("notification"):
+            return
+        template = Template(compile_condition(alert), self._hass)
+        try:
+            result = template.async_render(parse_result=True, strict=False)
+            if inspect.isawaitable(result):
+                result = await result
+        except TemplateError as err:
+            active, error = None, str(err)
+        else:
+            active, error = result_as_boolean(result), None
+        await self._condition_result(
+            alert_id, active, error, source=source, now=now
+        )
+
+    async def _condition_result(
+        self,
+        alert_id: str,
+        active: bool | None,
+        error: str | None,
+        *,
+        source: str,
+        now: datetime,
+    ) -> None:
+        alert = self._alerts.get(alert_id)
+        if alert is None:
+            return
+        if self._runtime_for is None:
+            raise RuntimeError("Condition feature has not been set up")
+        runtime = self._runtime_for(alert_id)
+        transition = self._transition_for(
+            runtime, alert, active, error, now, source
+        )
+        if transition.kind == TransitionKind.NO_CHANGE:
+            return
+        if self._on_transition is None:
+            raise RuntimeError("Condition feature has not been set up")
+        await self._on_transition(alert, transition, now)
+
+    async def condition_result(
+        self,
+        alert_id: str,
+        active: bool | None,
+        error: str | None,
+        *,
+        source: str,
+        now: datetime,
+    ) -> None:
+        lock = self._locks.setdefault(alert_id, asyncio.Lock())
+        async with lock:
+            await self._condition_result(
+                alert_id, active, error, source=source, now=now
+            )
+
+    @staticmethod
+    def _transition_for(
+        state: dict[str, Any],
+        alert: dict[str, Any],
+        active: bool | None,
+        error: str | None,
+        now: datetime,
+        source: str,
+    ) -> ConditionTransition:
+        from .confirmation import confirmation_for_alert
+
+        if error is not None:
+            return ConditionTransition(TransitionKind.CONDITION_ERROR, error, source)
+        state["last_evaluated"] = now.isoformat()
+        if not active:
+            if not state.get("active", False):
+                return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
+            pending = bool(state.get("confirmation_action_id"))
+            state.update(active=False, acknowledged=False, attempts=0,
+                         confirmation_action_id=None, notification_id=None,
+                         flow_id=None)
+            return ConditionTransition(
+                TransitionKind.BECAME_INACTIVE,
+                source=source,
+                had_pending_confirmation=pending,
+            )
+        if not state.get("active", False):
+            state.update(
+                active=True, acknowledged=False, attempts=0,
+                started_at=now.isoformat(),
+                notification_id=f"ha_notifications_{alert['id']}_{uuid.uuid4().hex[:10]}",
+            )
+            ConditionFeature._ensure_flow_id(state, alert)
+            return ConditionTransition(TransitionKind.BECAME_ACTIVE, source=source)
+        if state.get("acknowledged", False):
+            return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
+        has_sent = bool(state.get("last_notified") or state.get("attempts", 0))
+        monitor = MonitorConfig.model_validate(alert.get("monitor", {}))
+        confirmation = confirmation_for_alert(alert)
+        if (source == "startup" and monitor.startup and not has_sent) or (
+            source == "enabled" and not has_sent
+        ) or (
+            source in ("reload", "startup", "interval", "confirmation")
+            and ConditionFeature._confirmation_is_due(state, confirmation, now)
+        ):
+            ConditionFeature._ensure_flow_id(state, alert)
+            return ConditionTransition(TransitionKind.SHOULD_SEND, source=source)
+        return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
+
+    @staticmethod
+    def _confirmation_is_due(
+        state: dict[str, Any],
+        confirmation: Any,
+        now: datetime,
+    ) -> bool:
+        if (
+            not state.get("confirmation_action_id")
+            or not confirmation
+            or not confirmation.enabled
+            or not confirmation.reminders.enabled
+        ):
+            return False
+        if int(state.get("attempts", 0)) >= int(
+            confirmation.reminders.max_attempts or 1
+        ):
+            return False
+        last_notified = state.get("last_notified")
+        if not last_notified:
+            return True
+        try:
+            previous = datetime.fromisoformat(str(last_notified))
+        except ValueError:
+            return True
+        duration = parse_duration(confirmation.reminders.interval)
+        return duration is None or now - previous >= duration
+
+    @staticmethod
+    def _ensure_flow_id(state: dict[str, Any], alert: dict[str, Any]) -> None:
+        if not state.get("flow_id"):
+            state["flow_id"] = f"flow_{alert['id']}_{uuid.uuid4().hex[:8]}"
+
+    def _schedule_condition_result(
+        self, alert_id: str, active: bool | None, error: str | None, source: str
+    ) -> None:
+        self._schedule_task(
+            alert_id,
+            self.condition_result(
+                alert_id, active, error, source=source, now=dt_util.utcnow()
+            ),
+        )
+
+    def _schedule_check(self, alert_id: str, source: str) -> None:
+        self._schedule_task(
+            alert_id,
+            self.check_alert(alert_id, source=source, now=dt_util.utcnow()),
+        )
+
+    def _schedule_task(self, alert_id: str, coroutine: Awaitable[Any]) -> None:
+        task = self._hass.async_create_task(coroutine)
+        self._tasks.setdefault(alert_id, set()).add(task)
+
+        def remove_task(done_task: asyncio.Task[Any]) -> None:
+            tasks = self._tasks.get(alert_id)
+            if tasks is None:
+                return
+            tasks.discard(done_task)
+            if not tasks:
+                self._tasks.pop(alert_id, None)
+
+        task.add_done_callback(remove_task)
 
     @websocket_route(
         "conditions.validate",
@@ -48,7 +433,7 @@ class ConditionFeature(FeatureBase):
             raise ValueError(f"Condition template failed: {error}")
         return True
 
-class ConditionConfig(AlertFeatureConfig):
+class ConditionConfig(BaseModel):
     """Validated visual condition used by the editor and trigger workflow."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)

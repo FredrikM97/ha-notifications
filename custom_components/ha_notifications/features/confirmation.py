@@ -12,8 +12,7 @@ from homeassistant.util import dt as dt_util
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import EVENT_NOTIFICATION_ACTION, STATE_RUNTIME, StateRoot
-from ..controller.lifecycle import FeatureBase, route
-from .feature_config import AlertFeatureConfig
+from ..controller.lifecycle import FeatureBase
 
 DRAFT_SESSION_TTL = timedelta(minutes=15)
 
@@ -42,7 +41,7 @@ class ConfirmationActionsConfig(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class ConfirmationConfig(AlertFeatureConfig):
+class ConfirmationConfig(BaseModel):
     """Validated confirmation prompt and its owned follow-up settings."""
 
     model_config = ConfigDict(extra="allow")
@@ -96,9 +95,10 @@ class ConfirmationFeature(FeatureBase):
         self,
         hass: Any,
         state: StateRoot,
-        *_args: Any,
+        _config_storage: Any,
+        _runtime_storage: Any,
     ) -> None:
-        super().__init__(hass, state, *_args)
+        super().__init__()
         self._hass = hass
         self._state = state
         self._sessions: dict[str, ConfirmationSession] = {}
@@ -118,13 +118,10 @@ class ConfirmationFeature(FeatureBase):
         self._sessions.clear()
 
     async def _on_action_event(self, event: Any) -> None:
-        if self.lifecycle is None:
-            return
-        result = await self.lifecycle.dispatch("confirmation.resolve", event)
+        result = await self.resolve_action_event(event)
         if result:
-            await self.lifecycle.dispatch("flows.confirmation", result)
+            await self.feature("alert_flow").handle_confirmation(result)
 
-    @route("confirmation.track")
     async def track(
         self,
         session_id: str,
@@ -143,13 +140,16 @@ class ConfirmationFeature(FeatureBase):
             expires_at=(now + ttl) if draft_alert is not None and ttl else None,
         )
 
-    @route("confirmation.clear")
     async def clear(self, session_id: str) -> None:
         """Stop tracking one pending confirmation."""
 
         self._sessions.pop(session_id, None)
 
-    @route("confirmation.rebuild")
+    def has_pending(self, session_id: str) -> bool:
+        """Return whether a confirmation session is still pending."""
+
+        return session_id in self._sessions
+
     async def rebuild(self) -> None:
         """Restore pending saved-alert confirmations from runtime state."""
 
@@ -173,7 +173,6 @@ class ConfirmationFeature(FeatureBase):
         for key in set(related_ids):
             await self.clear(key)
 
-    @route("confirmation.expire_drafts")
     async def expire_drafts(self, now: datetime) -> list[str]:
         """Discard expired editor-draft confirmation sessions."""
 
@@ -186,7 +185,6 @@ class ConfirmationFeature(FeatureBase):
             self._sessions.pop(session_id, None)
         return expired
 
-    @route("confirmation.resolve")
     async def resolve_action_event(self, event: Any) -> ConfirmationResult | None:
         """Resolve a Home Assistant action event to one typed confirmation fact."""
 
@@ -229,7 +227,6 @@ class ConfirmationFeature(FeatureBase):
             alert.model_dump(exclude_none=True), confirmed_by, now, False, True
         )
 
-    @route("confirmation.prepare")
     async def prepare_action(
         self, alert: dict[str, Any], runtime: dict[str, Any]
     ) -> tuple[bool, str | None]:
@@ -247,8 +244,6 @@ class ConfirmationFeature(FeatureBase):
         runtime["confirmation_action_id"] = action_id
         return True, action_id
 
-# ----------------------------------------------------------------------
-# Incoming mobile-action event routing (was ConfirmationActionHandler)
 # ----------------------------------------------------------------------
 
 

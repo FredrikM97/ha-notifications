@@ -14,7 +14,7 @@ from ..const import StateRoot
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from ..support.storage import ConfigEntryStorage
+    from ..support.storage import ConfigEntryStorage, RuntimeStateStorage
 
 RouteHandler = Callable[..., Awaitable[Any]]
 
@@ -85,6 +85,7 @@ class Feature(Protocol):
     async def unload(self) -> None: ...
 
 
+
 class FeatureBase:
     """Inherited contract for self-registering lifecycle features."""
 
@@ -98,7 +99,7 @@ class FeatureBase:
         if not cls.__dict__.get("abstract", False):
             FeatureBase._registry.append(cls)
 
-    def __init__(self, *_args: Any) -> None:
+    def __init__(self) -> None:
         self.lifecycle: FeatureLifecycle | None = None
 
     async def setup(self, lifecycle: FeatureLifecycle) -> None:
@@ -129,6 +130,7 @@ class FeatureLifecycle:
         hass: HomeAssistant,
         state: StateRoot,
         config_storage: ConfigEntryStorage,
+        runtime_storage: RuntimeStateStorage,
         reload_configuration: Callable[[], Awaitable[None]],
         *,
         feature_classes_loaded: bool = False,
@@ -141,6 +143,7 @@ class FeatureLifecycle:
                 hass,
                 state,
                 config_storage,
+                runtime_storage,
             )
             for feature_class in FeatureBase._registry
         )
@@ -157,6 +160,7 @@ class FeatureLifecycle:
         hass: HomeAssistant,
         state: StateRoot,
         config_storage: ConfigEntryStorage,
+        runtime_storage: RuntimeStateStorage,
         reload_configuration: Callable[[], Awaitable[None]],
     ) -> FeatureLifecycle:
         """Discover and import feature modules outside Home Assistant's loop."""
@@ -166,6 +170,7 @@ class FeatureLifecycle:
             hass,
             state,
             config_storage,
+            runtime_storage,
             reload_configuration,
             feature_classes_loaded=True,
         )
@@ -176,10 +181,11 @@ class FeatureLifecycle:
         hass: HomeAssistant,
         state: StateRoot,
         config_storage: ConfigEntryStorage,
+        runtime_storage: RuntimeStateStorage,
     ) -> FeatureBase:
         """Compose each feature with the shared application context."""
 
-        return feature_class(hass, state, config_storage)
+        return feature_class(hass, state, config_storage, runtime_storage)
 
     async def reload(self) -> None:
         """Request the composition host to reload feature configuration."""

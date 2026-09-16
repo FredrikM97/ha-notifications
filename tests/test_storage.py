@@ -9,31 +9,26 @@ from test_support import load_storage
 storage = load_storage()
 
 
-class YamlTextTests(unittest.TestCase):
-    def test_parse_yaml_accepts_empty_and_mapping_documents(self):
-        self.assertEqual(storage.parse_yaml_text(""), {})
-        self.assertEqual(storage.parse_yaml_text("alerts: []"), {"alerts": []})
-
-    def test_parse_yaml_rejects_non_mapping_documents(self):
-        with self.assertRaisesRegex(ValueError, "must contain a mapping"):
-            storage.parse_yaml_text("- alert")
-
-    def test_default_config_yaml_round_trips(self):
-        text = storage.dump_yaml_text(storage.DEFAULT_CONFIG)
-        self.assertEqual(storage.parse_yaml_text(text), storage.DEFAULT_CONFIG)
-
-
 class ConfigEntryStorageTests(unittest.TestCase):
-    def test_parse_config_accepts_declared_alert_shape(self):
-        result = storage.parse_config(
-            "alerts:\n  - id: test\n    name: Test\n    conditions:\n"
-            "      - type: template\n        template: '{{ true }}'\n"
+    def test_normalize_config_accepts_declared_alert_shape(self):
+        result = storage.normalize_config(
+            {
+                "alerts": [
+                    {
+                        "id": "test",
+                        "name": "Test",
+                        "conditions": [
+                            {"type": "template", "template": "{{ true }}"}
+                        ],
+                    }
+                ]
+            }
         )
-        self.assertEqual(result.alerts[0].id, "test")
+        self.assertEqual(result["alerts"][0]["id"], "test")
 
-    def test_invalid_yaml_raises_without_touching_anything(self):
+    def test_invalid_config_raises_without_touching_anything(self):
         with self.assertRaises(ValueError):
-            storage.parse_config("- invalid\n")
+            storage.normalize_config({"alerts": "invalid"})
 
     def test_normalize_and_dump_yaml_round_trips(self):
         config = storage.Configuration.model_validate(
@@ -55,10 +50,9 @@ class ConfigEntryStorageTests(unittest.TestCase):
                 ],
             }
         )
-        normalized, text = storage.dump_config(config)
+        normalized = storage.normalize_config(config)
         self.assertEqual(config.version, 1)
-        self.assertEqual(text.count("notification:"), 1)
-        self.assertNotIn("notifications:", text)
+        self.assertEqual(normalized["alerts"][0]["id"], "demo")
 
     def test_preserves_feature_payload_for_feature_validation(self):
         config = storage.Configuration.model_validate(
@@ -93,7 +87,7 @@ class ConfigEntryStorageTests(unittest.TestCase):
             "[object Object]",
         )
 
-    def test_drops_runtime_state_from_yaml_output(self):
+    def test_drops_runtime_state_from_persisted_config(self):
         config = storage.Configuration.model_validate(
             {
                 "alerts": [
@@ -117,10 +111,10 @@ class ConfigEntryStorageTests(unittest.TestCase):
             }
         )
 
-        _, text = storage.dump_config(config)
+        normalized = storage.normalize_config(config)
 
-        self.assertNotIn("runtime:", text)
-        self.assertNotIn("last_event:", text)
+        self.assertNotIn("runtime", normalized["alerts"][0])
+        self.assertNotIn("last_event", normalized["alerts"][0])
 
 
 class RuntimeStateShapeTests(unittest.TestCase):

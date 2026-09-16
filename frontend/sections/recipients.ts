@@ -11,8 +11,8 @@ export function renderRecipientSection(): TemplateResult {
         can mix devices, areas, labels, floors, and notification entities.
       </div>
       <div class="nc-help">
-        Mobile App-only recipients use legacy Mobile App delivery. Mixed or
-        non-mobile recipients use standard Notify delivery.
+        Selected devices, areas, labels, floors, and notification entities are
+        passed to Home Assistant's standard Notify service.
       </div>`,
     "nc-section-recipient",
   );

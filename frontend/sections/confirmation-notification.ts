@@ -13,7 +13,17 @@ export function renderConfirmationNotificationSection(
   const confirmation = context.value.confirmation!;
   return section(
     "Notify recipients when confirmed",
-    html`${codeEditor({
+    html`<label class="nc-switch-label">
+        <ha-switch
+          .checked=${confirmation.notification.enabled === true}
+          @change=${(event: Event) => {
+            confirmation.notification.enabled = checkedOf(event);
+            context.markDirty();
+          }}
+        ></ha-switch>
+        <span>Send a follow-up notification</span>
+      </label>
+      ${codeEditor({
         value: confirmation.notification.message || "",
         placeholder: "",
         mode: "jinja2",

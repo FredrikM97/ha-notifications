@@ -8,8 +8,6 @@ from datetime import timedelta
 from test_support import load_const_and_models
 
 from custom_components.ha_notifications.domain.durations import (
-    duration_to_mapping,
-    duration_to_string,
     parse_duration,
 )
 from custom_components.ha_notifications.features.confirmation import (
@@ -39,14 +37,6 @@ class DurationTests(unittest.TestCase):
     def test_invalid_values_raise(self):
         with self.assertRaises(ValueError):
             parse_duration("nope")
-
-    def test_duration_serialization(self):
-        self.assertEqual(
-            duration_to_mapping("1:02:03"),
-            {"hours": 1, "minutes": 2, "seconds": 3},
-        )
-        self.assertEqual(duration_to_string("27:00"), "27:00:00")
-
 
 class ConfigurationTests(unittest.TestCase):
     def test_alert_owns_feature_sections_as_extra_fields(self):

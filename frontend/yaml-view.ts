@@ -1,10 +1,20 @@
-import { errorMessage, getYaml, reload, saveYaml, validateYaml } from "./api.js";
+import { parse, stringify } from "yaml";
+import {
+  errorMessage,
+  getConfig,
+  reload,
+  saveConfig,
+  validateConfig,
+} from "./api.js";
 import { html, render } from "lit";
 import type { Hass } from "./types.js";
 
 type Toast = (message: string, error?: boolean) => void;
 
-type CodeEditor = HTMLElement & { value: string };
+type CodeEditor = HTMLElement & {
+  value: string;
+  updateComplete?: Promise<unknown>;
+};
 
 function codeEditor(root: ParentNode): CodeEditor {
   const editor = root.querySelector<CodeEditor>("ha-code-editor");
@@ -22,8 +32,10 @@ export function renderYamlView(
 ): void {
   async function load(): Promise<void> {
     try {
-      const result = await getYaml(hass);
-      editor.value = result.yaml || "";
+      const config = await getConfig(hass);
+      await customElements.whenDefined("ha-code-editor");
+      await editor.updateComplete;
+      editor.value = stringify(config);
     } catch (err) {
       showToast(errorMessage(err), true);
     }
@@ -62,6 +74,14 @@ export function renderYamlView(
 
   const readEditor = (): string => editor.value || "";
 
+  function parseEditor(): Record<string, unknown> {
+    const value = parse(readEditor());
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("YAML must contain a mapping.");
+    }
+    return value as Record<string, unknown>;
+  }
+
   async function copyYaml(): Promise<void> {
     try {
       await navigator.clipboard.writeText(readEditor());
@@ -89,7 +109,7 @@ export function renderYamlView(
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     try {
-      await validateYaml(hass, readEditor());
+      await validateConfig(hass, parseEditor());
       showToast("YAML is valid.");
     } catch (err) {
       showToast(errorMessage(err), true);
@@ -102,7 +122,7 @@ export function renderYamlView(
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     try {
-      const result = await saveYaml(hass, readEditor());
+      const result = await saveConfig(hass, parseEditor());
       if (!result.saved) {
         throw new Error("The YAML was not saved.");
       }
