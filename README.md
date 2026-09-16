@@ -59,6 +59,16 @@ python3 -m pip install -e '.[test]'
 python3 -m pytest
 ```
 
+To run the same checks automatically before each local commit, configure the
+repository hook once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `scripts/validate.sh`, which checks Python lint, backend tests,
+the frontend build, frontend smoke tests, and frontend unit tests.
+
 Snapshots use Syrupy with Home Assistant-aware serialization. Review snapshot
 changes explicitly with:
 
