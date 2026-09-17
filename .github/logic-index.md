@@ -4,8 +4,7 @@ This is the compact routing map for the direct-workflow architecture.
 
 ## Startup and lifecycle
 
-- `backend/__init__.py`: Home Assistant config-entry and service lifecycle glue.
-- `backend/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
+- `backend/__init__.py`: Home Assistant config-entry and service lifecycle glue; constructs the feature lifecycle and attaches it to the controller host.
 - `backend/controller/core.py`: lifecycle host, direct Home Assistant lifecycle effects, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
 - `backend/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
 
@@ -17,28 +16,27 @@ This is the compact routing map for the direct-workflow architecture.
 
 ## Features
 
-- `features/alerts.py`: `AlertFeature` owns typed alerts, `AlertRuntime`, and the `alerts.apply`/`alerts.get`/`alerts.runtime`/`alerts.list`/`alerts.save` routes.
-- `features/conditions.py`: `ConditionFeature` owns condition listeners, per-alert evaluation serialization, and condition facts.
-- `features/alert_flow.py`: explicit ordering for condition and confirmation effects; it calls feature-owned operations directly and serializes alert effects.
-- `features/notification.py`: `NotificationFeature` owns notification composition and delivery outcome mutation; `features/conditions.py` owns monitor and confirmation-resend listeners and due policy.
-- `features/conditions.py`: condition-editor Pydantic model, validation, and HA template compilation.
-- `features/confirmation.py`: `ConfirmationFeature` owns confirmation session state, Home Assistant action subscription lifecycle, action matching, and resolution into confirmation facts.
-- `features/testing.py`: `TestFeature` owns saved-alert and editor-draft test delivery, confirmation-session creation, TTL expiry, disposal, and its websocket routes.
-- `features/notification.py`: notification and repeat Pydantic models, target normalization, rendering/composition, direct send/clear planning, and `ConfirmationDeliveryPlanner` for clear/completion requests.
-- `delivery/`: recipient and notification-channel resolution; mobile-app entities use their concrete data-capable service and other targets use generic Notify.
-- `features/follow_up_actions.py`: post-send and post-confirmation service-call planning with per-action failure isolation.
-- `features/history.py`: direct history recording, event formatting, runtime last-event mutation, and persistence decisions.
+- `backend/features/alerts.py`: `AlertFeature` owns typed alerts, `AlertRuntime`, and the `alerts.apply`/`alerts.get`/`alerts.runtime`/`alerts.list`/`alerts.save` routes.
+- `backend/features/conditions.py`: `ConditionFeature` owns condition listeners, per-alert evaluation serialization, and condition facts.
+- `backend/features/alert_flow.py`: explicit ordering for condition and confirmation effects; it calls feature-owned operations directly and serializes alert effects.
+- `backend/features/notification.py`: `NotificationFeature` owns notification composition and delivery outcome mutation; `backend/features/conditions.py` owns monitor and confirmation-resend listeners and due policy.
+- `backend/features/conditions.py`: condition-editor Pydantic model, validation, and HA template compilation.
+- `backend/features/confirmation.py`: `ConfirmationFeature` owns confirmation session state, Home Assistant action subscription lifecycle, action matching, and resolution into confirmation facts.
+- `backend/features/testing.py`: `TestFeature` owns saved-alert and editor-draft test delivery, confirmation-session creation, TTL expiry, disposal, and its websocket routes.
+- `backend/features/notification.py`: notification and repeat Pydantic models, target normalization, rendering/composition, direct send/clear planning, and `ConfirmationDeliveryPlanner` for clear/completion requests.
+- `backend/delivery/`: recipient and notification-channel resolution; mobile-app entities use their concrete data-capable service and other targets use generic Notify.
+- `backend/features/follow_up_actions.py`: post-send and post-confirmation service-call planning with per-action failure isolation.
+- `backend/features/history.py`: direct history recording, event formatting, runtime last-event mutation, and persistence decisions.
 
 ## Domain and support
 
-- `features/configuration.py`: flat `Alert`, `Configuration`, and `AlertRuntime` models plus structured configuration routes; each feature validates its own section at its workflow boundary.
-- `domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
-- `domain/template_values.py`: recursive template rendering and null removal for service-call configuration.
-- `domain/durations.py`: backend duration normalization for YAML and runtime values.
-- `domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
-- `support/storage.py`: structured config-entry option persistence, validation coordination, and runtime-state shape repair.
-- `support/templates.py`: shared awaitable-aware Home Assistant template rendering adapter.
-- `support/scheduler.py`: `TaskScheduler` owns tracked feature background tasks and lifecycle cleanup.
+- `backend/features/configuration.py`: flat `Alert`, `Configuration`, and `AlertRuntime` models plus structured configuration routes; each feature validates its own section at its workflow boundary.
+- `backend/domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
+- `backend/domain/template_values.py`: recursive template rendering and null removal for service-call configuration.
+- `backend/domain/durations.py`: backend duration normalization for YAML and runtime values.
+- `backend/support/storage.py`: structured config-entry option persistence, validation coordination, and runtime-state shape repair.
+- `backend/support/templates.py`: shared awaitable-aware Home Assistant template rendering adapter.
+- `backend/support/scheduler.py`: `TaskScheduler` owns tracked feature background tasks and lifecycle cleanup.
 
 ## Main flows
 
@@ -56,7 +54,7 @@ Home Assistant notification-action callback -> `ConfirmationFeature.resolve_acti
 
 ### Frontend test payload
 
-Websocket transport -> `DraftFeature` draft session creation -> direct notification delivery -> optional confirmation session -> explicit discard or TTL cleanup without changing saved alert configuration.
+Websocket transport -> `TestFeature` draft session creation -> direct notification delivery -> optional confirmation session -> explicit discard or TTL cleanup without changing saved alert configuration.
 
 ## Ownership rules
 

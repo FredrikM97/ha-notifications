@@ -5,7 +5,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Primary entry points
 - `backend/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
 - `backend/config_flow.py` — UI config flow and validation logic
-- `backend/controller/core.py` — `HaNotificationsController`: the composition root. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, direct routing of HA confirmation actions, notification send/clear routing, and every public frontend-facing operation
+- `backend/controller/core.py` — `HaNotificationsController`: the lifecycle host. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, and shared runtime state; feature-owned websocket routes are registered through the lifecycle.
 - `backend/bridge/websocket.py` — the frontend-facing interface: registers the 12 `ha_notifications/*` websocket commands
 - `backend/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
 
@@ -21,8 +21,8 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `backend/features/history.py` — explicit history mutation and persistence decisions
 
 ## Shared/support modules
-- `backend/controller/alert.py` — typed `Alert` and `Configuration` objects used by the controller and storage boundary
-- `backend/domain/mapping_model.py` — shared Pydantic mapping serialization and extension-field behavior
+- `backend/features/configuration.py` — typed `Alert`, `Configuration`, and `AlertRuntime` objects used by feature workflows and the storage boundary
+- `backend/domain/template_values.py` — shared recursive template rendering and null removal for service-call configuration
 - `backend/features/conditions.py` — visual condition model and condition rows -> Jinja template string
 - `backend/domain/durations.py` — duration parse/format helpers
 - `backend/support/storage.py` — structured config persistence, validation, and state-shape repair
@@ -48,11 +48,11 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 5. Only expand to wider reads if the root cause remains unclear.
 
 ## Good starting points by task
-- Save/edit lifecycle bug: `config_flow.py`, `support/storage.py`, `bridge/websocket.py`
-- Runtime trigger or interval issue: `features/conditions.py`, `controller/core.py`
+- Save/edit lifecycle bug: `backend/config_flow.py`, `backend/support/storage.py`, `backend/bridge/websocket.py`
+- Runtime trigger or interval issue: `backend/features/conditions.py`, `backend/controller/core.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
-- YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `features/configuration.py`, `support/storage.py`
-- Notification/confirmation flow: `features/notification.py`, `features/confirmation.py`, `delivery/`, `bridge/websocket.py`
+- YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `backend/features/configuration.py`, `backend/support/storage.py`
+- Notification/confirmation flow: `backend/features/notification.py`, `backend/features/confirmation.py`, `backend/delivery/`, `backend/bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.
