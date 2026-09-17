@@ -90,7 +90,7 @@ assert.match(
   editorHelpers,
   /function defaultAlert\(\)[\s\S]*?confirmation:\s*\{\s*enabled: false,/,
 );
-assert.match(editor, /sectionLabel\(parent, title\)/);
+assert.match(editor, /<span>\$\{title\}<\/span>/);
 assert.match(yamlView, /class="nc-code-editor nc-yaml-editor"/);
 assert.match(
   editor,

@@ -493,7 +493,7 @@ class AlertEditorController {
             @click=${() => this.showSection(index)}
           >
             ${this.sectionStatus(status)}
-            <span>${this.sectionLabel(parent, title)}</span>
+            <span>${title}</span>
           </button>
           ${this.sectionCollapseButton(hasChildren, title)}
         </div>`;
