@@ -5,9 +5,9 @@ from pathlib import Path
 
 from homeassistant import config_entries
 
-from custom_components.ha_notifications import config_flow
-from custom_components.ha_notifications.domain.durations import parse_duration
-from tests.support.test_support import load_const_and_models
+from backend import config_flow
+from backend.domain.durations import parse_duration
+from tests.backend.support.test_support import load_const_and_models
 
 const, models = load_const_and_models()
 
@@ -15,9 +15,8 @@ const, models = load_const_and_models()
 class ConfigContractTests(unittest.TestCase):
     def test_ui_config_flow_is_registered(self):
         manifest_path = (
-            Path(__file__).parents[2]
-            / "custom_components"
-            / "ha_notifications"
+            Path(__file__).parents[3]
+            / "backend"
             / "manifest.json"
         )
         manifest = json.loads(manifest_path.read_text())
@@ -32,7 +31,7 @@ class ConfigContractTests(unittest.TestCase):
         )
 
     def test_remove_callback_is_defined(self):
-        from custom_components.ha_notifications import async_remove_entry
+        from backend import async_remove_entry
 
         self.assertTrue(callable(async_remove_entry))
 

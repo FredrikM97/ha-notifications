@@ -5,18 +5,18 @@ from __future__ import annotations
 import unittest
 from datetime import timedelta
 
-from custom_components.ha_notifications.domain.durations import (
+from backend.domain.durations import (
     duration_seconds,
     parse_duration,
 )
-from custom_components.ha_notifications.features.confirmation import (
+from backend.features.confirmation import (
     ConfirmationConfig,
 )
-from custom_components.ha_notifications.features.notification import (
+from backend.features.notification import (
     NotificationConfig,
 )
-from tests.conftest import alert_fixture
-from tests.support.test_support import load_const_and_models
+from tests.backend.conftest import alert_fixture
+from tests.backend.support.test_support import load_const_and_models
 
 _, models = load_const_and_models()
 

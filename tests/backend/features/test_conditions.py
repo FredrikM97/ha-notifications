@@ -6,7 +6,7 @@ import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from tests.support.test_support import PACKAGE_NAME, ensure_package
+from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 

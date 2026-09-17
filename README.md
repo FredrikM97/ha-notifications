@@ -76,9 +76,10 @@ changes explicitly with:
 python3 -m pytest --snapshot-update
 ```
 
-The development bundle is written to `dist/panel.js`, and the build keeps a
-matching runtime copy at `custom_components/ha_notifications/dist/panel.js`.
-The runtime copy is included in repository-based HACS installs, which do not
+The authored Python integration lives in `backend/`. The build
+writes the frontend bundle to `dist/panel.js` and materializes the Home
+Assistant runtime package at `custom_components/ha_notifications/`. The
+runtime package is included in repository-based HACS installs, which do not
 run the Node build step. To install the current source into a local Home
 Assistant configuration:
 
@@ -92,7 +93,19 @@ For a release-quality HACS package, run:
 npm run export:hacs
 ```
 
-The export verifies the runtime bundle and excludes the raw TypeScript source.
+The export stages the runtime tree under `custom_components/ha_notifications`
+and verifies the bundle without including the raw TypeScript source. The
+release ZIP places that integration package at the archive root, matching the
+format Home Assistant expects from the release asset.
+
+To test the exact release archive locally, run:
+
+```bash
+npm run package:hacs
+```
+
+Pass a version to test the publish/dev-release manifest override, for example
+`npm run package:hacs -- 1.2.3`.
 
 ---
 

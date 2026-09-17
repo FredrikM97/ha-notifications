@@ -20,7 +20,8 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from yaml import safe_load
 
-from custom_components.ha_notifications.const import CONF_SHOW_SIDEBAR, DOMAIN
+import custom_components.ha_notifications  # noqa: F401
+from backend.const import CONF_SHOW_SIDEBAR, DOMAIN
 
 _ALERT_FIXTURES = safe_load(
     (Path(__file__).parent / "fixtures" / "alerts.yaml").read_text()
@@ -65,7 +66,7 @@ def alert_fixture(name: str) -> dict[str, Any]:
 def notification_snapshot(kind: str):
     """Build a deterministic registry snapshot for notification planner tests."""
 
-    from custom_components.ha_notifications.features.notification import (
+    from backend.features.notification import (
         RegistrySnapshot,
     )
 
@@ -139,7 +140,7 @@ def notification_snapshot(kind: str):
 def target_registry_snapshot():
     """Build registries covering user, device, area, floor, and label targets."""
 
-    from custom_components.ha_notifications.delivery.targets import RegistrySnapshot
+    from backend.delivery.targets import RegistrySnapshot
 
     return RegistrySnapshot(
         area_registry=SimpleNamespace(
@@ -202,7 +203,7 @@ def real_target_registry(hass: HomeAssistant):
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
 
-    from custom_components.ha_notifications.delivery.targets import RegistrySnapshot
+    from backend.delivery.targets import RegistrySnapshot
 
     mobile_entry = MockConfigEntry(
         domain="mobile_app",
@@ -296,10 +297,10 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
     """Provide a real HA context and captured delivery/timer test features."""
 
     confirmation = importlib.import_module(
-        "custom_components.ha_notifications.features.confirmation"
+        "backend.features.confirmation"
     )
     testing = importlib.import_module(
-        "custom_components.ha_notifications.features.testing"
+        "backend.features.testing"
     )
     saved_alert = make_confirmation_alert()
     notification = _TestNotification()

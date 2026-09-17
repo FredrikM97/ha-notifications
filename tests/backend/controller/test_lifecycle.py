@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from custom_components.ha_notifications.controller.lifecycle import FeatureLifecycle
+from backend.controller.lifecycle import FeatureLifecycle
 
 
 class RuntimeStorage:

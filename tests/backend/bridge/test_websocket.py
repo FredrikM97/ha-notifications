@@ -9,8 +9,8 @@ from unittest.mock import patch
 import voluptuous as vol
 from homeassistant.components import websocket_api
 
-from custom_components.ha_notifications.bridge import websocket
-from custom_components.ha_notifications.controller.lifecycle import (
+from backend.bridge import websocket
+from backend.controller.lifecycle import (
     WebsocketArgument,
     WebsocketRoute,
 )

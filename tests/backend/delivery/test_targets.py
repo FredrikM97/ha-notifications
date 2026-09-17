@@ -1,12 +1,12 @@
 """Tests for notification target resolution."""
 
-from custom_components.ha_notifications.delivery.targets import (
+from backend.delivery.targets import (
     mobile_app_notify_services_for_target,
     resolve_target_devices,
     resolve_user_notification_target,
     target_values,
 )
-from tests.conftest import target_registry_snapshot
+from tests.backend.conftest import target_registry_snapshot
 
 
 def test_target_helpers_resolve_all_target_types(snapshot):

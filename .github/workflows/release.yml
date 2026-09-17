@@ -75,10 +75,7 @@ jobs:
       - name: Build HACS package
         run: |
           npm ci
-          npm run export:hacs
-          cd hacs-export/custom_components/ha_notifications
-          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
-          unzip -tq ../../../ha-notifications.zip 'dist/panel.js'
+          npm run package:hacs
 
       - name: Update rolling draft release
         env:
@@ -153,12 +150,7 @@ jobs:
       - name: Build HACS package
         run: |
           npm ci
-          npm run export:hacs
-          package_dir=hacs-export/custom_components/ha_notifications
-          node -e 'const fs = require("fs"); const file = process.argv[1]; const manifest = JSON.parse(fs.readFileSync(file, "utf8")); manifest.version = process.argv[2]; fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);' "$package_dir/manifest.json" "${{ steps.version.outputs.version }}"
-          cd "$package_dir"
-          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
-          unzip -tq ../../../ha-notifications.zip 'dist/panel.js'
+          npm run package:hacs -- "${{ steps.version.outputs.version }}"
 
       - name: Publish release
         env:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from tests.conftest import alert_fixture
-from tests.support.test_support import load_storage
+from tests.backend.conftest import alert_fixture
+from tests.backend.support.test_support import load_storage
 
 storage = load_storage()
 

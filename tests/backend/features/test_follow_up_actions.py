@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.conftest import make_alert
-from tests.support.test_support import PACKAGE_NAME, ensure_package
+from tests.backend.conftest import make_alert
+from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 module = importlib.import_module(f"{PACKAGE_NAME}.features.follow_up_actions")

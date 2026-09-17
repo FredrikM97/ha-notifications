@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from custom_components.ha_notifications.const import STATE_RUNTIME
-from custom_components.ha_notifications.features.alerts import AlertFeature
-from custom_components.ha_notifications.features.configuration import Alert
-from tests.conftest import make_alert, make_runtime_state
+from backend.const import STATE_RUNTIME
+from backend.features.alerts import AlertFeature
+from backend.features.configuration import Alert
+from tests.backend.conftest import make_alert, make_runtime_state
 
 
 async def test_disabled_runtime_reset_contract_snapshot(snapshot):

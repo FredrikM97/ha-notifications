@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-python3 -m ruff check custom_components tests
 npm run build
-python3 -m pytest tests/
+python3 -m ruff check backend tests/backend
+python3 -m pytest tests/backend/
 npm run test:frontend
 npm run test:unit

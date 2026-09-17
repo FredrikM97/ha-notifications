@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from tests.support.test_support import PACKAGE_NAME, load_const_and_models
+from tests.backend.support.test_support import PACKAGE_NAME, load_const_and_models
 
 load_const_and_models()
 history = __import__(f"{PACKAGE_NAME}.features.history", fromlist=["history"])

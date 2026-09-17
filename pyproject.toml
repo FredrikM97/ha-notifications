@@ -35,10 +35,16 @@ all = [
 ]
 
 [tool.setuptools]
-py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.setuptools.package-data]
+backend = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/backend"]
 addopts = "-ra"
 pythonpath = ["."]
 asyncio_mode = "auto"

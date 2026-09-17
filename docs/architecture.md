@@ -2,6 +2,10 @@
 
 HA Notifications uses a small controller composition root and direct feature workflows. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
 
+The authored integration source lives under `backend/`. The
+frontend build materializes `custom_components/ha_notifications` for local Home
+Assistant runs and HACS export; that generated runtime tree is not source.
+
 ## Layer map
 
 ```mermaid

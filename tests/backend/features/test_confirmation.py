@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from tests.support.test_support import PACKAGE_NAME, ensure_package
+from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 confirmation = importlib.import_module(f"{PACKAGE_NAME}.features.confirmation")

@@ -9,13 +9,13 @@ from functools import partial
 
 from homeassistant.components.notify.const import NOTIFY_SERVICE_SCHEMA
 
-from tests.conftest import (
+from tests.backend.conftest import (
     make_confirmation_alert,
     notification_snapshot,
     target_registry_snapshot,
 )
-from tests.conftest import make_notification_alert as alert
-from tests.support.test_support import PACKAGE_NAME, ensure_package
+from tests.backend.conftest import make_notification_alert as alert
+from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 notifications = importlib.import_module(f"{PACKAGE_NAME}.features.notification")

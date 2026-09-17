@@ -47,7 +47,7 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Validate Python syntax after code changes.
 - Every new frontend or backend feature must include focused automated tests in the same change. Bug fixes must add or update a regression test for the reported behavior whenever the owning code can be tested.
 - Test user-visible frontend behavior at the component or helper boundary, and test backend behavior at the owning feature or application boundary. Do not rely on build, smoke, or type checks as substitutes for behavioral tests.
-- For frontend tests, prefer Vitest snapshots for complete rendered, serialized, or structured contracts, and reuse JSON fixtures whenever possible. Put reusable frontend test setup, builders, and mock clients in `tests/frontend/conftest.ts` rather than duplicating scaffolding in each test file, following the backend `tests/conftest.py` pattern. Keep ordinary assertions for small invariants, side effects, and error behavior; update snapshots only when the intended UI or payload contract changes.
+- For frontend tests, prefer Vitest snapshots for complete rendered, serialized, or structured contracts, and reuse JSON fixtures whenever possible. Put reusable frontend test setup, builders, and mock clients in `tests/frontend/conftest.ts` rather than duplicating scaffolding in each test file, following the backend `tests/backend/conftest.py` pattern. Keep ordinary assertions for small invariants, side effects, and error behavior; update snapshots only when the intended UI or payload contract changes.
 - For frontend DOM interactions, use Testing Library queries scoped through the shared `editorQueries()` helper and `user-event` for user actions. Keep direct selectors for implementation-specific Lit fragments or custom Home Assistant element properties where semantic queries do not apply.
 - Make frontend changes only when the relevant resource exists and is loaded correctly.
 - Favor small, targeted fixes over broad architectural changes.
@@ -111,15 +111,15 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   assertions for small behavioral invariants, side effects, exception
   types/messages, and values where only one property matters; do not force
   snapshots onto those focused checks.
-- Reuse the shared builders and YAML fixtures in `tests/conftest.py`
+- Reuse the shared builders and YAML fixtures in `tests/backend/conftest.py`
   (`alert_fixture`, `make_alert`, `make_confirmation_alert`, and
   `make_notification_alert`) as the starting point for test data. Apply only
   the minimum test-specific overrides rather than recreating base alert,
   notification, monitor, condition, or confirmation dictionaries inside
   individual tests.
 - When the same test object or payload shape appears in more than one test
-  module, add or extend a named fixture/builder in `tests/conftest.py` and load
-  stable structured data from `tests/fixtures/alerts.yaml`; do not duplicate
+  module, add or extend a named fixture/builder in `tests/backend/conftest.py` and load
+  stable structured data from `tests/backend/fixtures/alerts.yaml`; do not duplicate
   large literals across tests. Keep deliberately minimal malformed or boundary
   inputs local when their incompleteness is the behavior being tested.
 - Prefer the available VS Code/search tools or `rg` for read-only discovery.

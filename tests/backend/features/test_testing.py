@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import stable_test_payloads
+from tests.backend.conftest import stable_test_payloads
 
 
 @pytest.mark.asyncio

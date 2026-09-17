@@ -3,7 +3,7 @@ set -eu
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 config_dir=${1:-"$(CDPATH= cd -- "$root_dir/../.." && pwd)"}
-source_dir="$root_dir/custom_components/ha_notifications"
+source_dir="$root_dir/backend"
 target_dir="$config_dir/custom_components/ha_notifications"
 panel_file="$root_dir/dist/panel.js"
 

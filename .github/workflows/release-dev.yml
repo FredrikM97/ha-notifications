@@ -42,12 +42,7 @@ jobs:
         if: steps.changes.outputs.create == 'true'
         run: |
           npm ci
-          npm run export:hacs
-          package_dir=hacs-export/custom_components/ha_notifications
-          node -e 'const fs = require("fs"); const file = process.argv[1]; const manifest = JSON.parse(fs.readFileSync(file, "utf8")); manifest.version = "0.0.0"; fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);' "$package_dir/manifest.json"
-          cd "$package_dir"
-          zip -r ../../../ha-notifications.zip . -x '*.pyc' '*__pycache__/*'
-          unzip -tq ../../../ha-notifications.zip 'dist/panel.js'
+          npm run package:hacs -- 0.0.0
 
       - name: Update dev tag and release
         if: steps.changes.outputs.create == 'true'

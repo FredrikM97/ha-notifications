@@ -4,14 +4,14 @@ This is the compact routing map for the direct-workflow architecture.
 
 ## Startup and lifecycle
 
-- `custom_components/ha_notifications/__init__.py`: Home Assistant config-entry and service lifecycle glue.
-- `custom_components/ha_notifications/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
-- `custom_components/ha_notifications/controller/core.py`: lifecycle host, direct Home Assistant lifecycle effects, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
-- `custom_components/ha_notifications/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
+- `backend/__init__.py`: Home Assistant config-entry and service lifecycle glue.
+- `backend/__init__.py`: constructs the feature lifecycle and attaches it to the controller host.
+- `backend/controller/core.py`: lifecycle host, direct Home Assistant lifecycle effects, shared runtime state, configuration reload, ordered cross-feature workflows, and persistence. It does not construct features or own scheduled tasks.
+- `backend/controller/lifecycle.py`: feature setup/unload ordering, dependency validation, rollback, annotated feature/websocket-route dispatch, and scheduler lifecycle.
 
 ## Frontend transport
 
-- `custom_components/ha_notifications/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations and HA response serialization.
+- `backend/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations and HA response serialization.
 - `frontend/api.ts`: the only frontend/backend transport module.
 - `frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
 
@@ -69,9 +69,9 @@ Websocket transport -> `DraftFeature` draft session creation -> direct notificat
 
 ## Verification routing
 
-- Condition behavior: `features/conditions.py`, `tests/test_conditions.py`, `tests/test_controller_core.py`.
-- Confirmation behavior: `features/confirmation.py`, `tests/test_confirmation.py`, controller confirmation tests.
-- Delivery behavior: `features/notification.py`, notification-service modules, `tests/test_notification.py`.
-- History behavior: `features/history.py`, `tests/test_history*.py`.
-- Configuration behavior: `features/configuration.py`, `support/storage.py`, `tests/test_config_contract.py`, `tests/test_storage.py`.
+- Condition behavior: `features/conditions.py`, `tests/backend/features/test_conditions.py`.
+- Confirmation behavior: `features/confirmation.py`, `tests/backend/features/test_confirmation.py`.
+- Delivery behavior: `features/notification.py`, notification-service modules, `tests/backend/features/test_notification.py`.
+- History behavior: `features/history.py`, `tests/backend/features/test_history*.py`.
+- Configuration behavior: `features/configuration.py`, `support/storage.py`, `tests/backend/domain/test_config_contract.py`, `tests/backend/support/test_storage.py`.
 - Frontend behavior: `frontend/api.ts`, editor modules, `tests/frontend/`, and frontend build/test commands.

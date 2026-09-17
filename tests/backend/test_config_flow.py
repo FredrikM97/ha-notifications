@@ -7,7 +7,7 @@ from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
 from syrupy.assertion import SnapshotAssertion
 
-from custom_components.ha_notifications.const import CONF_SHOW_SIDEBAR, DOMAIN
+from backend.const import CONF_SHOW_SIDEBAR, DOMAIN
 
 
 def stable_flow_result(result: dict) -> dict:
