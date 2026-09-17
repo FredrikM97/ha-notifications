@@ -85,6 +85,21 @@ class AlertEditorController {
   private draftTestSessionId: string | null = null;
   private discardDialog: HTMLElement | null = null;
   private activeSectionIndex = 0;
+  private mobileSectionsOpen = false;
+  private handleOutsideSectionPointer = (event: PointerEvent): void => {
+    if (!this.mobileSectionsOpen) return;
+
+    const menu = this.host.querySelector<HTMLElement>(
+      ".nc-mobile-section-menu",
+    );
+    const button = this.host.querySelector<HTMLElement>(
+      '[data-role="section-manage"]',
+    );
+    const path = event.composedPath();
+    if (menu && path.includes(menu)) return;
+    if (button && path.includes(button)) return;
+    this.closeMobileSections();
+  };
 
   private visual!: HTMLElement;
   private conditionsYamlView!: HTMLElement;
@@ -153,6 +168,7 @@ class AlertEditorController {
 
     this.renderEditor();
     this.root.append(this.host);
+    document.addEventListener("pointerdown", this.handleOutsideSectionPointer);
     void fillActionEditors(this.host);
 
     this.visual = this.host.querySelector<HTMLElement>('[data-role="visual"]')!;
@@ -278,6 +294,20 @@ class AlertEditorController {
                 ),
               )}
             </div>
+            <button
+              class="nc-button secondary nc-section-manage-button"
+              data-role="section-manage"
+              type="button"
+              aria-expanded="false"
+              aria-label="Manage sections"
+              title="Manage sections"
+              @click=${this.toggleMobileSections}
+            >
+              <ha-icon icon="mdi:menu"></ha-icon>
+            </button>
+            ${this.renderSectionNavigation(
+              "nc-section-header nc-mobile-section-menu",
+            )}
           </header>
           <div
             class="nc-editor-validation"
@@ -288,55 +318,7 @@ class AlertEditorController {
           ></div>
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
-              <nav class="nc-section-header" aria-label="Alert sections">
-                ${editorSections.map(
-                  ({ title, setting, parent, status }, index) => {
-                    const hasChildren = editorSections.some(
-                      (section) => section.parent === title,
-                    );
-                    return html` <div
-                      class="nc-section-nav-row"
-                      data-setting=${setting || nothing}
-                      data-parent=${parent || nothing}
-                      ?hidden=${!isSectionVisible(setting, optionalSettings) ||
-                      (parent === "Confirmation" &&
-                        !optionalSettings.confirmation)}
-                    >
-                      <button
-                        class=${this.sectionNavButtonClass(setting, parent)}
-                        @click=${() => this.showSection(index)}
-                      >
-                        ${this.sectionStatus(status)}
-                        <span>${title}</span>
-                      </button>
-                      ${this.sectionCollapseButton(hasChildren, title)}
-                    </div>`;
-                  },
-                )}
-              </nav>
-              <ha-selector
-                class="nc-section-select"
-                .hass=${this.context.hass}
-                .selector=${{
-                  select: {
-                    mode: "dropdown",
-                    options: editorSections.map(
-                      ({ title, setting, parent }, index) => ({
-                        value: String(index),
-                        label: this.sectionLabel(parent, title),
-                        disabled:
-                          !isSectionVisible(setting, optionalSettings) ||
-                          (parent === "Confirmation" &&
-                            !optionalSettings.confirmation),
-                      }),
-                    ),
-                  },
-                }}
-                .value=${String(this.activeSectionIndex)}
-                aria-label="Alert section"
-                @value-changed=${(event: CustomEvent<{ value?: string }>) =>
-                  this.showSection(Number(event.detail.value || 0))}
-              ></ha-selector>
+              ${this.renderSectionNavigation()}
               <div class="nc-editor-sections">
                 ${renderBasicSection(context)}${renderMonitorSection(
                   context,
@@ -493,8 +475,34 @@ class AlertEditorController {
       : "";
   };
 
+  private renderSectionNavigation = (className = "nc-section-header") =>
+    html`<nav class=${className} aria-label="Alert sections">
+      ${editorSections.map(({ title, setting, parent, status }, index) => {
+        const hasChildren = editorSections.some(
+          (section) => section.parent === title,
+        );
+        return html`<div
+          class="nc-section-nav-row"
+          data-setting=${setting || nothing}
+          data-parent=${parent || nothing}
+          ?hidden=${!isSectionVisible(setting, this.optionalSettings) ||
+          (parent === "Confirmation" && !this.optionalSettings.confirmation)}
+        >
+          <button
+            class=${this.sectionNavButtonClass(setting, parent)}
+            @click=${() => this.showSection(index)}
+          >
+            ${this.sectionStatus(status)}
+            <span>${this.sectionLabel(parent, title)}</span>
+          </button>
+          ${this.sectionCollapseButton(hasChildren, title)}
+        </div>`;
+      })}
+    </nav>`;
+
   private showSection = (index: number): void => {
     this.activeSectionIndex = index;
+    this.closeMobileSections();
     this.host
       .querySelectorAll<HTMLElement>(".nc-section")
       .forEach((item, itemIndex) =>
@@ -508,10 +516,6 @@ class AlertEditorController {
         if (active) button.setAttribute("aria-current", "step");
         else button.removeAttribute("aria-current");
       });
-    const select = this.host.querySelector<HTMLElement & { value: string }>(
-      ".nc-section-select",
-    );
-    if (select) select.value = String(index);
     const title = this.host.querySelector<HTMLElement>(
       '[data-role="editor-section-title"]',
     );
@@ -598,10 +602,10 @@ class AlertEditorController {
           collapsed || !isSectionVisible(setting, this.optionalSettings);
       });
 
-    const button = this.host.querySelector<HTMLButtonElement>(
+    const buttons = this.host.querySelectorAll<HTMLButtonElement>(
       `[data-collapse-parent="${parent}"]`,
     );
-    if (button) {
+    buttons.forEach((button) => {
       button.setAttribute("aria-expanded", String(!collapsed));
       button.setAttribute(
         "aria-label",
@@ -610,6 +614,43 @@ class AlertEditorController {
       button.setAttribute("title", this.sidebarToggleLabel(collapsed, parent));
       const icon = button.querySelector<HTMLElement>("ha-icon");
       if (icon) icon.setAttribute("icon", this.sidebarToggleIcon(collapsed));
+    });
+  };
+
+  private toggleMobileSections = (): void => {
+    if (this.mobileSectionsOpen) {
+      this.closeMobileSections();
+      return;
+    }
+
+    this.mobileSectionsOpen = true;
+    this.host
+      .querySelector<HTMLElement>(".nc-mobile-section-menu")
+      ?.classList.add("mobile-open");
+    const button = this.host.querySelector<HTMLButtonElement>(
+      '[data-role="section-manage"]',
+    );
+    if (button) {
+      button.setAttribute("aria-expanded", "true");
+      button.setAttribute("aria-label", "Close section menu");
+      button.title = "Close section menu";
+    }
+  };
+
+  private closeMobileSections = (): void => {
+    if (!this.mobileSectionsOpen) return;
+
+    this.mobileSectionsOpen = false;
+    this.host
+      .querySelector<HTMLElement>(".nc-mobile-section-menu")
+      ?.classList.remove("mobile-open");
+    const button = this.host.querySelector<HTMLButtonElement>(
+      '[data-role="section-manage"]',
+    );
+    if (button) {
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-label", "Manage sections");
+      button.title = "Manage sections";
     }
   };
 
@@ -759,6 +800,7 @@ class AlertEditorController {
     this.discardDialog?.remove();
     this.discardDialog = null;
     void this.discardDraftTest();
+    document.removeEventListener("pointerdown", this.handleOutsideSectionPointer);
     this.host.remove();
     if (this.dashboardContent) this.dashboardContent.hidden = false;
     if (this.dashboardTabs) this.dashboardTabs.hidden = false;

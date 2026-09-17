@@ -155,7 +155,7 @@ export function visualConditionBuilder(
       ${stateConditionTemplate(condition)}${numericConditionTemplate(
         condition,
       )}${attributeConditionTemplate(condition)}
-      <label class="nc-field"
+      <label class="nc-field nc-condition-duration"
         >For${durationInput(
           durationInputValue(condition.for, "00:00:00"),
           (next) => {

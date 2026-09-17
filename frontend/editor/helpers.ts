@@ -12,6 +12,10 @@ import {
 } from "./types.js";
 
 export function editorModeFor(value: Alert): EditorMode {
+  if (!value.conditions.length) {
+    return "visual";
+  }
+
   if (
     value.conditions.some((item) =>
       ["state", "numeric", "attribute"].includes(item.type),
