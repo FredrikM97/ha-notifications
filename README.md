@@ -2,410 +2,48 @@
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=FredrikM97&repository=ha-notifications&category=integration)
 
-HA Notifications is a hobby Home Assistant project for creating reliable,
-state-based alerts without maintaining a collection of complex, repetitive
-notification automations or external scripts. Its goal is to replace those
-scattered templates, scripts, and automation branches with one simpler flow:
-define the condition, choose who should be notified, and manage confirmation
-and follow-up behavior in one place.
+HA Notifications creates reliable, state-based alerts without a collection of
+repetitive notification automations or external scripts. Define a condition,
+choose the recipients, and optionally add confirmation, reminders, follow-up
+actions, and history in one Home Assistant panel.
 
-Create alerts from a dedicated Home Assistant panel, a Lovelace card, or YAML.
-Each alert can evaluate a template or visual condition, notify multiple
-devices and notification services, request confirmation, repeat reminders,
-run follow-up actions, and record its delivery history.
+Active alerts and their runtime state survive Home Assistant restarts, so an
+unresolved alert can continue notifying its configured recipients.
 
-Active alerts and their runtime state are persisted so a Home Assistant reboot
-does not silently dismiss an alert that still needs attention. When the system
-comes back, the integration can restore the alert workflow and continue
-delivering it to the configured recipients until it is resolved or otherwise
-cleared by its configuration.
+Use the **Add to HACS** button above to install the integration. HACS includes
+the compiled frontend; no separate Lovelace resource is required. Restart Home
+Assistant after installation.
 
-Use the **Add to HACS** button above to install HA Notifications. HACS
-includes the integration and its compiled frontend; no separate Lovelace
-resource is required. Restart Home Assistant after installation.
+<img width="1257" height="862" alt="HA Notifications alert editor" src="https://github.com/user-attachments/assets/b1ce380f-d098-4526-97f1-4ae0080b4cd0" />
 
-<img width="1257" height="862" alt="image" src="https://github.com/user-attachments/assets/b1ce380f-d098-4526-97f1-4ae0080b4cd0" />
-
-<img width="1242" height="609" alt="image" src="https://github.com/user-attachments/assets/97ef8118-be42-48fc-b978-493ea7320a7f" />
+<img width="1242" height="609" alt="HA Notifications history" src="https://github.com/user-attachments/assets/97ef8118-be42-48fc-b978-493ea7320a7f" />
 
 ## Lovelace card
 
-The integration automatically registers its compiled frontend module with Home
-Assistant, so no manually configured Lovelace resource is required. In a
+The integration registers its compiled frontend with Home Assistant. In a
 dashboard, choose **Add card**, select **HA Notifications**, and add it. The
-card opens the same full alert editor, history, and YAML UI as the sidebar
-panel; it is not a status-only card.
-
-The card configuration is:
+card opens the same alert editor, history, and YAML interface as the sidebar
+panel.
 
 ```yaml
 type: custom:ha-notifications-card
 ```
 
-## Development
+## What it supports
 
-Install the Node dependencies and build the frontend from the repository root:
+Each alert can include:
 
-```bash
-npm ci
-npm run build
-```
+- Visual or Jinja conditions, evaluated on state changes, at startup, or on an interval
+- Multiple notification targets, including devices, areas, labels, entities, and services
+- Optional confirmation actions, user attribution, completion notifications, and follow-up service calls
+- Reminder retries with configurable intervals and attempt limits
+- Persistent runtime state and delivery history across Home Assistant restarts
+- YAML import/export using the same configuration model as the editor
 
-Install the Python test dependencies and run the test suite with Home
-Assistant's custom-component pytest fixtures:
+## YAML
 
-```bash
-python3 -m pip install -e '.[test]'
-python3 -m pytest
-```
-
-To run the same checks automatically before each local commit, configure the
-repository hook once:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-The hook runs `scripts/validate.sh`, which checks Python lint, backend tests,
-the frontend build, frontend smoke tests, and frontend unit tests.
-
-Snapshots use Syrupy with Home Assistant-aware serialization. Review snapshot
-changes explicitly with:
-
-```bash
-python3 -m pytest --snapshot-update
-```
-
-The authored Python integration lives in `backend/`. The build
-writes the frontend bundle to `dist/panel.js` and materializes the Home
-Assistant runtime package at `custom_components/ha_notifications/`. The
-runtime package is included in repository-based HACS installs, which do not
-run the Node build step. To install the current source into a local Home
-Assistant configuration:
-
-```bash
-sh scripts/install_local.sh /path/to/home-assistant-config
-```
-
-For a release-quality HACS package, run:
-
-```bash
-npm run export:hacs
-```
-
-The export stages the runtime tree under `custom_components/ha_notifications`
-and verifies the bundle without including the raw TypeScript source. The
-release ZIP places that integration package at the archive root, matching the
-format Home Assistant expects from the release asset.
-
-To test the exact release archive locally, run:
-
-```bash
-npm run package:hacs
-```
-
-Pass a version to test the publish/dev-release manifest override, for example
-`npm run package:hacs -- 1.2.3`.
-
----
-
-## Features
-
-### Alert management
-
-Alerts can be created and managed from the HA Notifications frontend.
-
-Each alert can contain:
-
-* Name
-* Description
-* Enabled/disabled state
-* Condition
-* Trigger behaviour
-* Interval checking
-* Notification configuration
-* Notification targets
-* Confirmation settings
-* Optional confirmation completion notification
-* Actions after confirmation
-
-Alerts can be enabled or disabled without removing their configuration.
-
----
-
-## Trigger modes
-
-An alert can determine when its condition should be evaluated.
-
-The UI supports:
-
-### Condition changes
-
-The condition is monitored and evaluated when Home Assistant detects a relevant change.
-
-Example:
-
-```jinja
-{{ is_state('binary_sensor.freezer_door', 'on') }}
-```
-
-This is useful when an alert should react immediately to state changes.
-
----
-
-### Interval
-
-The condition is periodically evaluated.
-
-Example:
-
-```yaml
-monitor:
-  interval: 3600
-```
-
-This is useful for conditions based on things such as:
-
-* elapsed time
-* battery levels
-* sensor thresholds
-* schedules
-* values that change without producing a useful state trigger
-
----
-
-### Both
-
-Both mechanisms can be enabled.
-
-For example:
-
-```yaml
-monitor:
-  on_change: true
-  interval: 1800
-```
-
-The condition can therefore be evaluated immediately when relevant entities change while also being periodically rechecked.
-
-The UI deliberately presents these as simple options rather than forcing users to understand Home Assistant's automation `WHEN` / `THEN` terminology.
-
----
-
-## Conditions
-
-Each alert has a condition that evaluates to `true` or `false`.
-
-For example:
-
-```jinja
-{{ states('sensor.water_level') | float(100) < 20 }}
-```
-
-More advanced Jinja templates are supported.
-
-Example:
-
-```jinja
-{% set threshold = 20 %}
-{% set ns = namespace(low=false) %}
-
-{% for device_id in label_devices('plants') %}
-  {% for entity_id in device_entities(device_id) %}
-    {% if states(entity_id) | float(100) < threshold %}
-      {% set ns.low = true %}
-    {% endif %}
-  {% endfor %}
-{% endfor %}
-
-{{ ns.low }}
-```
-
-The condition editor supports direct template editing when more advanced logic is required.
-
----
-
-## Notifications
-
-Notification delivery is built directly into the integration.
-
-You do **not** need a separate notification script such as:
-
-```text
-script.global_multi_device_actionable_notifier
-```
-
-HA Notifications can execute notification services itself.
-
-This makes the integration self-contained and avoids an external dependency on a specific Home Assistant script.
-
----
-
-## Notification targets
-
-An alert is not restricted to a single device.
-
-Targets can be selected from the UI.
-
-Depending on the target type supported by the installed Home Assistant environment, an alert can target things such as:
-
-* Devices
-* Areas
-* Labels
-* Entities
-* Notification services
-
-For example, an alert could notify:
-
-```text
-Phone
-Tablet
-All devices in Bedroom
-All devices with label "Family"
-```
-
-Multiple targets can be selected for the same alert.
-
-Different alerts can have completely different targets.
-
-Example:
-
-```text
-Low water
-→ Kitchen devices
-
-Freezer open
-→ All household phones
-
-Plant moisture
-→ Personal phone
-
-Battery warning
-→ Maintenance devices
-```
-
----
-
-## Actionable notifications
-
-Alerts can optionally contain an action/confirmation button.
-
-Example:
-
-```yaml
-confirmation:
-  enabled: true
-  button: "Activity completed"
-```
-
-When the user confirms the notification, HA Notifications can:
-
-1. Detect the notification action
-2. Identify the user where possible
-3. Record the confirmation
-4. Clear the active notification
-5. Send an optional completion notification configured under
-  `confirmation.notification.message`
-6. Execute configured follow-up actions
-7. Record the complete operation in the debug history
-
----
-
-## Confirmation actions
-
-An alert can execute Home Assistant actions after confirmation.
-
-Example:
-
-```yaml
-confirmation:
-  enabled: true
-  actions:
-    enabled: true
-    items:
-      - action: switch.turn_on
-        target:
-          entity_id:
-            - switch.water_pump_reset
-            - switch.filter_reset
-```
-
-Multiple actions can be configured.
-
-Actions run sequentially and can include a Home Assistant-style delay. The
-delay may be an `HH:MM:SS` string or a duration mapping:
-
-```yaml
-confirmation:
-  actions:
-    enabled: true
-    items:
-      - delay: "00:10:00"
-      - action: switch.turn_off
-        target:
-          entity_id: switch.water_pump
-```
-
-This makes HA Notifications useful for workflows such as:
-
-```text
-Notification
-    ↓
-User confirms
-    ↓
-Clear notification
-    ↓
-Run Home Assistant actions
-    ↓
-    Send completion notification
-    ↓
-Record result
-```
-
----
-
-## Notification retry behaviour
-
-Actionable notifications can optionally be resent if they have not been confirmed.
-
-For example:
-
-```yaml
-confirmation:
-  enabled: true
-  reminders:
-    enabled: true
-    interval: 1800
-    max_attempts: 5
-```
-
-This allows a notification to behave like:
-
-```text
-Send
- ↓
-Wait
- ↓
-Confirmed?
- ├─ Yes → Complete
- └─ No
-      ↓
-   Wait again
-      ↓
-   Send again
-```
-
-The UI should expose these options without requiring users to manually build the state machine.
-
----
-
-## YAML support
-
-### Canonical YAML structure
-
-HA Notifications writes one canonical representation for each alert.
-Configuration uses one `notification`, a `conditions` list, and a `monitor`
-object. YAML validation rejects malformed structures before writing.
+The editor and YAML view use the same canonical configuration shape. A minimal
+alert looks like this:
 
 ```yaml
 version: 1
@@ -413,15 +51,10 @@ alerts:
   - id: low_water
     name: Low water
     enabled: true
-    description: ""
-    icon: mdi:bell-outline
     monitor:
       on_change: true
       startup: true
       interval: 3600
-      retention:
-        enabled: true
-        days: 30
     conditions:
       - type: template
         template: "{{ states('sensor.water_level') | float(100) < 20 }}"
@@ -443,12 +76,15 @@ alerts:
         items:
           - action: switch.turn_on
             target:
-              entity_id:
-                - switch.water_pump_reset
+              entity_id: switch.water_pump_reset
 ```
 
-Multiple visual conditions are combined with `AND`. There is no separate `logic` field.
+Multiple conditions are combined with `AND`. Confirmation is configured at
+the alert level, separately from the notification message and recipients.
 
-`confirmation.actions.enabled` explicitly controls whether follow-up actions are configured.
-Empty `confirmation.actions.items` lists are omitted from saved YAML when no
-follow-up actions are configured.
+## Development
+
+See [docs/development.md](docs/development.md) for setup, validation, local
+Home Assistant installation, and HACS packaging instructions. See
+[docs/architecture.md](docs/architecture.md) for the source layout, feature
+ownership, and runtime flow.

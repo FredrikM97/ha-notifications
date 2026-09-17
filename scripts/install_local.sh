@@ -2,7 +2,17 @@
 set -eu
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-config_dir=${1:-"$(CDPATH= cd -- "$root_dir/../.." && pwd)"}
+if [ "$#" -gt 1 ]; then
+  printf '%s\n' "Usage: sh scripts/install_local.sh [/path/to/home-assistant-config]" >&2
+  exit 1
+fi
+repo_parent=$(CDPATH= cd -- "$root_dir/.." && pwd)
+if [ "$(basename "$repo_parent")" = "repos" ]; then
+  default_config_dir=$(CDPATH= cd -- "$root_dir/../.." && pwd)
+else
+  default_config_dir=""
+fi
+config_dir=${1:-${HA_CONFIG_DIR:-$default_config_dir}}
 source_dir="$root_dir/backend"
 target_dir="$config_dir/custom_components/ha_notifications"
 panel_file="$root_dir/dist/panel.js"
@@ -12,8 +22,15 @@ if [ ! -f "$source_dir/manifest.json" ]; then
   exit 1
 fi
 
+if [ -z "$config_dir" ]; then
+  printf '%s\n' "Home Assistant config path is required outside config/repos layout." >&2
+  printf '%s\n' "Pass a path or set HA_CONFIG_DIR." >&2
+  exit 1
+fi
+
 if [ ! -f "$panel_file" ]; then
   printf '%s\n' "Compiled frontend is missing: $panel_file" >&2
+  printf '%s\n' "Run npm run build first, then run this script again." >&2
   exit 1
 fi
 
