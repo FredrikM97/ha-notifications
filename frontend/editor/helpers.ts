@@ -54,6 +54,7 @@ export function defaultAlert(): Alert {
       target: {},
       title: "",
       message: "",
+      ttl: true,
     },
     confirmation: {
       enabled: false,

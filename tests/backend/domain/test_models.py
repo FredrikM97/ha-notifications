@@ -107,7 +107,10 @@ class ConfigurationTests(unittest.TestCase):
         notification = NotificationConfig.model_validate({})
         confirmation.button = "Done"
         self.assertEqual(confirmation.button, "Done")
-        self.assertEqual(notification.model_dump(exclude_none=True), {})
+        self.assertEqual(
+            notification.model_dump(exclude_none=True),
+            {"ttl": True},
+        )
 
     def test_alert_runtime_accepts_last_event_entry(self):
         runtime = models.AlertRuntime.model_validate(

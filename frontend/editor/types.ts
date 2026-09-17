@@ -34,6 +34,7 @@ export interface EditorContext {
 }
 
 export type OptionalSetting =
+  | "ttl"
   | "confirmation"
   | "confirmationReminder"
   | "confirmationNotification"
@@ -44,7 +45,8 @@ export type OptionalSettings = Record<OptionalSetting, boolean>;
 export type SectionStatus =
   | OptionalSetting
   | "confirmationReminder"
-  | "confirmationNotification";
+  | "confirmationNotification"
+  | "ttl";
 
 export interface EditorSection {
   title: string;
@@ -63,6 +65,12 @@ export const editorSections: EditorSection[] = [
   { title: "Condition" },
   { title: "Recipients" },
   { title: "Notification" },
+  {
+    title: "Mobile delivery",
+    setting: "ttl",
+    parent: "Notification",
+    status: "ttl",
+  },
   {
     title: "Post-send actions",
     setting: "postSendActions",
@@ -91,11 +99,12 @@ export const editorSections: EditorSection[] = [
 ];
 
 export const optionalSections: Record<OptionalSetting, OptionalSection> = {
-  postSendActions: { index: 5 },
-  confirmation: { index: 6 },
-  confirmationReminder: { index: 7 },
-  confirmationNotification: { index: 8 },
-  postConfirmationActions: { index: 9 },
+  ttl: { index: 5 },
+  postSendActions: { index: 6 },
+  confirmation: { index: 7 },
+  confirmationReminder: { index: 8 },
+  confirmationNotification: { index: 9 },
+  postConfirmationActions: { index: 10 },
 };
 
 export const ACTIONS_PLACEHOLDER = `- action: switch.turn_on

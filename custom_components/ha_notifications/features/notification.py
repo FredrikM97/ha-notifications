@@ -42,6 +42,7 @@ class NotificationConfig(BaseModel):
     title: str | None = None
     message: str | None = None
     data: dict[str, Any] | None = None
+    ttl: bool | None = True
 
 
 @dataclass(frozen=True)
@@ -225,6 +226,7 @@ class _RenderedNotification:
     message: Any
     target: dict[str, Any]
     extra_data: dict[str, Any]
+    ttl: bool
     confirmation: ConfirmationConfig | None
 
 
@@ -273,6 +275,11 @@ async def plan_delivery(
         confirmation_action_id,
         has_confirmation,
         include_extra_data=bool(mobile_services),
+        use_ttl=(
+            rendered.ttl
+            and int(variables.get("attempt", 1)) == 1
+            and variables.get("trigger") != "confirmation"
+        ),
         notification_id=str(
             variables.get("notification_id", f"ha_notifications_{alert['id']}")
         ),
@@ -362,7 +369,12 @@ async def _render_notification(
     )
 
     return _RenderedNotification(
-        title, message, target, _normalized_extra_data(extra_data), confirmation
+        title,
+        message,
+        target,
+        _normalized_extra_data(extra_data),
+        bool(notification.ttl),
+        confirmation,
     )
 
 
@@ -470,6 +482,7 @@ def _service_data_for_notification(
     has_confirmation: bool,
     *,
     include_extra_data: bool,
+    use_ttl: bool,
     notification_id: str,
 ) -> dict[str, Any]:
     extra_data = rendered.extra_data
@@ -486,6 +499,8 @@ def _service_data_for_notification(
         extra_data["actions"] = actions
 
     service_data: dict[str, Any] = {"message": str(rendered.message)}
+    if include_extra_data and use_ttl:
+        extra_data.update({"ttl": 0, "priority": "high"})
     if rendered.title:
         service_data["title"] = str(rendered.title)
     if include_extra_data and extra_data:

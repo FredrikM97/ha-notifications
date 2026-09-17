@@ -22,6 +22,7 @@ notifications = importlib.import_module(f"{PACKAGE_NAME}.features.notification")
 
 mobile_snapshot = partial(notification_snapshot, "mobile")
 mobile_device_registry_snapshot = partial(notification_snapshot, "mobile_device")
+mobile_device_snapshot = mobile_device_registry_snapshot
 empty_snapshot = partial(notification_snapshot, "empty")
 labeled_device_snapshot = partial(notification_snapshot, "labeled")
 
@@ -224,9 +225,65 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             result[0].data["data"],
             {
                 "image": "https://example.test/image",
+                "ttl": 0,
+                "priority": "high",
                 "tag": "ha_notifications_alert_1",
             },
         )
+
+    async def test_mobile_notification_uses_ttl_for_fast_delivery(self):
+        configured_alert = alert()
+        configured_alert["notification"]["target"] = {
+            "device_id": ["phone_device"]
+        }
+        result = await notifications.plan_delivery(
+            configured_alert,
+            {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
+            None,
+            mobile_device_snapshot(),
+            render,
+        )
+
+        payload = result[0].data["data"]
+        self.assertEqual(payload["ttl"], 0)
+        self.assertEqual(payload["priority"], "high")
+
+    async def test_mobile_notification_omits_ttl_on_later_attempts(self):
+        configured_alert = alert()
+        configured_alert["notification"]["target"] = {
+            "device_id": ["phone_device"]
+        }
+        result = await notifications.plan_delivery(
+            configured_alert,
+            {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 2},
+            None,
+            mobile_device_snapshot(),
+            render,
+        )
+
+        self.assertNotIn("ttl", result[0].data["data"])
+        self.assertNotIn("priority", result[0].data["data"])
+
+    async def test_confirmation_notification_omits_ttl(self):
+        configured_alert = alert()
+        configured_alert["notification"]["target"] = {
+            "device_id": ["phone_device"]
+        }
+        result = await notifications.plan_delivery(
+            configured_alert,
+            {
+                "alert_id": "alert_1",
+                "alert_name": "Alert",
+                "attempt": 1,
+                "trigger": "confirmation",
+            },
+            None,
+            mobile_device_snapshot(),
+            render,
+        )
+
+        self.assertNotIn("ttl", result[0].data["data"])
+        self.assertNotIn("priority", result[0].data["data"])
 
     async def test_generic_notify_does_not_receive_mobile_app_data(self):
         configured_alert = alert()

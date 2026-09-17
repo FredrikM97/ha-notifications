@@ -54,6 +54,7 @@ describe("buildAlertPayload", () => {
     expect(payload.runtime).toBeUndefined();
   });
 
+
   it("persists a custom alert icon", () => {
     const original = defaultAlert();
     original.id = "custom_icon_alert";
