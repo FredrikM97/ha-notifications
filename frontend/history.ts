@@ -122,6 +122,7 @@ function historyTemplate(
 
 function historyFilterTemplate(options: HistoryRenderOptions) {
   const filters = options.filters || defaultHistoryFilters();
+  const activeFilterCount = countSecondaryHistoryFilters(filters);
   return html`<div class="nc-history-filter">
     <div class="nc-history-filter-heading">
       ${options.alertName
@@ -134,9 +135,32 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
               </div>
             </div>
             ${showAllButton(options.onShowAll, "Show all")}`
-        : html`<div class="nc-history-filter-label">
-              <ha-icon icon="mdi:filter-variant"></ha-icon>
-              <span>Filter history</span>
+        : html`<div class="nc-history-filter-main">
+              <div class="nc-history-filter-row">
+                <div class="nc-history-filter-label">
+                  <ha-icon icon="mdi:filter-variant"></ha-icon>
+                  <span>Filter history</span>
+                </div>
+                <details
+                  class="nc-history-filter-details"
+                  ?open=${activeFilterCount > 0}
+                >
+                  <summary>
+                    <ha-icon icon="mdi:filter-variant"></ha-icon>
+                    <span>More filters</span>
+                    ${activeFilterCount
+                      ? html`<span class="nc-history-filter-count"
+                          >${activeFilterCount}</span
+                        >`
+                      : ""}
+                    <ha-icon
+                      class="nc-history-filter-chevron"
+                      icon="mdi:chevron-down"
+                    ></ha-icon>
+                  </summary>
+                </details>
+              </div>
+              ${historySecondaryFiltersTemplate(options, filters)}
             </div>
             ${hasHistoryFilters(filters)
               ? html`<button
@@ -162,69 +186,77 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
             (event.currentTarget as HTMLInputElement).value,
           )}
       ></ha-input>
-      ${options.alerts?.length
-        ? html`<ha-selector
-            .hass=${options.hass}
-            .selector=${{
-              select: {
-                mode: "dropdown",
-                options: [
-                  { value: "", label: "All alerts" },
-                  ...options.alerts.map((alert) => ({
-                    value: alert.id,
-                    label: alert.name,
-                  })),
-                ],
-              },
-            }}
-            .value=${filters.alertId}
-            label="Alert"
-            aria-label="Filter by alert"
-            @value-changed=${(event: CustomEvent<{ value?: string }>) =>
-              updateHistoryFilter(options, "alertId", event.detail.value || "")}
-          ></ha-selector>`
-        : ""}
-      <ha-selector
-        .hass=${options.hass}
-        .selector=${{
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "", label: "All event types" },
-              ...(options.types || []).map((type) => ({
-                value: type,
-                label: formatType(type),
-              })),
-            ],
-          },
-        }}
-        .value=${filters.type}
-        label="Event type"
-        aria-label="Filter by event type"
-        @value-changed=${(event: CustomEvent<{ value?: string }>) =>
-          updateHistoryFilter(options, "type", event.detail.value || "")}
-      ></ha-selector>
-      <ha-selector
-        .hass=${options.hass}
-        .selector=${{
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "", label: "All severities" },
-              { value: "error", label: "Error" },
-              { value: "success", label: "Success" },
-              { value: "info", label: "Info" },
-              { value: "muted", label: "Muted" },
-            ],
-          },
-        }}
-        .value=${filters.severity}
-        label="Severity"
-        aria-label="Filter by severity"
-        @value-changed=${(event: CustomEvent<{ value?: string }>) =>
-          updateHistoryFilter(options, "severity", event.detail.value || "")}
-      ></ha-selector>
     </div>
+  </div>`;
+}
+
+function historySecondaryFiltersTemplate(
+  options: HistoryRenderOptions,
+  filters: HistoryFilters,
+) {
+  return html`<div class="nc-history-secondary-controls">
+    ${options.alerts?.length
+      ? html`<ha-selector
+          .hass=${options.hass}
+          .selector=${{
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "", label: "All alerts" },
+                ...options.alerts.map((alert) => ({
+                  value: alert.id,
+                  label: alert.name,
+                })),
+              ],
+            },
+          }}
+          .value=${filters.alertId}
+          label="Alert"
+          aria-label="Filter by alert"
+          @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+            updateHistoryFilter(options, "alertId", event.detail.value || "")}
+        ></ha-selector>`
+      : ""}
+    <ha-selector
+      .hass=${options.hass}
+      .selector=${{
+        select: {
+          mode: "dropdown",
+          options: [
+            { value: "", label: "All event types" },
+            ...(options.types || []).map((type) => ({
+              value: type,
+              label: formatType(type),
+            })),
+          ],
+        },
+      }}
+      .value=${filters.type}
+      label="Event type"
+      aria-label="Filter by event type"
+      @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+        updateHistoryFilter(options, "type", event.detail.value || "")}
+    ></ha-selector>
+    <ha-selector
+      .hass=${options.hass}
+      .selector=${{
+        select: {
+          mode: "dropdown",
+          options: [
+            { value: "", label: "All severities" },
+            { value: "error", label: "Error" },
+            { value: "success", label: "Success" },
+            { value: "info", label: "Info" },
+            { value: "muted", label: "Muted" },
+          ],
+        },
+      }}
+      .value=${filters.severity}
+      label="Severity"
+      aria-label="Filter by severity"
+      @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+        updateHistoryFilter(options, "severity", event.detail.value || "")}
+    ></ha-selector>
   </div>`;
 }
 
@@ -242,9 +274,17 @@ function updateHistoryFilter(
 }
 
 function hasHistoryFilters(filters: HistoryFilters): boolean {
-  return Boolean(
-    filters.search || filters.alertId || filters.type || filters.severity,
-  );
+  return countHistoryFilters(filters) > 0;
+}
+
+function countHistoryFilters(filters: HistoryFilters): number {
+  return [filters.search, filters.alertId, filters.type, filters.severity].filter(
+    Boolean,
+  ).length;
+}
+
+function countSecondaryHistoryFilters(filters: HistoryFilters): number {
+  return [filters.alertId, filters.type, filters.severity].filter(Boolean).length;
 }
 
 function historyItemTemplate(

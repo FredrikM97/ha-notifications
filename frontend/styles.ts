@@ -345,6 +345,94 @@ ha-code-editor.nc-code-editor .cm-scroller {
   gap: 8px;
 }
 
+.nc-history-filter-details {
+  min-width: 0;
+}
+
+.nc-history-filter-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nc-history-filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nc-history-filter-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--divider-color);
+  border-radius: var(--ha-border-radius-s, 4px);
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.nc-history-filter-details summary:hover {
+  background: var(--secondary-background-color);
+}
+
+.nc-history-filter-details[open] summary {
+  border-color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color) 10%,
+    var(--card-background-color)
+  );
+  color: var(--primary-text-color);
+}
+
+.nc-history-filter-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.nc-history-filter-details summary ha-icon {
+  --mdc-icon-size: 18px;
+}
+
+.nc-history-filter-chevron {
+  transition: transform 160ms ease;
+}
+
+.nc-history-filter-details[open] .nc-history-filter-chevron {
+  transform: rotate(180deg);
+}
+
+.nc-history-filter-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--primary-color);
+  color: var(--text-primary-color);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nc-history-secondary-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding: 0;
+}
+
+.nc-history-filter-main:not(:has(.nc-history-filter-details[open]))
+  .nc-history-secondary-controls {
+  display: none;
+}
+
 .nc-history-filter-heading {
   align-items: center;
   justify-content: space-between;
@@ -354,6 +442,7 @@ ha-code-editor.nc-code-editor .cm-scroller {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 36px;
   color: var(--secondary-text-color);
   font-size: 13px;
   font-weight: 700;
@@ -384,6 +473,10 @@ ha-code-editor.nc-code-editor .cm-scroller {
   min-width: 150px;
   min-height: 36px;
   box-sizing: border-box;
+}
+
+.nc-history-secondary-controls ha-selector {
+  min-width: 0;
 }
 
 .nc-history-search {
@@ -1471,22 +1564,50 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-history-filter-heading {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .nc-history-filter-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .nc-history-filter-row {
+    align-items: center;
   }
 
   .nc-history-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .nc-history-controls .nc-history-search {
-    grid-column: 1 / -1;
+    min-width: 0;
   }
 
-  .nc-history-controls ha-input,
-  .nc-history-controls ha-selector,
-  .nc-history-controls .nc-button {
+  .nc-history-controls ha-input {
+    width: 100%;
+  }
+
+  .nc-history-filter-details {
+    min-width: 0;
+  }
+
+  .nc-history-filter-details summary {
+    justify-content: center;
+    width: 100%;
+    padding: 0 8px;
+  }
+
+  .nc-history-secondary-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    margin-top: 8px;
+  }
+
+  .nc-history-secondary-controls ha-selector {
     width: 100%;
   }
 }
@@ -1644,22 +1765,42 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-history-filter-heading {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .nc-history-filter-main {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .nc-history-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .nc-history-controls .nc-history-search {
-    grid-column: 1 / -1;
+  .nc-history-controls ha-input {
+    width: 100%;
   }
 
-  .nc-history-controls ha-input,
-  .nc-history-controls ha-selector,
-  .nc-history-controls .nc-button {
+  .nc-history-filter-details {
+    min-width: 0;
+  }
+
+  .nc-history-filter-details summary {
+    justify-content: center;
+    width: 100%;
+    padding: 0 8px;
+  }
+
+  .nc-history-secondary-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    margin-top: 8px;
+  }
+
+  .nc-history-secondary-controls ha-selector {
     width: 100%;
   }
 }
