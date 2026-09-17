@@ -108,16 +108,18 @@ function hasRecipients(target: NotificationTarget): boolean {
 export function buildAlertPayload(
   original: Alert,
   values: AlertFormValues,
+  validate = true,
 ): Alert {
   const result = cloneAlert(original);
   delete result.runtime;
-  if (!hasRecipients(values.notification.target)) {
+  if (validate && !hasRecipients(values.notification.target)) {
     throw new Error(
       "Select at least one device, area, label, or notification entity in Recipients.",
     );
   }
 
   if (
+    validate &&
     values.confirmation.enabled &&
     !hasRecipients(values.notification.target)
   ) {
