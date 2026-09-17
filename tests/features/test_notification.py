@@ -31,6 +31,37 @@ async def render(source, _variables):
 
 
 class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_template_context_exposes_condition_facts_and_trigger(self):
+        configured_alert = alert()
+        configured_alert["notification"]["message"] = "{{ condition.front_door }}"
+        captured: list[dict[str, object]] = []
+
+        async def capture_render(source, variables):
+            captured.append(variables)
+            return source
+
+        await notifications.send_requested(
+            {
+                "alert": configured_alert,
+                "alert_id": "alert_1",
+                "alert_name": "Alert",
+                "attempt": 1,
+                "condition_facts": {"front_door": True},
+                "trigger_source": "change",
+                "now": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            },
+            notifications.NotificationCapabilitySet(
+                render=capture_render,
+                snapshot=labeled_device_snapshot(),
+            ),
+        )
+
+        assert any(
+            values.get("condition") == {"front_door": True}
+            and values.get("trigger") == "change"
+            for values in captured
+        )
+
     async def test_label_target_uses_generic_notify_target(self):
         configured_alert = alert()
         configured_alert["notification"]["target"] = {"label_id": ["critical"]}
@@ -405,7 +436,10 @@ async def test_confirmation_completion_planner_renders_message_and_clear_policy(
         },
     }
 
+    captured = {}
+
     async def render_confirmation(source, variables):
+        captured.update(variables)
         return source.replace("{{ confirmed_by }}", variables["confirmed_by"])
 
     plan = await notifications.ConfirmationDeliveryPlanner(
@@ -415,6 +449,9 @@ async def test_confirmation_completion_planner_renders_message_and_clear_policy(
     assert plan.clear_notification is False
     assert plan.completion_alert["notification"]["message"] == "Alice finished"
     assert plan.completion_alert["confirmation"] == {"enabled": False}
+    assert captured["confirmed_by"] == "Alice"
+    assert captured["trigger"] == "confirmation"
+    assert captured["attempt"] == 1
 
 
 async def test_notification_planner_rejects_missing_target():

@@ -100,6 +100,9 @@ class ConfirmationDeliveryPlanner:
                 "alert_name": self.alert["name"],
                 "alert_active": True,
                 "confirmed_by": self.confirmed_by,
+                "trigger": "confirmation",
+                "attempt": 1,
+                "test": False,
                 "now": self.now,
             },
             render,
@@ -403,6 +406,9 @@ async def send_requested(
         "now": now,
         "notification_id": f"ha_notifications_{alert['id']}",
         "confirmation_action_id": confirmation_action_id,
+        "conditions": payload.get("condition_facts", {}),
+        "condition": payload.get("condition_facts", {}),
+        "trigger": payload.get("trigger_source", ""),
     }
 
     render = capabilities.render

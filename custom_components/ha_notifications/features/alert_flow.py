@@ -96,6 +96,8 @@ class AlertFlow(FeatureBase):
                     runtime,
                     transition.kind == TransitionKind.SHOULD_SEND,
                     now,
+                    getattr(transition, "facts", None),
+                    transition.source,
                 )
             else:
                 return
@@ -167,6 +169,8 @@ class AlertFlow(FeatureBase):
         runtime: dict[str, Any],
         replace_existing: bool,
         now: datetime,
+        condition_facts: dict[str, bool] | None = None,
+        trigger_source: str = "",
     ) -> None:
         feature = self.feature("notification")
         attempt = feature.next_attempt(runtime)
@@ -180,6 +184,8 @@ class AlertFlow(FeatureBase):
                     "replace_existing": replace_existing,
                     "test": False,
                     "now": now,
+                    "condition_facts": condition_facts or {},
+                    "trigger_source": trigger_source,
                 }
             )
         except Exception as err:

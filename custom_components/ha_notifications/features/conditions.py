@@ -57,6 +57,7 @@ class ConditionTransition:
     error: str | None = None
     source: str = ""
     had_pending_confirmation: bool = False
+    facts: dict[str, bool] | None = None
 
 
 class ConditionWatchers:
@@ -275,8 +276,9 @@ class ConditionFeature(FeatureBase):
         if self._runtime_for is None:
             raise RuntimeError("Condition feature has not been set up")
         runtime = self._runtime_for(alert_id)
+        facts = await self._condition_facts(alert)
         transition = self._transition_for(
-            runtime, alert, active, error, now, source
+            runtime, alert, active, error, now, source, facts
         )
         if transition.kind == TransitionKind.NO_CHANGE:
             return
@@ -299,6 +301,25 @@ class ConditionFeature(FeatureBase):
                 alert_id, active, error, source=source, now=now
             )
 
+    async def _condition_facts(
+        self, alert: dict[str, Any]
+    ) -> dict[str, bool]:
+        """Evaluate named conditions for notification template branches."""
+
+        facts: dict[str, bool] = {}
+        for condition in alert.get("conditions", []):
+            condition_id = condition.get("id") if isinstance(condition, dict) else None
+            if not condition_id:
+                continue
+            try:
+                result = await render_template(
+                    self._hass, compile_condition({"conditions": [condition]})
+                )
+            except TemplateError:
+                result = False
+            facts[str(condition_id)] = result_as_boolean(result)
+        return facts
+
     @staticmethod
     def _transition_for(
         state: dict[str, Any],
@@ -307,11 +328,14 @@ class ConditionFeature(FeatureBase):
         error: str | None,
         now: datetime,
         source: str,
+        facts: dict[str, bool] | None = None,
     ) -> ConditionTransition:
         from .confirmation import confirmation_for_alert
 
         if error is not None:
-            return ConditionTransition(TransitionKind.CONDITION_ERROR, error, source)
+            return ConditionTransition(
+                TransitionKind.CONDITION_ERROR, error, source, facts=facts
+            )
         state["last_evaluated"] = now.isoformat()
         if not active:
             if not state.get("active", False):
@@ -324,6 +348,7 @@ class ConditionFeature(FeatureBase):
                 TransitionKind.BECAME_INACTIVE,
                 source=source,
                 had_pending_confirmation=pending,
+                facts=facts,
             )
         if not state.get("active", False):
             state.update(
@@ -332,7 +357,9 @@ class ConditionFeature(FeatureBase):
                 notification_id=f"ha_notifications_{alert['id']}_{uuid.uuid4().hex[:10]}",
             )
             ConditionFeature._ensure_flow_id(state, alert)
-            return ConditionTransition(TransitionKind.BECAME_ACTIVE, source=source)
+            return ConditionTransition(
+                TransitionKind.BECAME_ACTIVE, source=source, facts=facts
+            )
         if state.get("acknowledged", False):
             return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
         has_sent = bool(state.get("last_notified") or state.get("attempts", 0))
@@ -345,7 +372,9 @@ class ConditionFeature(FeatureBase):
             and ConditionFeature._confirmation_is_due(state, confirmation, now)
         ):
             ConditionFeature._ensure_flow_id(state, alert)
-            return ConditionTransition(TransitionKind.SHOULD_SEND, source=source)
+            return ConditionTransition(
+                TransitionKind.SHOULD_SEND, source=source, facts=facts
+            )
         return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
 
     @staticmethod
@@ -438,6 +467,7 @@ class ConditionConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
+    id: str | None = None
     type: str = ConditionType.TEMPLATE.value
     template: str | None = None
     model_for: Any = Field(default=None, alias="for")

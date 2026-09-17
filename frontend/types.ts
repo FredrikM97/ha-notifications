@@ -17,6 +17,7 @@ export interface HassLocale {
 export type AlertConditionType = "template" | "state" | "numeric" | "attribute";
 
 export interface AlertCondition {
+  id?: string;
   type: AlertConditionType;
   template?: string;
   entity_id?: string | string[];

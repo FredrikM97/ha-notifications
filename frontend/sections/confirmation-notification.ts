@@ -28,6 +28,19 @@ export function renderConfirmationNotificationSection(
       <div class="nc-help">
         Example: <code>Confirmed by {{confirmed_by}}</code>
       </div>
+      <details class="nc-template-help">
+        <summary>Template variables and sensor helpers</summary>
+        <div class="nc-help">
+          <code>confirmed_by</code>, <code>alert_id</code>,
+          <code>alert_name</code>, <code>alert_active</code>,
+          <code>trigger</code>, <code>attempt</code>, and <code>now</code> are
+          available. Home
+          Assistant helpers also work, for example
+          <code>states('sensor.temperature')</code>,
+          <code>state_attr('light.kitchen', 'brightness')</code>, and
+          <code>is_state('binary_sensor.door', 'on')</code>.
+        </div>
+      </details>
       `,
   );
 }

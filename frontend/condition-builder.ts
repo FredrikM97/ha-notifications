@@ -28,6 +28,9 @@ export function visualConditionBuilder(
       conditionTypes.some(([type]) => type === condition.type),
     )
     .map((condition) => ({ ...condition }));
+  const expandedIds = new Set(
+    state.filter((condition) => Boolean(condition.id)),
+  );
 
   const entities = registries.entities.filter(
     (item) => !item.entity_id.startsWith("notify."),
@@ -57,10 +60,19 @@ export function visualConditionBuilder(
   const renderBuilder = (): void => {
     render(
       html`<div class="nc-condition-rows">${conditionRowsTemplate()}</div>
+        <div class="nc-help">
+          IDs are optional. Set one such as <code>front_door</code> to use its
+          result in a notification with
+          <code>condition.front_door</code>.
+        </div>
         <button
           class="nc-button secondary"
           @click=${() => {
-            state.push({ type: "state", entity_id: "", state: "on" });
+            state.push({
+              type: "state",
+              entity_id: "",
+              state: "on",
+            });
             markDirty();
             renderBuilder();
           }}
@@ -83,6 +95,26 @@ export function visualConditionBuilder(
 
   const conditionRowTemplate = (condition: AlertCondition, index: number) =>
     html` <div class="nc-condition-row">
+      ${condition.id || expandedIds.has(condition)
+        ? html`<label class="nc-field"
+            >ID (optional)<ha-input
+              type="text"
+              .value=${condition.id || ""}
+              placeholder="front_door"
+              @input=${(event: Event) => update(condition, "id", event)}
+            ></ha-input
+          ></label>`
+        : html`<button
+            class="nc-button secondary nc-condition-id-toggle"
+            type="button"
+            @click=${() => {
+              expandedIds.add(condition);
+              renderBuilder();
+            }}
+          >
+            <ha-icon icon="mdi:tag-plus-outline"></ha-icon>
+            Add ID
+          </button>`}
       <label class="nc-field"
         >Type
         <ha-selector
