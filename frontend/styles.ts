@@ -1241,10 +1241,17 @@ ha-code-editor.nc-action-editor {
   min-width: 0;
 }
 
-.nc-condition-row .nc-button {
+.nc-condition-actions {
   grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-self: end;
   align-self: end;
+  justify-content: flex-end;
+}
+
+.nc-condition-actions .nc-button {
   white-space: nowrap;
 }
 

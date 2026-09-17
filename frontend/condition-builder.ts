@@ -104,17 +104,7 @@ export function visualConditionBuilder(
               @input=${(event: Event) => update(condition, "id", event)}
             ></ha-input
           ></label>`
-        : html`<button
-            class="nc-button secondary nc-condition-id-toggle"
-            type="button"
-            @click=${() => {
-              expandedIds.add(condition);
-              renderBuilder();
-            }}
-          >
-            <ha-icon icon="mdi:tag-plus-outline"></ha-icon>
-            Add ID
-          </button>`}
+        : html``}
       <label class="nc-field"
         >Type
         <ha-selector
@@ -165,16 +155,31 @@ export function visualConditionBuilder(
           hass,
         )}</label
       >
-      <button
-        class="nc-button danger"
-        @click=${() => {
-          state.splice(index, 1);
-          markDirty();
-          renderBuilder();
-        }}
-      >
-        Remove condition
-      </button>
+      <div class="nc-condition-actions">
+        ${condition.id || expandedIds.has(condition)
+          ? html``
+          : html`<button
+              class="nc-button secondary nc-condition-id-toggle"
+              type="button"
+              @click=${() => {
+                expandedIds.add(condition);
+                renderBuilder();
+              }}
+            >
+              <ha-icon icon="mdi:tag-plus-outline"></ha-icon>
+              Add ID
+            </button>`}
+        <button
+          class="nc-button danger"
+          @click=${() => {
+            state.splice(index, 1);
+            markDirty();
+            renderBuilder();
+          }}
+        >
+          Remove condition
+        </button>
+      </div>
     </div>`;
 
   const stateConditionTemplate = (condition: AlertCondition) => {
