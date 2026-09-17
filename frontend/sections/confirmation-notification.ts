@@ -1,7 +1,7 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/types.js";
-import { codeEditor, section } from "../editor/helpers.js";
+import { codeEditor, section, showTemplateHelp } from "../editor/helpers.js";
 
 export function renderConfirmationNotificationSection(
   context: EditorContext,
@@ -28,9 +28,18 @@ export function renderConfirmationNotificationSection(
       <div class="nc-help">
         Example: <code>Confirmed by {{confirmed_by}}</code>
       </div>
-      <details class="nc-template-help">
-        <summary>Template variables and sensor helpers</summary>
-        <div class="nc-help">
+      <div class="nc-template-help-trigger">
+        <span>Template variables and sensor helpers</span>
+        <button
+          class="nc-icon-button"
+          type="button"
+          aria-label="Show template variables and sensor helpers"
+          title="Show template variables and sensor helpers"
+          @click=${(event: Event) =>
+            showTemplateHelp(
+              event,
+              "Template variables and sensor helpers",
+              html`<div class="nc-help">
           <code>confirmed_by</code>, <code>alert_id</code>,
           <code>alert_name</code>, <code>alert_active</code>,
           <code>trigger</code>, <code>attempt</code>, and <code>now</code> are
@@ -39,8 +48,12 @@ export function renderConfirmationNotificationSection(
           <code>states('sensor.temperature')</code>,
           <code>state_attr('light.kitchen', 'brightness')</code>, and
           <code>is_state('binary_sensor.door', 'on')</code>.
-        </div>
-      </details>
+        </div>`,
+            )}
+        >
+          <ha-icon icon="mdi:information-outline"></ha-icon>
+        </button>
+      </div>
       `,
   );
 }

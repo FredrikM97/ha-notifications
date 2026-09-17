@@ -385,6 +385,44 @@ export function showYaml(root: ShadowRoot, alert: Alert): void {
   root.append(popup);
 }
 
+export function showTemplateHelp(
+  event: Event,
+  title: string,
+  content: TemplateResult,
+): void {
+  const trigger = event.currentTarget as HTMLElement | null;
+  const root = trigger?.getRootNode();
+  if (!(root instanceof ShadowRoot)) return;
+
+  const popup = document.createElement("div");
+  const close = (): void => popup.remove();
+  render(
+    html`<div
+      class="nc-modal-backdrop"
+      @click=${(clickEvent: MouseEvent) => {
+        if (clickEvent.target === clickEvent.currentTarget) close();
+      }}
+    >
+      <section class="nc-modal nc-template-help-modal" role="dialog" aria-modal="true">
+        <header class="nc-modal-header">
+          <h2>${title}</h2>
+          <button
+            class="nc-icon-button"
+            @click=${close}
+            aria-label="Close template help"
+            title="Close template help"
+          >
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        </header>
+        <main class="nc-modal-body">${content}</main>
+      </section>
+    </div>`,
+    popup,
+  );
+  root.append(popup);
+}
+
 export function actionArrayValue(
   editor: CodeEditor | null,
   label: string,

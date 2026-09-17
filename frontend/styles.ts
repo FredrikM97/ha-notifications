@@ -1171,6 +1171,24 @@ ha-code-editor.nc-action-editor {
   line-height: 1.5;
 }
 
+.nc-template-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+  color: var(--secondary-text-color);
+  font-size: 12px;
+}
+
+.nc-template-help-trigger .nc-icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+.nc-template-help-modal {
+  width: min(560px, 100%);
+}
+
 .nc-condition-mode {
   display: flex;
   gap: 6px;

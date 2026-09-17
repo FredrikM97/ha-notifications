@@ -4,7 +4,13 @@ import type {
   CodeEditor as CodeEditorElement,
   EditorContext,
 } from "../editor/types.js";
-import { codeEditor, field, section, valueOf } from "../editor/helpers.js";
+import {
+  codeEditor,
+  field,
+  section,
+  showTemplateHelp,
+  valueOf,
+} from "../editor/helpers.js";
 
 export function renderNotificationSection(
   context: EditorContext,
@@ -45,15 +51,24 @@ export function renderNotificationSection(
           true,
         )}
       </div>
-      <div class="nc-help">
-        Recipients on selected devices, areas, floors, and labels receive direct
-        notifications through Home Assistant's standard Notify service. In the
-        message or title, use <code>condition.id</code> and
-        <code>trigger</code> to choose text, for example
-        <code>{% if condition.front_door %}Door open{% endif %}</code>.
-      </div>
-      <details class="nc-template-help">
-        <summary>Template variables and sensor helpers</summary>
+      <div class="nc-template-help-trigger">
+        <span>Template variables and sensor helpers</span>
+        <button
+          class="nc-icon-button"
+          type="button"
+          aria-label="Show template variables and sensor helpers"
+          title="Show template variables and sensor helpers"
+          @click=${(event: Event) =>
+            showTemplateHelp(
+              event,
+              "Notification templates and helpers",
+              html`<div class="nc-help">
+          Recipients on selected devices, areas, floors, and labels receive
+          direct notifications through Home Assistant's standard Notify
+          service. In the message or title, use <code>condition.id</code> and
+          <code>trigger</code> to choose text, for example
+          <code>{% if condition.front_door %}Door open{% endif %}</code>.
+        </div>
         <div class="nc-help">
           <code>alert_id</code>, <code>alert_name</code>,
           <code>alert_active</code>, <code>attempt</code>,
@@ -63,7 +78,11 @@ export function renderNotificationSection(
           <code>states('sensor.temperature')</code>,
           <code>state_attr('light.kitchen', 'brightness')</code>, and
           <code>is_state('binary_sensor.door', 'on')</code>.
-        </div>
-      </details>`,
+        </div>`,
+            )}
+        >
+          <ha-icon icon="mdi:information-outline"></ha-icon>
+        </button>
+      </div>`,
   );
 }
