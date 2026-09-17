@@ -379,10 +379,13 @@ export function showYaml(root: ShadowRoot, alert: Alert): void {
     </div>`,
     popup,
   );
+  root.append(popup);
   const editor = popup.querySelector<CodeEditor>("ha-code-editor");
   if (!editor) throw new Error("Missing alert YAML editor");
-  editor.value = YAML.stringify(alert);
-  root.append(popup);
+  void customElements.whenDefined("ha-code-editor").then(async () => {
+    await editor.updateComplete;
+    editor.value = YAML.stringify(alert);
+  });
 }
 
 export function showTemplateHelp(

@@ -643,15 +643,6 @@ ha-code-editor.nc-code-editor .cm-scroller {
   display: none;
 }
 
-.nc-editor-validation {
-  padding: 10px 24px;
-  border-bottom: 1px solid var(--divider-color);
-  background: color-mix(in srgb, var(--warning-color, #ff9800) 12%, transparent);
-  color: var(--primary-text-color);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .nc-editor-shell > .nc-modal-header {
   background: var(--card-background-color);
   color: var(--primary-text-color);
@@ -1406,10 +1397,6 @@ ha-code-editor.nc-action-editor {
 
   .nc-editor-header h2 {
     font-size: 14px;
-  }
-
-  .nc-editor-validation {
-    padding: 10px 16px;
   }
 
   .nc-editor-layout {

@@ -309,13 +309,6 @@ class AlertEditorController {
               "nc-section-header nc-mobile-section-menu",
             )}
           </header>
-          <div
-            class="nc-editor-validation"
-            data-role="editor-validation"
-            role="status"
-            aria-live="polite"
-            hidden
-          ></div>
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
               ${this.renderSectionNavigation()}
@@ -455,24 +448,6 @@ class AlertEditorController {
         indicator.textContent = this.sectionStatusSymbol(isEnabled);
         indicator.setAttribute("aria-label", enabledLabel(isEnabled));
       });
-    this.refreshValidationSummary();
-  };
-
-  private refreshValidationSummary = (): void => {
-    const validation = this.host.querySelector<HTMLElement>(
-      '[data-role="editor-validation"]',
-    );
-    if (!validation) return;
-
-    const issues: string[] = [];
-    if (!this.value.name.trim()) issues.push("Basic: name is required.");
-    if (!this.value.monitor.on_change && !this.value.monitor.interval) {
-      issues.push("When to check: enable changes, an interval, or both.");
-    }
-    validation.hidden = issues.length === 0;
-    validation.textContent = issues.length
-      ? `Needs attention: ${issues.join(" ")}`
-      : "";
   };
 
   private renderSectionNavigation = (className = "nc-section-header") =>
@@ -808,7 +783,7 @@ class AlertEditorController {
     return true;
   };
 
-  private formPayload = (): Alert => {
+  private formPayload = (validate = true): Alert => {
     const value = this.value;
     const conditions = this.conditionsForCurrentMode();
     let actions: Record<string, unknown>[] = [];
@@ -877,11 +852,15 @@ class AlertEditorController {
       payload.confirmation.actions.items = actions;
     }
 
-    return buildAlertPayload(value, payload);
+    return buildAlertPayload(value, payload, validate);
   };
 
   private yamlView = (): void => {
-    showYaml(this.root, this.formPayload());
+    try {
+      showYaml(this.root, this.formPayload(false));
+    } catch (error) {
+      showEditorToast(this.root, errorMessage(error));
+    }
   };
 
   private conditionPayload = (): Alert => {
