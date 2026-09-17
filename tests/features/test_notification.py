@@ -454,6 +454,35 @@ async def test_confirmation_completion_planner_renders_message_and_clear_policy(
     assert captured["attempt"] == 1
 
 
+async def test_confirmation_completion_uses_generic_notify_target():
+    configured_alert = alert()
+    configured_alert["notification"]["target"] = {"entity_id": ["notify.external"]}
+    configured_alert["confirmation"] = {
+        "enabled": True,
+        "notification": {
+            "enabled": True,
+            "message": "Confirmed",
+            "clear": True,
+        },
+    }
+
+    plan = await notifications.ConfirmationDeliveryPlanner(
+        configured_alert, "Alice", "now"
+    ).build(render)
+    commands = await notifications.plan_delivery(
+        plan.completion_alert,
+        {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
+        None,
+        labeled_device_snapshot(),
+        render,
+    )
+
+    assert len(commands) == 1
+    assert commands[0].service == "send_message"
+    assert commands[0].target == {"entity_id": ["notify.external"]}
+    assert commands[0].data["message"] == "Confirmed"
+
+
 async def test_notification_planner_rejects_missing_target():
     configured_alert = alert()
     configured_alert["notification"]["target"] = None
