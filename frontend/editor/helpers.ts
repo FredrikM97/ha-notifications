@@ -41,7 +41,7 @@ export function defaultAlert(): Alert {
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
-    conditions: [{ type: "template", template: "" }],
+    conditions: [],
     monitor: {
       on_change: true,
       startup: true,
@@ -56,11 +56,11 @@ export function defaultAlert(): Alert {
       message: "",
     },
     confirmation: {
-      enabled: true,
+      enabled: false,
       button: "",
       notification: { enabled: false, message: "", clear: true },
       reminders: {
-        enabled: true,
+        enabled: false,
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
