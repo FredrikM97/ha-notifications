@@ -1,0 +1,28 @@
+{
+  "history": [
+    {
+      "alert_id": "garage",
+      "alert_name": "Garage door",
+      "type": "notification_sent",
+      "message": "The garage is open",
+      "details": {
+        "source": "sensor"
+      }
+    },
+    {
+      "alert_id": "water",
+      "alert_name": "Water leak",
+      "type": "delivery_failed",
+      "message": "Could not notify",
+      "details": {
+        "error": "Device unavailable"
+      }
+    }
+  ],
+  "emptyFilters": {
+    "search": "",
+    "alertId": "",
+    "type": "",
+    "severity": ""
+  }
+}

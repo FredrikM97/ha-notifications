@@ -12,4 +12,6 @@
 	removal after the architecture cleanup.
 - [ ] Add focused `AlertFlow` tests covering condition delivery ordering,
 	  delivery failure handling, confirmation completion, and persistence.
-- [ ] Run frontend build and frontend tests when frontend modules change.
+- [x] Add frontend component regression coverage for confirmation toggles,
+	  test-alert delivery, YAML condition errors, and popup dismissal.
+- [x] Run frontend build and frontend tests when frontend modules change.

@@ -45,6 +45,10 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Verify imports and referenced files actually exist.
 - Before architectural changes, verify the current filesystem and symbol locations; do not rely on stale paths or prior names in notes, summaries, or diagrams.
 - Validate Python syntax after code changes.
+- Every new frontend or backend feature must include focused automated tests in the same change. Bug fixes must add or update a regression test for the reported behavior whenever the owning code can be tested.
+- Test user-visible frontend behavior at the component or helper boundary, and test backend behavior at the owning feature or application boundary. Do not rely on build, smoke, or type checks as substitutes for behavioral tests.
+- For frontend tests, prefer Vitest snapshots for complete rendered, serialized, or structured contracts, and reuse JSON fixtures whenever possible. Put reusable frontend test setup, builders, and mock clients in `tests/frontend/conftest.ts` rather than duplicating scaffolding in each test file, following the backend `tests/conftest.py` pattern. Keep ordinary assertions for small invariants, side effects, and error behavior; update snapshots only when the intended UI or payload contract changes.
+- For frontend DOM interactions, use Testing Library queries scoped through the shared `editorQueries()` helper and `user-event` for user actions. Keep direct selectors for implementation-specific Lit fragments or custom Home Assistant element properties where semantic queries do not apply.
 - Make frontend changes only when the relevant resource exists and is loaded correctly.
 - Favor small, targeted fixes over broad architectural changes.
 - For an approved broad refactor, change one ownership boundary at a time, use cheap blocker checks during the boundary, then run focused tests when that boundary is coherent and update the architecture map before continuing.

@@ -208,3 +208,11 @@ async def test_confirmation_completion_and_completion_failure_are_recorded(monke
     assert features["notification"].cleared
     assert len(features["notification"].sent) == 1
     assert features["follow_up_actions"].calls
+
+    features["notification"].fail = True
+    await flow.handle_confirmation(result)
+    assert any(
+        event[0] == "record"
+        and event[1][1] == const.HistoryEventType.COMPLETION_FAILED
+        for event in features["history"].events
+    )

@@ -3,63 +3,44 @@ import {
   filterHistoryEntries,
   historyDetailSummary,
 } from "../../frontend/history.js";
-import type { HistoryEntry } from "../../frontend/types.js";
-
-const history: HistoryEntry[] = [
-  {
-    alert_id: "garage",
-    alert_name: "Garage door",
-    type: "notification_sent",
-    message: "The garage is open",
-    details: { source: "sensor" },
-  },
-  {
-    alert_id: "water",
-    alert_name: "Water leak",
-    type: "delivery_failed",
-    message: "Could not notify",
-    details: { error: "Device unavailable" },
-  },
-];
-
-const emptyFilters = {
-  search: "",
-  alertId: "",
-  type: "",
-  severity: "",
-};
+import { emptyHistoryFilters, historyFixture } from "./conftest.js";
 
 describe("filterHistoryEntries", () => {
   it("matches search text across the event content", () => {
     expect(
-      filterHistoryEntries(history, { ...emptyFilters, search: "device" }),
-    ).toEqual([history[1]]);
+      filterHistoryEntries(historyFixture, {
+        ...emptyHistoryFilters,
+        search: "device",
+      }),
+    ).toMatchSnapshot();
   });
 
   it("combines alert, event type, and severity filters", () => {
     expect(
-      filterHistoryEntries(history, {
-        ...emptyFilters,
+      filterHistoryEntries(historyFixture, {
+        ...emptyHistoryFilters,
         alertId: "garage",
         type: "notification_sent",
         severity: "success",
       }),
-    ).toEqual([history[0]]);
+    ).toMatchSnapshot();
   });
 
   it("returns all entries when no filters are active", () => {
-    expect(filterHistoryEntries(history, emptyFilters)).toEqual(history);
+    expect(
+      filterHistoryEntries(historyFixture, emptyHistoryFilters),
+    ).toMatchSnapshot();
   });
 });
 
 describe("historyDetailSummary", () => {
   it("hides attempt-only details from the inline preview", () => {
-    expect(historyDetailSummary({ attempt: 20 })).toBe("");
+    expect(historyDetailSummary({ attempt: 20 })).toMatchSnapshot();
   });
 
   it("keeps meaningful detail summaries visible", () => {
-    expect(historyDetailSummary({ error: "Device unavailable" })).toBe(
-      "Device unavailable",
-    );
+    expect(
+      historyDetailSummary({ error: "Device unavailable" }),
+    ).toMatchSnapshot();
   });
 });

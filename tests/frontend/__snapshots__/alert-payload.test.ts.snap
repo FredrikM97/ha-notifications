@@ -47,3 +47,95 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
   },
 }
 `;
+
+exports[`buildAlertPayload > persists a custom alert icon 1`] = `
+{
+  "conditions": [
+    {
+      "template": "{{ true }}",
+      "type": "template",
+    },
+  ],
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "button": "",
+    "enabled": false,
+    "notification": {
+      "clear": true,
+      "enabled": false,
+      "message": "",
+    },
+    "reminders": {
+      "enabled": true,
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:door-open",
+  "id": "custom_icon_alert",
+  "monitor": {
+    "on_change": true,
+    "startup": true,
+  },
+  "name": "Front door open",
+  "notification": {
+    "message": "The front door is open.",
+    "target": {
+      "entity_id": [
+        "notify.mobile_app_phone",
+      ],
+    },
+    "title": "Alert",
+  },
+}
+`;
+
+exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] = `
+{
+  "conditions": [
+    {
+      "template": "{{ true }}",
+      "type": "template",
+    },
+  ],
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "button": "",
+    "enabled": false,
+    "notification": {
+      "clear": true,
+      "enabled": false,
+      "message": "",
+    },
+    "reminders": {
+      "enabled": true,
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "preview_alert",
+  "monitor": {
+    "on_change": true,
+    "startup": true,
+  },
+  "name": "Front door open",
+  "notification": {
+    "message": "The front door is open.",
+    "target": {},
+    "title": "Alert",
+  },
+}
+`;

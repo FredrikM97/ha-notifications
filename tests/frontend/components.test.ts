@@ -1,0 +1,366 @@
+// @vitest-environment happy-dom
+
+import { describe, expect, it, vi } from "vitest";
+import { visualConditionBuilder } from "../../frontend/condition-builder.js";
+import { defaultAlert } from "../../frontend/editor/helpers.js";
+import { openEditor } from "../../frontend/editor/index.js";
+import { createRecipientPicker } from "../../frontend/recipient-picker.js";
+import type { Hass } from "../../frontend/types.js";
+import {
+  editorOptions,
+  editorQueries,
+  editorRoot,
+  domQueries,
+  emptyRegistries,
+  installHaTestElements,
+  stableMarkup,
+  testUser,
+} from "./conftest.js";
+
+installHaTestElements();
+
+describe("condition builder interactions", () => {
+  it("moves Add ID into the action row and reveals the ID field", async () => {
+    const container = document.createElement("div");
+    const queries = domQueries(container);
+    const user = testUser();
+    const markDirty = vi.fn();
+    const conditions = [
+      { type: "state" as const, entity_id: "sensor.front_door", state: "on" },
+    ];
+
+    visualConditionBuilder(
+      container,
+      {} as Hass,
+      emptyRegistries(),
+      conditions,
+      markDirty,
+    );
+
+    expect(container.querySelector(".nc-condition-id-toggle")).toMatchSnapshot();
+    await user.click(queries.getByRole("button", { name: "Add ID" }));
+
+    expect(
+      stableMarkup(container.querySelector(".nc-condition-actions")),
+    ).toMatchSnapshot();
+    expect(
+      container.querySelector('ha-input[placeholder="front_door"]'),
+    ).not.toBeNull();
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it("removes a condition and marks the editor dirty", async () => {
+    const container = document.createElement("div");
+    const queries = domQueries(container);
+    const user = testUser();
+    const markDirty = vi.fn();
+
+    visualConditionBuilder(
+      container,
+      {} as Hass,
+      emptyRegistries(),
+      [{ type: "state", entity_id: "sensor.front_door", state: "on" }],
+      markDirty,
+    );
+    await user.click(queries.getByRole("button", { name: "Remove condition" }));
+
+    expect(container.querySelector(".nc-condition-row")).toBeNull();
+    expect(container.querySelector(".nc-help")).toMatchSnapshot();
+    expect(markDirty).toHaveBeenCalledOnce();
+  });
+});
+
+describe("alert editor interactions", () => {
+  it("switches active sections and keeps the contextual title", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+
+    const sectionButtons = queries.getAllByRole("button", {
+      name: /When to check/,
+    });
+    await user.click(sectionButtons[0]);
+
+    expect(root.querySelector('[data-role="editor-section-title"]')).toMatchSnapshot();
+    expect(root.querySelectorAll(".nc-section.active")).toHaveLength(1);
+    expect(sectionButtons[0].classList.contains("active")).toBe(true);
+  });
+
+  it("switches condition editor modes", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+    await user.click(
+      queries.getAllByRole("button", { name: /Condition/ })[0],
+    );
+
+    await user.click(queries.getByRole("button", { name: "Conditions YAML" }));
+    expect(root.querySelector('[data-role="conditions-yaml"]')?.hidden).toBe(
+      false,
+    );
+    expect(root.querySelector('[data-role="visual"]')?.hidden).toBe(true);
+
+    await user.click(queries.getByRole("button", { name: "Advanced Jinja" }));
+    expect(root.querySelector('[data-role="jinja"]')?.hidden).toBe(false);
+    expect(root.querySelector('[data-role="conditions-yaml"]')?.hidden).toBe(
+      true,
+    );
+  });
+
+  it("updates confirmation state and status indicators when toggled", () => {
+    const root = editorRoot();
+    openEditor(editorOptions(root, defaultAlert()));
+
+    const confirmationSwitch = root.querySelector<HTMLElement>(
+      '[data-role="editor-section-control"][data-setting="confirmation"] ha-switch',
+    );
+    const confirmationControl = root.querySelector<HTMLElement>(
+      '[data-role="editor-section-control"][data-setting="confirmation"]',
+    );
+    expect(confirmationSwitch).not.toBeNull();
+    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
+      .toBe("Disabled");
+    expect(
+      root.querySelector(
+        '.nc-section-status[data-status="confirmation"]',
+      )?.getAttribute("aria-label"),
+    ).toBe("Disabled");
+
+    (confirmationSwitch as HTMLElement & { checked: boolean }).checked = true;
+    confirmationSwitch?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect((confirmationSwitch as HTMLElement & { checked: boolean }).checked).toBe(
+      true,
+    );
+    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
+      .toBe("Enabled");
+    expect(
+      root.querySelector(
+        '.nc-section-status[data-status="confirmation"]',
+      )?.getAttribute("aria-label"),
+    ).toBe("Enabled");
+    expect(root.querySelector(".nc-editor-state")?.textContent).toBe(
+      "Unsaved changes",
+    );
+
+    (confirmationSwitch as HTMLElement & { checked: boolean }).checked = false;
+    confirmationSwitch?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect((confirmationSwitch as HTMLElement & { checked: boolean }).checked).toBe(
+      false,
+    );
+    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
+      .toBe("Disabled");
+    expect(
+      root.querySelector(
+        '.nc-section-status[data-status="confirmation"]',
+      )?.getAttribute("aria-label"),
+    ).toBe("Disabled");
+  });
+
+  it("shows a validation error for malformed Conditions YAML", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    const options = editorOptions(root);
+    openEditor(options);
+    await user.click(queries.getAllByRole("button", { name: /Condition/ })[0]);
+    await user.click(queries.getByRole("button", { name: "Conditions YAML" }));
+
+    const yamlEditor = root.querySelector<HTMLElement & { value: string }>(
+      '[data-role="conditions-yaml-editor"]',
+    );
+    yamlEditor.value = "condition: true";
+    await user.click(queries.getByRole("button", { name: "Validate condition" }));
+
+    await vi.waitFor(() => {
+      expect(root.querySelector(".nc-toast")?.textContent).toContain(
+        "Conditions YAML must be a list.",
+      );
+    });
+    expect(options.onValidateCondition).not.toHaveBeenCalled();
+  });
+
+  it("opens and closes the mobile section menu", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+
+    const menuButton = queries.getByRole("button", { name: "Manage sections" });
+    const menu = root.querySelector(".nc-mobile-section-menu");
+    await user.click(menuButton);
+
+    expect(menu?.classList.contains("mobile-open")).toBe(true);
+    expect(menuButton?.getAttribute("aria-expanded")).toBe("true");
+
+    await user.click(menuButton);
+    expect(menu?.classList.contains("mobile-open")).toBe(false);
+    expect(menuButton?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens template help in a modal from the notification section", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+    await user.click(queries.getAllByRole("button", { name: /Notification/ })[0]);
+
+    await user.click(
+      queries.getAllByRole("button", {
+        name: "Show template variables and sensor helpers",
+      })[0],
+    );
+
+    expect(stableMarkup(root.querySelector(".nc-template-help-modal"))).toMatchSnapshot();
+    await user.click(queries.getByRole("button", { name: "Close template help" }));
+    expect(root.querySelector(".nc-template-help-modal")).toBeNull();
+  });
+
+  it("previews unsaved data without requiring recipients", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    const alert = defaultAlert();
+    alert.id = "draft_alert";
+    openEditor(editorOptions(root, alert));
+
+    const nameInput = root.querySelector(".nc-section ha-input") as HTMLElement & {
+      value: string;
+    };
+    nameInput.value = "Draft alert";
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await user.click(queries.getByRole("button", { name: "View alert YAML" }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const editor = root.querySelector(".nc-alert-yaml-modal ha-code-editor") as
+      | (HTMLElement & { value: string })
+      | null;
+    expect(editor?.value).toMatchSnapshot();
+  });
+
+  it("shows validation feedback instead of saving an unnamed alert", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    const options = editorOptions(root);
+    openEditor(options);
+
+    await user.click(queries.getByRole("button", { name: "Save alert" }));
+
+    expect(root.querySelector(".nc-toast")).toMatchSnapshot();
+    expect(options.onSave).not.toHaveBeenCalled();
+  });
+
+  it("sends a valid draft through the Test alert action", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    const alert = defaultAlert();
+    alert.id = "testable_alert";
+    alert.name = "Testable alert";
+    alert.conditions = [{ type: "template", template: "{{ true }}" }];
+    alert.notification.target = { entity_id: ["notify.phone"] };
+    const options = editorOptions(root, alert, {
+      ...emptyRegistries(),
+      entities: [{ entity_id: "notify.phone", name: "Phone" }],
+    });
+    openEditor(options);
+
+    await user.click(queries.getByRole("button", { name: "Test alert" }));
+    await vi.waitFor(() => expect(options.onTest).toHaveBeenCalledOnce());
+
+    const testedAlert = options.onTest.mock.calls[0][0];
+    expect(testedAlert.name).toBe("Testable alert");
+    expect(testedAlert.conditions).toEqual([
+      { type: "template", template: "{{ true }}" },
+    ]);
+    expect(testedAlert.notification.target).toEqual({
+      entity_id: ["notify.phone"],
+    });
+  });
+
+  it("saves an edited alert and closes the editor", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    const alert = defaultAlert();
+    alert.id = "editable_alert";
+    alert.name = "Original name";
+    alert.conditions = [
+      { type: "template", template: "{{ true }}" },
+    ];
+    alert.notification.target = { entity_id: ["notify.phone"] };
+    const registries = {
+      ...emptyRegistries(),
+      entities: [{ entity_id: "notify.phone", name: "Phone" }],
+    };
+    const options = editorOptions(root, alert, registries);
+    openEditor(options);
+
+    const nameInput = root.querySelector(".nc-section ha-input") as HTMLElement & {
+      value: string;
+    };
+    nameInput.value = "Updated name";
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await user.click(queries.getByRole("button", { name: "Save alert" }));
+    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(root.querySelector(".nc-editor-view")).toBeNull();
+    });
+
+    expect(options.onSave).toHaveBeenCalledOnce();
+    expect(options.onSave.mock.calls[0][0]).toMatchSnapshot();
+  });
+
+  it("asks before discarding unsaved changes", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+    const nameInput = root.querySelector(".nc-section ha-input") as HTMLElement & {
+      value: string;
+    };
+    nameInput.value = "Draft";
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await user.click(queries.getByRole("button", { name: "Cancel" }));
+    expect(
+      root.querySelector(".nc-discard-modal")?.textContent?.replace(/\s+/g, " ").trim(),
+    ).toMatchSnapshot();
+
+    await user.click(queries.getByRole("button", { name: "Stay" }));
+    expect(root.querySelector(".nc-editor-view")).not.toBeNull();
+    expect(root.querySelector(".nc-discard-modal")).toBeNull();
+  });
+});
+
+describe("recipient picker interactions", () => {
+  it("serializes a selected notification entity and marks the editor dirty", async () => {
+    const markDirty = vi.fn();
+    const picker = createRecipientPicker(
+      {
+        ...emptyRegistries(),
+        entities: [{ entity_id: "notify.phone", name: "Phone" }],
+      },
+      {},
+      markDirty,
+    );
+    const queries = domQueries(picker.element);
+    const user = testUser();
+    const search = picker.element.querySelector("ha-input") as HTMLElement;
+    search.dispatchEvent(new Event("focus", { bubbles: true }));
+
+    await user.click(queries.getByRole("button", { name: "Phone" }));
+
+    expect(picker.target()).toMatchSnapshot();
+    expect(
+      stableMarkup(picker.element.querySelector(".nc-target-chip")),
+    ).toMatchSnapshot();
+    expect(markDirty).toHaveBeenCalledOnce();
+  });
+});

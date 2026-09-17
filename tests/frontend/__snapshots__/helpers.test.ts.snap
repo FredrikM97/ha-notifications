@@ -4,6 +4,22 @@ exports[`durationInputValue > converts an hours/minutes/seconds object 1`] = `"0
 
 exports[`durationInputValue > falls back for missing/invalid values 1`] = `"00:30:00"`;
 
+exports[`durationInputValue > includes days from a native duration value 1`] = `"51:04:05"`;
+
 exports[`durationInputValue > pads an HH:MM string to HH:MM:SS 1`] = `"01:30:00"`;
 
 exports[`durationInputValue > passes an HH:MM:SS string through unchanged 1`] = `"100:00:00"`;
+
+exports[`enabledLabel > reflects the enabled flag 1`] = `
+[
+  "Enabled",
+  "Disabled",
+]
+`;
+
+exports[`toggleTitle > describes the action the toggle performs next 1`] = `
+[
+  "Disable confirmation",
+  "Enable confirmation",
+]
+`;

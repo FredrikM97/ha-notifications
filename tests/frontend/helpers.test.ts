@@ -26,7 +26,7 @@ describe("durationInputValue", () => {
         { days: 2, hours: 3, minutes: 4, seconds: 5 },
         "00:00:00",
       ),
-    ).toBe("51:04:05");
+    ).toMatchSnapshot();
   });
 
   it("falls back for missing/invalid values", () => {
@@ -36,14 +36,15 @@ describe("durationInputValue", () => {
 
 describe("enabledLabel", () => {
   it("reflects the enabled flag", () => {
-    expect(enabledLabel(true)).toBe("Enabled");
-    expect(enabledLabel(false)).toBe("Disabled");
+    expect([enabledLabel(true), enabledLabel(false)]).toMatchSnapshot();
   });
 });
 
 describe("toggleTitle", () => {
   it("describes the action the toggle performs next", () => {
-    expect(toggleTitle(true, "confirmation")).toBe("Disable confirmation");
-    expect(toggleTitle(false, "confirmation")).toBe("Enable confirmation");
+    expect([
+      toggleTitle(true, "confirmation"),
+      toggleTitle(false, "confirmation"),
+    ]).toMatchSnapshot();
   });
 });

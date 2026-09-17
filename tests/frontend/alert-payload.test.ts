@@ -1,37 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAlertPayload } from "../../frontend/alert-payload.js";
-import type { AlertFormValues } from "../../frontend/alert-payload.js";
 import { defaultAlert } from "../../frontend/editor/helpers.js";
-
-function values(overrides: Partial<AlertFormValues> = {}): AlertFormValues {
-  return {
-    identity: { name: "Front door open", description: "" },
-    monitor: {
-      conditions: [{ type: "template", template: "{{ true }}" }],
-      onChange: true,
-      startup: true,
-    },
-    notification: {
-      target: {},
-      title: "Alert",
-      message: "The front door is open.",
-    },
-    confirmation: {
-      enabled: false,
-      button: "",
-      notification: { enabled: false, message: "", clear: true },
-      reminders: {
-        enabled: true,
-        interval: "00:30:00",
-        max_attempts: 5,
-        show_attempts: false,
-      },
-      actions: { enabled: false, items: [] },
-    },
-    post_send_actions: { postSendActionsEnabled: false },
-    ...overrides,
-  };
-}
+import { alertFormValues } from "./conftest.js";
 
 describe("buildAlertPayload", () => {
   it("omits the delivery action when recipients are selected", () => {
@@ -39,9 +9,9 @@ describe("buildAlertPayload", () => {
     original.id = "test_alert"; // defaultAlert() ids by Date.now(), not snapshot-stable
     const payload = buildAlertPayload(
       original,
-      values({
+      alertFormValues({
         notification: {
-          ...values().notification,
+          ...alertFormValues().notification,
           target: { entity_id: ["notify.mobile_app_phone"] },
         },
       }),
@@ -51,9 +21,17 @@ describe("buildAlertPayload", () => {
 
   it("throws when there are no recipients", () => {
     const original = defaultAlert();
-    expect(() => buildAlertPayload(original, values())).toThrow(
+    expect(() => buildAlertPayload(original, alertFormValues())).toThrow(
       /Select at least one device, area, label, or notification entity/,
     );
+  });
+
+  it("serializes incomplete drafts for YAML preview", () => {
+    const original = defaultAlert();
+    original.id = "preview_alert";
+    const payload = buildAlertPayload(original, alertFormValues(), false);
+
+    expect(payload).toMatchSnapshot();
   });
 
   it("does not include runtime state in the editable alert payload", () => {
@@ -65,9 +43,9 @@ describe("buildAlertPayload", () => {
     };
     const payload = buildAlertPayload(
       original,
-      values({
+      alertFormValues({
         notification: {
-          ...values().notification,
+          ...alertFormValues().notification,
           target: { entity_id: ["notify.mobile_app_phone"] },
         },
       }),
@@ -77,32 +55,34 @@ describe("buildAlertPayload", () => {
   });
 
   it("persists a custom alert icon", () => {
+    const original = defaultAlert();
+    original.id = "custom_icon_alert";
     const payload = buildAlertPayload(
-      defaultAlert(),
-      values({
+      original,
+      alertFormValues({
         identity: {
           name: "Front door open",
           description: "",
           icon: "mdi:door-open",
         },
         notification: {
-          ...values().notification,
+          ...alertFormValues().notification,
           target: { entity_id: ["notify.mobile_app_phone"] },
         },
       }),
     );
 
-    expect(payload.icon).toBe("mdi:door-open");
+    expect(payload).toMatchSnapshot();
   });
 
   it("throws when confirmation is enabled without recipients", () => {
     expect(() =>
       buildAlertPayload(
         defaultAlert(),
-        values({
-          notification: { ...values().notification, target: {} },
+        alertFormValues({
+          notification: { ...alertFormValues().notification, target: {} },
           confirmation: {
-            ...values().confirmation,
+            ...alertFormValues().confirmation,
             enabled: true,
           },
         }),

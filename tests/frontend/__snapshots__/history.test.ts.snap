@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`filterHistoryEntries > combines alert, event type, and severity filters 1`] = `
+[
+  {
+    "alert_id": "garage",
+    "alert_name": "Garage door",
+    "details": {
+      "source": "sensor",
+    },
+    "message": "The garage is open",
+    "type": "notification_sent",
+  },
+]
+`;
+
+exports[`filterHistoryEntries > matches search text across the event content 1`] = `
+[
+  {
+    "alert_id": "water",
+    "alert_name": "Water leak",
+    "details": {
+      "error": "Device unavailable",
+    },
+    "message": "Could not notify",
+    "type": "delivery_failed",
+  },
+]
+`;
+
+exports[`filterHistoryEntries > returns all entries when no filters are active 1`] = `
+[
+  {
+    "alert_id": "garage",
+    "alert_name": "Garage door",
+    "details": {
+      "source": "sensor",
+    },
+    "message": "The garage is open",
+    "type": "notification_sent",
+  },
+  {
+    "alert_id": "water",
+    "alert_name": "Water leak",
+    "details": {
+      "error": "Device unavailable",
+    },
+    "message": "Could not notify",
+    "type": "delivery_failed",
+  },
+]
+`;
+
+exports[`historyDetailSummary > hides attempt-only details from the inline preview 1`] = `""`;
+
+exports[`historyDetailSummary > keeps meaningful detail summaries visible 1`] = `"Device unavailable"`;

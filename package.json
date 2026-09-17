@@ -13,7 +13,10 @@
     "install:ha": "sh scripts/install_local.sh"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/user-event": "^14.6.7",
     "esbuild": "^0.28.2",
+    "happy-dom": "^20.14.5",
     "lit": "^3.3.1",
     "prettier": "^3.8.3",
     "typescript": "^5.8.3",

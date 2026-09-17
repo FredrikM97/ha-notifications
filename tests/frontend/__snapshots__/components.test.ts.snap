@@ -1,0 +1,172 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`alert editor interactions > asks before discarding unsaved changes 1`] = `"Unsaved changes You have unsaved changes. Leave without saving? Stay Discard changes"`;
+
+exports[`alert editor interactions > opens template help in a modal from the notification section 1`] = `
+"<section class="nc-modal nc-template-help-modal" role="dialog" aria-modal="true">
+        <header class="nc-modal-header">
+          <h2>Notification templates and helpers</h2>
+          <button class="nc-icon-button" aria-label="Close template help" title="Close template help">
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        </header>
+        <main class="nc-modal-body"><div class="nc-help">
+          Recipients on selected devices, areas, floors, and labels receive
+          direct notifications through Home Assistant's standard Notify
+          service. In the message or title, use <code>condition.id</code> and
+          <code>trigger</code> to choose text, for example
+          <code>{% if condition.front_door %}Door open{% endif %}</code>.
+        </div>
+        <div class="nc-help">
+          <code>alert_id</code>, <code>alert_name</code>,
+          <code>alert_active</code>, <code>attempt</code>,
+          <code>trigger</code>, <code>now</code>, and
+          <code>condition.&lt;id&gt;</code> are available here. Home Assistant
+          helpers are also available, such as
+          <code>states('sensor.temperature')</code>,
+          <code>state_attr('light.kitchen', 'brightness')</code>, and
+          <code>is_state('binary_sensor.door', 'on')</code>.
+        </div></main>
+      </section>"
+`;
+
+exports[`alert editor interactions > previews unsaved data without requiring recipients 1`] = `
+"id: draft_alert
+name: Draft alert
+enabled: true
+description: ""
+icon: mdi:bell-outline
+conditions: []
+monitor:
+  on_change: true
+  startup: true
+notification:
+  target: {}
+  title: ""
+  message: ""
+confirmation:
+  enabled: false
+  button: ""
+  notification:
+    enabled: false
+    message: ""
+    clear: true
+  reminders:
+    enabled: false
+    interval: 1800
+    max_attempts: 5
+    show_attempts: false
+  actions:
+    enabled: false
+"
+`;
+
+exports[`alert editor interactions > saves an edited alert and closes the editor 1`] = `
+{
+  "conditions": [
+    {
+      "template": "{{ true }}",
+      "type": "template",
+    },
+  ],
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+    },
+    "button": "",
+    "enabled": false,
+    "notification": {
+      "clear": true,
+      "enabled": false,
+      "message": "",
+    },
+    "reminders": {
+      "enabled": false,
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "editable_alert",
+  "monitor": {
+    "on_change": true,
+    "startup": true,
+  },
+  "name": "Updated name",
+  "notification": {
+    "message": "",
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+  },
+}
+`;
+
+exports[`alert editor interactions > shows validation feedback instead of saving an unnamed alert 1`] = `
+<div
+  class="nc-toast"
+>
+  Name is required.
+</div>
+`;
+
+exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `
+<h2
+  data-role="editor-section-title"
+>
+  When to check
+</h2>
+`;
+
+exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 1`] = `
+<button
+  class="nc-button secondary nc-condition-id-toggle"
+  type="button"
+>
+  
+              
+  <ha-icon
+    icon="mdi:tag-plus-outline"
+  />
+  
+              Add ID
+            
+</button>
+`;
+
+exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 2`] = `
+"<div class="nc-condition-actions">
+        
+        <button class="nc-button danger">
+          Remove condition
+        </button>
+      </div>"
+`;
+
+exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `
+<div
+  class="nc-help"
+>
+  No visual conditions configured.
+</div>
+`;
+
+exports[`recipient picker interactions > serializes a selected notification entity and marks the editor dirty 1`] = `
+{
+  "entity_id": [
+    "notify.phone",
+  ],
+}
+`;
+
+exports[`recipient picker interactions > serializes a selected notification entity and marks the editor dirty 2`] = `
+"<span class="nc-target-chip" title="Notification entities">Phone<button class="nc-chip-remove">
+                  Remove
+                </button></span>"
+`;

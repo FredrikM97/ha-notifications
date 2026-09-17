@@ -1,0 +1,43 @@
+{
+  "identity": {
+    "name": "Front door open",
+    "description": ""
+  },
+  "monitor": {
+    "conditions": [
+      {
+        "type": "template",
+        "template": "{{ true }}"
+      }
+    ],
+    "onChange": true,
+    "startup": true
+  },
+  "notification": {
+    "target": {},
+    "title": "Alert",
+    "message": "The front door is open."
+  },
+  "confirmation": {
+    "enabled": false,
+    "button": "",
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "clear": true
+    },
+    "reminders": {
+      "enabled": true,
+      "interval": "00:30:00",
+      "max_attempts": 5,
+      "show_attempts": false
+    },
+    "actions": {
+      "enabled": false,
+      "items": []
+    }
+  },
+  "post_send_actions": {
+    "postSendActionsEnabled": false
+  }
+}
