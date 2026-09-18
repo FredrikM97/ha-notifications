@@ -1,5 +1,6 @@
-import { html, nothing, render } from "lit";
+import { html, nothing } from "lit";
 import type { TemplateResult } from "lit";
+import { ref } from "lit/directives/ref.js";
 import * as YAML from "yaml";
 import type { Alert, Hass } from "../types.js";
 import {
@@ -119,11 +120,9 @@ export function showEditorToast(
   message: string,
   duration = 6000,
 ): void {
-  const toast = document.createElement("div");
-  toast.className = "nc-toast";
-  toast.textContent = message;
-  root.append(toast);
-  window.setTimeout(() => toast.remove(), duration);
+  root.dispatchEvent(
+    new CustomEvent("nc-editor-toast", { detail: { message, duration } }),
+  );
 }
 
 export function durationInputValue(
@@ -214,8 +213,7 @@ export function durationInput(
   };
   const commit = (event: Event): void => {
     const input = event.currentTarget as HTMLInputElement;
-    input.value = normalize(input.value);
-    onChange(input.value);
+    onChange(normalize(input.value));
   };
 
   return html`<ha-input
@@ -282,6 +280,7 @@ export function codeEditor({
   className = "nc-action-editor",
   readOnly = false,
   onInput,
+  onReady,
 }: CodeEditorOptions): TemplateResult {
   return html`<ha-code-editor
     data-role=${role || nothing}
@@ -294,6 +293,9 @@ export function codeEditor({
     ?read-only=${readOnly}
     @input=${onInput || nothing}
     @value-changed=${onInput || nothing}
+    ${ref((element) => {
+      if (element) onReady?.(element as CodeEditor);
+    })}
   ></ha-code-editor>`;
 }
 
@@ -301,8 +303,12 @@ export function section(
   title: string,
   content: TemplateResult,
   className = "",
+  active = false,
 ): TemplateResult {
-  return html`<section class="nc-section ${className}" data-title=${title}>
+  return html`<section
+    class="nc-section ${className}${active ? " active" : ""}"
+    data-title=${title}
+  >
     <div class="nc-section-content">${content}</div>
   </section>`;
 }
@@ -332,11 +338,12 @@ export function optionalControls(
 export function editorSectionControl(
   setting: OptionalSetting,
   content: TemplateResult,
+  visible = false,
 ): TemplateResult {
   return html`<div
     data-role="editor-section-control"
     data-setting=${setting}
-    hidden
+    ?hidden=${!visible}
   >
     ${content}
   </div>`;
@@ -351,49 +358,11 @@ export function toggleTitle(enabled: boolean, label: string): string {
 }
 
 export function showYaml(root: ShadowRoot, alert: Alert): void {
-  const popup = document.createElement("div");
-  const close = (): void => popup.remove();
-  render(
-    html`<div
-      class="nc-modal-backdrop"
-      @click=${(event: MouseEvent) => {
-        if (event.target === event.currentTarget) close();
-      }}
-    >
-      <section class="nc-modal nc-alert-yaml-modal">
-        <header class="nc-modal-header">
-          <h2>Alert YAML</h2>
-          <button
-            class="nc-icon-button"
-            @click=${close}
-            aria-label="Close YAML"
-            title="Close YAML"
-          >
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
-        </header>
-        <main class="nc-modal-body">
-          ${codeEditor({
-            value: "",
-            mode: "yaml",
-            language: "yaml",
-            label: "Alert YAML",
-            className: "nc-alert-yaml-editor",
-            readOnly: true,
-          })}
-        </main>
-      </section>
-    </div>`,
-    popup,
+  root.dispatchEvent(
+    new CustomEvent("nc-editor-modal", {
+      detail: { kind: "yaml", alert },
+    }),
   );
-  root.append(popup);
-  const editor = popup.querySelector<CodeEditor>("ha-code-editor");
-  if (!editor) throw new Error("Missing alert YAML editor");
-  void customElements.whenDefined("ha-code-editor").then(async () => {
-    await editor.updateComplete;
-    constrainCodeEditor(editor);
-    editor.value = YAML.stringify(alert);
-  });
 }
 
 export function showTemplateHelp(
@@ -405,33 +374,17 @@ export function showTemplateHelp(
   const root = trigger?.getRootNode();
   if (!(root instanceof ShadowRoot)) return;
 
-  const popup = document.createElement("div");
-  const close = (): void => popup.remove();
-  render(
-    html`<div
-      class="nc-modal-backdrop"
-      @click=${(clickEvent: MouseEvent) => {
-        if (clickEvent.target === clickEvent.currentTarget) close();
-      }}
-    >
-      <section class="nc-modal nc-template-help-modal" role="dialog" aria-modal="true">
-        <header class="nc-modal-header">
-          <h2>${title}</h2>
-          <button
-            class="nc-icon-button"
-            @click=${close}
-            aria-label="Close template help"
-            title="Close template help"
-          >
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
-        </header>
-        <main class="nc-modal-body">${content}</main>
-      </section>
-    </div>`,
-    popup,
+  root.dispatchEvent(
+    new CustomEvent("nc-editor-modal", {
+      detail: {
+        kind: "template-help",
+        title,
+        content,
+        modalClass: "nc-template-help-modal",
+        closeLabel: "Close template help",
+      },
+    }),
   );
-  root.append(popup);
 }
 
 export function actionArrayValue(

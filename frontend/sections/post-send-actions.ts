@@ -22,6 +22,9 @@ export function renderPostSendActionsSection(
         language: "yaml",
         label: "Post-send actions",
         onInput: () => context.markDirty(),
+        onReady: (editor) => context.setEditorControl("notification-actions", editor),
       })}`,
+    "",
+    context.activeSection === "Post-send actions",
   );
 }

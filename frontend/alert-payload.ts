@@ -1,8 +1,5 @@
 import type { Alert, AlertCondition, NotificationTarget } from "./types.js";
-
-function cloneAlert(alert: Alert): Alert {
-  return JSON.parse(JSON.stringify(alert)) as Alert;
-}
+import { clone } from "./editor/types.js";
 
 function durationToSeconds(
   value: string | number | Record<string, number> | undefined,
@@ -110,7 +107,7 @@ export function buildAlertPayload(
   values: AlertFormValues,
   validate = true,
 ): Alert {
-  const result = cloneAlert(original);
+  const result = clone(original);
   delete result.runtime;
   if (validate && !hasRecipients(values.notification.target)) {
     throw new Error(

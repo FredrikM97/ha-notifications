@@ -1,4 +1,5 @@
 import { html } from "lit";
+import { ref } from "lit/directives/ref.js";
 import type { TemplateResult } from "lit";
 import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/types.js";
 import { codeEditor, conditionTemplate, conditionsYaml, field, section } from "../editor/helpers.js";
@@ -27,8 +28,8 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
           Advanced Jinja
         </button>
       </div>
-      <div data-role="visual" class="nc-condition-visual"></div>
-      <div data-role="conditions-yaml">
+      <div ?hidden=${context.mode !== "visual"} ${ref((element) => element && context.setEditorElement("visual", element as HTMLElement))} data-role="visual" class="nc-condition-visual"></div>
+      <div ?hidden=${context.mode !== "yaml"} ${ref((element) => element && context.setEditorElement("conditions-yaml", element as HTMLElement))} data-role="conditions-yaml">
         ${field(
           "Conditions YAML",
           codeEditor({
@@ -38,6 +39,7 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
             language: "yaml",
             label: "Conditions YAML",
             onInput: () => context.markDirty(),
+            onReady: (editor) => context.setEditorControl("conditions-yaml", editor),
           }),
           true,
         )}
@@ -46,7 +48,7 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
           the visual editor.
         </div>
       </div>
-      <div data-role="jinja">
+      <div ?hidden=${context.mode !== "jinja"} ${ref((element) => element && context.setEditorElement("jinja", element as HTMLElement))} data-role="jinja">
         ${field(
           "Jinja condition",
           codeEditor({
@@ -75,5 +77,7 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
         </div>
       </div>
       `,
+    "",
+    context.activeSection === "Condition",
   );
 }

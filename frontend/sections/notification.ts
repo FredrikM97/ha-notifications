@@ -84,5 +84,7 @@ export function renderNotificationSection(
           <ha-icon icon="mdi:information-outline"></ha-icon>
         </button>
       </div>`,
+    "",
+    context.activeSection === "Notification",
   );
 }

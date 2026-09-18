@@ -55,5 +55,7 @@ export function renderConfirmationNotificationSection(
         </button>
       </div>
       `,
+    "",
+    context.activeSection === "Notify recipients when confirmed",
   );
 }

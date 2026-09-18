@@ -33,5 +33,7 @@ export function renderConfirmationSection(
         ></ha-switch>
         <span>Clear notifications when acknowledged</span>
       </label>`,
+    "",
+    context.activeSection === "Confirmation",
   );
 }

@@ -3,7 +3,7 @@
 exports[`alert editor interactions > asks before discarding unsaved changes 1`] = `"Unsaved changes You have unsaved changes. Leave without saving? Stay Discard changes"`;
 
 exports[`alert editor interactions > opens template help in a modal from the notification section 1`] = `
-"<section class="nc-modal nc-template-help-modal" role="dialog" aria-modal="true">
+"<section role="dialog" aria-modal="true" class="nc-modal nc-template-help-modal">
         <header class="nc-modal-header">
           <h2>Notification templates and helpers</h2>
           <button class="nc-icon-button" aria-label="Close template help" title="Close template help">
@@ -109,44 +109,29 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
 `;
 
 exports[`alert editor interactions > shows validation feedback instead of saving an unnamed alert 1`] = `
-<div
-  class="nc-toast"
->
-  Name is required.
-</div>
+"<div class="nc-toast">
+          Name is required.
+        </div>"
 `;
 
-exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `
-<h2
-  data-role="editor-section-title"
->
-  When to check
-</h2>
-`;
+exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `"<h2 data-role="editor-section-title">When to check</h2>"`;
 
 exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 1`] = `
 <button
   class="nc-button secondary nc-condition-id-toggle"
   type="button"
 >
-  
-              
   <ha-icon
     icon="mdi:tag-plus-outline"
   />
-  
-              Add ID
-            
+  Add ID
 </button>
 `;
 
 exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 2`] = `
 "<div class="nc-condition-actions">
-        
-        <button class="nc-button danger">
-          Remove condition
-        </button>
-      </div>"
+      <button class="nc-button danger">Remove condition</button>
+    </div>"
 `;
 
 exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `
@@ -165,8 +150,4 @@ exports[`recipient picker interactions > serializes a selected notification enti
 }
 `;
 
-exports[`recipient picker interactions > serializes a selected notification entity and marks the editor dirty 2`] = `
-"<span class="nc-target-chip" title="Notification entities">Phone<button class="nc-chip-remove">
-                  Remove
-                </button></span>"
-`;
+exports[`recipient picker interactions > serializes a selected notification entity and marks the editor dirty 2`] = `"<span class="nc-target-chip" title="Notification entities">Phone<button class="nc-chip-remove">Remove</button></span>"`;

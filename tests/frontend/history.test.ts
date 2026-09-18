@@ -6,7 +6,7 @@ import {
   historyDetailSummary,
   renderHistory,
 } from "../../frontend/history.js";
-import { emptyHistoryFilters, historyFixture } from "./conftest.js";
+import { emptyHistoryFilters, historyFixture, testUser } from "./conftest.js";
 
 describe("filterHistoryEntries", () => {
   it("matches search text across the event content", () => {
@@ -74,5 +74,21 @@ describe("history filter controls", () => {
         .querySelector(".nc-history-filter-details")
         ?.hasAttribute("open"),
     ).toBe(true);
+  });
+});
+
+describe("history detail controls", () => {
+  it("toggles details without querying the rendered details element", async () => {
+    const container = document.createElement("div");
+    renderHistory(container, historyFixture, {
+      filters: emptyHistoryFilters,
+    });
+    const user = testUser();
+    const item = container.querySelector(".nc-history-item.clickable");
+    const details = item?.querySelector("details");
+
+    expect(details?.hasAttribute("open")).toBe(false);
+    await user.click(item!);
+    expect(item?.querySelector("details")?.hasAttribute("open")).toBe(true);
   });
 });

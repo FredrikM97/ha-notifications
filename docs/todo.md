@@ -20,3 +20,15 @@
 - [x] Add frontend component regression coverage for confirmation toggles,
 	  test-alert delivery, YAML condition errors, and popup dismissal.
 - [x] Run frontend build and frontend tests when frontend modules change.
+- [x] Refactor `AlertEditorController` navigation, section visibility, status indicators, and validation controls to derive from Lit templates instead of DOM queries and mutations.
+- [x] Move editor dashboard visibility and action restoration into a Lit-owned panel/editor state boundary.
+- [x] Replace editor modal and toast mounting with Lit-owned state and conditional templates; retain direct DOM access only for Home Assistant code-editor integration.
+- [x] Remove remaining editor `querySelector` usage for form controls by passing typed element references or extracting values through component-owned state.
+- [x] `frontend/condition-builder.ts`: move condition rows and interaction state into a stateful Lit element; retain only typed event targets.
+- [x] `frontend/recipient-picker.ts`: move recipient filtering, selection, and result rendering into a stateful Lit element and Lit-owned mounting.
+- [x] `frontend/editor/index.ts`: finish dashboard actions and modal state as declarative Lit templates; retain only explicit dashboard/editor ownership and HA editor integration boundaries.
+- [x] `frontend/editor/helpers.ts`: replace toast/modal host creation and selector lookups with Lit-owned state; keep CodeMirror sizing and Home Assistant editor readiness imperative.
+- [x] `frontend/panel.ts`: replace external history/YAML mount queries with child Lit components or explicit element references; remove render-time DOM existence checks.
+- [x] `frontend/history.ts`: replace the external `render(content, container)` boundary with a Lit history component while preserving filter callbacks and details interactions.
+- [x] `frontend/yaml-view.ts`: replace editor lookup/mounting with a Lit YAML component; retain only the Home Assistant code-editor readiness/value bridge.
+- [x] Frontend DOM audit: remaining production DOM access is limited to HA code-editor discovery/value extraction in `fillActionEditors`, CodeMirror's internal `.cm-scroller` sizing, the explicit editor host create/remove lifecycle, and the duplicate-editor host guard. No dashboard, modal/toast, form-control, or history-details ownership remains selector-driven.

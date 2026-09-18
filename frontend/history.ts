@@ -1,4 +1,5 @@
-import { html, render } from "lit";
+import { html, LitElement, render } from "lit";
+import { ref } from "lit/directives/ref.js";
 import { formatLocalDateTime } from "./date-time.js";
 import type { Hass, HassLocale, HistoryEntry } from "./types.js";
 
@@ -14,7 +15,7 @@ export interface HistoryAlertOption {
   name: string;
 }
 
-interface HistoryRenderOptions {
+export interface HistoryRenderOptions {
   alertName?: string | null;
   alerts?: HistoryAlertOption[];
   filters?: HistoryFilters;
@@ -90,33 +91,106 @@ export function renderHistory(
   history: HistoryEntry[],
   options: HistoryRenderOptions = {},
 ): void {
-  const filters = options.filters || defaultHistoryFilters();
-  const filteredHistory = filterHistoryEntries(history, filters);
-  let content = emptyHistoryTemplate(options);
-  if (history.length) {
-    content = historyTemplate(filteredHistory, history.length, options);
+  let element: HistoryViewElement | undefined;
+  render(
+    html`<ha-notifications-history-view
+      .history=${history}
+      .options=${options}
+      ${ref((value) => {
+        element = value as HistoryViewElement;
+      })}
+    ></ha-notifications-history-view>`,
+    container,
+  );
+  element?.renderImmediately();
+}
+
+class HistoryViewElement extends LitElement {
+  history: HistoryEntry[] = [];
+
+  options: HistoryRenderOptions = {};
+
+  private expandedDetails = new Set<number>();
+
+  static properties = {
+    history: { attribute: false },
+    options: { attribute: false },
+  };
+
+  protected createRenderRoot(): HTMLElement {
+    return this;
   }
 
-  render(content, container);
+  renderImmediately(): void {
+    render(this.render(), this);
+  }
+
+  protected render() {
+    const filters = this.options.filters || defaultHistoryFilters();
+    const filteredHistory = filterHistoryEntries(this.history, filters);
+    if (!this.history.length) {
+      return emptyHistoryTemplate(this.options);
+    }
+
+    return historyTemplate(
+      filteredHistory,
+      this.history.length,
+      this.options,
+      this.expandedDetails,
+      (index) => {
+        if (this.expandedDetails.has(index)) {
+          this.expandedDetails.delete(index);
+        } else {
+          this.expandedDetails.add(index);
+        }
+        this.renderImmediately();
+      },
+    );
+  }
 }
+
+customElements.define("ha-notifications-history-view", HistoryViewElement);
 
 function historyTemplate(
   history: HistoryEntry[],
   totalCount: number,
   options: HistoryRenderOptions,
+  expandedDetails: Set<number>,
+  toggleDetails: (index: number) => void,
 ) {
   return html`<div class="nc-card nc-history">
     ${historyFilterTemplate(options)}
-    ${history.length
-      ? history.map((item) => historyItemTemplate(item, options))
-      : html`<div class="nc-history-no-results">
-          No history entries match these filters.
-        </div>`}
-    ${history.length && history.length !== totalCount
-      ? html`<div class="nc-history-count">
-          Showing ${history.length} of ${totalCount} events
-        </div>`
-      : ""}
+    ${historyItemsTemplate(history, options, expandedDetails, toggleDetails)}
+    ${historyCountTemplate(history.length, totalCount)}
+  </div>`;
+}
+
+function historyItemsTemplate(
+  history: HistoryEntry[],
+  options: HistoryRenderOptions,
+  expandedDetails: Set<number>,
+  toggleDetails: (index: number) => void,
+) {
+  if (!history.length) {
+    return html`<div class="nc-history-no-results">
+      No history entries match these filters.
+    </div>`;
+  }
+
+  return history.map((item, index) =>
+    historyItemTemplate(
+      item,
+      options,
+      expandedDetails.has(index),
+      () => toggleDetails(index),
+    ),
+  );
+}
+
+function historyCountTemplate(count: number, totalCount: number) {
+  if (!count || count === totalCount) return "";
+  return html`<div class="nc-history-count">
+    Showing ${count} of ${totalCount} events
   </div>`;
 }
 
@@ -125,52 +199,7 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
   const activeFilterCount = countSecondaryHistoryFilters(filters);
   return html`<div class="nc-history-filter">
     <div class="nc-history-filter-heading">
-      ${options.alertName
-        ? html`<div>
-              <div class="nc-history-filter-title">
-                History for ${options.alertName}
-              </div>
-              <div class="nc-history-filter-subtitle">
-                Showing events for this alert only.
-              </div>
-            </div>
-            ${showAllButton(options.onShowAll, "Show all")}`
-        : html`<div class="nc-history-filter-main">
-              <div class="nc-history-filter-row">
-                <div class="nc-history-filter-label">
-                  <ha-icon icon="mdi:filter-variant"></ha-icon>
-                  <span>Filter history</span>
-                </div>
-                <details
-                  class="nc-history-filter-details"
-                  ?open=${activeFilterCount > 0}
-                >
-                  <summary>
-                    <ha-icon icon="mdi:filter-variant"></ha-icon>
-                    <span>More filters</span>
-                    ${activeFilterCount
-                      ? html`<span class="nc-history-filter-count"
-                          >${activeFilterCount}</span
-                        >`
-                      : ""}
-                    <ha-icon
-                      class="nc-history-filter-chevron"
-                      icon="mdi:chevron-down"
-                    ></ha-icon>
-                  </summary>
-                </details>
-              </div>
-              ${historySecondaryFiltersTemplate(options, filters)}
-            </div>
-            ${hasHistoryFilters(filters)
-              ? html`<button
-                  class="nc-button secondary nc-history-clear"
-                  @click=${() =>
-                    options.onFiltersChanged?.(defaultHistoryFilters())}
-                >
-                  Clear
-                </button>`
-              : ""}`}
+      ${historyHeadingTemplate(options, filters, activeFilterCount)}
     </div>
     <div class="nc-history-controls">
       <ha-input
@@ -190,33 +219,68 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
   </div>`;
 }
 
+function historyHeadingTemplate(
+  options: HistoryRenderOptions,
+  filters: HistoryFilters,
+  activeFilterCount: number,
+) {
+  if (options.alertName) {
+    return html`<div>
+        <div class="nc-history-filter-title">History for ${options.alertName}</div>
+        <div class="nc-history-filter-subtitle">
+          Showing events for this alert only.
+        </div>
+      </div>
+      ${showAllButton(options.onShowAll, "Show all")}`;
+  }
+
+  return html`<div class="nc-history-filter-main">
+      <div class="nc-history-filter-row">
+        <div class="nc-history-filter-label">
+          <ha-icon icon="mdi:filter-variant"></ha-icon>
+          <span>Filter history</span>
+        </div>
+        <details class="nc-history-filter-details" ?open=${activeFilterCount > 0}>
+          <summary>
+            <ha-icon icon="mdi:filter-variant"></ha-icon>
+            <span>More filters</span>
+            ${historyFilterCountTemplate(activeFilterCount)}
+            <ha-icon
+              class="nc-history-filter-chevron"
+              icon="mdi:chevron-down"
+            ></ha-icon>
+          </summary>
+        </details>
+      </div>
+      ${historySecondaryFiltersTemplate(options, filters)}
+    </div>
+    ${historyClearButtonTemplate(options, filters)}`;
+}
+
+function historyFilterCountTemplate(count: number) {
+  if (!count) return "";
+  return html`<span class="nc-history-filter-count">${count}</span>`;
+}
+
+function historyClearButtonTemplate(
+  options: HistoryRenderOptions,
+  filters: HistoryFilters,
+) {
+  if (!hasHistoryFilters(filters)) return "";
+  return html`<button
+    class="nc-button secondary nc-history-clear"
+    @click=${() => options.onFiltersChanged?.(defaultHistoryFilters())}
+  >
+    Clear
+  </button>`;
+}
+
 function historySecondaryFiltersTemplate(
   options: HistoryRenderOptions,
   filters: HistoryFilters,
 ) {
   return html`<div class="nc-history-secondary-controls">
-    ${options.alerts?.length
-      ? html`<ha-selector
-          .hass=${options.hass}
-          .selector=${{
-            select: {
-              mode: "dropdown",
-              options: [
-                { value: "", label: "All alerts" },
-                ...options.alerts.map((alert) => ({
-                  value: alert.id,
-                  label: alert.name,
-                })),
-              ],
-            },
-          }}
-          .value=${filters.alertId}
-          label="Alert"
-          aria-label="Filter by alert"
-          @value-changed=${(event: CustomEvent<{ value?: string }>) =>
-            updateHistoryFilter(options, "alertId", event.detail.value || "")}
-        ></ha-selector>`
-      : ""}
+    ${alertFilterTemplate(options, filters)}
     <ha-selector
       .hass=${options.hass}
       .selector=${{
@@ -260,6 +324,33 @@ function historySecondaryFiltersTemplate(
   </div>`;
 }
 
+function alertFilterTemplate(
+  options: HistoryRenderOptions,
+  filters: HistoryFilters,
+) {
+  if (!options.alerts?.length) return "";
+  return html`<ha-selector
+    .hass=${options.hass}
+    .selector=${{
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "", label: "All alerts" },
+          ...options.alerts.map((alert) => ({
+            value: alert.id,
+            label: alert.name,
+          })),
+        ],
+      },
+    }}
+    .value=${filters.alertId}
+    label="Alert"
+    aria-label="Filter by alert"
+    @value-changed=${(event: CustomEvent<{ value?: string }>) =>
+      updateHistoryFilter(options, "alertId", event.detail.value || "")}
+  ></ha-selector>`;
+}
+
 function defaultHistoryFilters(): HistoryFilters {
   return { search: "", alertId: "", type: "", severity: "" };
 }
@@ -290,6 +381,8 @@ function countSecondaryHistoryFilters(filters: HistoryFilters): number {
 function historyItemTemplate(
   item: HistoryEntry,
   options: HistoryRenderOptions,
+  detailsOpen: boolean,
+  toggleDetails: () => void,
 ) {
   const details = item.details as Record<string, unknown> | undefined;
   const hasDetails = Boolean(details && Object.keys(details).length);
@@ -298,8 +391,16 @@ function historyItemTemplate(
     class=${`nc-history-item${hasDetails ? " clickable" : ""}`}
     ?tabindex=${hasDetails}
     role=${hasDetails ? "button" : "none"}
-    @click=${hasDetails ? toggleHistoryDetails : undefined}
-    @keydown=${hasDetails ? toggleHistoryDetailsWithKeyboard : undefined}
+    @click=${hasDetails ? toggleDetails : undefined}
+    @keydown=${
+      hasDetails
+        ? (event: KeyboardEvent) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            toggleDetails();
+          }
+        : undefined
+    }
   >
     <div class="nc-history-time">
       ${formatLocalDateTime(item.timestamp, true, options.locale)}
@@ -316,32 +417,25 @@ function historyItemTemplate(
             >`
           : ""}
       </div>
-      ${hasDetails
-        ? html`<details class="nc-details nc-history-details">
-            <summary>Details</summary>
-            <pre>${JSON.stringify(details, null, 2)}</pre>
-          </details>`
-        : ""}
+      ${historyDetailsTemplate(details, hasDetails, detailsOpen)}
     </div>
   </div>`;
 }
 
-function toggleHistoryDetails(event: Event): void {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  if (target.closest("button, summary, details")) return;
-
-  const details =
-    event.currentTarget instanceof HTMLElement
-      ? event.currentTarget.querySelector<HTMLDetailsElement>("details")
-      : null;
-  if (details) details.open = !details.open;
-}
-
-function toggleHistoryDetailsWithKeyboard(event: KeyboardEvent): void {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  toggleHistoryDetails(event);
+function historyDetailsTemplate(
+  details: Record<string, unknown> | undefined,
+  hasDetails: boolean,
+  detailsOpen: boolean,
+) {
+  if (!hasDetails) return "";
+  return html`<details
+    class="nc-details nc-history-details"
+    ?open=${detailsOpen}
+    @click=${(event: Event) => event.stopPropagation()}
+  >
+    <summary>Details</summary>
+    <pre>${JSON.stringify(details, null, 2)}</pre>
+  </details>`;
 }
 
 function historyAlertTemplate(
@@ -355,7 +449,10 @@ function historyAlertTemplate(
 
   return html`<button
     class="nc-history-alert-link"
-    @click=${() => options.onAlertSelected?.(item.alert_id!, alertName)}
+    @click=${(event: Event) => {
+      event.stopPropagation();
+      options.onAlertSelected?.(item.alert_id!, alertName);
+    }}
   >
     ${alertName}
   </button>`;

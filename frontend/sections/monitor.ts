@@ -83,32 +83,39 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
           ></ha-switch>
           History retention
         </span>`,
-        monitor.retention?.enabled !== false
-          ? html`<div class="nc-help">
-              Completed alert history is removed after this period.
-            </div>
-            <ha-input
-              class="nc-number-field"
-              type="number"
-              min="1"
-              step="1"
-              aria-label="History retention days"
-              .value=${String(monitor.retention?.days || 30)}
-              @input=${(event: Event) => {
-                monitor.retention = {
-                  ...monitor.retention,
-                  enabled: monitor.retention?.enabled,
-                  days: Math.max(
-                    1,
-                    Number((event.currentTarget as HTMLInputElement).value) ||
-                      30,
-                  ),
-                };
-                context.markDirty();
-              }}
-            ></ha-input>`
-          : html``,
+        retentionTemplate(monitor, context),
       )}
     </div>`,
+    "",
+    context.activeSection === "When to check",
   );
+}
+
+function retentionTemplate(
+  monitor: EditorContext["value"]["monitor"],
+  context: EditorContext,
+): TemplateResult {
+  if (monitor.retention?.enabled === false) return html``;
+  return html`<div class="nc-help">
+      Completed alert history is removed after this period.
+    </div>
+    <ha-input
+      class="nc-number-field"
+      type="number"
+      min="1"
+      step="1"
+      aria-label="History retention days"
+      .value=${String(monitor.retention?.days || 30)}
+      @input=${(event: Event) => {
+        monitor.retention = {
+          ...monitor.retention,
+          enabled: monitor.retention?.enabled,
+          days: Math.max(
+            1,
+            Number((event.currentTarget as HTMLInputElement).value) || 30,
+          ),
+        };
+        context.markDirty();
+      }}
+    ></ha-input>`;
 }

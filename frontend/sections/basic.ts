@@ -49,5 +49,7 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
         ></ha-icon-picker>`,
       )}
     </div>`,
+    "",
+    context.activeSection === "Basic",
   );
 }

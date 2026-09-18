@@ -18,6 +18,7 @@ export interface CodeEditorOptions {
   className?: string;
   readOnly?: boolean;
   onInput?: (event: Event) => void;
+  onReady?: (editor: CodeEditor) => void;
 }
 
 export type EditorMode = "visual" | "yaml" | "jinja";
@@ -26,6 +27,9 @@ export interface EditorContext {
   hass: Hass;
   value: Alert;
   mode: EditorMode;
+  activeSection: string;
+  setEditorElement(role: string, element: HTMLElement): void;
+  setEditorControl(role: string, element: CodeEditor): void;
   markDirty(): void;
   refreshStatuses(): void;
   setMode(mode: EditorMode): void;

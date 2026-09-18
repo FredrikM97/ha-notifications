@@ -13,14 +13,15 @@ import {
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
-import { renderHistory, type HistoryFilters } from "./history.js";
+import "./history.js";
+import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
 import { styles } from "./styles.js";
 import { showToast as showToastOn, toastListTemplate } from "./toast.js";
 import type { Toast } from "./toast.js";
-import { LitElement, html, render } from "lit";
+import { LitElement, html } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
-import { renderYamlView } from "./yaml-view.js";
+import "./yaml-view.js";
 
 type PanelTab = "alerts" | "history" | "yaml";
 
@@ -138,6 +139,7 @@ class HaNotificationsPanel extends LitElement {
   private _registries: Registries | null = null;
   private _registriesPromise: Promise<Registries> | null = null;
   private _initialized = false;
+  private editorActive = false;
   toasts: Toast[] = [];
 
   set hass(value: Hass) {
@@ -213,10 +215,7 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private editorOpen(): boolean {
-    return Boolean(
-      this.renderRoot.querySelector(".nc-editor-view") ||
-      this.renderRoot.querySelector("#nc-yaml-editor"),
-    );
+    return this.editorActive || this.tab === "yaml";
   }
 
   async refresh({ silent = false }: { silent?: boolean } = {}): Promise<void> {
@@ -280,14 +279,10 @@ class HaNotificationsPanel extends LitElement {
     }
 
     return html`${this.styleTemplate()}
-      <div class="nc-page">
+      <div class="nc-page" ?hidden=${this.editorActive}>
         ${this.headerTemplate()}${this.tabsTemplate()}${this.tabTemplate()}
       </div>
       ${toastListTemplate(this.toasts)}`;
-  }
-
-  protected updated(): void {
-    this.renderActiveExternalView();
   }
 
   private styleTemplate(): TemplateResult {
@@ -347,10 +342,18 @@ class HaNotificationsPanel extends LitElement {
     }
 
     if (this.tab === "history") {
-      return html`<div id="history-view"></div>`;
+      return html`<ha-notifications-history-view
+        .history=${this.history}
+        .options=${this.historyViewOptions()}
+      ></ha-notifications-history-view>`;
     }
 
-    return html`<div id="yaml-view"></div>`;
+    return html`<ha-notifications-yaml-view
+      .hass=${this._hass}
+      .showToast=${(message: string, error?: boolean) =>
+        this.showToast(message, error)}
+      .refreshPanel=${() => this.refresh()}
+    ></ha-notifications-yaml-view>`;
   }
 
   private alertsTemplate(): TemplateResult {
@@ -372,52 +375,27 @@ class HaNotificationsPanel extends LitElement {
     </div>`;
   }
 
-  private renderActiveExternalView(): void {
-    if (!this.isAdmin()) {
-      return;
-    }
-
-    if (this.tab === "history") {
-      renderHistory(
-        this.renderRoot.querySelector("#history-view")!,
-        this.history,
-        {
-          alertName: this.historyAlertName,
-          hass: this._hass!,
-          locale: this._hass?.locale,
-          alerts: this.alerts.map((alert) => ({
-            id: alert.id,
-            name: alert.name,
-          })),
-          filters: this.historyFilters,
-          types: [
-            ...new Set(this.history.map((item) => item.type).filter(Boolean)),
-          ] as string[],
-          onFiltersChanged: (filters) => {
-            this.historyFilters = filters;
-            this.requestUpdate();
-          },
-          onAlertSelected: (alertId, alertName) =>
-            this.showHistoryForAlert(alertId, alertName),
-          onShowAll: () => this.showAllHistory(),
-        },
-      );
-    }
-
-    const yamlView = this.renderRoot.querySelector<HTMLElement>("#yaml-view");
-    if (
-      this.tab === "yaml" &&
-      this._hass &&
-      yamlView &&
-      !yamlView.querySelector("#nc-yaml-editor")
-    ) {
-      renderYamlView(
-        yamlView,
-        this._hass,
-        (message, error) => this.showToast(message, error),
-        () => this.refresh(),
-      );
-    }
+  private historyViewOptions(): HistoryRenderOptions {
+    return {
+      alertName: this.historyAlertName,
+      hass: this._hass || undefined,
+      locale: this._hass?.locale,
+      alerts: this.alerts.map((alert) => ({
+        id: alert.id,
+        name: alert.name,
+      })),
+      filters: this.historyFilters,
+      types: [
+        ...new Set(this.history.map((item) => item.type).filter(Boolean)),
+      ] as string[],
+      onFiltersChanged: (filters) => {
+        this.historyFilters = filters;
+        this.requestUpdate();
+      },
+      onAlertSelected: (alertId, alertName) =>
+        this.showHistoryForAlert(alertId, alertName),
+      onShowAll: () => this.showAllHistory(),
+    };
   }
 
   private selectTab(tab: PanelTab): void {
@@ -564,6 +542,8 @@ class HaNotificationsPanel extends LitElement {
       return;
     }
 
+    this.editorActive = true;
+    this.requestUpdate();
     openEditor({
       root: this.renderRoot as ShadowRoot,
       hass: this._hass!,
@@ -589,6 +569,10 @@ class HaNotificationsPanel extends LitElement {
       onSaved: async () => {
         await this.refresh();
       },
+      onClosed: () => {
+        this.editorActive = false;
+        this.requestUpdate();
+      },
     });
   };
 
@@ -601,6 +585,8 @@ class HaNotificationsPanel extends LitElement {
       return;
     }
 
+    this.editorActive = true;
+    this.requestUpdate();
     openEditor({
       root: this.renderRoot as ShadowRoot,
       hass: this._hass!,
@@ -626,6 +612,10 @@ class HaNotificationsPanel extends LitElement {
       },
       onSaved: async () => {
         await this.refresh();
+      },
+      onClosed: () => {
+        this.editorActive = false;
+        this.requestUpdate();
       },
     });
   }

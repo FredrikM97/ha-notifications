@@ -6,7 +6,8 @@ import {
   saveConfig,
   validateConfig,
 } from "./api.js";
-import { html, render } from "lit";
+import { html, LitElement, render } from "lit";
+import { ref } from "lit/directives/ref.js";
 import type { Hass } from "./types.js";
 import { constrainCodeEditor } from "./editor/helpers.js";
 
@@ -17,48 +18,90 @@ type CodeEditor = HTMLElement & {
   updateComplete?: Promise<unknown>;
 };
 
-function codeEditor(root: ParentNode): CodeEditor {
-  const editor = root.querySelector<CodeEditor>("ha-code-editor");
-  if (!editor) {
-    throw new Error("YAML editor is missing.");
-  }
-  return editor;
-}
+class YamlViewElement extends LitElement {
+  hass!: Hass;
 
-export function renderYamlView(
-  container: HTMLElement,
-  hass: Hass,
-  showToast: Toast,
-  refresh: () => Promise<void>,
-): void {
-  async function load(): Promise<void> {
-    try {
-      const config = await getConfig(hass);
-      await customElements.whenDefined("ha-code-editor");
-      await editor.updateComplete;
-      constrainCodeEditor(editor);
-      editor.value = stringify(config);
-    } catch (err) {
-      showToast(errorMessage(err), true);
+  showToast!: Toast;
+
+  refreshPanel!: () => Promise<void>;
+
+  static properties = {
+    hass: { attribute: false },
+    showToast: { attribute: false },
+    refreshPanel: { attribute: false },
+  };
+
+  private yaml = "";
+  private busyAction: "reload" | "validate" | "save" | null = null;
+  private editor: CodeEditor | null = null;
+  private loadedHass: Hass | null = null;
+
+  protected createRenderRoot(): HTMLElement {
+    return this;
+  }
+
+  renderImmediately(): void {
+    render(this.render(), this);
+  }
+
+  protected updated(): void {
+    if (this.hass && this.hass !== this.loadedHass) {
+      this.loadedHass = this.hass;
+      void this.load();
     }
   }
 
-  render(
-    html`<div class="nc-card nc-yaml">
+  async load(): Promise<void> {
+    try {
+      const config = await getConfig(this.hass);
+      this.yaml = stringify(config);
+      this.renderImmediately();
+      await customElements.whenDefined("ha-code-editor");
+      await this.editor?.updateComplete;
+      if (this.editor) {
+        constrainCodeEditor(this.editor);
+      }
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
+  protected render() {
+    return html`<div class="nc-card nc-yaml">
       <div class="nc-toolbar">
         <div>
           Advanced editor. Copy this YAML to another system or import a
           validated configuration into Home Assistant.
         </div>
         <div class="nc-actions">
-          <button class="nc-button secondary" @click=${copyYaml}>Copy</button>
-          <button class="nc-button secondary" @click=${validateYamlText}>
+          <button
+            class="nc-button secondary"
+            ?disabled=${this.busyAction !== null}
+            @click=${this.copyYaml}
+          >
+            Copy
+          </button>
+          <button
+            class="nc-button secondary"
+            ?disabled=${this.busyAction !== null}
+            @click=${this.validateYamlText}
+          >
             Validate
           </button>
-          <button class="nc-button secondary" @click=${reloadYaml}>
+          <button
+            class="nc-button secondary"
+            ?disabled=${this.busyAction !== null}
+            @click=${this.reloadYaml}
+          >
             Reload
           </button>
-          <button class="nc-button" @click=${saveYamlText}>Save YAML</button>
+          <button
+            class="nc-button"
+            ?disabled=${this.busyAction !== null}
+            @click=${this.saveYamlText}
+          >
+            Save YAML
+          </button>
         </div>
       </div>
       <ha-code-editor
@@ -67,75 +110,103 @@ export function renderYamlView(
         mode="yaml"
         language="yaml"
         aria-label="HA Notifications YAML"
+        .value=${this.yaml}
+        @input=${this.updateYaml}
+        @value-changed=${this.updateYaml}
+        ${ref((editor: CodeEditor) => {
+          this.editor = editor;
+        })}
       ></ha-code-editor>
-    </div>`,
-    container,
-  );
+    </div>`;
+  }
 
-  const editor = codeEditor(container);
+  private updateYaml = (event: Event): void => {
+    this.yaml = (event.currentTarget as CodeEditor).value || "";
+  };
 
-  const readEditor = (): string => editor.value || "";
-
-  function parseEditor(): Record<string, unknown> {
-    const value = parse(readEditor());
+  private parseEditor(): Record<string, unknown> {
+    const value = parse(this.yaml);
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("YAML must contain a mapping.");
     }
     return value as Record<string, unknown>;
   }
 
-  async function copyYaml(): Promise<void> {
+  private copyYaml = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(readEditor());
-      showToast("YAML copied to clipboard.");
+      await navigator.clipboard.writeText(this.yaml);
+      this.showToast("YAML copied to clipboard.");
     } catch (err) {
-      showToast(errorMessage(err), true);
+      this.showToast(errorMessage(err), true);
     }
-  }
+  };
 
-  async function reloadYaml(event: Event): Promise<void> {
-    const button = event.currentTarget as HTMLButtonElement;
-    button.disabled = true;
+  private reloadYaml = async (): Promise<void> => {
+    this.busyAction = "reload";
+    this.renderImmediately();
     try {
-      await reload(hass);
-      await load();
-      showToast("YAML configuration reloaded.");
+      await reload(this.hass);
+      await this.load();
+      this.showToast("YAML configuration reloaded.");
     } catch (err) {
-      showToast(errorMessage(err), true);
+      this.showToast(errorMessage(err), true);
     } finally {
-      button.disabled = false;
+      this.busyAction = null;
+      this.renderImmediately();
     }
-  }
+  };
 
-  async function validateYamlText(event: Event): Promise<void> {
-    const button = event.currentTarget as HTMLButtonElement;
-    button.disabled = true;
+  private validateYamlText = async (): Promise<void> => {
+    this.busyAction = "validate";
+    this.renderImmediately();
     try {
-      await validateConfig(hass, parseEditor());
-      showToast("YAML is valid.");
+      await validateConfig(this.hass, this.parseEditor());
+      this.showToast("YAML is valid.");
     } catch (err) {
-      showToast(errorMessage(err), true);
+      this.showToast(errorMessage(err), true);
     } finally {
-      button.disabled = false;
+      this.busyAction = null;
+      this.renderImmediately();
     }
-  }
+  };
 
-  async function saveYamlText(event: Event): Promise<void> {
-    const button = event.currentTarget as HTMLButtonElement;
-    button.disabled = true;
+  private saveYamlText = async (): Promise<void> => {
+    this.busyAction = "save";
+    this.renderImmediately();
     try {
-      const result = await saveConfig(hass, parseEditor());
+      const result = await saveConfig(this.hass, this.parseEditor());
       if (!result.saved) {
         throw new Error("The YAML was not saved.");
       }
-      showToast("YAML saved and configuration reloaded.");
-      await refresh();
+      this.showToast("YAML saved and configuration reloaded.");
+      await this.refreshPanel();
     } catch (err) {
-      showToast(errorMessage(err), true);
+      this.showToast(errorMessage(err), true);
     } finally {
-      button.disabled = false;
+      this.busyAction = null;
+      this.renderImmediately();
     }
-  }
+  };
+}
 
-  void load();
+export function renderYamlView(
+  container: HTMLElement,
+  hass: Hass,
+  showToast: Toast,
+  refresh: () => Promise<void>,
+): void {
+  let element: YamlViewElement | undefined;
+  render(
+    html`<ha-notifications-yaml-view
+      .hass=${hass}
+      .showToast=${showToast}
+      .refreshPanel=${refresh}
+      ${ref((value) => {
+        element = value as YamlViewElement;
+      })}
+    ></ha-notifications-yaml-view>`,
+    container,
+  );
+  element?.renderImmediately();
+  void element?.load();
 }

@@ -22,6 +22,9 @@ export function renderPostConfirmationActionsSection(
         language: "yaml",
         label: "Post-confirmation actions",
         onInput: () => context.markDirty(),
+        onReady: (editor) => context.setEditorControl("actions", editor),
       })}`,
+    "",
+    context.activeSection === "Post-confirmation actions",
   );
 }

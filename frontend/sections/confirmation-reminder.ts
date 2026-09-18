@@ -59,5 +59,7 @@ export function renderConfirmationReminderSection(
         </label>
       </div>
       </div>`,
+    "",
+    context.activeSection === "Reminder policy",
   );
 }

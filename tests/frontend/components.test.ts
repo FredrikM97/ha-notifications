@@ -82,7 +82,9 @@ describe("alert editor interactions", () => {
     });
     await user.click(sectionButtons[0]);
 
-    expect(root.querySelector('[data-role="editor-section-title"]')).toMatchSnapshot();
+    expect(
+      stableMarkup(root.querySelector('[data-role="editor-section-title"]')),
+    ).toMatchSnapshot();
     expect(root.querySelectorAll(".nc-section.active")).toHaveLength(1);
     expect(sectionButtons[0].classList.contains("active")).toBe(true);
   });
@@ -252,7 +254,7 @@ describe("alert editor interactions", () => {
 
     await user.click(queries.getByRole("button", { name: "Save alert" }));
 
-    expect(root.querySelector(".nc-toast")).toMatchSnapshot();
+    expect(stableMarkup(root.querySelector(".nc-toast"))).toMatchSnapshot();
     expect(options.onSave).not.toHaveBeenCalled();
   });
 
