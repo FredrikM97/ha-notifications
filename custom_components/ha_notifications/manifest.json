@@ -11,8 +11,8 @@
   ],
   "documentation": "https://github.com/FredrikM97/ha-notifications",
   "integration_type": "service",
-  "issue_tracker": "https://github.com/FredrikM97/ha-notifications/issues",
   "iot_class": "calculated",
+  "issue_tracker": "https://github.com/FredrikM97/ha-notifications/issues",
   "single_config_entry": true,
   "version": "0.0.0"
 }
