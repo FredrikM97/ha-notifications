@@ -14,11 +14,12 @@ else
 fi
 config_dir=${1:-${HA_CONFIG_DIR:-$default_config_dir}}
 source_dir="$root_dir/backend"
+manifest_file="$root_dir/manifest.json"
 target_dir="$config_dir/custom_components/ha_notifications"
 panel_file="$root_dir/dist/panel.js"
 
-if [ ! -f "$source_dir/manifest.json" ]; then
-  printf '%s\n' "Integration source is missing: $source_dir" >&2
+if [ ! -f "$manifest_file" ]; then
+  printf '%s\n' "Integration manifest is missing: $manifest_file" >&2
   exit 1
 fi
 
@@ -37,6 +38,7 @@ fi
 mkdir -p "$config_dir/custom_components"
 rm -rf "$target_dir"
 cp -R "$source_dir" "$target_dir"
+cp "$manifest_file" "$target_dir/manifest.json"
 mkdir -p "$target_dir/dist"
 cp "$panel_file" "$target_dir/dist/panel.js"
 
