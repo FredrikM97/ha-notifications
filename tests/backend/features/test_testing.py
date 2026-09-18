@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
+
 import pytest
 
+from custom_components.ha_notifications.features.confirmation import DRAFT_SESSION_TTL
 from tests.backend.conftest import stable_test_payloads
 
 
@@ -34,6 +38,23 @@ async def test_saved_test_delivery_contract_snapshot(test_feature_context, snaps
     await context.run_reminders()
 
     assert stable_test_payloads(context.notification.payloads) == snapshot
+
+
+@pytest.mark.asyncio
+async def test_expiry_callback_schedules_coroutine_as_task(test_feature_context):
+    context = test_feature_context
+
+    await context.feature.test_saved("alert_1")
+    expiry_callback = next(
+        callback
+        for delay, callback in context.scheduled
+        if delay == DRAFT_SESSION_TTL
+    )
+
+    task = expiry_callback(datetime.now(timezone.utc))
+
+    assert asyncio.isfuture(task)
+    await task
 
 
 @pytest.mark.asyncio

@@ -151,7 +151,9 @@ class TestFeature(FeatureBase):
             self._test_expiry_callbacks[session_id] = async_call_later(
                 self._hass,
                 DRAFT_SESSION_TTL,
-                lambda _now: self._expire_test_action(session_id, action_id),
+                lambda _now: self._hass.async_create_task(
+                    self._expire_test_action(session_id, action_id)
+                ),
             )
         self._schedule_draft_reminder(session_id)
 
@@ -168,7 +170,9 @@ class TestFeature(FeatureBase):
         self._draft_callbacks[session_id] = async_call_later(
             self._hass,
             DRAFT_SESSION_TTL,
-            lambda _now: self._expire_draft(session_id),
+            lambda _now: self._hass.async_create_task(
+                self._expire_draft(session_id)
+            ),
         )
 
         action_id = None
@@ -208,7 +212,9 @@ class TestFeature(FeatureBase):
         self._reminder_callbacks[session_id] = async_call_later(
             self._hass,
             interval,
-            lambda _now: self._send_draft_reminder(session_id),
+            lambda _now: self._hass.async_create_task(
+                self._send_draft_reminder(session_id)
+            ),
         )
 
     async def _send_draft_reminder(self, session_id: str) -> None:
