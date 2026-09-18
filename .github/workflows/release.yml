@@ -66,17 +66,6 @@ jobs:
             fi
           } > release-notes.md
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-          cache: npm
-
-      - name: Build HACS package
-        run: |
-          npm ci
-          npm run package:hacs
-
       - name: Update rolling draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,7 +83,6 @@ jobs:
               --target main \
               --draft
           fi
-          gh release upload unreleased ha-notifications.zip --clobber
 
   publish:
     if: |
