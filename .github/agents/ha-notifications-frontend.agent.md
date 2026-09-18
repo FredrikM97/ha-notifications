@@ -44,7 +44,7 @@ and `docs/architecture.md` only as needed to narrow to the frontend files.
 - DO NOT remove existing functionality while simplifying the UI.
 - DO NOT add custom selectors when HA already provides a native one.
 - DO NOT lose unsaved changes or overwrite valid YAML with invalid content.
-- DO NOT assume browser state is the source of truth when backend/runtime state also matters.
+- DO NOT assume browser state is the source of truth when custom_components/ha_notifications/runtime state also matters.
 
 ## Approach
 1. Start from the exact frontend file implicated by the issue.
@@ -58,4 +58,4 @@ and `docs/architecture.md` only as needed to narrow to the frontend files.
 - Brief summary of the frontend change
 - Files touched and why
 - Validation performed, including any UI or resource checks
-- Any risks or follow-up notes for backend/runtime parity
+- Any risks or follow-up notes for custom_components/ha_notifications/runtime parity

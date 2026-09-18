@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 from homeassistant.core import HomeAssistant
 
-from backend.const import (
+from custom_components.ha_notifications.const import (
     DOMAIN,
     SERVICE_RELOAD,
     SERVICE_TEST,
 )
-from backend.support.storage import ConfigEntryStorage
+from custom_components.ha_notifications.support.storage import ConfigEntryStorage
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

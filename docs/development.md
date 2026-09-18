@@ -43,9 +43,9 @@ standard `config/repos/<repository>` layout); pass a path or set
 sh scripts/install_local.sh /path/to/home-assistant-config
 ```
 
-The build writes the frontend bundle to `dist/panel.js` and generates the
-Home Assistant runtime package under `custom_components/ha_notifications/`.
-Those generated paths are not authored source.
+The integration source is authored under `custom_components/ha_notifications/`.
+The build writes the frontend bundle to `dist/panel.js` and copies it to
+`custom_components/ha_notifications/dist/panel.js` for Home Assistant.
 
 ## HACS package
 
@@ -61,8 +61,9 @@ Pass a version to override the manifest for a release test:
 npm run package:hacs -- 1.2.3
 ```
 
-The package script builds the generated runtime tree and creates the ZIP in the
-package-root layout expected by Home Assistant releases.
+The package script builds the frontend, copies the canonical integration into a
+temporary export tree, and creates a ZIP with the integration files at its root,
+as expected by Home Assistant releases.
 
 For source layout, feature ownership, and runtime flow, see
 [architecture.md](architecture.md).

@@ -3,30 +3,30 @@
 This file is a lightweight map of the repository so agents can narrow to the right files before reading deeper. `.github/logic-index.md` is the canonical symptom-to-file and flow router; use this file only for orientation. For a visual component map, see `docs/architecture.md`.
 
 ## Primary entry points
-- `backend/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
-- `backend/config_flow.py` — UI config flow and validation logic
-- `backend/controller/core.py` — `HaNotificationsController`: the lifecycle host. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, and shared runtime state; feature-owned websocket routes are registered through the lifecycle.
-- `backend/bridge/websocket.py` — the frontend-facing interface: registers the 12 `ha_notifications/*` websocket commands
-- `backend/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
+- `custom_components/ha_notifications/__init__.py` — minimal HA lifecycle glue: builds the controller, calls `async_setup`/`async_unload`, registers the `reload`/`test` services
+- `custom_components/ha_notifications/config_flow.py` — UI config flow and validation logic
+- `custom_components/ha_notifications/controller/core.py` — `HaNotificationsController`: the lifecycle host. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, and shared runtime state; feature-owned websocket routes are registered through the lifecycle.
+- `custom_components/ha_notifications/bridge/websocket.py` — the frontend-facing interface: registers the 12 `ha_notifications/*` websocket commands
+- `custom_components/ha_notifications/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
 
 ## Controller kernel and feature modules
-- `backend/controller/core.py` — kernel: Home Assistant lifecycle effects, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
-- `backend/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
-- `backend/delivery/` — recipient resolution for Home Assistant's generic Notify service
-- `backend/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
-- `backend/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
-- `backend/features/confirmation.py` — confirmation model, direct confirmation-action workflow, sessions, and confirmation effects
-- `backend/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
-- `backend/features/follow_up_actions.py` — post-send and post-confirmation service calls
-- `backend/features/history.py` — explicit history mutation and persistence decisions
+- `custom_components/ha_notifications/controller/core.py` — kernel: Home Assistant lifecycle effects, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
+- `custom_components/ha_notifications/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
+- `custom_components/ha_notifications/delivery/` — recipient resolution for Home Assistant's generic Notify service
+- `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
+- `custom_components/ha_notifications/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
+- `custom_components/ha_notifications/features/confirmation.py` — confirmation model, direct confirmation-action workflow, sessions, and confirmation effects
+- `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
+- `custom_components/ha_notifications/features/follow_up_actions.py` — post-send and post-confirmation service calls
+- `custom_components/ha_notifications/features/history.py` — explicit history mutation and persistence decisions
 
 ## Shared/support modules
-- `backend/features/configuration.py` — typed `Alert`, `Configuration`, and `AlertRuntime` objects used by feature workflows and the storage boundary
-- `backend/domain/template_values.py` — shared recursive template rendering and null removal for service-call configuration
-- `backend/features/conditions.py` — visual condition model and condition rows -> Jinja template string
-- `backend/domain/durations.py` — duration parse/format helpers
-- `backend/support/storage.py` — structured config persistence, validation, and state-shape repair
-- `backend/features/history.py` — history formatting, queries, deletion cleanup, and recording
+- `custom_components/ha_notifications/features/configuration.py` — typed `Alert`, `Configuration`, and `AlertRuntime` objects used by feature workflows and the storage boundary
+- `custom_components/ha_notifications/domain/template_values.py` — shared recursive template rendering and null removal for service-call configuration
+- `custom_components/ha_notifications/features/conditions.py` — visual condition model and condition rows -> Jinja template string
+- `custom_components/ha_notifications/domain/durations.py` — duration parse/format helpers
+- `custom_components/ha_notifications/support/storage.py` — structured config persistence, validation, and state-shape repair
+- `custom_components/ha_notifications/features/history.py` — history formatting, queries, deletion cleanup, and recording
 
 ## Frontend/editor surfaces
 - `frontend/api.ts` — API calls for listing/saving alerts (the only transport boundary)
@@ -48,11 +48,11 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 5. Only expand to wider reads if the root cause remains unclear.
 
 ## Good starting points by task
-- Save/edit lifecycle bug: `backend/config_flow.py`, `backend/support/storage.py`, `backend/bridge/websocket.py`
-- Runtime trigger or interval issue: `backend/features/conditions.py`, `backend/controller/core.py`
+- Save/edit lifecycle bug: `custom_components/ha_notifications/config_flow.py`, `custom_components/ha_notifications/support/storage.py`, `custom_components/ha_notifications/bridge/websocket.py`
+- Runtime trigger or interval issue: `custom_components/ha_notifications/features/conditions.py`, `custom_components/ha_notifications/controller/core.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
-- YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `backend/features/configuration.py`, `backend/support/storage.py`
-- Notification/confirmation flow: `backend/features/notification.py`, `backend/features/confirmation.py`, `backend/delivery/`, `backend/bridge/websocket.py`
+- YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `custom_components/ha_notifications/features/configuration.py`, `custom_components/ha_notifications/support/storage.py`
+- Notification/confirmation flow: `custom_components/ha_notifications/features/notification.py`, `custom_components/ha_notifications/features/confirmation.py`, `custom_components/ha_notifications/delivery/`, `custom_components/ha_notifications/bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.

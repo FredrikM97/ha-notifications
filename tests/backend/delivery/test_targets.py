@@ -1,6 +1,6 @@
 """Tests for notification target resolution."""
 
-from backend.delivery.targets import (
+from custom_components.ha_notifications.delivery.targets import (
     mobile_app_notify_services_for_target,
     resolve_target_devices,
     resolve_user_notification_target,

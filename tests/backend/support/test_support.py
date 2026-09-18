@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-PACKAGE_NAME = "backend"
+PACKAGE_NAME = "custom_components.ha_notifications"
 
 
 def ensure_package() -> None:

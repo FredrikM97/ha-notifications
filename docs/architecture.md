@@ -2,9 +2,9 @@
 
 HA Notifications uses a small controller composition root and direct feature workflows. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
 
-The authored integration source lives under `backend/`. The
-frontend build materializes `custom_components/ha_notifications` for local Home
-Assistant runs and HACS export; that generated runtime tree is not source.
+The authored integration source lives under `custom_components/ha_notifications/`.
+The frontend build adds the generated `dist/panel.js` bundle to that source tree
+for local Home Assistant runs and HACS export.
 
 ## Layer map
 
@@ -14,22 +14,22 @@ flowchart LR
     Store[HA Store and ConfigEntry options]
     Init[__init__.py\nHA lifecycle glue]
     Compose[__init__.py\nfeature construction]
-    Core[backend/controller/core.py\nlifecycle host and ordered workflows]
-    Life[backend/controller/lifecycle.py\nfeature setup/unload + scheduler]
-    WS[backend/bridge/websocket.py\nwebsocket transport]
-    Trigger[backend/features/conditions.py\nCondition evaluation and listeners]
-    Flow[backend/features/alert_flow.py\nordered alert effects]
-    Alerts[backend/features/alerts.py\nAlert queries]
-    Conditions[backend/features/conditions.py\nConditionConfig + compiler]
-    Confirm[backend/features/confirmation.py\nConfirmationConfig + sessions]
-    Testing[backend/features/testing.py\nSaved and draft alert tests]
-    Notify[backend/features/notification.py\nNotificationConfig + delivery plan]
-    Delivery[backend/delivery/\nrecipient/channel resolution]
-    Actions[backend/features/follow_up_actions.py\nservice-call plans]
-    History[backend/features/history.py\nhistory and persistence decisions]
-    Alert[backend/features/configuration.py\nAlert + Configuration + Runtime]
-    Shared[backend/domain/durations.py\nbackend duration normalization]
-    Storage[backend/support/storage.py\nConfigEntry options and runtime state shape]
+    Core[custom_components/ha_notifications/controller/core.py\nlifecycle host and ordered workflows]
+    Life[custom_components/ha_notifications/controller/lifecycle.py\nfeature setup/unload + scheduler]
+    WS[custom_components/ha_notifications/bridge/websocket.py\nwebsocket transport]
+    Trigger[custom_components/ha_notifications/features/conditions.py\nCondition evaluation and listeners]
+    Flow[custom_components/ha_notifications/features/alert_flow.py\nordered alert effects]
+    Alerts[custom_components/ha_notifications/features/alerts.py\nAlert queries]
+    Conditions[custom_components/ha_notifications/features/conditions.py\nConditionConfig + compiler]
+    Confirm[custom_components/ha_notifications/features/confirmation.py\nConfirmationConfig + sessions]
+    Testing[custom_components/ha_notifications/features/testing.py\nSaved and draft alert tests]
+    Notify[custom_components/ha_notifications/features/notification.py\nNotificationConfig + delivery plan]
+    Delivery[custom_components/ha_notifications/delivery/\nrecipient/channel resolution]
+    Actions[custom_components/ha_notifications/features/follow_up_actions.py\nservice-call plans]
+    History[custom_components/ha_notifications/features/history.py\nhistory and persistence decisions]
+    Alert[custom_components/ha_notifications/features/configuration.py\nAlert + Configuration + Runtime]
+    Shared[custom_components/ha_notifications/domain/durations.py\nbackend duration normalization]
+    Storage[custom_components/ha_notifications/support/storage.py\nConfigEntry options and runtime state shape]
     Front[frontend/api.ts + Lit UI]
 
     Init --> Compose

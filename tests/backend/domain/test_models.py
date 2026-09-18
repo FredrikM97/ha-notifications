@@ -5,14 +5,14 @@ from __future__ import annotations
 import unittest
 from datetime import timedelta
 
-from backend.domain.durations import (
+from custom_components.ha_notifications.domain.durations import (
     duration_seconds,
     parse_duration,
 )
-from backend.features.confirmation import (
+from custom_components.ha_notifications.features.confirmation import (
     ConfirmationConfig,
 )
-from backend.features.notification import (
+from custom_components.ha_notifications.features.notification import (
     NotificationConfig,
 )
 from tests.backend.conftest import alert_fixture

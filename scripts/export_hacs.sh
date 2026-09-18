@@ -15,6 +15,10 @@ rm -rf "$output_dir"
 mkdir -p "$output_dir"
 cp -R "$root_dir/custom_components" "$output_dir/custom_components"
 package_dir="$output_dir/custom_components/ha_notifications"
+if [ ! -f "$package_dir/manifest.json" ] || [ ! -f "$package_dir/__init__.py" ]; then
+	printf '%s\n' "Canonical integration source is incomplete: $package_dir" >&2
+	exit 1
+fi
 mkdir -p "$package_dir/dist"
 cp "$panel_file" "$package_dir/dist/panel.js"
 find "$output_dir/custom_components" -type d -name __pycache__ -prune -exec rm -rf {} +

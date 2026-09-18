@@ -1,0 +1,18 @@
+{
+  "domain": "ha_notifications",
+  "name": "HA Notifications",
+  "codeowners": ["@FredrikM97"],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/FredrikM97/ha-notifications",
+  "integration_type": "service",
+  "issue_tracker": "https://github.com/FredrikM97/ha-notifications/issues",
+  "iot_class": "calculated",
+  "single_config_entry": true,
+  "version": "0.0.0"
+}

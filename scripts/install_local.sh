@@ -13,10 +13,13 @@ else
   default_config_dir=""
 fi
 config_dir=${1:-${HA_CONFIG_DIR:-$default_config_dir}}
-source_dir="$root_dir/backend"
-manifest_file="$root_dir/manifest.json"
+source_dir="$root_dir/custom_components/ha_notifications"
+manifest_file="$source_dir/manifest.json"
 target_dir="$config_dir/custom_components/ha_notifications"
 panel_file="$root_dir/dist/panel.js"
+if [ ! -f "$panel_file" ]; then
+  panel_file="$source_dir/dist/panel.js"
+fi
 
 if [ ! -f "$manifest_file" ]; then
   printf '%s\n' "Integration manifest is missing: $manifest_file" >&2

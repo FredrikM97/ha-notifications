@@ -39,10 +39,10 @@ all = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*"]
+include = ["custom_components.ha_notifications*"]
 
 [tool.setuptools.package-data]
-backend = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
+custom_components.ha_notifications = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/backend"]

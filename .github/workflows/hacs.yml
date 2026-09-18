@@ -15,18 +15,6 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
-      - uses: "actions/setup-node@v5"
-        with:
-          node-version: "24"
-          cache: npm
-      - name: Prepare installable integration
-        run: |
-          npm ci
-          npm run package:hacs -- 0.0.0
-          rm -rf custom_components/ha_notifications
-          mkdir -p custom_components/ha_notifications
-          unzip -q ha-notifications.zip -d custom_components/ha_notifications
-          node -e 'const fs=require("fs"); const path="hacs.json"; const config=JSON.parse(fs.readFileSync(path)); delete config.content_in_root; fs.writeFileSync(path, JSON.stringify(config, null, 2)+"\n");'
       - name: HACS validation
         uses: "hacs/action@main"
         with:
@@ -36,15 +24,4 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
         - uses: "actions/checkout@v4"
-        - uses: "actions/setup-node@v5"
-          with:
-            node-version: "24"
-            cache: npm
-        - name: Prepare installable integration
-          run: |
-            npm ci
-            npm run package:hacs -- 0.0.0
-            rm -rf custom_components/ha_notifications
-            mkdir -p custom_components/ha_notifications
-            unzip -q ha-notifications.zip -d custom_components/ha_notifications
         - uses: "home-assistant/actions/hassfest@master"
