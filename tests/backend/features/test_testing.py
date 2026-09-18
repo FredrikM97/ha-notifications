@@ -76,6 +76,24 @@ async def test_editor_test_uses_the_same_attempt_loop(test_feature_context):
 
 
 @pytest.mark.asyncio
+async def test_editor_test_cleans_up_when_initial_delivery_fails(
+    test_feature_context, monkeypatch
+):
+    context = test_feature_context
+
+    async def fail_send(payload):
+        raise RuntimeError("delivery failed")
+
+    monkeypatch.setattr(context.notification, "send", fail_send)
+
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await context.feature.test_payload(context.alert)
+
+    assert context.feature._sessions == {}
+    assert context.confirmation._sessions == {}
+
+
+@pytest.mark.asyncio
 async def test_editor_test_delivery_contract_snapshot(test_feature_context, snapshot):
     context = test_feature_context
 
@@ -90,8 +108,8 @@ async def test_confirmation_stops_pending_test_reminders(test_feature_context):
     context = test_feature_context
 
     await context.feature.test_saved("alert_1")
-    session_id = next(iter(context.feature._draft_action_ids))
-    await context.confirmation.clear(context.feature._draft_action_ids[session_id])
+    session_id = next(iter(context.feature._sessions))
+    await context.confirmation.clear(context.feature._sessions[session_id].action_id)
     await context.run_reminders()
 
     assert [payload["attempt"] for payload in context.notification.payloads] == [1]

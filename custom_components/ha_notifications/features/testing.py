@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -24,6 +26,25 @@ def _required_alert_id(value: Any) -> str:
     return value
 
 
+@dataclass
+class TestSession:
+    alert: dict[str, Any]
+    action_id: str | None
+    attempts: int = 1
+    session_expiry_cancel: Callable[[], None] | None = None
+    reminder_cancel: Callable[[], None] | None = None
+    action_expiry_cancel: Callable[[], None] | None = None
+
+    def cancel_timers(self) -> None:
+        for cancel in (
+            self.session_expiry_cancel,
+            self.reminder_cancel,
+            self.action_expiry_cancel,
+        ):
+            if cancel:
+                cancel()
+
+
 class TestFeature(FeatureBase):
     """Coordinate explicitly requested test delivery without owning sessions."""
 
@@ -39,26 +60,12 @@ class TestFeature(FeatureBase):
     ) -> None:
         super().__init__()
         self._hass = hass
-        self._draft_callbacks: dict[str, Callable[[], None]] = {}
-        self._reminder_callbacks: dict[str, Callable[[], None]] = {}
-        self._test_expiry_callbacks: dict[str, Callable[[], None]] = {}
-        self._draft_attempts: dict[str, int] = {}
-        self._draft_alerts: dict[str, dict[str, Any]] = {}
-        self._draft_action_ids: dict[str, str | None] = {}
+        self._sessions: dict[str, TestSession] = {}
 
     async def on_unload(self) -> None:
-        for cancel in self._draft_callbacks.values():
-            cancel()
-        self._draft_callbacks.clear()
-        for cancel in self._reminder_callbacks.values():
-            cancel()
-        self._reminder_callbacks.clear()
-        for cancel in self._test_expiry_callbacks.values():
-            cancel()
-        self._test_expiry_callbacks.clear()
-        self._draft_attempts.clear()
-        self._draft_alerts.clear()
-        self._draft_action_ids.clear()
+        for session in self._sessions.values():
+            session.cancel_timers()
+        self._sessions.clear()
 
     @websocket_route(
         "testing.saved",
@@ -80,18 +87,16 @@ class TestFeature(FeatureBase):
         if alert is None:
             raise ValueError(f"Unknown alert: {alert_id}")
         action_id = await self._prepare_test_action(alert)
-        await self.feature("notification").send(
-            {
-                "alert": alert,
-                "attempt": 1,
-                "confirmation_action_id": action_id,
-                "replace_existing": False,
-                "test": True,
-                "now": dt_util.utcnow(),
-            }
-        )
+        try:
+            await self._send_test_notification(alert, action_id)
+        except Exception:
+            if action_id:
+                await self.feature("confirmation").clear(action_id)
+            raise
         if action_id:
-            self._register_test_reminders(action_id, alert, action_id)
+            self._register_test_session(
+                action_id, alert, action_id, expires_action=True
+            )
         return True
 
     async def _prepare_test_action(self, alert: dict[str, Any]) -> str | None:
@@ -118,46 +123,80 @@ class TestFeature(FeatureBase):
         """Send an unsaved editor draft without modifying saved state."""
 
         draft_alert = Alert.model_validate(alert).model_dump(exclude_none=True)
-        sessions = await self._create_draft(draft_alert)
-        await self.feature("notification").send(
-            {
-                "alert": {**draft_alert, "id": sessions["session_id"]},
-                "attempt": 1,
-                "confirmation_action_id": sessions["confirmation_action_id"],
-                "replace_existing": False,
-                "test": True,
-                "now": dt_util.utcnow(),
-            }
+        session = await self._create_draft_session(draft_alert)
+        try:
+            await self._send_test_notification(
+                {**draft_alert, "id": session["session_id"]},
+                session["confirmation_action_id"],
+            )
+        except Exception:
+            await self.discard_payload(session["session_id"])
+            raise
+        self._register_test_session(
+            session["session_id"],
+            {**draft_alert, "id": session["session_id"]},
+            session["confirmation_action_id"],
         )
-        self._register_test_reminders(
-            sessions["session_id"],
-            {**draft_alert, "id": sessions["session_id"]},
-            sessions["confirmation_action_id"],
-        )
-        return sessions
+        return session
 
-    def _register_test_reminders(
+    def _register_test_session(
         self,
         session_id: str,
         alert: dict[str, Any],
         action_id: str | None,
+        *,
+        expires_action: bool = False,
     ) -> None:
-        """Track and schedule attempts for either kind of test notification."""
+        """Track and schedule attempts for a saved or draft test."""
 
-        self._draft_attempts[session_id] = 1
-        self._draft_alerts[session_id] = alert
-        self._draft_action_ids[session_id] = action_id
-        if action_id == session_id:
-            self._test_expiry_callbacks[session_id] = async_call_later(
-                self._hass,
+        session = self._sessions.setdefault(
+            session_id, TestSession(alert=alert, action_id=action_id)
+        )
+        session.alert = alert
+        session.action_id = action_id
+        session.attempts = 1
+        if expires_action and action_id is not None:
+            session.action_expiry_cancel = self._schedule(
                 DRAFT_SESSION_TTL,
-                lambda _now: self._hass.async_create_task(
-                    self._expire_test_action(session_id, action_id)
-                ),
+                lambda: self._expire_test_action(session_id, action_id),
             )
-        self._schedule_draft_reminder(session_id)
+        self._schedule_reminder(session_id)
 
-    async def _create_draft(self, alert: dict[str, Any]) -> dict[str, str | None]:
+    async def _send_test_notification(
+        self,
+        alert: dict[str, Any],
+        action_id: str | None,
+        *,
+        attempt: int = 1,
+        replace_existing: bool = False,
+    ) -> None:
+        await self.feature("notification").send(
+            {
+                "alert": alert,
+                "attempt": attempt,
+                "confirmation_action_id": action_id,
+                "replace_existing": replace_existing,
+                "test": True,
+                "now": dt_util.utcnow(),
+            }
+        )
+
+    def _schedule(
+        self,
+        delay: timedelta,
+        operation: Callable[[], Awaitable[None]],
+    ) -> Callable[[], None]:
+        """Run an async operation from Home Assistant's sync timer callback."""
+
+        return async_call_later(
+            self._hass,
+            delay,
+            lambda _now: self._hass.async_create_task(operation()),
+        )
+
+    async def _create_draft_session(
+        self, alert: dict[str, Any]
+    ) -> dict[str, str | None]:
         now = dt_util.utcnow()
         session_id = f"NC_DRAFT_{uuid4().hex}"
         draft_alert = {**alert, "id": session_id}
@@ -167,14 +206,6 @@ class TestFeature(FeatureBase):
             draft_alert=draft_alert,
             ttl=DRAFT_SESSION_TTL,
         )
-        self._draft_callbacks[session_id] = async_call_later(
-            self._hass,
-            DRAFT_SESSION_TTL,
-            lambda _now: self._hass.async_create_task(
-                self._expire_draft(session_id)
-            ),
-        )
-
         action_id = None
         confirmation = confirmation_for_alert(draft_alert)
         if confirmation and confirmation.enabled:
@@ -185,16 +216,23 @@ class TestFeature(FeatureBase):
                 draft_alert=draft_alert,
                 ttl=DRAFT_SESSION_TTL,
             )
+        self._sessions[session_id] = TestSession(
+            alert=draft_alert,
+            action_id=action_id,
+            session_expiry_cancel=self._schedule(
+                DRAFT_SESSION_TTL, lambda: self._expire_session(session_id)
+            ),
+        )
         return {"session_id": session_id, "confirmation_action_id": action_id}
 
-    async def _expire_draft(self, session_id: str) -> None:
+    async def _expire_session(self, session_id: str) -> None:
         await self.discard_payload(session_id)
 
-    def _schedule_draft_reminder(self, session_id: str) -> None:
-        alert = self._draft_alerts.get(session_id)
-        if alert is None:
+    def _schedule_reminder(self, session_id: str) -> None:
+        session = self._sessions.get(session_id)
+        if session is None:
             return
-        confirmation = confirmation_for_alert(alert)
+        confirmation = confirmation_for_alert(session.alert)
         if (
             confirmation is None
             or not confirmation.enabled
@@ -202,68 +240,51 @@ class TestFeature(FeatureBase):
         ):
             return
         interval = parse_duration(confirmation.reminders.interval)
-        if interval is None or self._draft_attempts.get(session_id, 0) >= int(
+        if interval is None or session.attempts >= int(
             confirmation.reminders.max_attempts or 1
         ):
             return
-        previous = self._reminder_callbacks.pop(session_id, None)
-        if previous:
-            previous()
-        self._reminder_callbacks[session_id] = async_call_later(
-            self._hass,
-            interval,
-            lambda _now: self._hass.async_create_task(
-                self._send_draft_reminder(session_id)
-            ),
+        if session.reminder_cancel:
+            session.reminder_cancel()
+        session.reminder_cancel = self._schedule(
+            interval, lambda: self._send_reminder(session_id)
         )
 
-    async def _send_draft_reminder(self, session_id: str) -> None:
-        self._reminder_callbacks.pop(session_id, None)
-        alert = self._draft_alerts.get(session_id)
-        if alert is None:
+    async def _send_reminder(self, session_id: str) -> None:
+        session = self._sessions.get(session_id)
+        if session is None:
             return
-        confirmation = confirmation_for_alert(alert)
-        current_attempt = self._draft_attempts.get(session_id, 0)
+        session.reminder_cancel = None
+        confirmation = confirmation_for_alert(session.alert)
+        current_attempt = session.attempts
         max_attempts = (
             int(confirmation.reminders.max_attempts or 1)
             if confirmation
             else 1
         )
-        action_id = self._draft_action_ids.get(session_id)
+        action_id = session.action_id
         if action_id and not self.feature("confirmation").has_pending(action_id):
-            self._draft_alerts.pop(session_id, None)
-            self._draft_action_ids.pop(session_id, None)
-            self._draft_attempts.pop(session_id, None)
+            self._remove_session(session_id)
             return
         if confirmation is None or current_attempt >= max_attempts:
             return
         try:
-            await self.feature("notification").send(
-                {
-                    "alert": alert,
-                    "attempt": current_attempt + 1,
-                    "confirmation_action_id": action_id,
-                    "replace_existing": True,
-                    "test": True,
-                    "now": dt_util.utcnow(),
-                }
+            await self._send_test_notification(
+                session.alert,
+                action_id,
+                attempt=current_attempt + 1,
+                replace_existing=True,
             )
         except Exception:
-            self._schedule_draft_reminder(session_id)
+            self._schedule_reminder(session_id)
             return
-        self._draft_attempts[session_id] = current_attempt + 1
-        self._schedule_draft_reminder(session_id)
+        session.attempts = current_attempt + 1
+        self._schedule_reminder(session_id)
 
     async def _expire_test_action(
         self, session_id: str, action_id: str
     ) -> None:
-        self._test_expiry_callbacks.pop(session_id, None)
-        cancel = self._reminder_callbacks.pop(session_id, None)
-        if cancel:
-            cancel()
-        self._draft_attempts.pop(session_id, None)
-        self._draft_alerts.pop(session_id, None)
-        self._draft_action_ids.pop(session_id, None)
+        self._remove_session(session_id)
         await self.feature("confirmation").clear(action_id)
 
     @websocket_route(
@@ -277,14 +298,11 @@ class TestFeature(FeatureBase):
         """Dispose a draft and any confirmation action bound to it."""
 
         now = dt_util.utcnow()
-        cancel = self._draft_callbacks.pop(session_id, None)
-        if cancel:
-            cancel()
-        reminder_cancel = self._reminder_callbacks.pop(session_id, None)
-        if reminder_cancel:
-            reminder_cancel()
-        self._draft_attempts.pop(session_id, None)
-        self._draft_alerts.pop(session_id, None)
-        self._draft_action_ids.pop(session_id, None)
+        self._remove_session(session_id)
         await self.feature("confirmation").discard_draft(session_id, now)
         return True
+
+    def _remove_session(self, session_id: str) -> None:
+        session = self._sessions.pop(session_id, None)
+        if session:
+            session.cancel_timers()
