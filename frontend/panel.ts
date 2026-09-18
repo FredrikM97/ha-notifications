@@ -311,7 +311,9 @@ class HaNotificationsPanel extends LitElement {
   private headerTemplate(): TemplateResult {
     return html`<div class="nc-header">
       <div class="nc-title">
-        <div class="nc-title-icon">🔔</div>
+        <div class="nc-title-icon">
+          <ha-icon icon="mdi:bell-badge"></ha-icon>
+        </div>
         <div>
           <h1>HA Notifications</h1>
           <p>Manage alerts, notifications and debug history.</p>
