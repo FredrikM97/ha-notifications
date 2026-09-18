@@ -49,6 +49,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view dev >/dev/null 2>&1; then
+            gh release delete dev --yes --cleanup-tag
+          fi
           git tag -f dev
           git push -f origin dev
           last_stable=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
@@ -58,8 +61,6 @@ jobs:
             commit_count="N/A"
           fi
           notes="Development build from main branch."$'\n\n'"**Build**: $(date -u '+%Y-%m-%d %H:%M UTC')"$'\n'"**Commit**: $(git rev-parse --short HEAD)"$'\n'"**Changes**: $commit_count commits since the last stable release"
-          if ! gh release view dev >/dev/null 2>&1; then
-            gh release create dev --title "Dev Release" --notes "$notes" --prerelease
-          fi
+          gh release create dev --title "Dev Release" --notes "$notes" --prerelease
           gh release upload dev ha-notifications.zip --clobber
           gh release edit dev --notes "$notes" --prerelease
