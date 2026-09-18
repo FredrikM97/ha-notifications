@@ -308,6 +308,7 @@ ha-code-editor.nc-code-editor {
   display: block;
   max-width: 100%;
   min-width: 0;
+  --nc-code-editor-height: min(650px, 70vh);
   overflow: hidden;
 }
 
@@ -647,6 +648,11 @@ ha-code-editor.nc-code-editor .cm-scroller {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
+}
+
+ha-code-editor.nc-yaml-editor {
+  height: min(650px, 70vh);
+  max-height: min(650px, 70vh);
 }
 
 .nc-modal-backdrop {
@@ -1555,6 +1561,7 @@ ha-code-editor.nc-action-editor {
 
   .nc-code-editor,
   ha-code-editor.nc-alert-yaml-editor {
+    --nc-code-editor-height: min(420px, 62vh);
     min-height: min(420px, 62vh);
   }
 
@@ -1748,6 +1755,7 @@ ha-code-editor.nc-action-editor {
 
   .nc-code-editor,
   ha-code-editor.nc-alert-yaml-editor {
+    --nc-code-editor-height: min(420px, 62vh);
     min-height: min(420px, 62vh);
   }
 
@@ -1818,6 +1826,8 @@ ha-code-editor.nc-alert-yaml-editor {
   --code-editor-background-color: var(--secondary-background-color);
   --code-editor-gutter-color: var(--secondary-background-color);
   display: block;
+  height: min(650px, 70vh);
+  max-height: min(650px, 70vh);
   min-height: min(650px, 70vh);
 }
 `;

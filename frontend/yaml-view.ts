@@ -8,6 +8,7 @@ import {
 } from "./api.js";
 import { html, render } from "lit";
 import type { Hass } from "./types.js";
+import { constrainCodeEditor } from "./editor/helpers.js";
 
 type Toast = (message: string, error?: boolean) => void;
 
@@ -35,6 +36,7 @@ export function renderYamlView(
       const config = await getConfig(hass);
       await customElements.whenDefined("ha-code-editor");
       await editor.updateComplete;
+      constrainCodeEditor(editor);
       editor.value = stringify(config);
     } catch (err) {
       showToast(errorMessage(err), true);

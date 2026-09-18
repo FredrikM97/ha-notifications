@@ -240,16 +240,23 @@ export async function fillActionEditors(host: HTMLElement): Promise<void> {
 
   for (const editor of editors) {
     await editor.updateComplete;
-    const codeMirror = editor.codemirror?.dom;
-    if (!codeMirror || !editor.isConnected) continue;
-
-    editor.style.height = "280px";
-    codeMirror.style.height = "100%";
-    const scroller = codeMirror.querySelector(
-      ".cm-scroller",
-    ) as HTMLElement | null;
-    if (scroller) scroller.style.height = "100%";
+    constrainCodeEditor(editor, "280px");
   }
+}
+
+export function constrainCodeEditor(
+  editor: CodeEditor,
+  height = "var(--nc-code-editor-height)",
+): void {
+  const codeMirror = editor.codemirror?.dom;
+  if (!codeMirror || !editor.isConnected) return;
+
+  if (height) editor.style.height = height;
+  codeMirror.style.height = "100%";
+  const scroller = codeMirror.querySelector(
+    ".cm-scroller",
+  ) as HTMLElement | null;
+  if (scroller) scroller.style.height = "100%";
 }
 
 export function field(
@@ -384,6 +391,7 @@ export function showYaml(root: ShadowRoot, alert: Alert): void {
   if (!editor) throw new Error("Missing alert YAML editor");
   void customElements.whenDefined("ha-code-editor").then(async () => {
     await editor.updateComplete;
+    constrainCodeEditor(editor);
     editor.value = YAML.stringify(alert);
   });
 }
