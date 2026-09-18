@@ -14,17 +14,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
-    "homeassistant>=2025.1",
-    "home-assistant-frontend==20250109.2",
-    "pytest-homeassistant-custom-component==0.13.205",
-    "syrupy==4.8.0",
-]
-quality = [
-    "ruff>=0.8",
-]
 all = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
@@ -35,14 +24,9 @@ all = [
     "ruff>=0.8",
 ]
 
-[tool.setuptools]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["custom_components.ha_notifications*"]
-
-[tool.setuptools.package-data]
-custom_components.ha_notifications = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/backend"]

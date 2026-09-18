@@ -6,7 +6,7 @@ Install the Node and Python development dependencies from the repository root:
 
 ```bash
 npm ci
-python3 -m pip install -e ".[test]"
+python3 -m pip install -e ".[all]"
 ```
 
 Run the complete local validation suite:
