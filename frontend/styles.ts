@@ -990,6 +990,17 @@ ha-code-editor.nc-code-editor .cm-scroller {
   gap: 22px;
 }
 
+.nc-notification-delivery-options {
+  display: grid;
+  gap: 12px;
+}
+
+.nc-notification-delivery-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .nc-field {
   display: grid;
   gap: 10px;

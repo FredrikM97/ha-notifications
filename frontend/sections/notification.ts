@@ -86,3 +86,35 @@ export function renderNotificationSection(
       </div>`,
   );
 }
+
+export function renderNotificationDeliverySection(
+  context: EditorContext,
+): TemplateResult {
+  const ttlEnabled = context.value.notification.ttl !== false;
+  return section(
+    "Mobile delivery",
+    html`<div class="nc-notification-delivery-options">
+      <div class="nc-notification-delivery-option">
+        ${field(
+          html`<span class="nc-field-heading">
+            <ha-switch
+              .checked=${ttlEnabled}
+              @change=${(event: Event) => {
+                context.value.notification.ttl = (
+                  event.currentTarget as HTMLInputElement
+                ).checked;
+                context.markDirty();
+                context.refreshStatuses();
+              }}
+            ></ha-switch>
+            <span>TTL 0 for original delivery</span>
+          </span>`,
+          html`<div class="nc-help">
+            Requests fast Mobile App delivery for the original notification.
+            Confirmation messages and reminders use normal delivery.
+          </div>`,
+        )}
+      </div>
+    </div>`,
+  );
+}

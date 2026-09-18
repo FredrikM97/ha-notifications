@@ -64,6 +64,7 @@ export interface AlertNotificationFormValues {
   target: NotificationTarget;
   title: string;
   message: string;
+  ttl: boolean;
 }
 
 export interface AlertConfirmationFormValues {
@@ -146,6 +147,11 @@ export function buildAlertPayload(
     title: values.notification.title,
     message: values.notification.message,
   };
+  if (values.notification.ttl) {
+    result.notification.ttl = true;
+  } else {
+    delete result.notification.ttl;
+  }
   result.confirmation = values.confirmation;
 
   if (original.notification?.data) {

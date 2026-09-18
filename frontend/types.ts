@@ -63,6 +63,7 @@ export interface NotificationConfig {
   target: NotificationTarget;
   title: string;
   message: string;
+  ttl?: boolean;
   data?: Record<string, unknown>;
 }
 

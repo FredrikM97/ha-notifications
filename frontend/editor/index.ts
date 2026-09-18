@@ -40,6 +40,7 @@ import {
   renderConfirmationReminderSection,
   renderMonitorSection,
   renderNotificationSection,
+  renderNotificationDeliverySection,
   renderPostConfirmationActionsSection,
   renderPostSendActionsSection,
   renderRecipientSection,
@@ -159,6 +160,7 @@ class AlertEditorController {
       validateActions: this.validateActions,
     };
     this.optionalSettings = {
+      ttl: true,
       confirmation: true,
       confirmationReminder: true,
       confirmationNotification: true,
@@ -230,6 +232,18 @@ class AlertEditorController {
               </div>
             </div>
             <div class="nc-editor-section-controls">
+              ${editorSectionControl(
+                "ttl",
+                optionalControls(
+                  context,
+                  this.value.notification.ttl !== false,
+                  "TTL",
+                  (enabled) => {
+                    this.value.notification.ttl = enabled;
+                    this.markDirty();
+                  },
+                ),
+              )}
               ${editorSectionControl(
                 "postSendActions",
                 optionalControls(
@@ -320,6 +334,13 @@ class AlertEditorController {
                 )}${renderRecipientSection()}${renderNotificationSection(
                   context,
                 )}
+                <div
+                  class="nc-optional-setting"
+                  data-setting="ttl"
+                  ?hidden=${!optionalSettings.ttl}
+                >
+                  ${renderNotificationDeliverySection(context)}
+                </div>
                 <div
                   class="nc-optional-setting"
                   data-setting="postSendActions"
@@ -438,6 +459,7 @@ class AlertEditorController {
       confirmationNotification: Boolean(
         value.confirmation?.enabled && value.confirmation.notification.enabled,
       ),
+      ttl: value.notification.ttl !== false,
     };
     this.host
       .querySelectorAll<HTMLElement>(".nc-section-status")
@@ -515,7 +537,9 @@ class AlertEditorController {
         if (!switchElement || !state) return;
 
         let enabled = false;
-        if (control.dataset.setting === "postSendActions") {
+        if (control.dataset.setting === "ttl") {
+          enabled = this.value.notification.ttl !== false;
+        } else if (control.dataset.setting === "postSendActions") {
           enabled = Boolean(this.value.post_send_actions?.enabled);
         } else if (control.dataset.setting === "confirmation") {
           enabled = Boolean(this.value.confirmation?.enabled);
@@ -819,6 +843,7 @@ class AlertEditorController {
         target: this.recipients.target(),
         title: value.notification.title,
         message: value.notification.message,
+        ttl: value.notification.ttl !== false,
       },
       confirmation: {
         enabled: Boolean(confirmation.enabled),

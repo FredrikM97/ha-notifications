@@ -234,6 +234,7 @@ class AlertFlow(FeatureBase):
                     "replace_existing": False,
                     "test": result.test,
                     "now": result.now,
+                    "trigger_source": "confirmation",
                 }
             )
         except Exception as err:
