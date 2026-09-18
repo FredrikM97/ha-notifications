@@ -36,7 +36,7 @@ if printf '%s\n' "$archive_entries" | grep -q '^custom_components/'; then
 	printf '%s\n' "HACS archive must contain the integration at its root" >&2
 	exit 1
 fi
-for required_entry in manifest.json __init__.py dist/panel.js; do
+for required_entry in manifest.json __init__.py dist/panel.js brand/icon.png; do
 	if ! printf '%s\n' "$archive_entries" | grep -Fxq "$required_entry"; then
 		printf '%s\n' "HACS archive is missing root entry: $required_entry" >&2
 		exit 1

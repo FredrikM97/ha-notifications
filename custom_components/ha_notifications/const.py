@@ -78,7 +78,9 @@ class TransitionKind(StrEnum):
 
 
 class ConditionType(StrEnum):
-    """Visual/template condition discriminator (`backend/features/conditions.py`).
+    """Visual/template condition discriminator.
+
+    See `custom_components/ha_notifications/features/conditions.py`.
     """
 
     TEMPLATE = "template"
