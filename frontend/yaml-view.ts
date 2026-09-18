@@ -10,7 +10,6 @@ import { html, LitElement, render } from "lit";
 import { ref } from "lit/directives/ref.js";
 import type { Hass } from "./types.js";
 import { constrainCodeEditor } from "./editor/helpers.js";
-
 type Toast = (message: string, error?: boolean) => void;
 
 type CodeEditor = HTMLElement & {
@@ -187,26 +186,4 @@ class YamlViewElement extends LitElement {
       this.renderImmediately();
     }
   };
-}
-
-export function renderYamlView(
-  container: HTMLElement,
-  hass: Hass,
-  showToast: Toast,
-  refresh: () => Promise<void>,
-): void {
-  let element: YamlViewElement | undefined;
-  render(
-    html`<ha-notifications-yaml-view
-      .hass=${hass}
-      .showToast=${showToast}
-      .refreshPanel=${refresh}
-      ${ref((value) => {
-        element = value as YamlViewElement;
-      })}
-    ></ha-notifications-yaml-view>`,
-    container,
-  );
-  element?.renderImmediately();
-  void element?.load();
 }

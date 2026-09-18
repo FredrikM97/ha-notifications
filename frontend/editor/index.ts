@@ -37,18 +37,16 @@ import {
   valueOf,
 } from "./helpers.js";
 import { toastListTemplate, type Toast } from "../toast.js";
-import {
-  renderBasicSection,
-  renderConditionSection,
-  renderConfirmationSection,
-  renderConfirmationNotificationSection,
-  renderConfirmationReminderSection,
-  renderMonitorSection,
-  renderNotificationSection,
-  renderPostConfirmationActionsSection,
-  renderPostSendActionsSection,
-  renderRecipientSection,
-} from "../sections.js";
+import { renderBasicSection } from "../sections/basic.js";
+import { renderConditionSection } from "../sections/condition.js";
+import { renderConfirmationSection } from "../sections/confirmation.js";
+import { renderConfirmationNotificationSection } from "../sections/confirmation-notification.js";
+import { renderConfirmationReminderSection } from "../sections/confirmation-reminder.js";
+import { renderMonitorSection } from "../sections/monitor.js";
+import { renderNotificationSection } from "../sections/notification.js";
+import { renderPostConfirmationActionsSection } from "../sections/post-confirmation-actions.js";
+import { renderPostSendActionsSection } from "../sections/post-send-actions.js";
+import { renderRecipientSection } from "../sections/recipients.js";
 
 interface OpenEditorOptions {
   root: ShadowRoot;
