@@ -14,11 +14,7 @@ const, models = load_const_and_models()
 
 class ConfigContractTests(unittest.TestCase):
     def test_ui_config_flow_is_registered(self):
-        manifest_path = (
-            Path(__file__).parents[3]
-            / "backend"
-            / "manifest.json"
-        )
+        manifest_path = Path(__file__).parents[3] / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
 
         self.assertTrue(manifest["config_flow"])

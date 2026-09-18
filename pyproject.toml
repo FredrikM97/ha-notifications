@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ha-notifications"
 version = "0.4.0"
 description = "Home Assistant HA Notifications custom integration"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7,<3",

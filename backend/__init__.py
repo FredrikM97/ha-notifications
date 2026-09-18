@@ -16,6 +16,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import (
     HomeAssistantError,
 )
+from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CONF_SHOW_SIDEBAR,
@@ -26,6 +27,8 @@ from .const import (
 from .controller.core import HaNotificationsController
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SERVICE_TEST_SCHEMA = vol.Schema(
     {

@@ -1,1 +1,18 @@
-backend/manifest.json
+{
+  "domain": "ha_notifications",
+  "name": "HA Notifications",
+  "version": "0.0.0",
+  "documentation": "https://github.com/FredrikM97/ha-notifications",
+  "issue_tracker": "https://github.com/FredrikM97/ha-notifications/issues",
+  "codeowners": ["@FredrikM97"],
+  "config_flow": true,
+  "single_config_entry": true,
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ]
+}
