@@ -180,7 +180,7 @@ class AlertFeature(FeatureBase):
                 alert, dt_util.utcnow()
             )
 
-        config = await self._config_storage.load_config()
+        config = dict(await self._config_storage.load_config())
         config["alerts"] = [
             item for item in config["alerts"] if item["id"] != alert_id
         ]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 from custom_components.ha_notifications.const import STATE_RUNTIME
 from custom_components.ha_notifications.features.alerts import AlertFeature
@@ -116,7 +116,7 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
             self.saved = []
 
         async def load_config(self):
-            return self.config
+            return MappingProxyType(self.config)
 
         async def save_config(self, config):
             self.saved.append(config)
