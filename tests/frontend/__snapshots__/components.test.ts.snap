@@ -57,9 +57,10 @@ exports[`alert editor interactions > opens template help in a modal from the not
         <main class="nc-modal-body"><div class="nc-help">
           Recipients on selected devices, areas, floors, and labels receive
           direct notifications through Home Assistant's standard Notify
-          service. In the message or title, use <code>condition.id</code> and
-          <code>trigger</code> to choose text, for example
-          <code>{% if condition.front_door %}Door open{% endif %}</code>.
+          service. Give conditions an ID in the Condition view, then use that
+          ID in the message or title to choose text. For example:
+          <code>{% if condition.front_door %}Door open{% elif
+            condition.garage %}Garage open{% else %}All clear{% endif %}</code>.
         </div>
         <div class="nc-help">
           <code>alert_id</code>, <code>alert_name</code>,
