@@ -2,9 +2,42 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Awaitable, Callable
 
+from .confirmation import ConfirmationContext
+
 TemplateRenderer = Callable[[str, dict[str, Any]], Awaitable[Any]]
+
+
+def template_context(
+    alert: Mapping[str, Any],
+    attempt: int,
+    now: Any,
+    test: bool,
+    *,
+    notification_id: str | None = None,
+    condition_facts: Mapping[str, bool] | None = None,
+    trigger: str = "",
+    confirmation: ConfirmationContext | None = None,
+) -> dict[str, Any]:
+    """Build the common template context at the rendering boundary."""
+
+    values: dict[str, Any] = {
+        "alert_id": alert["id"],
+        "alert_name": alert["name"],
+        "alert_active": True,
+        "attempt": attempt,
+        "test": test,
+        "now": now,
+        "notification_id": notification_id or f"ha_notifications_{alert['id']}",
+        "conditions": dict(condition_facts or {}),
+        "condition": dict(condition_facts or {}),
+        "trigger": trigger,
+    }
+    if confirmation:
+        values.update(confirmation.template_values())
+    return values
 
 
 async def render_template_values(

@@ -158,8 +158,7 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
         state["runtime"]["alert_1"] = {"flow_id": "flow_1"}
         self.assertTrue(
-            feature.record_event(
-                state["runtime"]["alert_1"],
+            feature.record(
                 alert,
                 "test",
                 "Test",

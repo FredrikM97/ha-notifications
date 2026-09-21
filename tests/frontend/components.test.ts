@@ -165,6 +165,20 @@ describe("alert editor interactions", () => {
     },
   );
 
+  it("adds and removes confirmation response buttons", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const user = testUser();
+    openEditor(editorOptions(root));
+
+    await user.click(queries.getAllByRole("button", { name: /Confirmation/ })[0]);
+    await user.click(queries.getByRole("button", { name: "Add response button" }));
+
+    expect(queries.getByRole("button", { name: "Remove button" })).not.toBeNull();
+    await user.click(queries.getByRole("button", { name: "Remove button" }));
+    expect(root.querySelectorAll(".nc-confirmation-button-row")).toHaveLength(1);
+  });
+
   it("switches active sections and keeps the contextual title", async () => {
     const root = editorRoot();
     const queries = editorQueries(root);

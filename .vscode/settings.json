@@ -11,5 +11,14 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}"
   ],
-  "python-envs.defaultEnvManager": "ms-python.python:system"
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "workbench.colorCustomizations": {
+                    "commandCenter.activeForeground": "#000000",
+                    "commandCenter.foreground": "#000000",
+                    "titleBar.activeBackground": "#a6fa8b",
+                    "titleBar.activeForeground": "#132123",
+                    "titleBar.inactiveBackground": "#a6fa8b",
+                    "titleBar.inactiveForeground": "#132123"
+                },
+                "workbench.experimental.modernUI": false
 }

@@ -29,6 +29,8 @@ flowchart LR
     History[custom_components/ha_notifications/features/history.py\nhistory and persistence decisions]
     Alert[custom_components/ha_notifications/features/configuration.py\nAlert + Configuration + Runtime]
     Shared[custom_components/ha_notifications/domain/durations.py\nbackend duration normalization]
+    ConfirmValue[custom_components/ha_notifications/domain/confirmation.py\nconfirmation contexts and response selections]
+    NotificationValue[custom_components/ha_notifications/domain/notification.py\nnotification delivery outcomes]
     Storage[custom_components/ha_notifications/support/storage.py\nConfigEntry options and runtime state shape]
     Front[frontend/api.ts + Lit UI]
 
@@ -48,6 +50,11 @@ flowchart LR
     Core --> Notify
     Core --> Actions
     Core --> History
+    Flow --> ConfirmValue
+    Notify --> ConfirmValue
+    Actions --> ConfirmValue
+    Notify --> NotificationValue
+    Flow --> NotificationValue
     Alert --> Trigger
     Alert --> Confirm
     Alert --> Notify
@@ -93,6 +100,8 @@ flowchart LR
 - `domain/template_values.py` owns recursive configuration-template rendering and null removal before service calls.
 - `features/history.py` owns history entry formatting, queries, deletion cleanup, recording, and runtime history mutation. Workflows call it directly; history does not depend on subscriber ordering.
 - `features/configuration.py` owns the flat `Alert`, `Configuration`, and `AlertRuntime` models because they compose the persisted document and runtime boundary. Each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model. `domain/` contains only shared value behavior.
+- `domain/confirmation.py` owns immutable confirmation contexts and response selections passed between workflows; it does not own confirmation configuration, sessions, or persistence.
+- `domain/notification.py` owns immutable notification delivery outcomes passed to ordered workflows; it does not own delivery or runtime state.
 - `features/conditions.py` owns `MonitorConfig`, watcher settings, and condition decisions.
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
 - `features/confirmation.py` owns `ConfirmationConfig` and confirmation sessions; `features/alert_flow.py` owns confirmation effect ordering.

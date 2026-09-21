@@ -43,6 +43,13 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 
 ## Required behavior for changes
 - Verify imports and referenced files actually exist.
+- Keep imports at module scope. Do not add lazy imports inside functions or
+  methods; only retain them when required to break a documented import cycle,
+  support an optional dependency, or preserve lifecycle discovery behavior.
+- Do not add test-only spies, ordering trackers, fake state, or compatibility
+  scaffolding to production source. Test-only behavior belongs in test doubles,
+  fixtures, and helpers under `tests/`; production code should contain only
+  behavior required by the application.
 - Before architectural changes, verify the current filesystem and symbol locations; do not rely on stale paths or prior names in notes, summaries, or diagrams.
 - Validate Python syntax after code changes.
 - Every new frontend or backend feature must include focused automated tests in the same change. Bug fixes must add or update a regression test for the reported behavior whenever the owning code can be tested.
@@ -76,6 +83,10 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   benefit from decoupling, and keep event payloads and failure behavior explicit.
 - Treat feature routes as frontend transport only. Backend feature workflows call
   their declared class dependencies directly, never through string route dispatch.
+- When the user explicitly approves a structural migration, it is acceptable to
+  break the old internal or persisted contract. Prefer one canonical model and
+  migrate all producers, consumers, fixtures, and tests together; do not keep
+  parallel legacy branches merely to avoid a coordinated change.
 - Do not use `FeatureServices`, service locators, or callback bags. Construct
   each feature with explicit dependencies and the state-machine object it owns.
 - Feature classes may use Home Assistant directly for their owned framework

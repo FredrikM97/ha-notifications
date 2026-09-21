@@ -28,8 +28,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..const import ConditionType, TransitionKind
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from ..domain.durations import parse_duration
+from ..domain.durations import duration_seconds, parse_duration
 from ..support.templates import render_template
+from .confirmation import clear_pending_actions, pending_action_ids
 
 
 class MonitorConfig(BaseModel):
@@ -44,8 +45,6 @@ class MonitorConfig(BaseModel):
     @field_validator("interval", mode="before")
     @classmethod
     def _normalize_interval(cls, value: Any) -> Any:
-        from ..domain.durations import duration_seconds
-
         return duration_seconds(value)
 
 
@@ -70,10 +69,14 @@ class ConditionWatchers:
             [str, bool | None, str | None, str], None
         ],
         on_check: Callable[[str, str], None],
+        confirmation_interval: Callable[
+            [dict[str, Any]], timedelta | None
+        ] = lambda _alert: None,
     ) -> None:
         self._hass = hass
         self._on_condition_result = on_condition_result
         self._on_check = on_check
+        self._confirmation_interval = confirmation_interval
         self._unsubscribers: dict[str, list[Callable[[], None]]] = {}
 
     def _track_template(
@@ -129,8 +132,6 @@ class ConditionWatchers:
                 )
             )
 
-        from .confirmation import confirmation_for_alert
-
         interval = parse_duration(monitor.interval)
         if interval is not None:
             unsubscribers.append(
@@ -138,14 +139,7 @@ class ConditionWatchers:
                     interval, lambda _now: self._on_check(alert_id, "interval")
                 )
             )
-        confirmation = confirmation_for_alert(alert)
-        confirmation_interval = None
-        if (
-            confirmation
-            and confirmation.enabled
-            and confirmation.reminders.enabled
-        ):
-            confirmation_interval = parse_duration(confirmation.reminders.interval)
+        confirmation_interval = self._confirmation_interval(alert)
         if confirmation_interval is not None:
             unsubscribers.append(
                 self._track_interval(
@@ -164,7 +158,7 @@ class ConditionFeature(FeatureBase):
     """Own condition compilation, evaluation, and condition watchers."""
 
     name = "conditions"
-    dependencies = ("alerts", "alert_flow")
+    dependencies = ("alerts", "alert_flow", "confirmation")
 
     def __init__(
         self,
@@ -195,8 +189,12 @@ class ConditionFeature(FeatureBase):
         alert_feature = self.feature("alerts")
         self._runtime_for = alert_feature.runtime
         self._on_transition = self.feature("alert_flow").handle_condition
+        confirmation_feature = self.feature("confirmation")
         self._watchers = ConditionWatchers(
-            self._hass, self._schedule_condition_result, self._schedule_check
+            self._hass,
+            self._schedule_condition_result,
+            self._schedule_check,
+            confirmation_feature.reminder_interval,
         )
         self.set_alerts(alert_feature.alerts)
         for alert in self._alerts.values():
@@ -278,7 +276,14 @@ class ConditionFeature(FeatureBase):
         runtime = self._runtime_for(alert_id)
         facts = await self._condition_facts(alert)
         transition = self._transition_for(
-            runtime, alert, active, error, now, source, facts
+            runtime,
+            alert,
+            active,
+            error,
+            now,
+            source,
+            facts,
+            self.feature("confirmation").reminder_due(alert, runtime, now),
         )
         if transition.kind == TransitionKind.NO_CHANGE:
             return
@@ -329,9 +334,8 @@ class ConditionFeature(FeatureBase):
         now: datetime,
         source: str,
         facts: dict[str, bool] | None = None,
+        confirmation_due: bool = False,
     ) -> ConditionTransition:
-        from .confirmation import confirmation_for_alert
-
         if error is not None:
             return ConditionTransition(
                 TransitionKind.CONDITION_ERROR, error, source, facts=facts
@@ -340,10 +344,15 @@ class ConditionFeature(FeatureBase):
         if not active:
             if not state.get("active", False):
                 return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
-            pending = bool(state.get("confirmation_action_id"))
-            state.update(active=False, acknowledged=False, attempts=0,
-                         confirmation_action_id=None, notification_id=None,
-                         flow_id=None)
+            pending = bool(pending_action_ids(state))
+            state.update(
+                active=False,
+                acknowledged=False,
+                attempts=0,
+                notification_id=None,
+                flow_id=None,
+            )
+            clear_pending_actions(state)
             return ConditionTransition(
                 TransitionKind.BECAME_INACTIVE,
                 source=source,
@@ -364,45 +373,17 @@ class ConditionFeature(FeatureBase):
             return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
         has_sent = bool(state.get("last_notified") or state.get("attempts", 0))
         monitor = MonitorConfig.model_validate(alert.get("monitor", {}))
-        confirmation = confirmation_for_alert(alert)
         if (source == "startup" and monitor.startup and not has_sent) or (
             source == "enabled" and not has_sent
         ) or (
             source in ("reload", "startup", "interval", "confirmation")
-            and ConditionFeature._confirmation_is_due(state, confirmation, now)
+            and confirmation_due
         ):
             ConditionFeature._ensure_flow_id(state, alert)
             return ConditionTransition(
                 TransitionKind.SHOULD_SEND, source=source, facts=facts
             )
         return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
-
-    @staticmethod
-    def _confirmation_is_due(
-        state: dict[str, Any],
-        confirmation: Any,
-        now: datetime,
-    ) -> bool:
-        if (
-            not state.get("confirmation_action_id")
-            or not confirmation
-            or not confirmation.enabled
-            or not confirmation.reminders.enabled
-        ):
-            return False
-        if int(state.get("attempts", 0)) >= int(
-            confirmation.reminders.max_attempts or 1
-        ):
-            return False
-        last_notified = state.get("last_notified")
-        if not last_notified:
-            return True
-        try:
-            previous = datetime.fromisoformat(str(last_notified))
-        except ValueError:
-            return True
-        duration = parse_duration(confirmation.reminders.interval)
-        return duration is None or now - previous >= duration
 
     @staticmethod
     def _ensure_flow_id(state: dict[str, Any], alert: dict[str, Any]) -> None:

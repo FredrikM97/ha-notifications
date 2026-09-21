@@ -10,7 +10,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -39,7 +44,12 @@
         }),
       }),
       'attempt': 1,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': False,
       'test': True,
@@ -53,7 +63,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -82,7 +97,12 @@
         }),
       }),
       'attempt': 2,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -96,7 +116,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -125,7 +150,12 @@
         }),
       }),
       'attempt': 3,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -139,7 +169,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -168,7 +203,12 @@
         }),
       }),
       'attempt': 4,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -182,7 +222,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -211,7 +256,12 @@
         }),
       }),
       'attempt': 5,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -229,7 +279,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -256,7 +311,12 @@
         }),
       }),
       'attempt': 1,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': False,
       'test': True,
@@ -270,7 +330,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -297,7 +362,12 @@
         }),
       }),
       'attempt': 2,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -311,7 +381,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -338,7 +413,12 @@
         }),
       }),
       'attempt': 3,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -352,7 +432,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -379,7 +464,12 @@
         }),
       }),
       'attempt': 4,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,
@@ -393,7 +483,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'enabled': True,
@@ -420,7 +515,12 @@
         }),
       }),
       'attempt': 5,
-      'confirmation_action_id': '<confirmation_action_id>',
+      'notification_actions': list([
+        dict({
+          'action': '<confirmation_action_1>',
+          'title': 'Confirm',
+        }),
+      ]),
       'now': '<datetime>',
       'replace_existing': True,
       'test': True,

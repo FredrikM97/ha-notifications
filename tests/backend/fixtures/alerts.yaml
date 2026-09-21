@@ -32,7 +32,9 @@ confirmation:
         - notify.somebody
   confirmation:
     enabled: true
-    button: Confirm
+    buttons:
+      - id: confirm
+        label: Confirm
     reminders:
       enabled: true
       interval: 2
@@ -69,7 +71,9 @@ configuration:
     message: Message
   confirmation:
     enabled: true
-    button: Confirm
+    buttons:
+      - id: confirm
+        label: Confirm
     reminders:
       interval: 2
       max_attempts: 5

@@ -41,7 +41,7 @@ export interface NotificationTarget {
 
 export interface ConfirmationConfig {
   enabled: boolean;
-  button: string;
+  buttons: { id: string; label: string }[];
   notification: {
     enabled: boolean;
     message: string;

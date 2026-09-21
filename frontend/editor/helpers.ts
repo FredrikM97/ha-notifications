@@ -58,7 +58,7 @@ export function defaultAlert(): Alert {
     },
     confirmation: {
       enabled: false,
-      button: "",
+      buttons: [{ id: "confirm", label: "Done" }],
       notification: { enabled: false, message: "", clear: true },
       reminders: {
         enabled: false,

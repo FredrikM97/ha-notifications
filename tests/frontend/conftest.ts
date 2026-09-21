@@ -26,7 +26,6 @@ export const alertRuntimeFixture = alertFixtureData.runtime as Record<
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
 export const draftTestResultFixture = alertFixtureData.draftTestResult as {
   session_id: string;
-  confirmation_action_id: string | null;
 };
 
 export function createHassClient() {

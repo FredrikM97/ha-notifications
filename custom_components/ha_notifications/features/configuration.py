@@ -44,7 +44,7 @@ class AlertRuntime(BaseModel):
     acknowledged: bool = False
     attempts: int = 0
     notification_id: str | None = None
-    confirmation_action_id: str | None = None
+    confirmation_action_ids: dict[str, str] = Field(default_factory=dict)
     flow_id: str | None = None
     started_at: str | None = None
     last_evaluated: str | None = None

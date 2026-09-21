@@ -32,6 +32,8 @@ This is the compact routing map for the direct-workflow architecture.
 
 - `custom_components/ha_notifications/features/configuration.py`: flat `Alert`, `Configuration`, and `AlertRuntime` models plus structured configuration routes; each feature validates its own section at its workflow boundary.
 - `custom_components/ha_notifications/domain/service_calls.py`: typed Home Assistant service-call values produced by workflows.
+- `custom_components/ha_notifications/domain/notification.py`: immutable notification delivery outcomes passed to ordered workflows.
+- `custom_components/ha_notifications/domain/confirmation.py`: immutable confirmation contexts and response selections passed between ordered workflows.
 - `custom_components/ha_notifications/domain/template_values.py`: recursive template rendering and null removal for service-call configuration.
 - `custom_components/ha_notifications/domain/durations.py`: backend duration normalization for YAML and runtime values.
 - `custom_components/ha_notifications/support/storage.py`: structured config-entry option persistence, validation coordination, and runtime-state shape repair.

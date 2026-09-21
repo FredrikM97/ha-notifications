@@ -53,21 +53,6 @@ class HistoryFeature(FeatureBase):
             now,
         )
 
-    def record_event(
-        self,
-        runtime_state: dict[str, Any] | None,
-        alert: dict[str, Any],
-        event_type: HistoryEventType,
-        message: str,
-        details: dict[str, Any],
-        now: Any,
-    ) -> bool:
-        """Record an event through the history feature owner."""
-
-        return self._record_event(
-            runtime_state, alert, event_type, message, details, now
-        )
-
     def record_notification_outcome(
         self,
         alert: dict[str, Any],
@@ -96,6 +81,28 @@ class HistoryFeature(FeatureBase):
             event_type,
             "Notification sent." if success else "Notification failed.",
             details,
+            now,
+        )
+
+    def record_completion_outcome(
+        self,
+        alert: dict[str, Any],
+        *,
+        success: bool,
+        now: Any,
+        error: str | None = None,
+    ) -> bool:
+        """Record the outcome of a confirmation completion notification."""
+
+        return self.record(
+            alert,
+            HistoryEventType.COMPLETION_SENT
+            if success
+            else HistoryEventType.COMPLETION_FAILED,
+            "Completion notification sent."
+            if success
+            else "Completion notification failed.",
+            {} if success else {"error": error},
             now,
         )
 

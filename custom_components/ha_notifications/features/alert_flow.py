@@ -9,6 +9,7 @@ from typing import Any
 
 from ..const import HistoryEventType, StateRoot, TransitionKind
 from ..controller.lifecycle import FeatureBase
+from ..domain.notification import NotificationOutcome
 from ..support.storage import RuntimeStateStorage
 from ..support.templates import render_template
 from . import confirmation, notification
@@ -54,8 +55,7 @@ class AlertFlow(FeatureBase):
         async with lock:
             runtime = self.feature("alerts").runtime(alert_id)
             if transition.kind == TransitionKind.CONDITION_ERROR:
-                self.feature("history").record_event(
-                    runtime,
+                self.feature("history").record(
                     dict(alert),
                     HistoryEventType.CONDITION_ERROR,
                     "Template evaluation failed.",
@@ -70,8 +70,7 @@ class AlertFlow(FeatureBase):
                     await self.feature("notification").clear(
                         dict(alert), now
                     )
-                self.feature("history").record_event(
-                    runtime,
+                self.feature("history").record(
                     dict(alert),
                     HistoryEventType.CONDITION_INACTIVE,
                     "Condition became false.",
@@ -83,8 +82,7 @@ class AlertFlow(FeatureBase):
                 TransitionKind.SHOULD_SEND,
             ):
                 await self._prepare_confirmation(dict(alert), runtime, now)
-                self.feature("history").record_event(
-                    runtime,
+                self.feature("history").record(
                     dict(alert),
                     HistoryEventType.CONDITION_ACTIVE,
                     "Condition became true.",
@@ -113,20 +111,20 @@ class AlertFlow(FeatureBase):
         async with lock:
             if not result.test:
                 self.feature("alerts").acknowledge(
-                    alert["id"], result.confirmed_by, result.now
+                    alert["id"], result.confirmation.confirmed_by, result.now
                 )
             if result.record_history:
                 self.feature("history").record(
                     alert,
                     HistoryEventType.CONFIRMED,
                     "Notification confirmed.",
-                    {"confirmed_by": result.confirmed_by},
+                    result.confirmation.history_details(),
                     result.now,
                 )
 
             delivery = await notification.ConfirmationDeliveryPlanner(
                 alert,
-                result.confirmed_by,
+                result.confirmation,
                 result.now,
             ).build(self._render_template)
             if delivery.clear_notification:
@@ -134,10 +132,7 @@ class AlertFlow(FeatureBase):
             if delivery.completion_alert is not None:
                 await self._send_completion(delivery.completion_alert, result)
 
-            settings = confirmation.confirmation_for_alert(alert)
-            actions = []
-            if settings and settings.actions.enabled:
-                actions = settings.actions.items
+            actions = self.feature("confirmation").follow_up_actions(alert)
             await self.feature("follow_up_actions").run(
                 alert,
                 1,
@@ -145,7 +140,7 @@ class AlertFlow(FeatureBase):
                 result.test,
                 result.record_history,
                 actions,
-                result.confirmed_by,
+                result.confirmation,
             )
             self._runtime_storage.persist()
 
@@ -153,15 +148,7 @@ class AlertFlow(FeatureBase):
         self, alert: dict[str, Any], runtime: dict[str, Any], now: datetime
     ) -> None:
         confirmation_feature = self.feature("confirmation")
-        created, action_id = await confirmation_feature.prepare_action(
-            alert, runtime
-        )
-        if created and action_id:
-            await confirmation_feature.track(
-                action_id,
-                now=now,
-                alert_id=str(alert["id"]),
-            )
+        await confirmation_feature.prepare_action(alert, runtime, now=now)
 
     async def _send_notification(
         self,
@@ -173,46 +160,49 @@ class AlertFlow(FeatureBase):
         trigger_source: str = "",
     ) -> None:
         feature = self.feature("notification")
-        attempt = feature.next_attempt(runtime)
-        action_id = runtime.get("confirmation_action_id")
-        try:
-            await feature.send(
-                {
-                    "alert": alert,
-                    "attempt": attempt,
-                    "confirmation_action_id": action_id,
-                    "replace_existing": replace_existing,
-                    "test": False,
-                    "now": now,
-                    "condition_facts": condition_facts or {},
-                    "trigger_source": trigger_source,
-                }
-            )
-        except Exception as err:
-            feature.record_delivery_result(
-                runtime, attempt, now, success=False, error=str(err)
-            )
-            self.feature("history").record_notification_outcome(
-                alert,
-                success=False,
-                attempt=attempt,
-                now=now,
-                error=str(err),
-            )
-            return
-
-        feature.record_delivery_result(runtime, attempt, now, success=True)
-        self.feature("history").record_notification_outcome(
+        alerts = self.feature("alerts")
+        attempt = alerts.next_attempt(str(alert["id"]))
+        pending_actions = self.feature("confirmation").pending_actions(
+            alert, runtime
+        )
+        notification_actions = pending_actions.notification_actions()
+        outcome = await feature.send_alert(
             alert,
-            success=True,
             attempt=attempt,
             now=now,
+            replace_existing=replace_existing,
+            notification_actions=notification_actions,
+            condition_facts=condition_facts,
+            trigger_source=trigger_source,
         )
-        runtime["_notification_succeeded"] = True
+        self._record_notification_delivery(alert, outcome)
+        if not outcome.success:
+            return
         await self.feature("follow_up_actions").run(
             alert, attempt, now, False, True
         )
-        runtime.pop("_notification_succeeded", None)
+
+    def _record_notification_delivery(
+        self,
+        alert: dict[str, Any],
+        outcome: NotificationOutcome,
+    ) -> None:
+        """Apply the ordered delivery outcome to its owning feature boundaries."""
+
+        self.feature("alerts").record_delivery_result(
+            str(alert["id"]),
+            outcome.attempt,
+            outcome.now,
+            success=outcome.success,
+            error=outcome.error,
+        )
+        self.feature("history").record_notification_outcome(
+            alert,
+            success=outcome.success,
+            attempt=outcome.attempt,
+            now=outcome.now,
+            error=outcome.error,
+        )
 
     async def _render_template(
         self, source: str, variables: dict[str, Any] | None = None
@@ -224,33 +214,24 @@ class AlertFlow(FeatureBase):
         completion_alert: dict[str, Any],
         result: confirmation.ConfirmationResult,
     ) -> None:
-        alert = result.alert
         try:
-            await self.feature("notification").send(
-                {
-                    "alert": completion_alert,
-                    "attempt": 1,
-                    "confirmation_action_id": None,
-                    "replace_existing": False,
-                    "test": result.test,
-                    "now": result.now,
-                }
+            await self.feature("notification").send_completion(
+                completion_alert,
+                now=result.now,
+                test=result.test,
             )
         except Exception as err:
             if result.record_history:
-                self.feature("history").record(
-                    alert,
-                    HistoryEventType.COMPLETION_FAILED,
-                    "Completion notification failed.",
-                    {"error": str(err)},
-                    result.now,
+                self.feature("history").record_completion_outcome(
+                    result.alert,
+                    success=False,
+                    error=str(err),
+                    now=result.now,
                 )
         else:
             if result.record_history:
-                self.feature("history").record(
-                    alert,
-                    HistoryEventType.COMPLETION_SENT,
-                    "Completion notification sent.",
-                    {},
-                    result.now,
+                self.feature("history").record_completion_outcome(
+                    result.alert,
+                    success=True,
+                    now=result.now,
                 )

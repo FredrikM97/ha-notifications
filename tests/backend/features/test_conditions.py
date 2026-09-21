@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
@@ -120,7 +121,7 @@ def test_transition_matrix_covers_activation_acknowledgement_and_reminders():
     pending = {
         "active": True,
         "attempts": 1,
-        "confirmation_action_id": "confirm_1",
+        "confirmation_action_ids": {"confirm_1": "confirm"},
         "last_notified": now.isoformat(),
     }
     assert (
@@ -137,6 +138,7 @@ def test_transition_matrix_covers_activation_acknowledgement_and_reminders():
             None,
             now + timedelta(seconds=60),
             "confirmation",
+                confirmation_due=True,
         ).kind
         is TransitionKind.SHOULD_SEND
     )
@@ -155,7 +157,7 @@ def test_condition_transition_contract_snapshot(snapshot):
             "active": True,
             "acknowledged": False,
             "attempts": 2,
-            "confirmation_action_id": "confirm_1",
+            "confirmation_action_ids": {"confirm_1": "confirm"},
         },
         {
             "id": "alert_1",
@@ -168,6 +170,7 @@ def test_condition_transition_contract_snapshot(snapshot):
         None,
         datetime(2026, 1, 1, tzinfo=timezone.utc),
         "confirmation",
+            confirmation_due=True,
     )
 
     assert {
@@ -186,7 +189,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         }
         self.runtime = {
             "active": False,
-            "confirmation_action_id": None,
+            "confirmation_action_ids": {},
         }
         self.transitions = []
 
@@ -197,6 +200,11 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         self.feature._alerts = {"alert_1": self.alert}
         self.feature._runtime_for = lambda _alert_id: self.runtime
         self.feature._on_transition = on_transition
+        self.feature.lifecycle = SimpleNamespace(
+            feature=lambda name: SimpleNamespace(reminder_due=lambda *_args: False)
+            if name == "confirmation"
+            else None
+        )
 
     async def test_inactive_evaluation_does_not_allocate_confirmation(self):
         await self.feature.condition_result(
@@ -208,7 +216,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(self.transitions, [])
-        self.assertIsNone(self.runtime["confirmation_action_id"])
+        self.assertEqual(self.runtime["confirmation_action_ids"], {})
 
     async def test_condition_error_does_not_allocate_confirmation(self):
         await self.feature.condition_result(
@@ -220,7 +228,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(self.transitions[0].kind, TransitionKind.CONDITION_ERROR)
-        self.assertIsNone(self.runtime["confirmation_action_id"])
+        self.assertEqual(self.runtime["confirmation_action_ids"], {})
 
 
 class ConditionFeatureTests(unittest.TestCase):
@@ -231,7 +239,12 @@ class ConditionFeatureTests(unittest.TestCase):
     def test_watchers_register_change_and_both_interval_sources(self):
         calls = []
         removed = []
-        watchers = ConditionWatchers(None, lambda *args: None, lambda *args: None)
+        watchers = ConditionWatchers(
+            None,
+            lambda *args: None,
+            lambda *args: None,
+            lambda _alert: timedelta(seconds=60),
+        )
 
         def track_template(source, callback):
             calls.append(("template", source, callback))

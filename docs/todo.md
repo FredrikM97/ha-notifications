@@ -32,3 +32,8 @@
 - [x] `frontend/history.ts`: replace the external `render(content, container)` boundary with a Lit history component while preserving filter callbacks and details interactions.
 - [x] `frontend/yaml-view.ts`: replace editor lookup/mounting with a Lit YAML component; retain only the Home Assistant code-editor readiness/value bridge.
 - [x] Frontend DOM audit: remaining production DOM access is limited to HA code-editor discovery/value extraction in `fillActionEditors`, CodeMirror's internal `.cm-scroller` sizing, the explicit editor host create/remove lifecycle, and the duplicate-editor host guard. No dashboard, modal/toast, form-control, or history-details ownership remains selector-driven.
+- [x] Support multiple confirmation response buttons, preserve the selected action, and expose it to completion messages and follow-up action templates while retaining the legacy single-button configuration.
+- [x] Add `ConfirmationContext` projections for template values and history details so passive consumers do not interpret confirmation fields.
+- [x] Move prepared notification actions and confirmation follow-up selection behind `ConfirmationFeature` so delivery and orchestration consume narrow outputs.
+- [x] Consolidate repeated runtime and template-context plumbing behind owned adapters, removing duplicate scalar and mapping fields from workflow call sites.
+- [x] Replace the remaining `confirmation_for_alert()` helper with a model-owned confirmation configuration boundary.

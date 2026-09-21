@@ -4,7 +4,8 @@
     'acknowledged': True,
     'active': False,
     'attempts': 0,
-    'confirmation_action_id': None,
+    'confirmation_action_ids': dict({
+    }),
     'confirmed_at': '2026-01-01T00:00:00+00:00',
     'confirmed_by': 'Alice',
     'flow_id': None,
@@ -21,7 +22,8 @@
     'acknowledged': False,
     'active': False,
     'attempts': 0,
-    'confirmation_action_id': None,
+    'confirmation_action_ids': dict({
+    }),
     'confirmed_at': None,
     'confirmed_by': None,
     'flow_id': None,

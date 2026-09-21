@@ -6,7 +6,12 @@
       'items': list([
       ]),
     }),
-    'button': 'Confirm',
+    'buttons': list([
+      dict({
+        'id': 'confirm',
+        'label': 'Confirm',
+      }),
+    ]),
     'enabled': True,
     'notification': dict({
       'clear': True,

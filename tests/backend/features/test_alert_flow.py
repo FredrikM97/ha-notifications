@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from custom_components.ha_notifications.domain.notification import NotificationOutcome
 from tests.backend.conftest import make_alert
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
@@ -18,7 +19,7 @@ const = importlib.import_module(f"{PACKAGE_NAME}.const")
 
 class RuntimeAlerts:
     def __init__(self):
-        self.values = {"alert_1": {"active": True, "confirmation_action_id": "confirm"}}
+        self.values = {"alert_1": {"active": True, "confirmation_action_ids": {"confirm": "confirm"}}}
 
     def runtime(self, alert_id):
         return self.values[alert_id]
@@ -26,16 +27,25 @@ class RuntimeAlerts:
     def acknowledge(self, *_args):
         return None
 
+    def next_attempt(self, alert_id):
+        return int(self.values[alert_id].get("attempts", 0)) + 1
+
+    def record_delivery_result(self, alert_id, attempt, now, *, success, error=None):
+        runtime = self.values[alert_id]
+        if success:
+            runtime["attempts"] = attempt
+        runtime["last_error"] = error
+
 
 class History:
     def __init__(self, order=None):
         self.events = []
         self.order = order
 
-    def record_event(self, *args):
+    def record(self, *args):
         if self.order is not None:
             self.order.append("history")
-        self.events.append(args)
+        self.events.append((None, *args))
         return True
 
     def record_notification_outcome(self, *args, **kwargs):
@@ -43,10 +53,23 @@ class History:
             self.order.append("notification_outcome")
         self.events.append(("notification", args, kwargs))
 
-    def record(self, *args):
-        if self.order is not None:
-            self.order.append("history_record")
-        self.events.append(("record", args))
+    def record_completion_outcome(self, alert, *, success, now, error=None):
+        self.events.append(
+            (
+                "record",
+                (
+                    alert,
+                    const.HistoryEventType.COMPLETION_SENT
+                    if success
+                    else const.HistoryEventType.COMPLETION_FAILED,
+                    "Completion notification sent."
+                    if success
+                    else "Completion notification failed.",
+                    {} if success else {"error": error},
+                    now,
+                ),
+            )
+        )
 
 
 class Notification:
@@ -56,22 +79,24 @@ class Notification:
         self.cleared = []
         self.order = order
 
-    @staticmethod
-    def next_attempt(runtime):
-        return int(runtime.get("attempts", 0)) + 1
-
-    @staticmethod
-    def record_delivery_result(runtime, attempt, now, *, success, error=None):
-        if success:
-            runtime["attempts"] = attempt
-        runtime["last_error"] = error
-
     async def send(self, payload):
         if self.fail:
             raise RuntimeError("delivery failed")
         if self.order is not None:
             self.order.append("notification")
         self.sent.append(payload)
+
+    async def send_alert(self, alert, **kwargs):
+        try:
+            await self.send({"alert": alert, **kwargs})
+        except Exception as err:
+            return NotificationOutcome(
+                kwargs["attempt"], kwargs["now"], False, str(err)
+            )
+        return NotificationOutcome(kwargs["attempt"], kwargs["now"], True)
+
+    async def send_completion(self, alert, **kwargs):
+        await self.send({"alert": alert, **kwargs})
 
     async def clear(self, alert, now):
         if self.order is not None:
@@ -92,8 +117,19 @@ class FlakyNotification(Notification):
 
 
 class Confirmation:
-    async def prepare_action(self, _alert, _runtime):
+    async def prepare_action(self, _alert, runtime, **_kwargs):
+        runtime["confirmation_action_ids"] = {"confirm": "confirm"}
         return True, "confirm"
+
+    def pending_actions(self, _alert, _runtime):
+        return SimpleNamespace(
+            primary_action_id="confirm",
+            notification_actions=lambda: [],
+        )
+
+    @staticmethod
+    def follow_up_actions(_alert):
+        return []
 
     async def track(self, *_args, **_kwargs):
         return None
@@ -175,7 +211,7 @@ async def test_active_condition_sends_and_runs_follow_up():
     )
 
     assert features["notification"].sent[0]["attempt"] == 1
-    assert features["notification"].sent[0]["confirmation_action_id"] == "confirm"
+    assert features["notification"].sent[0]["notification_actions"] == []
     assert features["follow_up_actions"].calls
 
 
@@ -274,7 +310,13 @@ async def test_condition_and_confirmation_effects_persist_runtime_state():
     assert len(features["runtime_storage"].calls) == 1
 
     result = module.confirmation.ConfirmationResult(
-        make_alert(), "Alice", now, False, True
+        make_alert(),
+        module.confirmation.ConfirmationContext(
+            "Alice", module.confirmation.ConfirmationSelection("confirm", "confirm", "Done")
+        ),
+        now,
+        False,
+        True,
     )
     await flow.handle_confirmation(result)
     assert len(features["runtime_storage"].calls) == 2
@@ -303,7 +345,13 @@ async def test_confirmation_completion_and_completion_failure_are_recorded(monke
 
     monkeypatch.setattr(module.notification, "ConfirmationDeliveryPlanner", Planner)
     result = module.confirmation.ConfirmationResult(
-        alert, "Alice", now, False, True
+        alert,
+        module.confirmation.ConfirmationContext(
+            "Alice", module.confirmation.ConfirmationSelection("confirm", "confirm", "Done")
+        ),
+        now,
+        False,
+        True,
     )
     await flow.handle_confirmation(result)
     assert features["notification"].cleared

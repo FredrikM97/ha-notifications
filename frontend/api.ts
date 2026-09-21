@@ -17,7 +17,6 @@ const DOMAIN = "ha_notifications";
 
 export interface DraftTestResult {
   session_id: string;
-  confirmation_action_id: string | null;
 }
 
 export function errorMessage(error: unknown): string {

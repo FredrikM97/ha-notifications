@@ -14,6 +14,8 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/ha_notifications/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
 - `custom_components/ha_notifications/delivery/` — recipient resolution for Home Assistant's generic Notify service
 - `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
+- `custom_components/ha_notifications/domain/notification.py` — immutable notification delivery outcomes passed to ordered workflows
+- `custom_components/ha_notifications/domain/confirmation.py` — immutable confirmation contexts and response selections passed between workflows
 - `custom_components/ha_notifications/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
 - `custom_components/ha_notifications/features/confirmation.py` — confirmation model, direct confirmation-action workflow, sessions, and confirmation effects
 - `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions

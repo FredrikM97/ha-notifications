@@ -42,7 +42,16 @@ def stable_test_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]
     normalized = deepcopy(payloads)
     for payload in normalized:
         payload["now"] = "<datetime>"
-        payload["confirmation_action_id"] = "<confirmation_action_id>"
+        payload["notification_actions"] = [
+            {
+                "action": f"<confirmation_action_{index}>",
+                "title": action["title"],
+            }
+            for index, action in enumerate(
+                payload.get("notification_actions", []),
+                start=1,
+            )
+        ]
         alert_id = payload["alert"]["id"]
         if str(alert_id).startswith("NC_DRAFT_"):
             payload["alert"]["id"] = "<draft_session_id>"
@@ -360,7 +369,6 @@ def make_runtime_state(**overrides: Any) -> dict[str, Any]:
         "acknowledged": False,
         "attempts": 0,
         "notification_id": None,
-        "confirmation_action_id": None,
         "flow_id": None,
         "started_at": None,
         "last_evaluated": None,

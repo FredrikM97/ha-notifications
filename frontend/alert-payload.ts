@@ -65,7 +65,7 @@ export interface AlertNotificationFormValues {
 
 export interface AlertConfirmationFormValues {
   enabled: boolean;
-  button: string;
+  buttons: { id: string; label: string }[];
   notification: {
     enabled: boolean;
     message: string;

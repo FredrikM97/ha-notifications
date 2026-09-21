@@ -130,7 +130,7 @@ class AlertEditorController {
     this.value = clone(options.alert || defaultAlert());
     this.value.confirmation = {
       enabled: false,
-      button: "",
+      buttons: [{ id: "confirm", label: "Done" }],
       notification: { enabled: false, message: "", clear: true },
       reminders: {
         enabled: true,
@@ -795,7 +795,7 @@ class AlertEditorController {
       },
       confirmation: {
         enabled: Boolean(confirmation.enabled),
-        button: confirmation.button,
+        buttons: confirmation.buttons,
         notification: {
           enabled: Boolean(confirmation.notification.enabled),
           message: confirmation.notification.message,

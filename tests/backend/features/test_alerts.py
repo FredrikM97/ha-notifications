@@ -17,7 +17,7 @@ async def test_disabled_runtime_reset_contract_snapshot(snapshot):
             "alert_1": make_runtime_state(
                 active=True,
                 attempts=4,
-                confirmation_action_id="confirm_1",
+                confirmation_action_ids={"confirm_1": "confirm"},
                 last_notified="2026-09-16T12:00:00+00:00",
             )
         }
@@ -40,7 +40,7 @@ async def test_disabling_and_reenabling_resets_runtime_attempts() -> None:
             "alert_1": make_runtime_state(
                 active=True,
                 attempts=4,
-                confirmation_action_id="confirm_1",
+                confirmation_action_ids={"confirm_1": "confirm"},
                 last_notified="2026-09-16T12:00:00+00:00",
             )
         }
@@ -56,8 +56,31 @@ async def test_disabling_and_reenabling_resets_runtime_attempts() -> None:
 
     runtime = feature.runtime("alert_1")
     assert runtime["attempts"] == 0
-    assert runtime["confirmation_action_id"] is None
+    assert runtime["confirmation_action_ids"] == {}
     assert runtime["active"] is False
+
+
+async def test_runtime_reset_preserves_evaluation_and_history_context() -> None:
+    state = {
+        STATE_RUNTIME: {
+            "alert_1": make_runtime_state(
+                last_evaluated="2026-09-21T10:00:00+00:00",
+                last_event={"type": "notification_sent"},
+            )
+        }
+    }
+    feature = AlertFeature(None, state, None, None)
+    feature._alerts = {
+        "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
+    }
+
+    await feature.apply_config(
+        {"alerts": [make_alert(enabled=False, name="Alert")]}
+    )
+
+    runtime = feature.runtime("alert_1")
+    assert runtime["last_evaluated"] == "2026-09-21T10:00:00+00:00"
+    assert runtime["last_event"] == {"type": "notification_sent"}
 
 
 async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(

@@ -4,8 +4,7 @@
     "alerts": []
   },
   "draftTestResult": {
-    "session_id": "session",
-    "confirmation_action_id": null
+    "session_id": "session"
   },
   "alert": {
     "id": "door",

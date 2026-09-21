@@ -10,7 +10,12 @@
           }),
         ]),
         'confirmation': dict({
-          'button': 'Confirm',
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
           'enabled': True,
           'reminders': dict({
             'interval': 2,

@@ -13,6 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import EVENT_NOTIFICATION_ACTION, STATE_RUNTIME, StateRoot
 from ..controller.lifecycle import FeatureBase
+from ..domain.durations import parse_duration
+from ..domain.confirmation import (
+    ConfirmationActionSet,
+    ConfirmationContext,
+    ConfirmationSelection,
+)
 
 DRAFT_SESSION_TTL = timedelta(minutes=15)
 
@@ -41,13 +47,28 @@ class ConfirmationActionsConfig(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ConfirmationButtonConfig(BaseModel):
+    """One response button shown on a confirmation notification."""
+
+    id: str
+    label: str
+
+
+def default_confirmation_buttons() -> list[ConfirmationButtonConfig]:
+    """Return the canonical default response for enabled confirmations."""
+
+    return [ConfirmationButtonConfig(id="confirm", label="Done")]
+
+
 class ConfirmationConfig(BaseModel):
     """Validated confirmation prompt and its owned follow-up settings."""
 
     model_config = ConfigDict(extra="allow")
 
     enabled: bool | None = None
-    button: str | None = None
+    buttons: list[ConfirmationButtonConfig] = Field(
+        default_factory=default_confirmation_buttons
+    )
     notification: ConfirmationNotificationConfig = Field(
         default_factory=ConfirmationNotificationConfig
     )
@@ -58,20 +79,29 @@ class ConfirmationConfig(BaseModel):
         default_factory=ConfirmationActionsConfig
     )
 
+    @classmethod
+    def from_alert(cls, alert: dict[str, Any]) -> ConfirmationConfig | None:
+        """Read confirmation configuration from an alert boundary."""
 
-def confirmation_config(value: Any) -> ConfirmationConfig:
-    """Validate one confirmation payload at the confirmation feature boundary."""
+        value = alert.get("confirmation")
+        if value is None:
+            return None
+        return cls.model_validate(value)
 
-    return ConfirmationConfig.model_validate(value)
+
+def pending_action_ids(runtime: dict[str, Any]) -> dict[str, str]:
+    """Read canonical pending actions while migrating legacy runtime state."""
+
+    action_ids = runtime.get("confirmation_action_ids") or {}
+    if action_ids:
+        return dict(action_ids)
+    return {}
 
 
-def confirmation_for_alert(alert: dict[str, Any]) -> ConfirmationConfig | None:
-    """Read the alert-level confirmation configuration."""
+def clear_pending_actions(runtime: dict[str, Any]) -> None:
+    """Clear all persisted pending confirmation action representations."""
 
-    value = alert.get("confirmation")
-    if value is None:
-        return None
-    return ConfirmationConfig.model_validate(value)
+    runtime["confirmation_action_ids"] = {}
 
 
 class ConfirmationSession(BaseModel):
@@ -81,6 +111,7 @@ class ConfirmationSession(BaseModel):
 
     alert_id: str | None = None
     draft_alert: dict[str, Any] | None = None
+    selection: ConfirmationSelection
     created_at: datetime
     expires_at: datetime | None = None
 
@@ -117,6 +148,38 @@ class ConfirmationFeature(FeatureBase):
             self._unsubscribe = None
         self._sessions.clear()
 
+    @staticmethod
+    def reminder_interval(alert: dict[str, Any]) -> timedelta | None:
+        """Return the configured reminder interval for an alert."""
+
+        settings = ConfirmationConfig.from_alert(alert)
+        if settings is None or not settings.enabled or not settings.reminders.enabled:
+            return None
+        return parse_duration(settings.reminders.interval)
+
+    @staticmethod
+    def reminder_due(
+        alert: dict[str, Any], runtime: dict[str, Any], now: datetime
+    ) -> bool:
+        """Decide whether a pending confirmation should be resent."""
+
+        if not pending_action_ids(runtime):
+            return False
+        settings = ConfirmationConfig.from_alert(alert)
+        if settings is None or not settings.enabled or not settings.reminders.enabled:
+            return False
+        if int(runtime.get("attempts", 0)) >= int(settings.reminders.max_attempts or 1):
+            return False
+        last_notified = runtime.get("last_notified")
+        if not last_notified:
+            return True
+        try:
+            previous = datetime.fromisoformat(str(last_notified))
+        except ValueError:
+            return True
+        interval = parse_duration(settings.reminders.interval)
+        return interval is None or now - previous >= interval
+
     async def _on_action_event(self, event: Any) -> None:
         result = await self.resolve_action_event(event)
         if result:
@@ -130,12 +193,15 @@ class ConfirmationFeature(FeatureBase):
         alert_id: str | None = None,
         draft_alert: dict[str, Any] | None = None,
         ttl: timedelta | None = None,
+        selection: ConfirmationSelection | None = None,
     ) -> None:
         """Track a pending confirmation owned by this feature."""
 
         self._sessions[session_id] = ConfirmationSession(
             alert_id=alert_id,
             draft_alert=draft_alert,
+            selection=selection
+            or ConfirmationSelection(session_id, "confirm", "Done"),
             created_at=now,
             expires_at=(now + ttl) if draft_alert is not None and ttl else None,
         )
@@ -144,6 +210,26 @@ class ConfirmationFeature(FeatureBase):
         """Stop tracking one pending confirmation."""
 
         self._sessions.pop(session_id, None)
+
+    async def _clear_related(self, session: ConfirmationSession) -> None:
+        """Stop tracking every response belonging to the same confirmation."""
+
+        related_ids = [
+            session_id
+            for session_id, candidate in self._sessions.items()
+            if (
+                session.alert_id is not None
+                and candidate.alert_id == session.alert_id
+            )
+            or (
+                session.draft_alert is not None
+                and candidate.draft_alert is not None
+                and candidate.draft_alert.get("id")
+                == session.draft_alert.get("id")
+            )
+        ]
+        for session_id in related_ids:
+            await self.clear(session_id)
 
     def has_pending(self, session_id: str) -> bool:
         """Return whether a confirmation session is still pending."""
@@ -156,9 +242,19 @@ class ConfirmationFeature(FeatureBase):
         self._sessions.clear()
         now = dt_util.utcnow()
         for alert_id, state in self._state[STATE_RUNTIME].items():
-            action_id = state.get("confirmation_action_id")
-            if action_id:
-                await self.track(action_id, now=now, alert_id=alert_id)
+            action_ids = pending_action_ids(state)
+            alert = self._alerts.get(alert_id)
+            selections = self.selections_for(
+                alert.model_dump(exclude_none=True) if alert else {},
+                action_ids,
+            )
+            for selection in selections:
+                await self.track(
+                    selection.action_id,
+                    now=now,
+                    alert_id=alert_id,
+                    selection=selection,
+                )
 
     async def discard_draft(self, session_id: str, now: datetime) -> None:
         """Discard a draft and every confirmation action bound to it."""
@@ -206,9 +302,13 @@ class ConfirmationFeature(FeatureBase):
             user_id,
         )
         if session.draft_alert is not None:
-            await self.clear(action_id)
+            await self._clear_related(session)
             return ConfirmationResult(
-                session.draft_alert, confirmed_by, now, True, False
+                session.draft_alert,
+                ConfirmationContext(confirmed_by, session.selection),
+                now,
+                True,
+                False,
             )
 
         if session.alert_id is None:
@@ -218,31 +318,129 @@ class ConfirmationFeature(FeatureBase):
         if (
             alert is None
             or state is None
-            or state.get("confirmation_action_id") != action_id
+            or action_id not in pending_action_ids(state)
         ):
             return None
 
-        await self.clear(action_id)
+        await self._clear_related(session)
         return ConfirmationResult(
-            alert.model_dump(exclude_none=True), confirmed_by, now, False, True
+            alert.model_dump(exclude_none=True),
+            ConfirmationContext(confirmed_by, session.selection),
+            now,
+            False,
+            True,
         )
 
-    async def prepare_action(
+    def selections_for(
+        self, alert: dict[str, Any], action_ids: dict[str, str]
+    ) -> tuple[ConfirmationSelection, ...]:
+        """Resolve persisted action IDs into immutable response selections."""
+
+        settings = ConfirmationConfig.from_alert(alert)
+        labels = {
+            button.id: button.label
+            for button in settings.buttons
+        } if settings else {}
+        return tuple(
+            ConfirmationSelection(
+                str(action_id),
+                str(response_id),
+                labels.get(str(response_id), "Done"),
+            )
+            for action_id, response_id in action_ids.items()
+        )
+
+    def pending_actions(
         self, alert: dict[str, Any], runtime: dict[str, Any]
-    ) -> tuple[bool, str | None]:
+    ) -> ConfirmationActionSet:
+        """Return prepared notification actions for one pending alert."""
+
+        action_ids = pending_action_ids(runtime)
+        return ConfirmationActionSet(self.selections_for(alert, action_ids))
+
+    def notification_actions(
+        self, alert: dict[str, Any], action_ids: dict[str, str]
+    ) -> list[dict[str, str]]:
+        """Project draft or test response IDs into notification actions."""
+
+        return ConfirmationActionSet(
+            self.selections_for(alert, action_ids)
+        ).notification_actions()
+
+    @staticmethod
+    def follow_up_actions(alert: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return configured post-confirmation actions without exposing config shape."""
+
+        settings = ConfirmationConfig.from_alert(alert)
+        if settings is None or not settings.actions.enabled:
+            return []
+        return settings.actions.items
+
+    async def prepare_action(
+        self,
+        alert: dict[str, Any],
+        runtime: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> None:
         """Create a pending action only when confirmation is configured."""
 
         confirmation = ConfirmationConfig.model_validate(
             alert.get("confirmation") or {}
         )
         if not confirmation.enabled:
-            return False, None
-        action_id = runtime.get("confirmation_action_id")
-        if action_id:
-            return False, str(action_id)
-        action_id = f"NC_CONFIRM_{alert['id']}_{uuid4().hex}"
-        runtime["confirmation_action_id"] = action_id
-        return True, action_id
+            return
+        existing = pending_action_ids(runtime)
+        if existing:
+            if now is not None:
+                for selection in self.selections_for(alert, existing):
+                    await self.track(
+                        selection.action_id,
+                        now=now,
+                        alert_id=str(alert["id"]),
+                        selection=selection,
+                    )
+            return
+        action_ids = {
+            f"NC_CONFIRM_{alert['id']}_{uuid4().hex}_{button.id}": button.id
+            for button in confirmation.buttons
+        }
+        runtime["confirmation_action_ids"] = action_ids
+        if now is not None:
+            for selection in self.selections_for(alert, action_ids):
+                await self.track(
+                    selection.action_id,
+                    now=now,
+                    alert_id=str(alert["id"]),
+                    selection=selection,
+                )
+
+    async def prepare_draft_actions(
+        self,
+        alert: dict[str, Any],
+        draft_alert: dict[str, Any],
+        *,
+        now: datetime,
+        prefix: str,
+    ) -> dict[str, str]:
+        """Create and track response actions for an unsaved test delivery."""
+
+        settings = ConfirmationConfig.from_alert(alert)
+        if settings is None or not settings.enabled:
+            return {}
+        action_ids = {
+            f"{prefix}_{uuid4().hex}_{button.id}": button.id
+            for button in settings.buttons
+        }
+        for selection in self.selections_for(alert, action_ids):
+            await self.track(
+                selection.action_id,
+                now=now,
+                draft_alert=draft_alert,
+                ttl=DRAFT_SESSION_TTL,
+                selection=selection,
+            )
+        return action_ids
 
 # ----------------------------------------------------------------------
 
@@ -252,7 +450,7 @@ class ConfirmationResult:
     """Resolved action with the alert data needed by the controller."""
 
     alert: dict[str, Any]
-    confirmed_by: str
+    confirmation: ConfirmationContext
     now: datetime
     test: bool
     record_history: bool

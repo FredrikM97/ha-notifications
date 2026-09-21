@@ -16,10 +16,10 @@ testing = importlib.import_module(f"{PACKAGE_NAME}.features.testing")
 
 
 def test_confirmation_configuration_contract_snapshot(snapshot):
-    config = confirmation.confirmation_config(
+    config = confirmation.ConfirmationConfig.model_validate(
         {
             "enabled": True,
-            "button": "Confirm",
+            "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {
                 "enabled": True,
                 "message": "Confirmed by {{confirmed_by}}",
@@ -38,8 +38,31 @@ def test_confirmation_configuration_contract_snapshot(snapshot):
 
 
 class ConfirmationConfigTests(unittest.TestCase):
+    def test_confirmation_context_projects_to_templates_and_history(self):
+        context = confirmation.ConfirmationContext(
+            "Alice",
+            confirmation.ConfirmationSelection("action", "snooze", "Snooze"),
+        )
+
+        self.assertEqual(
+            context.template_values(),
+            {
+                "confirmed_by": "Alice",
+                "confirmation_response_id": "snooze",
+                "confirmation_response": "Snooze",
+            },
+        )
+        self.assertEqual(
+            context.history_details(),
+            {
+                "confirmed_by": "Alice",
+                "response_id": "snooze",
+                "response": "Snooze",
+            },
+        )
+
     def test_confirmation_defaults_are_owned_by_confirmation_feature(self):
-        config = confirmation.confirmation_config({"enabled": True})
+        config = confirmation.ConfirmationConfig.model_validate({"enabled": True})
 
         self.assertTrue(config.enabled)
         self.assertTrue(config.reminders.enabled)
@@ -47,12 +70,17 @@ class ConfirmationConfigTests(unittest.TestCase):
         self.assertFalse(config.actions.enabled)
 
     def test_confirmation_is_read_from_alert_level(self):
-        alert = {"confirmation": {"enabled": True, "button": "Done"}}
+        alert = {
+            "confirmation": {
+                "enabled": True,
+                "buttons": [{"id": "confirm", "label": "Done"}],
+            }
+        }
 
-        config = confirmation.confirmation_for_alert(alert)
+        config = confirmation.ConfirmationConfig.from_alert(alert)
 
         self.assertIsNotNone(config)
-        self.assertEqual(config.button, "Done")
+        self.assertEqual(config.buttons[0].label, "Done")
 
 
 class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
@@ -70,25 +98,50 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
     async def test_prepare_action_requires_enabled_confirmation(self):
         runtime = {}
 
-        created, action_id = await self.feature.prepare_action(
+        await self.feature.prepare_action(
             {"id": "alert_1", "confirmation": {"enabled": False}}, runtime
         )
 
-        self.assertFalse(created)
-        self.assertIsNone(action_id)
         self.assertEqual(runtime, {})
 
     async def test_prepare_action_is_idempotent_for_pending_action(self):
         runtime = {}
         alert = {"id": "alert_1", "confirmation": {"enabled": True}}
 
-        created, action_id = await self.feature.prepare_action(alert, runtime)
-        repeated, repeated_id = await self.feature.prepare_action(alert, runtime)
+        await self.feature.prepare_action(alert, runtime)
+        first_action_ids = dict(runtime["confirmation_action_ids"])
+        await self.feature.prepare_action(alert, runtime)
 
-        self.assertTrue(created)
-        self.assertTrue(action_id.startswith("NC_CONFIRM_alert_1_"))
-        self.assertFalse(repeated)
-        self.assertEqual(repeated_id, action_id)
+        self.assertEqual(runtime["confirmation_action_ids"], first_action_ids)
+
+    async def test_prepare_action_creates_one_pending_action_per_button(self):
+        runtime = {}
+        alert = {
+            "id": "alert_1",
+            "confirmation": {
+                "enabled": True,
+                "buttons": [
+                    {"id": "snooze", "label": "Snooze"},
+                    {"id": "escalate", "label": "Escalate"},
+                ],
+            },
+        }
+
+        await self.feature.prepare_action(alert, runtime)
+
+        self.assertEqual(
+            set(runtime["confirmation_action_ids"].values()),
+            {"snooze", "escalate"},
+        )
+
+    async def test_prepare_action_preserves_pending_actions(self):
+        runtime = {"confirmation_action_ids": {"action": "confirm"}}
+
+        await self.feature.prepare_action(
+            {"id": "alert_1", "confirmation": {"enabled": True}}, runtime
+        )
+
+        self.assertEqual(runtime["confirmation_action_ids"], {"action": "confirm"})
 
     async def test_draft_session_expires_and_can_be_cleared(self):
         await self.feature.track(
@@ -126,7 +179,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         test_feature = testing.TestFeature(None, {}, None, None)
         test_feature.lifecycle = Lifecycle()
-        action_id = await test_feature._prepare_test_action(alert)
+        action_ids = await test_feature._prepare_test_action(alert)
+        action_id = next(iter(action_ids), None)
 
         self.assertIsNotNone(action_id)
         session = self.sessions[action_id]
@@ -151,7 +205,12 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.feature._hass = Hass()
         draft = {"id": "draft_1", "name": "Draft"}
         await self.feature.track(
-            "draft_action", now=self.now, draft_alert=draft
+            "draft_action",
+            now=self.now,
+            draft_alert=draft,
+            selection=confirmation.ConfirmationSelection(
+                "draft_action", "snooze", "Snooze"
+            ),
         )
         result = await self.feature.resolve_action_event(
             SimpleNamespace(
@@ -161,6 +220,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.alert, draft)
         self.assertTrue(result.test)
+        self.assertEqual(result.confirmation.selection.response_id, "snooze")
+        self.assertEqual(result.confirmation.selection.label, "Snooze")
         self.assertFalse(self.feature.has_pending("draft_action"))
 
         alert = SimpleNamespace(
@@ -168,7 +229,9 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
         self.feature._alerts = {"alert_1": alert}
         self.feature._state["runtime"] = {
-            "alert_1": {"confirmation_action_id": "saved_action"}
+            "alert_1": {
+                "confirmation_action_ids": {"saved_action": "confirm"}
+            }
         }
         await self.feature.track("saved_action", now=self.now, alert_id="alert_1")
         result = await self.feature.resolve_action_event(
@@ -178,6 +241,61 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(result.alert["name"], "Saved")
+
+    async def test_resolving_one_response_clears_sibling_responses(self):
+        class Hass:
+            class States:
+                @staticmethod
+                def async_all(_domain):
+                    return []
+
+            class Auth:
+                async def async_get_user(self, _user_id):
+                    return None
+
+            states = States()
+            auth = Auth()
+
+        self.feature._hass = Hass()
+        alert = SimpleNamespace(
+            model_dump=lambda exclude_none=True: {"id": "alert_1", "name": "Saved"}
+        )
+        self.feature._alerts = {"alert_1": alert}
+        self.feature._state["runtime"] = {
+            "alert_1": {
+                "confirmation_action_ids": {
+                    "snooze": "snooze",
+                    "escalate": "escalate",
+                },
+            }
+        }
+        await self.feature.track(
+            "snooze",
+            now=self.now,
+            alert_id="alert_1",
+            selection=confirmation.ConfirmationSelection(
+                "snooze", "snooze", "Snooze"
+            ),
+        )
+        await self.feature.track(
+            "escalate",
+            now=self.now,
+            alert_id="alert_1",
+            selection=confirmation.ConfirmationSelection(
+                "escalate", "escalate", "Escalate"
+            ),
+        )
+
+        result = await self.feature.resolve_action_event(
+            SimpleNamespace(
+                data={"action": "snooze"},
+                context=SimpleNamespace(user_id=None),
+            )
+        )
+
+        self.assertEqual(result.confirmation.selection.response_id, "snooze")
+        self.assertFalse(self.feature.has_pending("snooze"))
+        self.assertFalse(self.feature.has_pending("escalate"))
         self.assertFalse(result.test)
         self.assertTrue(result.record_history)
 

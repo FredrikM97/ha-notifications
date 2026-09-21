@@ -109,7 +109,9 @@ async def test_confirmation_stops_pending_test_reminders(test_feature_context):
 
     await context.feature.test_saved("alert_1")
     session_id = next(iter(context.feature._sessions))
-    await context.confirmation.clear(context.feature._sessions[session_id].action_id)
+    await context.confirmation.clear(
+        context.feature._sessions[session_id].primary_action_id
+    )
     await context.run_reminders()
 
     assert [payload["attempt"] for payload in context.notification.payloads] == [1]

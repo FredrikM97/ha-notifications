@@ -40,7 +40,8 @@ export function renderConfirmationNotificationSection(
               event,
               "Template variables and sensor helpers",
               html`<div class="nc-help">
-          <code>confirmed_by</code>, <code>alert_id</code>,
+          <code>confirmed_by</code>, <code>confirmation_response_id</code>,
+          <code>confirmation_response</code>, <code>alert_id</code>,
           <code>alert_name</code>, <code>alert_active</code>,
           <code>trigger</code>, <code>attempt</code>, and <code>now</code> are
           available. Home

@@ -91,7 +91,9 @@ notification:
   message: ""
 confirmation:
   enabled: false
-  button: ""
+  buttons:
+    - id: confirm
+      label: Done
   notification:
     enabled: false
     message: ""
@@ -143,8 +145,11 @@ exports[`alert editor interactions > renders the Condition editor section 1`] = 
 
 exports[`alert editor interactions > renders the Confirmation editor section 1`] = `
 {
-  "buttons": [],
+  "buttons": [
+    "Add response button",
+  ],
   "controls": [
+    "ha-input",
     "ha-input",
     "ha-switch",
   ],
@@ -275,7 +280,12 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
     "actions": {
       "enabled": false,
     },
-    "button": "",
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
     "enabled": false,
     "notification": {
       "clear": true,

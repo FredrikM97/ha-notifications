@@ -80,7 +80,10 @@ class ConfigurationTests(unittest.TestCase):
                 "notifications": [{"action": "notify.legacy"}],
                 "notification": {
                 },
-                "confirmation": {"enabled": True, "button": "Done"},
+                "confirmation": {
+                    "enabled": True,
+                    "buttons": [{"id": "confirm", "label": "Done"}],
+                },
             }
         )
         mapped = alert.model_dump(exclude_none=True)
@@ -103,10 +106,12 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("notification", config.alerts[0].model_extra)
 
     def test_feature_models_are_mutable_typed_objects(self):
-        confirmation = ConfirmationConfig.model_validate({"button": "Acknowledge"})
+        confirmation = ConfirmationConfig.model_validate(
+            {"buttons": [{"id": "confirm", "label": "Acknowledge"}]}
+        )
         notification = NotificationConfig.model_validate({})
-        confirmation.button = "Done"
-        self.assertEqual(confirmation.button, "Done")
+        confirmation.buttons[0].label = "Done"
+        self.assertEqual(confirmation.buttons[0].label, "Done")
         self.assertEqual(notification.model_dump(exclude_none=True), {})
 
     def test_alert_runtime_accepts_last_event_entry(self):

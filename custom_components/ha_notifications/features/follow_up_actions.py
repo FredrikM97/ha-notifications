@@ -12,9 +12,14 @@ from ..const import (
     HistoryEventType,
     StateRoot,
 )
+from ..domain.confirmation import ConfirmationContext
 from ..controller.lifecycle import FeatureBase
 from ..domain.service_calls import ServiceCall
-from ..domain.template_values import remove_nulls, render_template_values
+from ..domain.template_values import (
+    remove_nulls,
+    render_template_values,
+    template_context,
+)
 from ..support.storage import RuntimeStateStorage
 from ..support.templates import render_template
 
@@ -47,19 +52,6 @@ class ActionResult:
     error: str | None
 
 
-@dataclass(frozen=True)
-class ActionContext:
-    """Typed template inputs for one follow-up action execution."""
-
-    alert_id: str
-    alert_name: str
-    attempt: int
-    test: bool
-    now: Any
-    confirmation_action_id: str | None
-    confirmed_by: str | None = None
-
-
 class FollowUpActionsFeature(FeatureBase):
     """Own follow-up action rendering, execution, and outcome recording."""
 
@@ -86,7 +78,7 @@ class FollowUpActionsFeature(FeatureBase):
         test: bool,
         record_history: bool,
         actions: list[dict[str, Any]] | None = None,
-        confirmed_by: str | None = None,
+        confirmation: ConfirmationContext | None = None,
     ) -> None:
         """Render, execute, and record post-send or confirmation actions."""
 
@@ -96,20 +88,16 @@ class FollowUpActionsFeature(FeatureBase):
         action_list = actions if actions is not None else (post_send.actions or [])
         if not action_list or (actions is None and not post_send.enabled):
             return
-        context = ActionContext(
-            alert["id"],
-            alert["name"],
+        variables = template_context(
+            alert,
             attempt,
-            test,
             now,
-            self._state[STATE_RUNTIME].get(alert["id"], {}).get(
-                "confirmation_action_id"
-            ),
-            confirmed_by,
+            test,
+            confirmation=confirmation,
         )
         results = await self._render_actions(
             action_list,
-            context,
+            variables,
         )
         for result in results:
             event_type = HistoryEventType.NOTIFICATION_ACTION
@@ -134,8 +122,7 @@ class FollowUpActionsFeature(FeatureBase):
                     event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
                     message = "Action failed."
                     details["error"] = str(err)
-            if record_history and self.feature("history").record_event(
-                self._state[STATE_RUNTIME].get(alert["id"]),
+            if record_history and self.feature("history").record(
                 alert,
                 event_type,
                 message,
@@ -145,21 +132,9 @@ class FollowUpActionsFeature(FeatureBase):
                 self._runtime_storage.persist()
 
     async def _render_actions(
-        self, actions: list[dict[str, Any]], context: ActionContext
+        self, actions: list[dict[str, Any]], variables: dict[str, Any]
     ) -> list[ActionResult]:
         """Render each configured action independently."""
-
-        variables = {
-            "alert_id": context.alert_id,
-            "alert_name": context.alert_name,
-            "alert_active": True,
-            "attempt": context.attempt,
-            "test": context.test,
-            "now": context.now,
-            "notification_id": f"ha_notifications_{context.alert_id}",
-            "confirmation_action_id": context.confirmation_action_id,
-            "confirmed_by": context.confirmed_by,
-        }
         results: list[ActionResult] = []
         for index, action in enumerate(actions, start=1):
             try:

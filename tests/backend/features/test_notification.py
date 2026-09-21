@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 from functools import partial
 
 from homeassistant.components.notify.const import NOTIFY_SERVICE_SCHEMA
+from custom_components.ha_notifications.domain.confirmation import (
+    ConfirmationContext,
+    ConfirmationSelection,
+)
+from custom_components.ha_notifications.features.alerts import AlertFeature
 
 from tests.backend.conftest import (
     make_confirmation_alert,
@@ -77,7 +82,6 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 "alert_name": "Alert",
                 "attempt": 1,
             },
-            None,
             capabilities.snapshot,
             capabilities.render,
         )
@@ -89,7 +93,7 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         configured_alert = alert()
         configured_alert["confirmation"] = {
             "enabled": True,
-            "button": "Acknowledge",
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
         }
         capabilities = notifications.NotificationCapabilitySet(
             render=render,
@@ -103,9 +107,11 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 "alert_name": "Alert",
                 "attempt": 1,
             },
-            "confirm_1",
             capabilities.snapshot,
             capabilities.render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
         )
 
         self.assertEqual(result[0].service, "mobile_app_somebody")
@@ -124,20 +130,54 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         }
         configured_alert["confirmation"] = {
             "enabled": True,
-            "button": "Acknowledge",
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
         }
 
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            "confirm_1",
             mobile_snapshot(),
             render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
         )
 
         self.assertEqual(result[0].service, "mobile_app_somebody")
         self.assertIsNone(result[0].target)
         self.assertIn("actions", result[0].data["data"])
+
+    async def test_multiple_confirmation_buttons_are_rendered(self):
+        configured_alert = alert()
+        configured_alert["confirmation"] = {
+            "enabled": True,
+            "buttons": [
+                {"id": "snooze", "label": "Snooze"},
+                {"id": "escalate", "label": "Escalate"},
+            ],
+        }
+        configured_alert["notification"]["target"] = {
+            "device_id": ["phone_device"]
+        }
+
+        result = await notifications.plan_delivery(
+            configured_alert,
+            {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
+            mobile_device_registry_snapshot(),
+            render,
+            notification_actions=[
+                {"action": "action_snooze", "title": "Snooze"},
+                {"action": "action_escalate", "title": "Escalate"},
+            ],
+        )
+
+        self.assertEqual(
+            result[0].data["data"]["actions"],
+            [
+                {"action": "action_snooze", "title": "Snooze"},
+                {"action": "action_escalate", "title": "Escalate"},
+            ],
+        )
 
     async def test_user_target_resolves_to_mobile_service(self):
         configured_alert = alert()
@@ -146,7 +186,6 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            None,
             target_registry_snapshot(),
             render,
         )
@@ -161,15 +200,17 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         }
         configured_alert["confirmation"] = {
             "enabled": True,
-            "button": "Confirm!",
+            "buttons": [{"id": "confirm", "label": "Confirm!"}],
         }
 
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            "NC_CONFIRM_alert_1_test",
             mobile_device_registry_snapshot(),
             render,
+            notification_actions=[
+                {"action": "NC_CONFIRM_alert_1_test", "title": "Confirm!"}
+            ],
         )
 
         self.assertEqual(result[0].service, "mobile_app_somebody")
@@ -186,15 +227,17 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         }
         configured_alert["confirmation"] = {
             "enabled": True,
-            "button": "Acknowledge",
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
         }
 
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            "confirm_1",
             mobile_snapshot(),
             render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
         )
 
         self.assertEqual(result[0].service, "mobile_app_somebody")
@@ -213,7 +256,6 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            None,
             mobile_device_registry_snapshot(),
             render,
         )
@@ -238,7 +280,6 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            None,
             labeled_device_snapshot(),
             render,
         )
@@ -254,15 +295,17 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         }
         configured_alert["confirmation"] = {
             "enabled": True,
-            "button": "Acknowledge",
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
         }
 
         result = await notifications.plan_delivery(
             configured_alert,
             {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-            "confirm_1",
             labeled_device_snapshot(),
             render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
         )
 
         self.assertEqual(result[0].service, "send_message")
@@ -279,7 +322,6 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             {
                 "alert": alert(),
                 "attempt": 1,
-                "confirmation_action_id": None,
                 "replace_existing": True,
                 "now": "now",
             },
@@ -339,7 +381,9 @@ async def test_mobile_replacement_contract_snapshot(snapshot):
         {
             "alert": alert(),
             "attempt": 2,
-            "confirmation_action_id": "confirm_1",
+            "notification_actions": [
+                {"action": "confirm_1", "title": "Confirm"}
+            ],
             "replace_existing": True,
             "test": True,
             "now": "now",
@@ -367,7 +411,9 @@ async def test_confirmation_reminder_replacement_contract_snapshot(snapshot):
         {
             "alert": make_confirmation_alert(),
             "attempt": 2,
-            "confirmation_action_id": "confirm_1",
+            "notification_actions": [
+                {"action": "confirm_1", "title": "Confirm"}
+            ],
             "replace_existing": True,
             "test": False,
             "now": "now",
@@ -396,29 +442,36 @@ def test_delivery_result_commits_only_successful_attempts():
         "last_notified": "previous",
         "last_error": None,
     }
+    feature = AlertFeature(None, {"runtime": {"alert_1": runtime}}, None, None)
 
-    notifications.NotificationFeature.record_delivery_result(
-        runtime,
+    feature.record_delivery_result(
+        "alert_1",
         2,
         datetime(2026, 1, 1, tzinfo=timezone.utc),
         success=False,
         error="delivery failed",
     )
 
-    assert runtime == {
+    assert {
+        key: runtime[key]
+        for key in ("attempts", "last_notified", "last_error")
+    } == {
         "attempts": 1,
         "last_notified": "previous",
         "last_error": "delivery failed",
     }
 
-    notifications.NotificationFeature.record_delivery_result(
-        runtime,
+    feature.record_delivery_result(
+        "alert_1",
         2,
         datetime(2026, 1, 2, tzinfo=timezone.utc),
         success=True,
     )
 
-    assert runtime == {
+    assert {
+        key: runtime[key]
+        for key in ("attempts", "last_notified", "last_error")
+    } == {
         "attempts": 2,
         "last_notified": "2026-01-02T00:00:00+00:00",
         "last_error": None,
@@ -443,7 +496,9 @@ async def test_confirmation_completion_planner_renders_message_and_clear_policy(
         return source.replace("{{ confirmed_by }}", variables["confirmed_by"])
 
     plan = await notifications.ConfirmationDeliveryPlanner(
-        configured_alert, "Alice", "now"
+        configured_alert,
+        ConfirmationContext("Alice", ConfirmationSelection("action", "confirm", "Done")),
+        "now",
     ).build(render_confirmation)
 
     assert plan.clear_notification is False
@@ -467,12 +522,13 @@ async def test_confirmation_completion_uses_generic_notify_target():
     }
 
     plan = await notifications.ConfirmationDeliveryPlanner(
-        configured_alert, "Alice", "now"
+        configured_alert,
+        ConfirmationContext("Alice", ConfirmationSelection("action", "confirm", "Done")),
+        "now",
     ).build(render)
     commands = await notifications.plan_delivery(
         plan.completion_alert,
         {"alert_id": "alert_1", "alert_name": "Alert", "attempt": 1},
-        None,
         labeled_device_snapshot(),
         render,
     )
@@ -535,7 +591,6 @@ async def test_notification_feature_send_and_clear_use_capabilities(hass, monkey
         {
             "alert": alert(),
             "attempt": 1,
-            "confirmation_action_id": None,
             "replace_existing": False,
             "now": "now",
         }
@@ -552,7 +607,6 @@ async def test_send_requested_propagates_or_swallows_planning_errors(monkeypatch
     payload = {
         "alert": alert(),
         "attempt": 1,
-        "confirmation_action_id": None,
         "replace_existing": False,
         "now": "now",
     }

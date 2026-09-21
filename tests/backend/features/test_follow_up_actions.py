@@ -19,14 +19,14 @@ class HistoryRecorder:
     def __init__(self) -> None:
         self.events = []
 
-    def record_event(self, *args):
+    def record(self, *args):
         self.events.append(args)
         return True
 
 
 @pytest.fixture
 def follow_up_context(hass):
-    state = {"runtime": {"alert_1": {"confirmation_action_id": "confirm_1"}}}
+    state = {"runtime": {"alert_1": {"confirmation_action_ids": {"confirm_1": "confirm"}}}}
     history = HistoryRecorder()
     feature = module.FollowUpActionsFeature(hass, state, None, SimpleNamespace(
         persist=lambda: None
@@ -68,9 +68,9 @@ async def test_run_renders_and_executes_multiple_actions(
     assert calls[0].data["brightness"] == 20
     assert [
         {
-            "index": event[4]["index"],
-            "message": event[3],
-            "details": event[4],
+                "index": event[3]["index"],
+                "message": event[2],
+                "details": event[3],
         }
         for event in history.events
     ] == snapshot
@@ -97,8 +97,8 @@ async def test_run_records_service_failure(hass, follow_up_context):
         True,
     )
 
-    assert history.events[0][2].value == "notification_action_failed"
-    assert history.events[0][4]["error"] == "service unavailable"
+    assert history.events[0][1].value == "notification_action_failed"
+    assert history.events[0][3]["error"] == "service unavailable"
 
 
 @pytest.mark.asyncio
