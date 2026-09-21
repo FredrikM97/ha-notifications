@@ -18,11 +18,11 @@ type CodeEditor = HTMLElement & {
 };
 
 class YamlViewElement extends LitElement {
-  hass!: Hass;
+  declare hass: Hass;
 
-  showToast!: Toast;
+  declare showToast: Toast;
 
-  refreshPanel!: () => Promise<void>;
+  declare refreshPanel: () => Promise<void>;
 
   static properties = {
     hass: { attribute: false },
@@ -187,3 +187,5 @@ class YamlViewElement extends LitElement {
     }
   };
 }
+
+customElements.define("ha-notifications-yaml-view", YamlViewElement);

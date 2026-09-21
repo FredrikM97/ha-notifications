@@ -1,0 +1,79 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`YAML view > renders the registered view and loads configuration 1`] = `
+<div
+  class="nc-card nc-yaml"
+>
+  
+      
+  <div
+    class="nc-toolbar"
+  >
+    
+        
+    <div>
+      
+          Advanced editor. Copy this YAML to another system or import a
+          validated configuration into Home Assistant.
+        
+    </div>
+    
+        
+    <div
+      class="nc-actions"
+    >
+      
+          
+      <button
+        class="nc-button secondary"
+      >
+        
+            Copy
+          
+      </button>
+      
+          
+      <button
+        class="nc-button secondary"
+      >
+        
+            Validate
+          
+      </button>
+      
+          
+      <button
+        class="nc-button secondary"
+      >
+        
+            Reload
+          
+      </button>
+      
+          
+      <button
+        class="nc-button"
+      >
+        
+            Save YAML
+          
+      </button>
+      
+        
+    </div>
+    
+      
+  </div>
+  
+      
+  <ha-code-editor
+    aria-label="HA Notifications YAML"
+    class="nc-code-editor nc-yaml-editor"
+    id="nc-yaml-editor"
+    language="yaml"
+    mode="yaml"
+  />
+  
+    
+</div>
+`;
