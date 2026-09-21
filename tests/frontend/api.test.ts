@@ -3,12 +3,23 @@ import {
   getAlerts,
   getAlertRuntime,
   getConfig,
+  getHistory,
+  discardDraftTestPayload,
+  deleteAlert,
+  loadRegistries,
+  reload,
   saveAlert,
   saveConfig,
   testAlert,
+  testAlertPayload,
   validateConfig,
 } from "../../frontend/api.js";
-import { alertFixture, createHassClient } from "./conftest.js";
+import {
+  alertFixture,
+  configFixture,
+  createHassClient,
+  draftTestResultFixture,
+} from "./conftest.js";
 
 describe("frontend API transport", () => {
   it("uses the runtime command for alert runtime state", async () => {
@@ -37,7 +48,7 @@ describe("frontend API transport", () => {
 
   it("uses structured config for configuration routes", async () => {
     const client = createHassClient();
-    const config = { version: 1, alerts: [] };
+    const config = configFixture;
 
     await getConfig(client.hass);
     await validateConfig(client.hass, config);
@@ -62,5 +73,37 @@ describe("frontend API transport", () => {
     await expect(getAlerts(client.hass)).rejects.toThrow(
       "ha_notifications/list: expected an alert list.",
     );
+  });
+
+  it("snapshots history, delete, draft test, and reload commands", async () => {
+    const client = createHassClient();
+    const alert = alertFixture();
+
+    await getHistory(client.hass, "door", 150);
+    await deleteAlert(client.hass, "door");
+    client.sendMessagePromise.mockResolvedValueOnce(draftTestResultFixture);
+    await testAlertPayload(client.hass, alert);
+    await discardDraftTestPayload(client.hass, "session");
+    await reload(client.hass);
+
+    expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
+  });
+
+  it("enriches registry entities with friendly state names", async () => {
+    const client = createHassClient();
+    client.sendMessagePromise
+      .mockResolvedValueOnce([{ entity_id: "light.kitchen" }])
+      .mockResolvedValueOnce([
+        { entity_id: "light.kitchen", attributes: { friendly_name: "Kitchen" } },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    await expect(loadRegistries(client.hass)).resolves.toMatchObject({
+      entities: [{ entity_id: "light.kitchen", friendly_name: "Kitchen" }],
+    });
   });
 });

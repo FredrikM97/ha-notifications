@@ -51,6 +51,29 @@ exports[`filterHistoryEntries > returns all entries when no filters are active 1
 ]
 `;
 
+exports[`history view element > renders the registered history view 1`] = `
+{
+  "count": undefined,
+  "entries": [
+    {
+      "badge": "notification sent",
+      "hasDetails": true,
+      "title": "Garage door",
+    },
+    {
+      "badge": "delivery failed",
+      "hasDetails": true,
+      "title": "Water leak",
+    },
+  ],
+  "filters": [
+    "Filter by event type",
+    "Filter by severity",
+    "Search history",
+  ],
+}
+`;
+
 exports[`historyDetailSummary > hides attempt-only details from the inline preview 1`] = `""`;
 
 exports[`historyDetailSummary > keeps meaningful detail summaries visible 1`] = `"Device unavailable"`;

@@ -4,20 +4,54 @@ import { describe, expect, it, vi } from "vitest";
 import { visualConditionBuilder } from "../../frontend/condition-builder.js";
 import { defaultAlert } from "../../frontend/editor/helpers.js";
 import { openEditor } from "../../frontend/editor/index.js";
+import { editorSections } from "../../frontend/editor/types.js";
 import { createRecipientPicker } from "../../frontend/recipient-picker.js";
 import type { Hass } from "../../frontend/types.js";
 import {
+  editorAlertFixture,
   editorOptions,
   editorQueries,
   editorRoot,
   domQueries,
   emptyRegistries,
   installHaTestElements,
+  populatedRegistries,
   stableMarkup,
   testUser,
 } from "./conftest.js";
 
 installHaTestElements();
+
+function sectionContract(section: Element | null) {
+  if (!section) {
+    return null;
+  }
+
+  const text = (element: Element): string =>
+    element.textContent?.replace(/\s+/g, " ").trim() || "";
+
+  return {
+    title: section.getAttribute("data-title"),
+    controls: [
+      ...section.querySelectorAll(
+        "ha-input, ha-selector, ha-switch, ha-code-editor, ha-icon-picker",
+      ),
+    ].map((element) =>
+      [
+        element.tagName.toLowerCase(),
+        element.getAttribute("aria-label"),
+        element.getAttribute("mode"),
+        element.getAttribute("data-role"),
+      ]
+        .filter(Boolean)
+        .join(":"),
+    ),
+    buttons: [...section.querySelectorAll("button")].map(
+      (button) => button.getAttribute("aria-label") || text(button),
+    ),
+    help: [...section.querySelectorAll(".nc-help")].map(text),
+  };
+}
 
 describe("condition builder interactions", () => {
   it("moves Add ID into the action row and reveals the ID field", async () => {
@@ -68,9 +102,69 @@ describe("condition builder interactions", () => {
     expect(container.querySelector(".nc-help")).toMatchSnapshot();
     expect(markDirty).toHaveBeenCalledOnce();
   });
+
+  it("omits visual conditions without an entity", () => {
+    const currentConditions = visualConditionBuilder(
+      document.createElement("div"),
+      {} as Hass,
+      emptyRegistries(),
+      [
+        { type: "state", entity_id: "sensor.front_door", state: "on" },
+        { type: "state", entity_id: "", state: "off" },
+      ],
+      vi.fn(),
+    );
+
+    expect(currentConditions()).toMatchSnapshot();
+  });
 });
 
 describe("alert editor interactions", () => {
+  it("loads populated alert and registry fixture data", async () => {
+    const root = editorRoot();
+    openEditor(
+      editorOptions(root, editorAlertFixture(), populatedRegistries()),
+    );
+    await Promise.resolve();
+
+    expect({
+      name: root.querySelector('[data-role="editor-alert-name"]')?.textContent,
+      conditionRows: root.querySelectorAll(".nc-condition-row").length,
+      selectedRecipients: [
+        ...root.querySelectorAll(".nc-target-chip"),
+      ].map((chip) => chip.textContent?.replace(/\s+/g, " ").trim()),
+      intervalEnabled: (
+        root.querySelector('[data-role="interval-toggle"]') as HTMLElement & {
+          checked: boolean;
+        }
+      )?.checked,
+      retentionDays: (
+        root.querySelector('[aria-label="History retention days"]') as HTMLInputElement
+      )?.value,
+      confirmationEnabled: (
+        root.querySelector(
+          '[data-role="editor-section-control"][data-setting="confirmation"] ha-switch',
+        ) as HTMLElement & { checked: boolean }
+      )?.checked,
+      actionEditors: [
+        ...root.querySelectorAll("ha-code-editor[data-role]")
+      ].map((editor) => ({
+        role: editor.getAttribute("data-role"),
+        value: (editor as HTMLElement & { value?: string }).value,
+      })),
+    }).toMatchSnapshot();
+  });
+
+  it.each(editorSections.map(({ title }) => title))(
+    "renders the %s editor section",
+    async (title) => {
+      const root = editorRoot();
+      openEditor(editorOptions(root));
+
+      expect(sectionContract(root.querySelector(`[data-title="${title}"]`))).toMatchSnapshot();
+    },
+  );
+
   it("switches active sections and keeps the contextual title", async () => {
     const root = editorRoot();
     const queries = editorQueries(root);
@@ -317,6 +411,21 @@ describe("alert editor interactions", () => {
 
     expect(options.onSave).toHaveBeenCalledOnce();
     expect(options.onSave.mock.calls[0][0]).toMatchSnapshot();
+    expect(options.onSaved).toHaveBeenCalledOnce();
+    expect(options.onClosed).toHaveBeenCalledOnce();
+  });
+
+  it("closes a clean editor without opening the discard dialog", async () => {
+    const root = editorRoot();
+    const queries = editorQueries(root);
+    const options = editorOptions(root);
+    openEditor(options);
+
+    await testUser().click(queries.getByRole("button", { name: "Cancel" }));
+
+    expect(root.querySelector(".nc-discard-modal")).toBeNull();
+    expect(root.querySelector(".nc-editor-view")).toBeNull();
+    expect(options.onClosed).toHaveBeenCalledOnce();
   });
 
   it("asks before discarding unsaved changes", async () => {
@@ -364,5 +473,35 @@ describe("recipient picker interactions", () => {
       stableMarkup(picker.element.querySelector(".nc-target-chip")),
     ).toMatchSnapshot();
     expect(markDirty).toHaveBeenCalledOnce();
+  });
+
+  it("filters recipients and removes a selected target", async () => {
+    const markDirty = vi.fn();
+    const picker = createRecipientPicker(
+      {
+        ...emptyRegistries(),
+        entities: [
+          { entity_id: "notify.phone", name: "Phone" },
+          { entity_id: "notify.tablet", name: "Tablet" },
+        ],
+      },
+      {},
+      markDirty,
+    );
+    const queries = domQueries(picker.element);
+    const user = testUser();
+    const search = picker.element.querySelector("ha-input") as HTMLElement & {
+      value: string;
+    };
+
+    await user.click(search);
+    search.value = "tablet";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await user.click(queries.getByRole("button", { name: "Tablet" }));
+    expect(picker.target()).toMatchSnapshot();
+
+    await user.click(queries.getByRole("button", { name: "Remove" }));
+    expect(picker.target()).toEqual({});
+    expect(markDirty).toHaveBeenCalledTimes(2);
   });
 });

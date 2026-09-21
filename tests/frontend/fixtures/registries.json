@@ -1,0 +1,39 @@
+{
+  "entities": [
+    {
+      "entity_id": "binary_sensor.front_door",
+      "name": "Front door",
+      "friendly_name": "Front door"
+    },
+    {
+      "entity_id": "notify.phone",
+      "name": "Phone"
+    },
+    {
+      "entity_id": "light.hall",
+      "name": "Hall light"
+    }
+  ],
+  "devices": [
+    {
+      "id": "device_phone",
+      "name": "Phone",
+      "name_by_user": "Main phone"
+    }
+  ],
+  "areas": [
+    {
+      "area_id": "hall",
+      "name": "Hall"
+    }
+  ],
+  "labels": [],
+  "floors": [],
+  "users": [
+    {
+      "id": "user_fred",
+      "name": "Fred",
+      "is_active": true
+    }
+  ]
+}

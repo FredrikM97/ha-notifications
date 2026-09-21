@@ -1,0 +1,52 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`panel view > renders the access guard for non-admin users 1`] = `
+{
+  "message": "HA Notifications alerts can only be viewed and edited by Home Assistant administrators.",
+  "title": "Administrator access required",
+}
+`;
+
+exports[`panel view > renders the alert dashboard and status card 1`] = `
+{
+  "alerts": [
+    {
+      "actions": [
+        "Test alert",
+        "Disable",
+        "Edit alert",
+        "View history",
+        "Delete alert",
+      ],
+      "meta": "condition changes · 1 entities",
+      "name": "Front door",
+      "statuses": [
+        "Enabled",
+        "Triggered",
+      ],
+    },
+  ],
+  "tabs": [
+    {
+      "active": true,
+      "label": "Alerts",
+    },
+    {
+      "active": false,
+      "label": "History",
+    },
+    {
+      "active": false,
+      "label": "YAML",
+    },
+  ],
+}
+`;
+
+exports[`panel view > renders the empty dashboard state 1`] = `
+{
+  "action": "Create alert",
+  "message": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
+  "title": "No alerts yet",
+}
+`;

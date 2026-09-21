@@ -6,7 +6,31 @@ import {
   historyDetailSummary,
   renderHistory,
 } from "../../frontend/history.js";
-import { emptyHistoryFilters, historyFixture, testUser } from "./conftest.js";
+import {
+  emptyHistoryFilters,
+  historyFixture,
+  mountCustomElement,
+  settleElement,
+  testUser,
+} from "./conftest.js";
+
+function historyContract(root: Element | null) {
+  if (!root) {
+    return null;
+  }
+
+  return {
+    filters: [...root.querySelectorAll("ha-input, ha-selector")].map(
+      (control) => control.getAttribute("aria-label"),
+    ),
+    entries: [...root.querySelectorAll(".nc-history-item")].map((entry) => ({
+      title: entry.querySelector(".nc-history-alert-link")?.textContent?.trim(),
+      badge: entry.querySelector(".nc-history-badge")?.textContent?.trim(),
+      hasDetails: Boolean(entry.querySelector(".nc-history-details")),
+    })),
+    count: root.querySelector(".nc-history-count")?.textContent?.trim(),
+  };
+}
 
 describe("filterHistoryEntries", () => {
   it("matches search text across the event content", () => {
@@ -90,5 +114,38 @@ describe("history detail controls", () => {
     expect(details?.hasAttribute("open")).toBe(false);
     await user.click(item!);
     expect(item?.querySelector("details")?.hasAttribute("open")).toBe(true);
+  });
+});
+
+describe("history view element", () => {
+  it("renders the registered history view", async () => {
+    const element = mountCustomElement<HTMLElement>(
+      "ha-notifications-history-view",
+      {
+        history: historyFixture,
+        options: { filters: emptyHistoryFilters },
+      },
+    );
+    await settleElement(element);
+
+    expect(historyContract(element.querySelector(".nc-history"))).toMatchSnapshot();
+  });
+
+  it("updates when its filters change", async () => {
+    const element = mountCustomElement<HTMLElement>(
+      "ha-notifications-history-view",
+      {
+        history: historyFixture,
+        options: { filters: emptyHistoryFilters },
+      },
+    );
+    await settleElement(element);
+
+    element.options = {
+      filters: { ...emptyHistoryFilters, severity: "error" },
+    };
+    await settleElement(element);
+
+    expect(element.querySelectorAll(".nc-history-item")).toHaveLength(1);
   });
 });

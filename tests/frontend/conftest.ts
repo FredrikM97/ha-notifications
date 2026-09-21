@@ -1,14 +1,33 @@
 import { vi } from "vitest";
 import { within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
-import type { Alert, Hass, HistoryEntry, Registries } from "../../frontend/types.js";
+import { render } from "lit";
+import type { TemplateResult } from "lit";
+import type {
+  Alert,
+  Hass,
+  HistoryEntry,
+  Registries,
+  RuntimeAlertState,
+} from "../../frontend/types.js";
 import type { AlertFormValues } from "../../frontend/alert-payload.js";
 import { defaultAlert } from "../../frontend/editor/helpers.js";
+import alertFixtureData from "./fixtures/alerts.json";
 import alertFormValuesData from "./fixtures/alert-form-values.json";
 import fixtureData from "./fixtures/history.json";
+import registriesFixtureData from "./fixtures/registries.json";
 
 export const historyFixture = fixtureData.history as HistoryEntry[];
 export const emptyHistoryFilters = fixtureData.emptyFilters;
+export const alertRuntimeFixture = alertFixtureData.runtime as Record<
+  string,
+  RuntimeAlertState
+>;
+export const configFixture = alertFixtureData.config as Record<string, unknown>;
+export const draftTestResultFixture = alertFixtureData.draftTestResult as {
+  session_id: string;
+  confirmation_action_id: string | null;
+};
 
 export function createHassClient() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});
@@ -20,6 +39,18 @@ export function createHassClient() {
 
 export function alertFixture(): Alert {
   return { id: "door", name: "Door" } as Alert;
+}
+
+export function configuredAlertFixture(): Alert {
+  return structuredClone(alertFixtureData.alert) as Alert;
+}
+
+export function editorAlertFixture(): Alert {
+  return structuredClone(alertFixtureData.editorAlert) as Alert;
+}
+
+export function populatedRegistries(): Registries {
+  return structuredClone(registriesFixtureData) as Registries;
 }
 
 export function alertFormValues(
@@ -54,6 +85,33 @@ export function installHaTestElements(): void {
 
 export function stableMarkup(element: Element | null): string | undefined {
   return element?.outerHTML.replace(/<!--.*?-->/g, "");
+}
+
+export function mountCustomElement<T extends HTMLElement>(
+  tagName: string,
+  properties: Record<string, unknown> = {},
+): T {
+  const element = document.createElement(tagName) as T;
+  Object.assign(element, properties);
+  document.body.append(element);
+  return element;
+}
+
+export function renderTemplate(template: TemplateResult): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  render(template, container);
+  return container;
+}
+
+export async function settleElement(element: HTMLElement): Promise<void> {
+  const updateComplete = (element as HTMLElement & {
+    updateComplete?: Promise<unknown>;
+  }).updateComplete;
+  if (updateComplete) {
+    await updateComplete;
+  }
+  await Promise.resolve();
 }
 
 export function editorRoot(): ShadowRoot {
@@ -95,5 +153,7 @@ export function editorOptions(
     onTest: vi.fn().mockResolvedValue({ session_id: "session" }),
     onValidateCondition: vi.fn().mockResolvedValue({}),
     onDiscardTest: vi.fn().mockResolvedValue({}),
+    onSaved: vi.fn().mockResolvedValue(undefined),
+    onClosed: vi.fn(),
   };
 }

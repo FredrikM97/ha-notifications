@@ -2,6 +2,50 @@
 
 exports[`alert editor interactions > asks before discarding unsaved changes 1`] = `"Unsaved changes You have unsaved changes. Leave without saving? Stay Discard changes"`;
 
+exports[`alert editor interactions > loads populated alert and registry fixture data 1`] = `
+{
+  "actionEditors": [
+    {
+      "role": "conditions-yaml-editor",
+      "value": "- type: state
+  id: front_door
+  entity_id: binary_sensor.front_door
+  state: on
+  for: 00:05:00
+",
+    },
+    {
+      "role": "condition",
+      "value": "",
+    },
+    {
+      "role": "notification-actions",
+      "value": "- action: logbook.log
+  data:
+    name: Front door alert
+",
+    },
+    {
+      "role": "actions",
+      "value": "- action: light.turn_on
+  target:
+    entity_id:
+      - light.hall
+",
+    },
+  ],
+  "conditionRows": 1,
+  "confirmationEnabled": true,
+  "intervalEnabled": true,
+  "name": "Front door open",
+  "retentionDays": "14",
+  "selectedRecipients": [
+    "Main phoneRemove",
+    "PhoneRemove",
+  ],
+}
+`;
+
 exports[`alert editor interactions > opens template help in a modal from the notification section 1`] = `
 "<section role="dialog" aria-modal="true" class="nc-modal nc-template-help-modal">
         <header class="nc-modal-header">
@@ -59,6 +103,163 @@ confirmation:
   actions:
     enabled: false
 "
+`;
+
+exports[`alert editor interactions > renders the Basic editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-input",
+    "ha-selector:Description",
+    "ha-icon-picker:Icon",
+  ],
+  "help": [],
+  "title": "Basic",
+}
+`;
+
+exports[`alert editor interactions > renders the Condition editor section 1`] = `
+{
+  "buttons": [
+    "Visual conditions",
+    "Conditions YAML",
+    "Advanced Jinja",
+    "Add condition",
+  ],
+  "controls": [
+    "ha-code-editor:Conditions YAML:yaml:conditions-yaml-editor",
+    "ha-code-editor:Jinja condition:jinja2:condition",
+  ],
+  "help": [
+    "No visual conditions configured.",
+    "IDs are optional. Set one such as front_door to use its result in a notification with condition.front_door.",
+    "Edit the raw conditions: list. This is the YAML behind the visual editor.",
+    "The condition should evaluate to true or false. Home Assistant automatically tracks entities referenced by the template.",
+  ],
+  "title": "Condition",
+}
+`;
+
+exports[`alert editor interactions > renders the Confirmation editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-input",
+    "ha-switch",
+  ],
+  "help": [],
+  "title": "Confirmation",
+}
+`;
+
+exports[`alert editor interactions > renders the Notification editor section 1`] = `
+{
+  "buttons": [
+    "Show template variables and sensor helpers",
+  ],
+  "controls": [
+    "ha-input",
+    "ha-code-editor:Notification message:jinja2",
+  ],
+  "help": [],
+  "title": "Notification",
+}
+`;
+
+exports[`alert editor interactions > renders the Notify recipients when confirmed editor section 1`] = `
+{
+  "buttons": [
+    "Show template variables and sensor helpers",
+  ],
+  "controls": [
+    "ha-code-editor:Confirmation message:jinja2",
+  ],
+  "help": [
+    "Optionally send a follow-up message after acknowledgement.",
+    "Example: Confirmed by {{confirmed_by}}",
+  ],
+  "title": "Notify recipients when confirmed",
+}
+`;
+
+exports[`alert editor interactions > renders the Post-confirmation actions editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-code-editor:Post-confirmation actions:yaml:actions",
+  ],
+  "help": [
+    "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
+  ],
+  "title": "Post-confirmation actions",
+}
+`;
+
+exports[`alert editor interactions > renders the Post-send actions editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-code-editor:Post-send actions:yaml:notification-actions",
+  ],
+  "help": [
+    "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
+  ],
+  "title": "Post-send actions",
+}
+`;
+
+exports[`alert editor interactions > renders the Recipients editor section 1`] = `
+{
+  "buttons": [
+    "All",
+    "Devices",
+    "Areas",
+    "Floors",
+    "Labels",
+    "Notification entities",
+    "Users",
+  ],
+  "controls": [
+    "ha-input",
+  ],
+  "help": [
+    "Search for a recipient, choose a type when needed, then select it. You can mix devices, areas, labels, floors, and notification entities.",
+    "Selected devices, areas, labels, floors, and notification entities are passed to Home Assistant's standard Notify service.",
+  ],
+  "title": "Recipients",
+}
+`;
+
+exports[`alert editor interactions > renders the Reminder policy editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-selector:Duration",
+    "ha-input",
+    "ha-switch",
+  ],
+  "help": [],
+  "title": "Reminder policy",
+}
+`;
+
+exports[`alert editor interactions > renders the When to check editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-switch",
+    "ha-switch",
+    "ha-switch:interval-toggle",
+    "ha-selector:Duration",
+    "ha-switch:Enable history retention",
+    "ha-input:History retention days",
+  ],
+  "help": [
+    "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
+    "Completed alert history is removed after this period.",
+  ],
+  "title": "When to check",
+}
 `;
 
 exports[`alert editor interactions > saves an edited alert and closes the editor 1`] = `
@@ -134,12 +335,30 @@ exports[`condition builder interactions > moves Add ID into the action row and r
     </div>"
 `;
 
+exports[`condition builder interactions > omits visual conditions without an entity 1`] = `
+[
+  {
+    "entity_id": "sensor.front_door",
+    "state": "on",
+    "type": "state",
+  },
+]
+`;
+
 exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `
 <div
   class="nc-help"
 >
   No visual conditions configured.
 </div>
+`;
+
+exports[`recipient picker interactions > filters recipients and removes a selected target 1`] = `
+{
+  "entity_id": [
+    "notify.tablet",
+  ],
+}
 `;
 
 exports[`recipient picker interactions > serializes a selected notification entity and marks the editor dirty 1`] = `

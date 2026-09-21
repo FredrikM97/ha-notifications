@@ -3,9 +3,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { within } from "@testing-library/dom";
 import type { Hass } from "../../frontend/types.js";
-import { installHaTestElements, testUser } from "./conftest.js";
+import {
+  installHaTestElements,
+  configFixture,
+  mountCustomElement,
+  testUser,
+} from "./conftest.js";
 
-const getConfig = vi.fn().mockResolvedValue({ version: 1, alerts: [] });
+const getConfig = vi.fn().mockResolvedValue(configFixture);
 const validateConfig = vi.fn().mockResolvedValue({});
 
 vi.mock("../../frontend/api.js", () => ({
@@ -20,39 +25,49 @@ await import("../../frontend/yaml-view.js");
 
 installHaTestElements();
 
+type YamlViewTestElement = HTMLElement & {
+  hass: Hass;
+  showToast: (message: string, error?: boolean) => void;
+  refreshPanel: () => Promise<void>;
+  updateComplete: Promise<unknown>;
+};
+
+function mountYamlView(): YamlViewTestElement {
+  return mountCustomElement<YamlViewTestElement>(
+    "ha-notifications-yaml-view",
+    {
+      hass: {} as Hass,
+      showToast: vi.fn(),
+      refreshPanel: vi.fn().mockResolvedValue(undefined),
+    },
+  );
+}
+
 describe("YAML view", () => {
   it("renders the registered view and loads configuration", async () => {
-    const element = document.createElement("ha-notifications-yaml-view") as HTMLElement & {
-      hass: Hass;
-      showToast: (message: string, error?: boolean) => void;
-      refreshPanel: () => Promise<void>;
-      updateComplete: Promise<unknown>;
-    };
-    element.hass = {} as Hass;
-    element.showToast = vi.fn();
-    element.refreshPanel = vi.fn().mockResolvedValue(undefined);
-    document.body.append(element);
+    const element = mountYamlView();
 
     await vi.waitFor(() => expect(getConfig).toHaveBeenCalledOnce());
     await element.updateComplete;
 
-    expect(element.querySelector(".nc-yaml")).toMatchSnapshot();
-    expect(element.querySelector("ha-code-editor")?.getAttribute("mode")).toBe(
-      "yaml",
-    );
+    const editor = element.querySelector("ha-code-editor") as HTMLElement & {
+      value: string;
+    };
+    expect({
+      buttons: [...element.querySelectorAll(".nc-actions button")].map((button) =>
+        button.textContent?.replace(/\s+/g, " ").trim(),
+      ),
+      editor: {
+        ariaLabel: editor.getAttribute("aria-label"),
+        language: editor.getAttribute("language"),
+        mode: editor.getAttribute("mode"),
+        value: editor.value,
+      },
+    }).toMatchSnapshot();
   });
 
   it("validates the current editor value", async () => {
-    const element = document.createElement("ha-notifications-yaml-view") as HTMLElement & {
-      hass: Hass;
-      showToast: (message: string, error?: boolean) => void;
-      refreshPanel: () => Promise<void>;
-      updateComplete: Promise<unknown>;
-    };
-    element.hass = {} as Hass;
-    element.showToast = vi.fn();
-    element.refreshPanel = vi.fn().mockResolvedValue(undefined);
-    document.body.append(element);
+    const element = mountYamlView();
 
     await vi.waitFor(() => expect(getConfig).toHaveBeenCalled());
     const editor = element.querySelector("ha-code-editor") as HTMLElement & {

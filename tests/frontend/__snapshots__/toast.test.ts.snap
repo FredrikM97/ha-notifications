@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`toast notifications > renders success and error toast states 1`] = `
+[
+  {
+    "error": false,
+    "text": "Saved.",
+  },
+  {
+    "error": true,
+    "text": "Failed.",
+  },
+]
+`;

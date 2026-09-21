@@ -19,6 +19,44 @@ exports[`frontend API transport > namespaces alert list and save commands 1`] = 
 ]
 `;
 
+exports[`frontend API transport > snapshots history, delete, draft test, and reload commands 1`] = `
+[
+  [
+    {
+      "alert_id": "door",
+      "limit": 150,
+      "type": "ha_notifications/history",
+    },
+  ],
+  [
+    {
+      "alert_id": "door",
+      "type": "ha_notifications/delete",
+    },
+  ],
+  [
+    {
+      "alert": {
+        "id": "door",
+        "name": "Door",
+      },
+      "type": "ha_notifications/test_payload",
+    },
+  ],
+  [
+    {
+      "session_id": "session",
+      "type": "ha_notifications/discard_test_payload",
+    },
+  ],
+  [
+    {
+      "type": "ha_notifications/reload",
+    },
+  ],
+]
+`;
+
 exports[`frontend API transport > uses structured config for configuration routes 1`] = `
 [
   [

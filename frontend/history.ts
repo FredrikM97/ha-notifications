@@ -106,9 +106,9 @@ export function renderHistory(
 }
 
 class HistoryViewElement extends LitElement {
-  history: HistoryEntry[] = [];
+  declare history: HistoryEntry[];
 
-  options: HistoryRenderOptions = {};
+  declare options: HistoryRenderOptions;
 
   private expandedDetails = new Set<number>();
 
