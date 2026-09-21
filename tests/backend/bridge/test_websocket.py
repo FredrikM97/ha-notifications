@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import unittest
+from types import MappingProxyType
 from unittest.mock import patch
 
 import voluptuous as vol
@@ -37,7 +38,7 @@ class Lifecycle:
         self.websocket_routes = routes
 
     async def dispatch(self, name: str, **kwargs: object) -> object:
-        if name == "testing.discard":
+        if name == "notification_preview.discard":
             raise RuntimeError("discard failed")
         return {"route": name, **kwargs}
 
@@ -105,11 +106,11 @@ class WebsocketTests(unittest.IsolatedAsyncioTestCase):
                 Lifecycle(
                     (
                         WebsocketRoute(
-                            "testing.discard",
-                            "discard_test_payload",
+                            "notification_preview.discard",
+                            "discard_preview",
                             (WebsocketArgument("session_id", str),),
                             "discard_failed",
-                            "Unable to discard test payload.",
+                            "Unable to discard preview.",
                         ),
                     )
                 ),
@@ -121,5 +122,42 @@ class WebsocketTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(connection.errors, [(3, "discard_failed", "discard failed")])
         self.assertEqual(connection.results, [])
+
+    async def test_results_convert_mappingproxy_values_for_json(self) -> None:
+        handlers = []
+
+        class ConfigLifecycle(Lifecycle):
+            async def dispatch(self, name: str, **kwargs: object) -> object:
+                return MappingProxyType(
+                    {
+                        "alerts": MappingProxyType(
+                            {"confirmation": MappingProxyType({"enabled": True})}
+                        )
+                    }
+                )
+
+        with (
+            patch.object(websocket_api, "websocket_command", _passthrough_decorator),
+            patch.object(websocket_api, "async_response", lambda fn: fn),
+        ):
+            module = importlib.reload(websocket)
+            module.register(
+                ConfigLifecycle(
+                    (WebsocketRoute("configuration.get", "get_config"),)
+                ),
+                handlers.append,
+            )
+
+        connection = Connection()
+        await handlers[0](None, connection, {"id": 4})
+
+        self.assertEqual(
+            connection.results,
+            [
+                (4, {"alerts": {"confirmation": {"enabled": True}}}),
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

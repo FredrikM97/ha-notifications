@@ -6,6 +6,7 @@ declarations into Home Assistant websocket handlers.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Callable
 
 import voluptuous as vol
@@ -13,6 +14,15 @@ from homeassistant.components import websocket_api
 
 from ..const import DOMAIN
 from ..controller.lifecycle import FeatureLifecycle, WebsocketRoute
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert mapping-like route results into JSON-serializable values."""
+    if isinstance(value, Mapping):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def register(
@@ -55,7 +65,7 @@ def register(
                     str(err) or specification.error_message,
                 )
                 return
-            connection.send_result(msg["id"], result)
+            connection.send_result(msg["id"], _json_safe(result))
 
         return handle
 

@@ -8,6 +8,8 @@
     "format": "prettier --write frontend/**/*.ts tests/frontend_smoke.mjs",
     "test:frontend": "node tests/frontend_smoke.mjs",
     "test:unit": "vitest run",
+    "test:ui": "vitest run tests/frontend",
+    "ui:preview": "npm run build && node scripts/ui_preview.mjs",
     "clean": "rm -rf dist",
     "export:hacs": "sh scripts/export_hacs.sh",
     "package:hacs": "sh scripts/package_hacs.sh",

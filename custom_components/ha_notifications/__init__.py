@@ -68,7 +68,9 @@ async def async_setup(
     ) -> None:
         """Test an alert."""
 
-        await _get_controller(hass).dispatch("testing.saved", call.data["alert_id"])
+        await _get_controller(hass).dispatch(
+            "notification_preview.saved", call.data["alert_id"]
+        )
 
     if not hass.services.has_service(
         DOMAIN,

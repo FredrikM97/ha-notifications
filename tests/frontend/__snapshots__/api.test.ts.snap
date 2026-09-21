@@ -40,13 +40,13 @@ exports[`frontend API transport > snapshots history, delete, draft test, and rel
         "id": "door",
         "name": "Door",
       },
-      "type": "ha_notifications/test_payload",
+      "type": "ha_notifications/preview_payload",
     },
   ],
   [
     {
       "session_id": "session",
-      "type": "ha_notifications/discard_test_payload",
+      "type": "ha_notifications/discard_preview",
     },
   ],
   [

@@ -18,10 +18,11 @@ from ..controller.lifecycle import (
     route,
     websocket_route,
 )
-from ..support.storage import RuntimeStateStorage
+from ..domain.confirmation import PendingConfirmationState
+from ..domain.runtime import AlertRuntimeState
+from ..support.storage import Storage
 from . import history
-from .confirmation import clear_pending_actions
-from .configuration import Alert, AlertRuntime
+from .configuration import Alert
 
 
 class AlertFeature(FeatureBase):
@@ -34,8 +35,8 @@ class AlertFeature(FeatureBase):
         self,
         _hass: Any,
         state: StateRoot,
-        config_storage: Any,
-        runtime_storage: RuntimeStateStorage,
+        config_storage: Storage,
+        runtime_storage: Storage,
     ) -> None:
         super().__init__()
         self._state = state
@@ -52,26 +53,24 @@ class AlertFeature(FeatureBase):
     def runtime(self, alert_id: str) -> dict[str, Any]:
         """Return the mutable runtime state for an owned alert."""
 
-        states = self._state[STATE_RUNTIME]
-        current = states.get(alert_id)
-        runtime = AlertRuntime.model_validate(current or {}).model_dump()
-        if current:
-            current.update(runtime)
-            return current
-        states[alert_id] = runtime
-        return runtime
+        return self._state[STATE_RUNTIME].setdefault(alert_id, {})
 
     def reset_runtime(self, alert_id: str) -> None:
         """Reset toggle-scoped runtime state using the typed defaults."""
 
         runtime = self.runtime(alert_id)
-        preserved = {
-            key: runtime.get(key)
-            for key in ("last_evaluated", "last_event")
-        }
-        runtime.clear()
-        runtime.update(AlertRuntime().model_dump())
-        runtime.update(preserved)
+        state = AlertRuntimeState.from_runtime(runtime)
+        state.active = False
+        state.acknowledged = False
+        state.confirmation = PendingConfirmationState()
+        state.notification_id = None
+        state.flow_id = None
+        state.started_at = None
+        state.last_notified = None
+        state.confirmed_at = None
+        state.confirmed_by = None
+        state.last_error = None
+        state.write_to(runtime)
 
     @route("alerts.apply")
     async def apply_config(self, config: dict[str, Any]) -> set[str]:
@@ -143,7 +142,7 @@ class AlertFeature(FeatureBase):
     async def save_alert(self, alert: dict[str, Any]) -> dict[str, Any]:
         """Create or update an alert in ConfigEntry options."""
 
-        config = await self._config_storage.load()
+        config = await self._config_storage.load_config()
         alerts = list(config["alerts"])
         saved_alert = Alert.model_validate(alert).model_dump(exclude_none=True)
         now_iso = dt_util.utcnow().isoformat()
@@ -162,7 +161,7 @@ class AlertFeature(FeatureBase):
             saved_alert["created_at"] = now_iso
             alerts.append(saved_alert)
 
-        await self._config_storage.save({"version": 1, "alerts": alerts})
+        await self._config_storage.save_config({"version": 1, "alerts": alerts})
         return saved_alert
 
     @websocket_route(
@@ -181,33 +180,17 @@ class AlertFeature(FeatureBase):
                 alert, dt_util.utcnow()
             )
 
-        config = await self._config_storage.load()
+        config = await self._config_storage.load_config()
         config["alerts"] = [
             item for item in config["alerts"] if item["id"] != alert_id
         ]
-        await self._config_storage.save(config)
+        await self._config_storage.save_config(config)
         self._state[STATE_RUNTIME].pop(alert_id, None)
         self._state[STATE_HISTORY] = history.remove_alert(
             self._state[STATE_HISTORY], alert_id
         )
         self._runtime_storage.persist()
         return True
-
-    def acknowledge(
-        self, alert_id: str, confirmed_by: str, now: Any
-    ) -> None:
-        """Apply a resolved confirmation to the owned alert runtime."""
-
-        runtime = self.runtime(alert_id)
-        runtime["acknowledged"] = True
-        clear_pending_actions(runtime)
-        runtime["confirmed_at"] = now.isoformat()
-        runtime["confirmed_by"] = confirmed_by
-
-    def next_attempt(self, alert_id: str) -> int:
-        """Return the next delivery attempt for an owned alert."""
-
-        return int(self.runtime(alert_id).get("attempts", 0)) + 1
 
     def record_delivery_result(
         self,
@@ -224,6 +207,5 @@ class AlertFeature(FeatureBase):
         if not success:
             runtime["last_error"] = error
             return
-        runtime["attempts"] = attempt
         runtime["last_notified"] = now.isoformat()
         runtime["last_error"] = None

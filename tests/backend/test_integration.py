@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
 from custom_components.ha_notifications.const import (
     DOMAIN,
     SERVICE_RELOAD,
     SERVICE_TEST,
+    STATE_HISTORY,
+    STATE_RUNTIME,
+    STORAGE_KEY,
+    STORAGE_VERSION,
 )
-from custom_components.ha_notifications.support.storage import ConfigEntryStorage
+from custom_components.ha_notifications.support.storage import Storage
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -40,17 +45,22 @@ async def test_configuration_is_persisted_in_entry_options(
     loaded_config_entry,
 ) -> None:
     """Structured alert configuration uses Home Assistant config-entry storage."""
-    storage = ConfigEntryStorage(hass, loaded_config_entry)
+    storage = Storage(
+        hass,
+        loaded_config_entry,
+        Store(hass, STORAGE_VERSION, STORAGE_KEY),
+        {STATE_RUNTIME: {}, STATE_HISTORY: []},
+    )
     config = {
         "version": 1,
         "alerts": [{"id": "demo", "name": "Demo"}],
     }
 
-    saved = await storage.save(config)
+    saved = await storage.save_config(config)
     assert saved["version"] == 1
     assert saved["alerts"][0]["id"] == "demo"
     assert loaded_config_entry.options == saved
-    assert await ConfigEntryStorage(hass, loaded_config_entry).load() == saved
+    assert await storage.load_config() == saved
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -59,8 +69,13 @@ async def test_entry_option_updates_reload_live_configuration(
     loaded_config_entry,
 ) -> None:
     """ConfigEntry option changes are applied by the controller listener."""
-    storage = ConfigEntryStorage(hass, loaded_config_entry)
-    await storage.save(
+    storage = Storage(
+        hass,
+        loaded_config_entry,
+        Store(hass, STORAGE_VERSION, STORAGE_KEY),
+        {STATE_RUNTIME: {}, STATE_HISTORY: []},
+    )
+    await storage.save_config(
         {
             "version": 1,
             "alerts": [{"id": "demo", "name": "Demo"}],

@@ -14,7 +14,7 @@ from ..const import StateRoot
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from ..support.storage import ConfigEntryStorage, RuntimeStateStorage
+    from ..support.storage import Storage
 
 RouteHandler = Callable[..., Awaitable[Any]]
 
@@ -129,8 +129,7 @@ class FeatureLifecycle:
         self,
         hass: HomeAssistant,
         state: StateRoot,
-        config_storage: ConfigEntryStorage,
-        runtime_storage: RuntimeStateStorage,
+        storage: Storage,
         reload_configuration: Callable[[], Awaitable[None]],
         *,
         feature_classes_loaded: bool = False,
@@ -142,8 +141,7 @@ class FeatureLifecycle:
                 feature_class,
                 hass,
                 state,
-                config_storage,
-                runtime_storage,
+                storage,
             )
             for feature_class in FeatureBase._registry
         )
@@ -159,8 +157,7 @@ class FeatureLifecycle:
         cls,
         hass: HomeAssistant,
         state: StateRoot,
-        config_storage: ConfigEntryStorage,
-        runtime_storage: RuntimeStateStorage,
+        storage: Storage,
         reload_configuration: Callable[[], Awaitable[None]],
     ) -> FeatureLifecycle:
         """Discover and import feature modules outside Home Assistant's loop."""
@@ -169,8 +166,7 @@ class FeatureLifecycle:
         return cls(
             hass,
             state,
-            config_storage,
-            runtime_storage,
+            storage,
             reload_configuration,
             feature_classes_loaded=True,
         )
@@ -180,12 +176,11 @@ class FeatureLifecycle:
         feature_class: type[FeatureBase],
         hass: HomeAssistant,
         state: StateRoot,
-        config_storage: ConfigEntryStorage,
-        runtime_storage: RuntimeStateStorage,
+        storage: Storage,
     ) -> FeatureBase:
         """Compose each feature with the shared application context."""
 
-        return feature_class(hass, state, config_storage, runtime_storage)
+        return feature_class(hass, state, storage, storage)
 
     async def reload(self) -> None:
         """Request the composition host to reload feature configuration."""

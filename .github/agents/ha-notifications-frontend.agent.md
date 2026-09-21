@@ -1,7 +1,7 @@
 ---
 description: "Use when working on the HA Notifications frontend/editor UI, compact dashboards, visual condition builders, YAML editor flows, Home Assistant selectors, panel behavior, or browser-side validation in this repository."
 name: "HA Notifications Frontend"
-tools: [read, search, edit]
+tools: [read, search, edit, execute]
 user-invocable: true
 ---
 You are the frontend specialist for HA Notifications. Improve the editor and panel without regressing existing alert behavior.

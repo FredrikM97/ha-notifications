@@ -1,5 +1,5 @@
 import {
-  discardDraftTestPayload,
+  discardPreview,
   deleteAlert,
   errorMessage,
   getAlerts,
@@ -7,8 +7,8 @@ import {
   getHistory,
   loadRegistries,
   saveAlert,
-  testAlert,
-  testAlertPayload,
+  previewAlert,
+  previewAlertPayload,
   validateConditions,
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
@@ -107,17 +107,6 @@ function toggleAlertToast(alert: Alert): string {
   }
 
   return "Alert enabled.";
-}
-
-function attemptSummary(alert: Alert): string | null {
-  if (
-    !alert.confirmation?.reminders.show_attempts ||
-    !alert.runtime?.attempts
-  ) {
-    return null;
-  }
-
-  return `Attempt ${alert.runtime.attempts}/${alert.confirmation.reminders.max_attempts}`;
 }
 
 class HaNotificationsPanel extends LitElement {
@@ -415,10 +404,8 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private alertCardTemplate(alert: Alert): TemplateResult {
-    const runtime = alert.runtime || {};
     const status = alertStatus(alert);
     const monitor = this.monitorSummary(alert);
-    const attempts = attemptSummary(alert);
 
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
@@ -441,7 +428,6 @@ class HaNotificationsPanel extends LitElement {
         <div class="nc-alert-meta">
           ${monitor} · ${this.targetSummary(alert.notification?.target)}
         </div>
-        ${attempts ? html`<div class="nc-alert-meta">${attempts}</div>` : ""}
       </div>
       <div class="nc-alert-actions">
         <button
@@ -550,7 +536,7 @@ class HaNotificationsPanel extends LitElement {
       alert: null,
       registries,
       onTest: async (draft) => {
-        const result = await testAlertPayload(this._hass, draft);
+        const result = await previewAlertPayload(this._hass, draft);
         this.showToast("Draft test notification sent.");
         return result;
       },
@@ -559,7 +545,7 @@ class HaNotificationsPanel extends LitElement {
         this.showToast("Condition is valid.");
       },
       onDiscardTest: async (sessionId) => {
-        await discardDraftTestPayload(this._hass, sessionId);
+        await discardPreview(this._hass, sessionId);
       },
       onSave: async (alert) => {
         const saved = await saveAlert(this._hass, alert);
@@ -593,7 +579,7 @@ class HaNotificationsPanel extends LitElement {
       alert,
       registries,
       onTest: async (draft) => {
-        const result = await testAlertPayload(this._hass, draft);
+        const result = await previewAlertPayload(this._hass, draft);
         this.showToast("Draft test notification sent.");
         return result;
       },
@@ -602,7 +588,7 @@ class HaNotificationsPanel extends LitElement {
         this.showToast("Condition is valid.");
       },
       onDiscardTest: async (sessionId) => {
-        await discardDraftTestPayload(this._hass, sessionId);
+        await discardPreview(this._hass, sessionId);
       },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
@@ -637,7 +623,7 @@ class HaNotificationsPanel extends LitElement {
 
   private async testAlertFromCard(alert: Alert): Promise<void> {
     try {
-      await testAlert(this._hass, alert.id);
+      await previewAlert(this._hass, alert.id);
       this.showToast("Test notification sent.");
       await this.refresh();
     } catch (err) {

@@ -14,6 +14,7 @@ SERVICE_RELOAD = "reload"
 SERVICE_TEST = "test"
 
 EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
+EVENT_ALERT_EVENT = "ha_notifications_alert_event"
 STATE_RUNTIME = "runtime"
 STATE_HISTORY = "history"
 STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
@@ -41,8 +42,8 @@ FRONTEND_MODULE_REGISTERED_KEY = f"{DOMAIN}_frontend_module_registered"
 DEFAULT_HISTORY_RETENTION_DAYS = 30
 
 
-class HistoryEventType(StrEnum):
-    """Event types recorded to alert history.
+class AlertEventType(StrEnum):
+    """Event types published for one alert workflow fact.
 
     A `StrEnum` so existing string comparisons, JSON/YAML serialization, and
     frontend payloads keep working unchanged while call sites get typo-safe
@@ -62,19 +63,6 @@ class HistoryEventType(StrEnum):
     CONFIRMATION_ACTION = "confirmation_action"
     CONFIRMATION_ACTION_FAILED = "confirmation_action_failed"
     TEST = "test"
-
-
-class TransitionKind(StrEnum):
-    """What happened to one alert's condition (`features/conditions.py`'s
-    `ConditionTransition.kind`), used only internally by that module to pick
-    which fact events to emit.
-    """
-
-    NO_CHANGE = "no_change"
-    CONDITION_ERROR = "condition_error"
-    BECAME_ACTIVE = "became_active"
-    BECAME_INACTIVE = "became_inactive"
-    SHOULD_SEND = "should_send"
 
 
 class ConditionType(StrEnum):

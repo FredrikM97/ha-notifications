@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
-import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -24,13 +21,13 @@ from homeassistant.helpers.template import (
     result_as_boolean,
 )
 from homeassistant.util import dt as dt_util
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict
 
-from ..const import ConditionType, TransitionKind
+from ..const import ConditionType
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from ..domain.durations import duration_seconds, parse_duration
-from ..support.templates import render_template
-from .confirmation import clear_pending_actions, pending_action_ids
+from ..domain.workflow import ConditionTransition
+from ..support.jinja import JinjaEvaluator
+from .configuration import Alert
 
 
 class MonitorConfig(BaseModel):
@@ -41,23 +38,6 @@ class MonitorConfig(BaseModel):
     on_change: bool | None = None
     startup: bool | None = None
     interval: int | float | None = None
-
-    @field_validator("interval", mode="before")
-    @classmethod
-    def _normalize_interval(cls, value: Any) -> Any:
-        return duration_seconds(value)
-
-
-@dataclass(frozen=True)
-class ConditionTransition:
-    """Fact produced when an alert condition changes or needs attention."""
-
-    kind: TransitionKind
-    error: str | None = None
-    source: str = ""
-    had_pending_confirmation: bool = False
-    facts: dict[str, bool] | None = None
-
 
 class ConditionWatchers:
     """Own Home Assistant listeners for configured alert conditions."""
@@ -132,7 +112,11 @@ class ConditionWatchers:
                 )
             )
 
-        interval = parse_duration(monitor.interval)
+        interval = (
+            timedelta(seconds=float(monitor.interval))
+            if monitor.interval is not None
+            else None
+        )
         if interval is not None:
             unsubscribers.append(
                 self._track_interval(
@@ -158,7 +142,7 @@ class ConditionFeature(FeatureBase):
     """Own condition compilation, evaluation, and condition watchers."""
 
     name = "conditions"
-    dependencies = ("alerts", "alert_flow", "confirmation")
+    dependencies = ("alerts", "alert_flow", "response_actions")
 
     def __init__(
         self,
@@ -169,27 +153,19 @@ class ConditionFeature(FeatureBase):
     ) -> None:
         super().__init__()
         self._hass = hass
-        self._alerts: dict[str, dict[str, Any]] = {}
+        self._state = _state
+        self._jinja = JinjaEvaluator.for_hass(hass)
+        self._alerts: dict[str, Alert] = {}
         self._watchers: ConditionWatchers | None = None
         self._locks: dict[str, asyncio.Lock] = {}
         self._tasks: dict[str, set[asyncio.Task[Any]]] = {}
-        self._runtime_for: Callable[[str], dict[str, Any]] | None = None
-        self._on_transition: Callable[
-            [dict[str, Any], ConditionTransition, datetime], Awaitable[None]
-        ] | None = None
 
     def set_alerts(self, alerts: dict[str, Any]) -> None:
-        mapped_alerts = {
-            alert.id: alert.model_dump(exclude_none=True)
-            for alert in alerts.values()
-        }
-        self._alerts = mapped_alerts
+        self._alerts = alerts
 
     async def on_setup(self) -> None:
         alert_feature = self.feature("alerts")
-        self._runtime_for = alert_feature.runtime
-        self._on_transition = self.feature("alert_flow").handle_condition
-        confirmation_feature = self.feature("confirmation")
+        confirmation_feature = self.feature("response_actions")
         self._watchers = ConditionWatchers(
             self._hass,
             self._schedule_condition_result,
@@ -206,7 +182,6 @@ class ConditionFeature(FeatureBase):
         self._watchers = None
         self._locks.clear()
         self._tasks.clear()
-        self._on_transition = None
 
     async def check_alert(
         self, alert_id: str, *, source: str, now: datetime
@@ -228,7 +203,6 @@ class ConditionFeature(FeatureBase):
 
     async def _configure(self, alert: dict[str, Any]) -> None:
         await self._unconfigure(alert["id"])
-        self._runtime_for(alert["id"])
         if self._watchers is not None:
             self._watchers.configure(alert)
 
@@ -246,11 +220,8 @@ class ConditionFeature(FeatureBase):
         alert = self._alerts.get(alert_id)
         if alert is None or not alert.get("notification"):
             return
-        template = Template(compile_condition(alert), self._hass)
         try:
-            result = template.async_render(parse_result=True, strict=False)
-            if inspect.isawaitable(result):
-                result = await result
+            result = await self._jinja.render(compile_condition(alert))
         except TemplateError as err:
             active, error = None, str(err)
         else:
@@ -271,25 +242,14 @@ class ConditionFeature(FeatureBase):
         alert = self._alerts.get(alert_id)
         if alert is None:
             return
-        if self._runtime_for is None:
-            raise RuntimeError("Condition feature has not been set up")
-        runtime = self._runtime_for(alert_id)
+        runtime = self._state.setdefault("runtime", {}).setdefault(alert_id, {})
         facts = await self._condition_facts(alert)
-        transition = self._transition_for(
-            runtime,
-            alert,
-            active,
-            error,
-            now,
-            source,
-            facts,
-            self.feature("confirmation").reminder_due(alert, runtime, now),
-        )
-        if transition.kind == TransitionKind.NO_CHANGE:
+        response_actions = self.feature("response_actions")
+        response_actions.expire_stale(runtime, now)
+        evaluation = ConditionTransition(active, error, source, facts)
+        if evaluation.active is None and evaluation.error is None:
             return
-        if self._on_transition is None:
-            raise RuntimeError("Condition feature has not been set up")
-        await self._on_transition(alert, transition, now)
+        await self.feature("alert_flow").handle_condition(alert, evaluation, now)
 
     async def condition_result(
         self,
@@ -317,78 +277,13 @@ class ConditionFeature(FeatureBase):
             if not condition_id:
                 continue
             try:
-                result = await render_template(
-                    self._hass, compile_condition({"conditions": [condition]})
+                result = await self._jinja.render(
+                    compile_condition({"conditions": [condition]})
                 )
             except TemplateError:
                 result = False
             facts[str(condition_id)] = result_as_boolean(result)
         return facts
-
-    @staticmethod
-    def _transition_for(
-        state: dict[str, Any],
-        alert: dict[str, Any],
-        active: bool | None,
-        error: str | None,
-        now: datetime,
-        source: str,
-        facts: dict[str, bool] | None = None,
-        confirmation_due: bool = False,
-    ) -> ConditionTransition:
-        if error is not None:
-            return ConditionTransition(
-                TransitionKind.CONDITION_ERROR, error, source, facts=facts
-            )
-        state["last_evaluated"] = now.isoformat()
-        if not active:
-            if not state.get("active", False):
-                return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
-            pending = bool(pending_action_ids(state))
-            state.update(
-                active=False,
-                acknowledged=False,
-                attempts=0,
-                notification_id=None,
-                flow_id=None,
-            )
-            clear_pending_actions(state)
-            return ConditionTransition(
-                TransitionKind.BECAME_INACTIVE,
-                source=source,
-                had_pending_confirmation=pending,
-                facts=facts,
-            )
-        if not state.get("active", False):
-            state.update(
-                active=True, acknowledged=False, attempts=0,
-                started_at=now.isoformat(),
-                notification_id=f"ha_notifications_{alert['id']}_{uuid.uuid4().hex[:10]}",
-            )
-            ConditionFeature._ensure_flow_id(state, alert)
-            return ConditionTransition(
-                TransitionKind.BECAME_ACTIVE, source=source, facts=facts
-            )
-        if state.get("acknowledged", False):
-            return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
-        has_sent = bool(state.get("last_notified") or state.get("attempts", 0))
-        monitor = MonitorConfig.model_validate(alert.get("monitor", {}))
-        if (source == "startup" and monitor.startup and not has_sent) or (
-            source == "enabled" and not has_sent
-        ) or (
-            source in ("reload", "startup", "interval", "confirmation")
-            and confirmation_due
-        ):
-            ConditionFeature._ensure_flow_id(state, alert)
-            return ConditionTransition(
-                TransitionKind.SHOULD_SEND, source=source, facts=facts
-            )
-        return ConditionTransition(TransitionKind.NO_CHANGE, source=source)
-
-    @staticmethod
-    def _ensure_flow_id(state: dict[str, Any], alert: dict[str, Any]) -> None:
-        if not state.get("flow_id"):
-            state["flow_id"] = f"flow_{alert['id']}_{uuid.uuid4().hex[:8]}"
 
     def _schedule_condition_result(
         self, alert_id: str, active: bool | None, error: str | None, source: str
@@ -431,9 +326,7 @@ class ConditionFeature(FeatureBase):
         """Compile and evaluate a condition without persisting an alert."""
 
         try:
-            result = await render_template(
-                self._hass, compile_condition(alert)
-            )
+            result = await self._jinja.render(compile_condition(alert))
         except TemplateError as err:
             error = str(err)
         else:
@@ -442,46 +335,6 @@ class ConditionFeature(FeatureBase):
         if error is not None:
             raise ValueError(f"Condition template failed: {error}")
         return True
-
-class ConditionConfig(BaseModel):
-    """Validated visual condition used by the editor and trigger workflow."""
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    id: str | None = None
-    type: str = ConditionType.TEMPLATE.value
-    template: str | None = None
-    model_for: Any = Field(default=None, alias="for")
-
-    @field_validator("model_for", mode="before")
-    @classmethod
-    def normalize_duration(cls, value: Any) -> Any:
-        if value is None or value == "[object Object]":
-            return None
-        try:
-            parse_duration(value)
-        except ValueError:
-            return None
-        return value
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_input(cls, value: Any) -> Any:
-        if not isinstance(value, dict):
-            return {"template": str(value or "")}
-        values = dict(value)
-        if "for" in values:
-            values["model_for"] = values.pop("for")
-        return values
-
-
-def _seconds(value: Any) -> int:
-    """Get whole seconds."""
-
-    duration = parse_duration(value, timedelta())
-
-    return max(0, int(duration.total_seconds()))
-
 
 def _list(value: Any) -> list[Any]:
     if value is None:
@@ -527,9 +380,7 @@ def compile_condition(alert: Any) -> str:
     template_blocks: list[str] = []
 
     for condition in alert.get("conditions", []):
-        condition = ConditionConfig.model_validate(condition).model_dump(
-            exclude_none=True, by_alias=True
-        )
+        condition = {"type": ConditionType.TEMPLATE.value, **dict(condition)}
         if condition.get("enabled") is False:
             continue
 
@@ -544,7 +395,7 @@ def compile_condition(alert: Any) -> str:
             if not entity_ids or not states:
                 continue
 
-            duration = _seconds(condition.get("for"))
+            duration = max(0, int(condition.get("for") or 0))
             entity_expressions = []
 
             for entity_id in entity_ids:
@@ -580,7 +431,7 @@ def compile_condition(alert: Any) -> str:
                 continue
 
             entity_expressions = []
-            duration = _seconds(condition.get("for"))
+            duration = max(0, int(condition.get("for") or 0))
 
             for entity_id in entity_ids:
                 value = f"states({json.dumps(entity_id)}) | float(0)"

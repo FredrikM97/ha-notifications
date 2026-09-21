@@ -5,15 +5,14 @@ from __future__ import annotations
 import importlib
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from tests.backend.conftest import make_alert
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 history_feature = importlib.import_module(f"{PACKAGE_NAME}.features.history")
-const_module = importlib.import_module(f"{PACKAGE_NAME}.const")
-
-HistoryEventType = const_module.HistoryEventType
+core = importlib.import_module(f"{PACKAGE_NAME}.controller.core")
 
 
 def _state_root(alert_id="alert_1"):
@@ -77,42 +76,36 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
             [{"alert_id": "alert_2"}],
         )
 
-    def test_notification_outcome_records_flow_and_persistence(self):
+    def test_controller_persists_published_event(self):
         alert = make_alert()
         state_root = _state_root(alert["id"])
         now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        persisted_events = []
 
-        command = history_feature.record_notification_outcome(
-            state_root,
-            alert,
-            success=False,
-            attempt=2,
-            now=now,
-            error="boom",
-        )
+        def store_event(event_data):
+            state_root["history"].append(event_data)
+            persisted_events.append(event_data)
 
-        self.assertTrue(command)
+        persistence = SimpleNamespace(store_event=store_event)
+        controller = object.__new__(core.HaNotificationsController)
+        controller._state = state_root
+        controller._storage = persistence
+        controller._handle_alert_event(SimpleNamespace(data={
+            "id": "event_1",
+            "timestamp": now.isoformat(),
+            "alert_id": alert["id"],
+            "alert_name": alert["name"],
+            "type": "notification_failed",
+            "flow_id": "flow_1",
+            "message": "Notification failed.",
+            "details": {"attempt": 2, "error": "boom"},
+        }))
         entry = state_root["history"][0]
-        self.assertEqual(entry["type"], HistoryEventType.NOTIFICATION_FAILED)
+        self.assertEqual(entry["type"], "notification_failed")
         self.assertEqual(entry["flow_id"], "flow_1")
         self.assertEqual(entry["details"], {"attempt": 2, "error": "boom"})
-        self.assertIs(state_root["runtime"][alert["id"]]["last_event"], entry)
-
-    def test_notification_outcome_respects_record_history_flag(self):
-        alert = make_alert()
-        state_root = _state_root(alert["id"])
-
-        command = history_feature.record_notification_outcome(
-            state_root,
-            alert,
-            success=True,
-            attempt=1,
-            now=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            record_history=False,
-        )
-
-        self.assertFalse(command)
-        self.assertEqual(state_root["history"], [])
+        self.assertNotIn("last_event", state_root["runtime"][alert["id"]])
+        self.assertEqual(persisted_events, [entry])
 
 
 if __name__ == "__main__":

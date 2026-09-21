@@ -1,11 +1,6 @@
 # serializer version: 1
 # name: test_confirmation_configuration_contract_snapshot
   dict({
-    'actions': dict({
-      'enabled': False,
-      'items': list([
-      ]),
-    }),
     'buttons': list([
       dict({
         'id': 'confirm',

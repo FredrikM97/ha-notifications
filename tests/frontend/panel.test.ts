@@ -7,7 +7,7 @@ import {
   alertRuntimeFixture,
   configFixture,
   configuredAlertFixture,
-  draftTestResultFixture,
+  previewSessionResultFixture,
   emptyRegistries,
   mountCustomElement,
   settleElement,
@@ -21,13 +21,13 @@ const loadRegistries = vi.fn();
 const getConfig = vi.fn();
 const saveAlert = vi.fn();
 const deleteAlert = vi.fn();
-const testAlert = vi.fn();
-const testAlertPayload = vi.fn();
+const previewAlert = vi.fn();
+const previewAlertPayload = vi.fn();
 const validateConditions = vi.fn();
-const discardDraftTestPayload = vi.fn();
+const discardPreview = vi.fn();
 
 vi.mock("../../frontend/api.js", () => ({
-  discardDraftTestPayload,
+  discardPreview,
   deleteAlert,
   errorMessage: (error: unknown) => String(error),
   getAlerts,
@@ -36,8 +36,8 @@ vi.mock("../../frontend/api.js", () => ({
   getHistory,
   loadRegistries,
   saveAlert,
-  testAlert,
-  testAlertPayload,
+  previewAlert,
+  previewAlertPayload,
   validateConditions,
 }));
 
@@ -59,10 +59,10 @@ function setupApi(): void {
   getConfig.mockResolvedValue(configFixture);
   saveAlert.mockResolvedValue(alert);
   deleteAlert.mockResolvedValue({});
-  testAlert.mockResolvedValue({});
-  testAlertPayload.mockResolvedValue(draftTestResultFixture);
+  previewAlert.mockResolvedValue({});
+  previewAlertPayload.mockResolvedValue(previewSessionResultFixture);
   validateConditions.mockResolvedValue({});
-  discardDraftTestPayload.mockResolvedValue({});
+  discardPreview.mockResolvedValue({});
 }
 
 function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
@@ -109,6 +109,7 @@ describe("panel view", () => {
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await settleElement(panel);
 
+    expect(panel.shadowRoot.textContent).not.toContain("Attempt 2/3");
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
   });
 
@@ -176,7 +177,7 @@ describe("panel view", () => {
 
     expect(saveAlert).toHaveBeenCalledWith(
       expect.objectContaining({ user: { is_admin: true } }),
-      { ...alert, runtime: { active: true, attempts: 2 }, enabled: false },
+      { ...alert, runtime: { active: true, confirmation_attempts: 2 }, enabled: false },
     );
   });
 
@@ -188,7 +189,7 @@ describe("panel view", () => {
     const user = testUser();
 
     await user.click(queries.getByRole("button", { name: "Test alert" }));
-    await vi.waitFor(() => expect(testAlert).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(previewAlert).toHaveBeenCalledOnce());
 
     await user.click(queries.getByRole("button", { name: "View history" }));
     await vi.waitFor(() =>

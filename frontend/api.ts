@@ -15,7 +15,7 @@ import type {
 
 const DOMAIN = "ha_notifications";
 
-export interface DraftTestResult {
+export interface PreviewSessionResult {
   session_id: string;
 }
 
@@ -127,21 +127,21 @@ export async function deleteAlert(
   });
 }
 
-export async function testAlert(hass: Hass, alertId: string): Promise<unknown> {
+export async function previewAlert(hass: Hass, alertId: string): Promise<unknown> {
   if (!alertId) {
     throw new Error("Select an alert before testing it.");
   }
 
-  return call(hass, "test", {
+  return call(hass, "preview", {
     alert_id: alertId,
   });
 }
 
-export async function testAlertPayload(
+export async function previewAlertPayload(
   hass: Hass,
   alert: Alert,
-): Promise<DraftTestResult> {
-  return call<DraftTestResult>(hass, "test_payload", { alert });
+): Promise<PreviewSessionResult> {
+  return call<PreviewSessionResult>(hass, "preview_payload", { alert });
 }
 
 export async function validateConditions(
@@ -151,11 +151,11 @@ export async function validateConditions(
   return call(hass, "validate_conditions", { alert });
 }
 
-export async function discardDraftTestPayload(
+export async function discardPreview(
   hass: Hass,
   sessionId: string,
 ): Promise<unknown> {
-  return call(hass, "discard_test_payload", { session_id: sessionId });
+  return call(hass, "discard_preview", { session_id: sessionId });
 }
 
 export async function getHistory(

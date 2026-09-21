@@ -7,9 +7,11 @@
 # ---
 # name: test_condition_transition_contract_snapshot
   dict({
+    'active': True,
     'error': None,
-    'had_pending_confirmation': False,
-    'kind': 'should_send',
+    'facts': dict({
+      'front_door': True,
+    }),
     'source': 'confirmation',
   })
 # ---

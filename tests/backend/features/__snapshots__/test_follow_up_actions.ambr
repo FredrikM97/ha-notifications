@@ -4,17 +4,22 @@
     dict({
       'details': dict({
         'action': 'light.turn_on',
-        'index': 1,
+        'data': dict({
+          'brightness': 20,
+          'entity_id': 'light.kitchen',
+        }),
+        'target': dict({
+          'entity_id': 'light.kitchen',
+        }),
       }),
-      'index': 1,
+      'error': None,
       'message': 'Action executed.',
     }),
     dict({
       'details': dict({
-        'error': 'Invalid service action.',
-        'index': 2,
+        'action': 'bad-value',
       }),
-      'index': 2,
+      'error': 'Invalid service action.',
       'message': 'Action failed.',
     }),
   ])

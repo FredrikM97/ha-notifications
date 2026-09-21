@@ -11,15 +11,15 @@ from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 
-TransitionKind = importlib.import_module(
-    f"{PACKAGE_NAME}.const"
-).TransitionKind
 ConditionFeature = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).ConditionFeature
 ConditionWatchers = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).ConditionWatchers
+ConditionTransition = importlib.import_module(
+    f"{PACKAGE_NAME}.domain.workflow"
+).ConditionTransition
 compile_condition = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).compile_condition
@@ -34,7 +34,7 @@ def test_compile_condition_contract(snapshot):
                     "type": "state",
                     "entity_id": ["binary_sensor.door"],
                     "state": ["on", "open"],
-                    "for": "00:00:05",
+                    "for": 5,
                 },
                 {
                     "type": "numeric",
@@ -84,100 +84,26 @@ def test_compile_condition_skips_incomplete_conditions_and_renders_block_templat
     assert "{% endset %}" in compiled
 
 
-def test_compile_condition_normalizes_scalar_and_invalid_condition_inputs():
+def test_compile_condition_skips_empty_template_conditions():
     assert (
         compile_condition({"conditions": [{"type": "template", "template": ""}]})
         == "{{ true }}"
     )
-    assert compile_condition({"conditions": ["sensor.test"]}) != "{{ true }}"
-
-
-def test_transition_matrix_covers_activation_acknowledgement_and_reminders():
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    alert = {
-        "id": "alert_1",
-        "confirmation": {
-            "enabled": True,
-            "reminders": {"enabled": True, "interval": 60, "max_attempts": 3},
-        },
-        "monitor": {"startup": True},
-    }
-
-    inactive = {}
-    became_active = ConditionFeature._transition_for(
-        inactive, alert, True, None, now, "startup"
-    )
-    assert became_active.kind is TransitionKind.BECAME_ACTIVE
-    assert inactive["flow_id"].startswith("flow_alert_1_")
-
-    acknowledged = {"active": True, "acknowledged": True}
-    assert (
-        ConditionFeature._transition_for(
-            acknowledged, alert, True, None, now, "change"
-        ).kind
-        is TransitionKind.NO_CHANGE
-    )
-
-    pending = {
-        "active": True,
-        "attempts": 1,
-        "confirmation_action_ids": {"confirm_1": "confirm"},
-        "last_notified": now.isoformat(),
-    }
-    assert (
-        ConditionFeature._transition_for(
-            pending, alert, True, None, now, "confirmation"
-        ).kind
-        is TransitionKind.NO_CHANGE
-    )
-    assert (
-        ConditionFeature._transition_for(
-            pending,
-            alert,
-            True,
-            None,
-            now + timedelta(seconds=60),
-            "confirmation",
-                confirmation_due=True,
-        ).kind
-        is TransitionKind.SHOULD_SEND
-    )
-
-    inactive_transition = ConditionFeature._transition_for(
-        pending, alert, False, None, now, "change"
-    )
-    assert inactive_transition.kind is TransitionKind.BECAME_INACTIVE
-    assert inactive_transition.had_pending_confirmation
-    assert pending["attempts"] == 0
 
 
 def test_condition_transition_contract_snapshot(snapshot):
-    transition = ConditionFeature._transition_for(
-        {
-            "active": True,
-            "acknowledged": False,
-            "attempts": 2,
-            "confirmation_action_ids": {"confirm_1": "confirm"},
-        },
-        {
-            "id": "alert_1",
-            "confirmation": {
-                "enabled": True,
-                "reminders": {"enabled": True, "max_attempts": 5},
-            },
-        },
+    evaluation = ConditionTransition(
         True,
         None,
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
         "confirmation",
-            confirmation_due=True,
+        {"front_door": True},
     )
 
     assert {
-        "kind": transition.kind.value,
-        "error": transition.error,
-        "source": transition.source,
-        "had_pending_confirmation": transition.had_pending_confirmation,
+        "active": evaluation.active,
+        "error": evaluation.error,
+        "source": evaluation.source,
+        "facts": evaluation.facts,
     } == snapshot
 
 class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
@@ -189,21 +115,34 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         }
         self.runtime = {
             "active": False,
-            "confirmation_action_ids": {},
+            "confirmation": {"action_ids": {}, "attempts": 0},
         }
         self.transitions = []
 
         async def on_transition(alert, transition, now):
             self.transitions.append(transition)
 
-        self.feature = ConditionFeature(None, {}, None, None)
+        def expire_stale(runtime, now):
+            return False
+
+        runtime_storage = SimpleNamespace(runtime=lambda _alert_id: self.runtime)
+        self.feature = ConditionFeature(
+            None, {"runtime": {"alert_1": self.runtime}}, None, runtime_storage
+        )
         self.feature._alerts = {"alert_1": self.alert}
-        self.feature._runtime_for = lambda _alert_id: self.runtime
-        self.feature._on_transition = on_transition
         self.feature.lifecycle = SimpleNamespace(
-            feature=lambda name: SimpleNamespace(reminder_due=lambda *_args: False)
-            if name == "confirmation"
-            else None
+            feature=lambda name: (
+                SimpleNamespace(runtime=lambda _alert_id: self.runtime)
+                if name == "alerts"
+                else SimpleNamespace(
+                    reminder_due=lambda *_args: False,
+                    expire_stale=expire_stale,
+                )
+                if name == "response_actions"
+                else SimpleNamespace(
+                    handle_condition=on_transition
+                )
+            )
         )
 
     async def test_inactive_evaluation_does_not_allocate_confirmation(self):
@@ -215,8 +154,8 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
             now=self.now,
         )
 
-        self.assertEqual(self.transitions, [])
-        self.assertEqual(self.runtime["confirmation_action_ids"], {})
+        self.assertEqual(self.transitions[0].active, False)
+        self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
 
     async def test_condition_error_does_not_allocate_confirmation(self):
         await self.feature.condition_result(
@@ -227,8 +166,9 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
             now=self.now,
         )
 
-        self.assertEqual(self.transitions[0].kind, TransitionKind.CONDITION_ERROR)
-        self.assertEqual(self.runtime["confirmation_action_ids"], {})
+        self.assertIsNone(self.transitions[0].active)
+        self.assertIsNotNone(self.transitions[0].error)
+        self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
 
 
 class ConditionFeatureTests(unittest.TestCase):

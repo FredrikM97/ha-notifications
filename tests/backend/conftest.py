@@ -8,6 +8,7 @@ being forced through here.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ from yaml import safe_load
 
 import custom_components.ha_notifications  # noqa: F401
 from custom_components.ha_notifications.const import CONF_SHOW_SIDEBAR, DOMAIN
+from custom_components.ha_notifications.domain.workflow import NotificationOutcome
 
 _ALERT_FIXTURES = safe_load(
     (Path(__file__).parent / "fixtures" / "alerts.yaml").read_text()
@@ -42,6 +44,8 @@ def stable_test_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]
     normalized = deepcopy(payloads)
     for payload in normalized:
         payload["now"] = "<datetime>"
+        payload.pop("condition_facts", None)
+        payload.pop("trigger_source", None)
         payload["notification_actions"] = [
             {
                 "action": f"<confirmation_action_{index}>",
@@ -53,7 +57,7 @@ def stable_test_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]
             )
         ]
         alert_id = payload["alert"]["id"]
-        if str(alert_id).startswith("NC_DRAFT_"):
+        if str(alert_id).startswith("NC_PREVIEW_"):
             payload["alert"]["id"] = "<draft_session_id>"
     return normalized
 
@@ -279,8 +283,19 @@ class _TestNotification:
     def __init__(self) -> None:
         self.payloads: list[dict[str, Any]] = []
 
-    async def send(self, payload: dict[str, Any]) -> None:
-        self.payloads.append(payload)
+    async def send(self, request: Any) -> NotificationOutcome:
+        self.payloads.append(
+            {
+                "alert": dict(request.alert),
+                "attempt": request.attempt,
+                "notification_actions": list(request.notification_actions),
+                "replace_existing": request.replace_existing,
+                "now": request.now,
+                "condition_facts": dict(request.condition_facts),
+                "trigger_source": request.trigger_source,
+            }
+        )
+        return NotificationOutcome(request.attempt, request.now, True)
 
 
 class _TestAlerts:
@@ -291,6 +306,14 @@ class _TestAlerts:
         if alert_id == self.saved_alert["id"]:
             return self.saved_alert
         return None
+
+
+class _TestHistory:
+    def __init__(self) -> None:
+        self.removed_alert_ids: list[str] = []
+
+    async def remove_alert(self, alert_id: str) -> None:
+        self.removed_alert_ids.append(alert_id)
 
 
 class _TestLifecycle:
@@ -306,15 +329,18 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
     """Provide a real HA context and captured delivery/timer test features."""
 
     confirmation = importlib.import_module(
-        "custom_components.ha_notifications.features.confirmation"
+        "custom_components.ha_notifications.features.response_actions"
     )
-    testing = importlib.import_module(
-        "custom_components.ha_notifications.features.testing"
+    preview = importlib.import_module(
+        "custom_components.ha_notifications.features.notification_preview"
     )
     saved_alert = make_confirmation_alert()
     notification = _TestNotification()
-    confirmation_feature = confirmation.ConfirmationFeature(hass, {}, None, None)
-    test_feature = testing.TestFeature(hass, {}, None, None)
+    history = _TestHistory()
+    confirmation_feature = confirmation.ResponseActionsFeature(
+        hass, {}, None, None
+    )
+    test_feature = preview.NotificationPreviewFeature(hass, {}, None, None)
     scheduled: list[tuple[Any, Any]] = []
 
     def schedule(_hass: HomeAssistant, delay: Any, callback: Any):
@@ -327,11 +353,12 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
 
         return cancel
 
-    monkeypatch.setattr(testing, "async_call_later", schedule)
+    monkeypatch.setattr(preview, "async_call_later", schedule)
     test_feature.lifecycle = _TestLifecycle(
         {
             "alerts": _TestAlerts(saved_alert),
-            "confirmation": confirmation_feature,
+            "history": history,
+            "response_actions": confirmation_feature,
             "notification": notification,
         }
     )
@@ -340,13 +367,15 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
         while scheduled and len(notification.payloads) < 5:
             index = min(range(len(scheduled)), key=lambda item: scheduled[item][0])
             _, callback = scheduled.pop(index)
-            await callback(datetime.now(timezone.utc))
+            callback(datetime.now(timezone.utc))
+            await asyncio.sleep(0)
 
     return SimpleNamespace(
         alert=saved_alert,
         confirmation=confirmation_feature,
         feature=test_feature,
         notification=notification,
+        history=history,
         scheduled=scheduled,
         run_reminders=run_reminders,
     )
@@ -367,7 +396,7 @@ def make_runtime_state(**overrides: Any) -> dict[str, Any]:
     runtime = {
         "active": False,
         "acknowledged": False,
-        "attempts": 0,
+        "confirmation": {"action_ids": {}, "attempts": 0},
         "notification_id": None,
         "flow_id": None,
         "started_at": None,
@@ -376,7 +405,6 @@ def make_runtime_state(**overrides: Any) -> dict[str, Any]:
         "confirmed_at": None,
         "confirmed_by": None,
         "last_error": None,
-        "last_event": None,
     }
     runtime.update(overrides)
     return runtime

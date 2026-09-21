@@ -8,6 +8,9 @@ from types import SimpleNamespace
 from custom_components.ha_notifications.const import STATE_RUNTIME
 from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
+from custom_components.ha_notifications.features.response_actions import (
+    ResponseActionsFeature,
+)
 from tests.backend.conftest import make_alert, make_runtime_state
 
 
@@ -16,13 +19,18 @@ async def test_disabled_runtime_reset_contract_snapshot(snapshot):
         STATE_RUNTIME: {
             "alert_1": make_runtime_state(
                 active=True,
-                attempts=4,
-                confirmation_action_ids={"confirm_1": "confirm"},
+                confirmation={
+                    "attempts": 4,
+                    "action_ids": {"confirm_1": "confirm"},
+                },
                 last_notified="2026-09-16T12:00:00+00:00",
             )
         }
     }
-    feature = AlertFeature(None, state, None, None)
+    runtime_storage = SimpleNamespace(
+        runtime=lambda alert_id: state[STATE_RUNTIME].setdefault(alert_id, {})
+    )
+    feature = AlertFeature(None, state, None, runtime_storage)
     feature._alerts = {
         "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
     }
@@ -34,18 +42,23 @@ async def test_disabled_runtime_reset_contract_snapshot(snapshot):
     assert feature.runtime("alert_1") == snapshot
 
 
-async def test_disabling_and_reenabling_resets_runtime_attempts() -> None:
+async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts() -> None:
     state = {
         STATE_RUNTIME: {
             "alert_1": make_runtime_state(
                 active=True,
-                attempts=4,
-                confirmation_action_ids={"confirm_1": "confirm"},
+                confirmation={
+                    "attempts": 4,
+                    "action_ids": {"confirm_1": "confirm"},
+                },
                 last_notified="2026-09-16T12:00:00+00:00",
             )
         }
     }
-    feature = AlertFeature(None, state, None, None)
+    runtime_storage = SimpleNamespace(
+        runtime=lambda alert_id: state[STATE_RUNTIME].setdefault(alert_id, {})
+    )
+    feature = AlertFeature(None, state, None, runtime_storage)
     feature._alerts = {
         "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
     }
@@ -55,21 +68,23 @@ async def test_disabling_and_reenabling_resets_runtime_attempts() -> None:
     )
 
     runtime = feature.runtime("alert_1")
-    assert runtime["attempts"] == 0
-    assert runtime["confirmation_action_ids"] == {}
+    assert runtime["confirmation"]["attempts"] == 0
+    assert runtime["confirmation"]["action_ids"] == {}
     assert runtime["active"] is False
 
 
-async def test_runtime_reset_preserves_evaluation_and_history_context() -> None:
+async def test_runtime_reset_preserves_evaluation_context() -> None:
     state = {
         STATE_RUNTIME: {
             "alert_1": make_runtime_state(
                 last_evaluated="2026-09-21T10:00:00+00:00",
-                last_event={"type": "notification_sent"},
             )
         }
     }
-    feature = AlertFeature(None, state, None, None)
+    runtime_storage = SimpleNamespace(
+        runtime=lambda alert_id: state[STATE_RUNTIME].setdefault(alert_id, {})
+    )
+    feature = AlertFeature(None, state, None, runtime_storage)
     feature._alerts = {
         "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
     }
@@ -80,7 +95,7 @@ async def test_runtime_reset_preserves_evaluation_and_history_context() -> None:
 
     runtime = feature.runtime("alert_1")
     assert runtime["last_evaluated"] == "2026-09-21T10:00:00+00:00"
-    assert runtime["last_event"] == {"type": "notification_sent"}
+    assert "last_event" not in runtime
 
 
 async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
@@ -100,10 +115,10 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
             }
             self.saved = []
 
-        async def load(self):
+        async def load_config(self):
             return self.config
 
-        async def save(self, config):
+        async def save_config(self, config):
             self.saved.append(config)
             self.config = config
 
@@ -138,8 +153,8 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
 
 def test_acknowledge_updates_confirmation_runtime(snapshot):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    state = {STATE_RUNTIME: {}}
-    feature = AlertFeature(None, state, None, None)
+    state = {STATE_RUNTIME: {"alert_1": {}}}
+    feature = ResponseActionsFeature(None, state, None, None)
 
     feature.acknowledge("alert_1", "Alice", now)
 

@@ -14,7 +14,7 @@ You are the runtime and backend specialist for HA Notifications. Keep alert exec
   `controller/core.py` is the lifecycle and composition root for
   setup/unload/reload sequencing and public API delegation. Confirmation
   decisions belong in
-  `features/confirmation.py`.
+  `features/response_actions.py`.
 - Only `features/notification.py` (`compose_send`/`compose_clear`) decides
   notification content, recipients, and route. Application workflows execute
   its plans through direct Home Assistant service calls owned by the feature. If you
@@ -48,7 +48,9 @@ and `docs/architecture.md` only as needed to narrow to the runtime files.
 3. Keep changes minimal and root-cause based.
 4. For EventBus migration work, change one complete producer-to-consumer path at
   a time and preserve ordering, failure handling, persistence, callback task
-  ownership, and existing public APIs.
+  ownership, and existing public APIs. For an explicitly approved breaking
+  migration, update the complete internal contract together rather than
+  preserving compatibility solely to avoid coordinated changes.
 5. Use cheap blocker checks while a coherent runtime change is in progress;
   after the slice is complete, validate the save/update lifecycle and confirm
   the alert still evaluates after reload or save with `python3 -m pytest tests/`.

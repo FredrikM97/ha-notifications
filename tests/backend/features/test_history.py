@@ -146,58 +146,11 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
     async def test_history_feature_records_queries_and_missing_runtime(self):
         state = {"runtime": {}, "history": []}
         feature = history.HistoryFeature(None, state, None, None)
-        alert = {"id": "alert_1", "name": "Alert"}
-
-        self.assertFalse(
-            feature.record_notification_outcome(
-                alert,
-                success=True,
-                attempt=1,
-                now=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            )
-        )
         state["runtime"]["alert_1"] = {"flow_id": "flow_1"}
-        self.assertTrue(
-            feature.record(
-                alert,
-                "test",
-                "Test",
-                {"value": 1},
-                datetime(2026, 1, 1, tzinfo=timezone.utc),
-            )
-        )
+        self.assertEqual(await feature.list_history(limit=1), [])
         self.assertEqual(
             await feature.list_history(limit=1), state["history"][-1:][::-1]
         )
-
-
-def test_module_history_recorders_update_state_and_respect_disabled_recording():
-    state = {"runtime": {"alert_1": {"flow_id": "flow_1"}}, "history": []}
-    alert = {"id": "alert_1", "name": "Alert"}
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-
-    assert history.record_notification_outcome(
-        state, alert, success=False, attempt=2, error="failed", now=now
-    )
-    assert state["history"][0]["details"] == {"attempt": 2, "error": "failed"}
-    assert history.record_event(
-        state,
-        state["runtime"]["alert_1"],
-        alert,
-        "test",
-        "Test",
-        {},
-        now,
-    )
-    assert not history.record_notification_outcome(
-        state,
-        alert,
-        success=True,
-        attempt=3,
-        now=now,
-        record_history=False,
-    )
-
 
 if __name__ == "__main__":
     unittest.main()

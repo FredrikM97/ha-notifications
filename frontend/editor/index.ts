@@ -83,7 +83,7 @@ class AlertEditorController {
   private readonly collapsedParents = new Set<string>();
 
   private dirty = false;
-  private draftTestSessionId: string | null = null;
+  private previewSessionId: string | null = null;
   private discardDialogOpen = false;
   private activeSectionIndex = 0;
   private mobileSectionsOpen = false;
@@ -685,9 +685,9 @@ class AlertEditorController {
     return "mdi:chevron-down";
   }
 
-  private discardDraftTest = async (): Promise<void> => {
-    const sessionId = this.draftTestSessionId;
-    this.draftTestSessionId = null;
+  private discardPreview = async (): Promise<void> => {
+    const sessionId = this.previewSessionId;
+    this.previewSessionId = null;
     if (!sessionId) return;
     try {
       await this.onDiscardTest(sessionId);
@@ -749,7 +749,7 @@ class AlertEditorController {
       return false;
     }
     this.discardDialogOpen = false;
-    void this.discardDraftTest();
+    void this.discardPreview();
     document.removeEventListener("pointerdown", this.handleOutsideSectionPointer);
     this.host.remove();
     this.onClosed?.();
@@ -937,9 +937,9 @@ class AlertEditorController {
     const button = event.currentTarget as HTMLButtonElement;
     try {
       button.disabled = true;
-      await this.discardDraftTest();
+      await this.discardPreview();
       const result = await this.onTest(this.formPayload());
-      this.draftTestSessionId = result.session_id;
+      this.previewSessionId = result.session_id;
     } catch (error) {
       showEditorToast(this.root, errorMessage(error));
     } finally {
@@ -957,7 +957,7 @@ class AlertEditorController {
         throw new Error("Enable condition changes, an interval, or both.");
       const result = this.formPayload();
       button.disabled = true;
-      await this.discardDraftTest();
+      await this.discardPreview();
       const saved = await this.onSave(result);
       const savedAlert = saved || result;
       Object.assign(this.value, savedAlert);

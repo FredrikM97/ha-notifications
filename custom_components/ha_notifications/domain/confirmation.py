@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,22 +22,32 @@ class ConfirmationContext:
     confirmed_by: str
     selection: ConfirmationSelection
 
-    def template_values(self) -> dict[str, str]:
-        """Return the flat values exposed to Home Assistant templates."""
+
+@dataclass(slots=True)
+class PendingConfirmationState:
+    """Mutable pending confirmation state held at the runtime boundary."""
+
+    action_ids: dict[str, str] = field(default_factory=dict)
+    attempts: int = 0
+
+    @classmethod
+    def from_runtime(cls, runtime: Mapping[str, Any]) -> PendingConfirmationState:
+        """Load pending confirmation state from persisted runtime data."""
+
+        value = runtime.get("confirmation") or {}
+        return cls(
+            action_ids=dict(value.get("action_ids") or {}),
+            attempts=int(value.get("attempts", 0)),
+        )
+
+    def to_runtime(self) -> dict[str, Any]:
+        """Serialize pending confirmation state for runtime persistence."""
 
         return {
-            "confirmed_by": self.confirmed_by,
-            "confirmation_response_id": self.selection.response_id,
-            "confirmation_response": self.selection.label,
-        }
-
-    def history_details(self) -> dict[str, str]:
-        """Return generic details for a confirmation history entry."""
-
-        return {
-            "confirmed_by": self.confirmed_by,
-            "response_id": self.selection.response_id,
-            "response": self.selection.label,
+            "confirmation": {
+                "action_ids": dict(self.action_ids),
+                "attempts": self.attempts,
+            }
         }
 
 
@@ -45,12 +56,6 @@ class ConfirmationActionSet:
     """Prepared response actions owned by the confirmation feature."""
 
     selections: tuple[ConfirmationSelection, ...]
-
-    @property
-    def primary_action_id(self) -> str | None:
-        """Return the first action for legacy scalar consumers."""
-
-        return self.selections[0].action_id if self.selections else None
 
     def notification_actions(self) -> list[dict[str, str]]:
         """Project responses into Home Assistant notification actions."""

@@ -3,15 +3,16 @@
   dict({
     'acknowledged': True,
     'active': False,
-    'attempts': 0,
-    'confirmation_action_ids': dict({
+    'confirmation': dict({
+      'action_ids': dict({
+      }),
+      'attempts': 0,
     }),
     'confirmed_at': '2026-01-01T00:00:00+00:00',
     'confirmed_by': 'Alice',
     'flow_id': None,
     'last_error': None,
     'last_evaluated': None,
-    'last_event': None,
     'last_notified': None,
     'notification_id': None,
     'started_at': None,
@@ -21,15 +22,16 @@
   dict({
     'acknowledged': False,
     'active': False,
-    'attempts': 0,
-    'confirmation_action_ids': dict({
+    'confirmation': dict({
+      'action_ids': dict({
+      }),
+      'attempts': 0,
     }),
     'confirmed_at': None,
     'confirmed_by': None,
     'flow_id': None,
     'last_error': None,
     'last_evaluated': None,
-    'last_event': None,
     'last_notified': None,
     'notification_id': None,
     'started_at': None,

@@ -1,12 +1,10 @@
 import json
 import unittest
-from datetime import timedelta
 from pathlib import Path
 
 from homeassistant import config_entries
 
 from custom_components.ha_notifications import config_flow
-from custom_components.ha_notifications.domain.durations import parse_duration
 from tests.backend.support.test_support import load_const_and_models
 
 const, models = load_const_and_models()
@@ -50,7 +48,7 @@ class ConfigContractTests(unittest.TestCase):
                     "conditions": [
                         {"type": "template", "template": "{{ true }}"}
                     ],
-                    "monitor": {"on_change": True, "interval": "00:30"},
+                    "monitor": {"on_change": True, "interval": 1800},
                     "notification": {
                         "action": "notify.test",
                         "target": {"entity_id": ["notify.a"]},
@@ -68,17 +66,10 @@ class ConfigContractTests(unittest.TestCase):
 
         self.assertEqual(normalized["version"], 1)
         self.assertTrue(alert["monitor"]["on_change"])
-        self.assertEqual(alert["monitor"]["interval"], "00:30")
+        self.assertEqual(alert["monitor"]["interval"], 1800)
         self.assertNotIn("trigger", alert)
         self.assertNotIn("logic", alert)
         self.assertNotIn("notify_on_start", alert)
-
-    def test_parse_duration_time_strings(self):
-        self.assertEqual(parse_duration("12:00"), timedelta(hours=12))
-        self.assertEqual(parse_duration("00:30"), timedelta(minutes=30))
-        self.assertEqual(parse_duration("12:00:00"), timedelta(hours=12))
-        self.assertEqual(parse_duration("00:30:00"), timedelta(minutes=30))
-
 
 if __name__ == "__main__":
     unittest.main()

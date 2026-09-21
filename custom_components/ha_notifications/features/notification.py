@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from homeassistant.helpers import area_registry as ar
@@ -22,17 +22,21 @@ from ..delivery.targets import (
     resolve_user_notification_target,
     target_values,
 )
-from ..domain.service_calls import ServiceCall
-from ..domain.notification import NotificationOutcome
 from ..domain.confirmation import ConfirmationContext
-from ..domain.template_values import (
+from ..domain.service_calls import HomeAssistantServiceCall
+from ..domain.workflow import (
+    ConfirmationWorkflowEvent,
+    NotificationClearRequest,
+    NotificationOutcome,
+    NotificationRequest,
+)
+from ..support.jinja import (
+    JinjaEvaluator,
     TemplateRenderer,
     remove_nulls,
-    render_template_values,
-    template_context,
+    render_values,
 )
-from ..support.templates import render_template
-from .confirmation import ConfirmationConfig
+from .response_actions import ConfirmationConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +64,7 @@ class ConfirmationDeliveryPlanner:
 
     def __init__(
         self,
-        alert: dict[str, Any],
+        alert: Mapping[str, Any],
         confirmation: ConfirmationContext,
         now: Any,
     ) -> None:
@@ -90,23 +94,26 @@ class ConfirmationDeliveryPlanner:
 
         completion_message = (
             confirmation.notification.message
-            or "{{ confirmed_by }} confirmed this notification."
+            or "{{ request.confirmation.confirmed_by }} confirmed this notification."
         )
-        completion_alert = deepcopy(self.alert)
+        completion_alert = deepcopy(dict(self.alert))
         completion_alert["notification"] = self.notification.model_dump(
             exclude_none=True
         )
-        variables = template_context(
-            self.alert,
-            1,
-            self.now,
-            False,
-            trigger="confirmation",
-            confirmation=self.context,
+        request = ConfirmationWorkflowEvent(
+            self.alert, self.context, self.now
         )
-        completion_alert["notification"]["message"] = await render_template_values(
+        template_values = {
+            "request": request,
+            "confirmed_by": self.context.confirmed_by,
+            "confirmation_response_id": self.context.selection.response_id,
+            "confirmation_response": self.context.selection.label,
+            "alert_id": self.alert.get("id"),
+            "alert_name": self.alert.get("name"),
+        }
+        completion_alert["notification"]["message"] = await render_values(
             completion_message,
-            variables,
+            template_values,
             render,
         )
         completion_alert["confirmation"] = {"enabled": False}
@@ -136,6 +143,7 @@ class NotificationFeature(FeatureBase):
     ) -> None:
         super().__init__()
         self._hass = hass
+        self._jinja = JinjaEvaluator.for_hass(hass)
 
     def capabilities(self) -> NotificationCapabilitySet:
         """Build the Home Assistant values required for one delivery plan."""
@@ -143,7 +151,7 @@ class NotificationFeature(FeatureBase):
         hass = self._hass
         mobile_app_entries = list(hass.config_entries.async_entries("mobile_app"))
         return NotificationCapabilitySet(
-            render=self._render_template,
+            render=self._jinja.render,
             snapshot=RegistrySnapshot(
                 area_registry=ar.async_get(hass),
                 device_registry=dr.async_get(hass),
@@ -154,12 +162,7 @@ class NotificationFeature(FeatureBase):
             ),
         )
 
-    async def _render_template(
-        self, source: str, variables: dict[str, Any] | None = None
-    ) -> Any:
-        return await render_template(self._hass, source, variables)
-
-    async def _execute(self, calls: list[ServiceCall]) -> None:
+    async def _execute(self, calls: list[HomeAssistantServiceCall]) -> None:
         for call in calls:
             await self._hass.services.async_call(
                 call.domain,
@@ -169,69 +172,25 @@ class NotificationFeature(FeatureBase):
                 blocking=True,
             )
 
-    async def send(self, payload: dict[str, Any]) -> bool:
-        """Plan and execute a notification request."""
-
-        calls = await send_requested(
-            {**payload, "propagate_errors": True}, self.capabilities()
-        )
-        await self._execute(calls)
-        return True
-
-    async def send_alert(
-        self,
-        alert: dict[str, Any],
-        *,
-        attempt: int,
-        now: datetime,
-        replace_existing: bool,
-        test: bool = False,
-        notification_actions: list[dict[str, str]] | None = None,
-        condition_facts: dict[str, bool] | None = None,
-        trigger_source: str = "",
-    ) -> NotificationOutcome:
-        """Send an alert without exposing delivery payload assembly to callers."""
+    async def send(self, request: NotificationRequest) -> NotificationOutcome:
+        """Plan and execute one typed notification request."""
 
         try:
-            await self.send(
-                {
-                    "alert": alert,
-                    "attempt": attempt,
-                    "notification_actions": notification_actions or [],
-                    "replace_existing": replace_existing,
-                    "test": test,
-                    "now": now,
-                    "condition_facts": condition_facts or {},
-                    "trigger_source": trigger_source,
-                }
+            calls = await send_requested(
+                request,
+                self.capabilities(),
+                propagate_errors=True,
             )
+            await self._execute(calls)
         except Exception as err:
-            return NotificationOutcome(attempt, now, False, str(err))
-        return NotificationOutcome(attempt, now, True)
+            return NotificationOutcome(request.attempt, request.now, False, str(err))
+        return NotificationOutcome(request.attempt, request.now, True)
 
-    async def send_completion(
-        self,
-        alert: dict[str, Any],
-        *,
-        now: datetime,
-        test: bool,
-    ) -> bool:
-        """Send a rendered completion notification."""
-
-        return await self.send_alert(
-            alert,
-            attempt=1,
-            now=now,
-            replace_existing=False,
-            test=test,
-        )
-
-    async def clear(self, alert: dict[str, Any], now: Any) -> None:
+    async def clear(self, alert: Mapping[str, Any], now: Any) -> None:
         """Plan and best-effort execute a notification clear request."""
 
-        calls = await clear_requested(
-            {"alert": alert, "now": now}, self.capabilities()
-        )
+        request = NotificationClearRequest(alert, now)
+        calls = await clear_requested(request, self.capabilities())
         try:
             await self._execute(calls)
         except Exception:
@@ -260,19 +219,19 @@ class _RenderedNotification:
 
 
 async def plan_delivery(
-    alert: dict[str, Any],
-    variables: dict[str, Any],
+    request: NotificationRequest,
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
     notification_actions: list[dict[str, str]] | None = None,
-) -> list[ServiceCall]:
+) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that send one notification."""
 
+    alert = request.alert
     notification = NotificationConfig.model_validate(alert["notification"])
     rendered = await _render_notification(
         notification,
         ConfirmationConfig.from_alert(alert),
-        variables,
+        request,
         render,
         snapshot,
     )
@@ -298,18 +257,16 @@ async def plan_delivery(
         rendered,
         has_confirmation,
         include_extra_data=bool(mobile_services),
-        notification_id=str(
-            variables.get("notification_id", f"ha_notifications_{alert['id']}")
-        ),
+        notification_id=f"ha_notifications_{alert['id']}",
         notification_actions=notification_actions,
     )
-    commands: list[ServiceCall] = []
+    commands: list[HomeAssistantServiceCall] = []
     for action_to_call in actions_to_call:
         if "." not in action_to_call:
             raise ValueError(f"Invalid notification action: {action_to_call}")
         domain, service = action_to_call.split(".", 1)
         commands.append(
-            ServiceCall(
+            HomeAssistantServiceCall(
                 domain=domain,
                 service=service,
                 data=service_data,
@@ -321,15 +278,15 @@ async def plan_delivery(
 
 
 async def plan_clear(
-    alert: dict[str, Any],
-    variables: dict[str, Any],
+    request: NotificationClearRequest,
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
-) -> list[ServiceCall]:
+) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that clear one notification."""
 
+    alert = request.alert
     notification = NotificationConfig.model_validate(alert["notification"])
-    target = await render_template_values(notification.target, variables, render)
+    target = await render_values(notification.target, {"request": request}, render)
     target = resolve_user_notification_target(snapshot, target)
     if not target:
         return []
@@ -344,13 +301,13 @@ async def plan_clear(
 
     clear_target = None
 
-    commands: list[ServiceCall] = []
+    commands: list[HomeAssistantServiceCall] = []
     for action_to_call in actions_to_call:
         domain, service = action_to_call.split(".", 1)
         data = {"message": "clear_notification"}
         data["data"] = {"tag": f"ha_notifications_{alert['id']}"}
         commands.append(
-            ServiceCall(
+            HomeAssistantServiceCall(
                 domain=domain,
                 service=service,
                 data=data,
@@ -362,29 +319,31 @@ async def plan_clear(
 
 
 async def _render_notification(
-    notification: dict[str, Any],
+    notification: Mapping[str, Any],
     confirmation: ConfirmationConfig | None,
-    variables: dict[str, Any],
+    request: NotificationRequest,
     render: TemplateRenderer,
     snapshot: RegistrySnapshot,
 ) -> _RenderedNotification:
     notification = NotificationConfig.model_validate(notification)
-    title = await render_template_values(notification.title, variables, render)
-    message = await render_template_values(notification.message, variables, render)
+    template_values = {"request": request}
+    title = await render_values(notification.title, template_values, render)
+    message = await render_values(notification.message, template_values, render)
     if (
         confirmation
         and confirmation.reminders.show_attempts
         and isinstance(title, str)
-        and int(variables.get("attempt", 1)) > 1
+        and isinstance(request.attempt, int)
+        and request.attempt > 1
     ):
         title = (
-            f"{title} ({variables['attempt']}/"
+            f"{title} ({request.attempt}/"
             f"{confirmation.reminders.max_attempts or 1})"
         )
-    target = await render_template_values(notification.target, variables, render)
+    target = await render_values(notification.target, template_values, render)
     target = resolve_user_notification_target(snapshot, target)
-    extra_data = await render_template_values(
-        notification.data or {}, variables, render
+    extra_data = await render_values(
+        notification.data or {}, template_values, render
     )
 
     return _RenderedNotification(
@@ -417,39 +376,34 @@ def _requested_target_counts(target: dict[str, Any]) -> dict[str, int]:
 
 
 async def send_requested(
-    payload: dict[str, Any], capabilities: NotificationCapabilitySet
-) -> list[ServiceCall]:
-    alert = payload["alert"]
-    now = payload["now"]
-    variables = template_context(
-        alert,
-        payload["attempt"],
-        now,
-        payload.get("test", False),
-        condition_facts=payload.get("condition_facts", {}),
-        trigger=payload.get("trigger_source", ""),
-    )
-    notification_actions = payload.get("notification_actions", [])
+    request: NotificationRequest,
+    capabilities: NotificationCapabilitySet,
+    *,
+    propagate_errors: bool = False,
+) -> list[HomeAssistantServiceCall]:
+    alert = request.alert
+    notification_actions = list(request.notification_actions)
 
     render = capabilities.render
     snapshot = capabilities.snapshot
 
-    commands: list[ServiceCall] = []
-    if payload.get("replace_existing"):
+    commands: list[HomeAssistantServiceCall] = []
+    if request.replace_existing:
         commands.extend(
-            await _clear_commands(alert, now, snapshot, render)
+            await _clear_commands(
+                NotificationClearRequest(alert, request.now), snapshot, render
+            )
         )
 
     try:
         send_commands = await plan_delivery(
-            alert,
-            variables,
+            request,
             snapshot,
             render,
             notification_actions=notification_actions,
         )
     except Exception:  # noqa: BLE001 - reported as an event, not re-raised
-        if payload.get("propagate_errors", False):
+        if propagate_errors:
             raise
 
         return commands
@@ -459,30 +413,27 @@ async def send_requested(
 
 
 async def clear_requested(
-    payload: dict[str, Any], capabilities: NotificationCapabilitySet
-) -> list[ServiceCall]:
-    alert = payload["alert"]
-    now = payload.get("now")
-
+    request: NotificationClearRequest,
+    capabilities: NotificationCapabilitySet,
+) -> list[HomeAssistantServiceCall]:
     return await _clear_commands(
-        alert,
-        now,
+        request,
         capabilities.snapshot,
         capabilities.render,
     )
 
 
 async def _clear_commands(
-    alert: dict[str, Any],
-    now: Any,
+    request: NotificationClearRequest,
     snapshot: RegistrySnapshot,
     render: TemplateRenderer,
-) -> list[ServiceCall]:
-    variables = template_context(alert, 1, now, False)
+) -> list[HomeAssistantServiceCall]:
     try:
-        commands = await plan_clear(alert, variables, snapshot, render)
+        commands = await plan_clear(request, snapshot, render)
     except Exception:
-        _LOGGER.exception("Failed clearing notification for %s", alert["id"])
+        _LOGGER.exception(
+            "Failed clearing notification for %s", request.alert["id"]
+        )
         return []
 
     return commands

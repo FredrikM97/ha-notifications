@@ -2,174 +2,103 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from ..const import (
-    STATE_RUNTIME,
-    HistoryEventType,
+    EVENT_ALERT_EVENT,
+    AlertEventType,
     StateRoot,
 )
-from ..domain.confirmation import ConfirmationContext
 from ..controller.lifecycle import FeatureBase
-from ..domain.service_calls import ServiceCall
-from ..domain.template_values import (
-    remove_nulls,
-    render_template_values,
-    template_context,
-)
-from ..support.storage import RuntimeStateStorage
-from ..support.templates import render_template
-
-
-class FollowUpActionConfig(BaseModel):
-    """One permissive action payload retained for template rendering."""
-
-    model_config = ConfigDict(extra="allow")
-
-    action: Any = None
-    target: Any = Field(default_factory=dict)
-    data: Any = Field(default_factory=dict)
-
-
-class PostSendActionsConfig(BaseModel):
-    """Validated actions executed after a notification is sent."""
-
-    model_config = ConfigDict(extra="allow")
-
-    enabled: bool | None = None
-    actions: list[dict[str, Any]] | None = None
-
-
-@dataclass(frozen=True)
-class ActionResult:
-    """One configured action's render outcome, preserving its original index."""
-
-    index: int
-    command: ServiceCall | None
-    error: str | None
+from ..domain.service_calls import ServiceEffectsRequest
+from ..support.storage import Storage
 
 
 class FollowUpActionsFeature(FeatureBase):
     """Own follow-up action rendering, execution, and outcome recording."""
 
     name = "follow_up_actions"
-    dependencies = ("history",)
 
     def __init__(
         self,
         hass: Any,
-        state: StateRoot,
+        _state: StateRoot,
         _config_storage: Any,
-        runtime_storage: RuntimeStateStorage,
+        storage: Storage,
     ) -> None:
         super().__init__()
         self._hass = hass
-        self._state = state
-        self._runtime_storage = runtime_storage
+        self._storage = storage
 
-    async def run(
-        self,
+    @staticmethod
+    def actions_for_confirmation(
         alert: dict[str, Any],
-        attempt: int,
-        now: Any,
-        test: bool,
-        record_history: bool,
-        actions: list[dict[str, Any]] | None = None,
-        confirmation: ConfirmationContext | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return raw actions configured after confirmation."""
+
+        confirmation = alert.get("confirmation") or {}
+        actions = confirmation.get("actions") or {}
+        if not actions.get("enabled"):
+            return []
+        return list(actions.get("items") or [])
+
+    async def execute(
+        self,
+        request: ServiceEffectsRequest,
     ) -> None:
         """Render, execute, and record post-send or confirmation actions."""
 
-        post_send = PostSendActionsConfig.model_validate(
-            alert.get("post_send_actions") or {}
-        )
-        action_list = actions if actions is not None else (post_send.actions or [])
-        if not action_list or (actions is None and not post_send.enabled):
+        actions = request.actions
+        if not actions:
+            post_send = request.alert.get("post_send_actions") or {}
+            if not post_send.get("enabled"):
+                return
+            actions = tuple(post_send.get("actions") or ())
+        if not actions:
             return
-        variables = template_context(
-            alert,
-            attempt,
-            now,
-            test,
-            confirmation=confirmation,
-        )
-        results = await self._render_actions(
-            action_list,
-            variables,
-        )
-        for result in results:
-            event_type = HistoryEventType.NOTIFICATION_ACTION
-            message = "Action executed."
-            details = {"index": result.index}
-            if result.command is None:
-                message = "Action failed."
-                details["error"] = result.error
-            else:
-                try:
-                    await self._hass.services.async_call(
-                        result.command.domain,
-                        result.command.service,
-                        service_data=result.command.data,
-                        target=result.command.target,
-                        blocking=True,
-                    )
-                    details["action"] = (
-                        f"{result.command.domain}.{result.command.service}"
-                    )
-                except Exception as err:
-                    event_type = HistoryEventType.NOTIFICATION_ACTION_FAILED
-                    message = "Action failed."
-                    details["error"] = str(err)
-            if record_history and self.feature("history").record(
-                alert,
-                event_type,
-                message,
-                details,
-                now,
-            ):
-                self._runtime_storage.persist()
 
-    async def _render_actions(
-        self, actions: list[dict[str, Any]], variables: dict[str, Any]
-    ) -> list[ActionResult]:
-        """Render each configured action independently."""
-        results: list[ActionResult] = []
-        for index, action in enumerate(actions, start=1):
+        for raw_action in actions:
+            error: str | None = None
             try:
-                command = await self._render_action(
-                    FollowUpActionConfig.model_validate(action), variables
+                service = str(raw_action.get("action") or "")
+                if not service or service.count(".") != 1:
+                    raise ValueError("Invalid service action.")
+                target = raw_action.get("target") or None
+                data = raw_action.get("data")
+                if data is None:
+                    data = {}
+                if not isinstance(data, dict):
+                    raise ValueError("Service action data must be a mapping.")
+                domain, service_name = (
+                    part.strip() for part in service.split(".", 1)
                 )
-                results.append(ActionResult(index, command, None))
+                if not domain or not service_name:
+                    raise ValueError("Invalid service action.")
+                await self._hass.services.async_call(
+                    domain,
+                    service_name,
+                    service_data=data,
+                    target=target,
+                    blocking=True,
+                )
+                event_type = AlertEventType.NOTIFICATION_ACTION
+                message = "Action executed."
             except Exception as err:  # noqa: BLE001
-                results.append(ActionResult(index, None, str(err)))
-        return results
-
-    async def _render_action(
-        self, action: FollowUpActionConfig, variables: dict[str, Any]
-    ) -> ServiceCall:
-        async def render(source: str, values: dict[str, Any]) -> Any:
-            return await render_template(self._hass, source, values)
-
-        service = str(
-            await render_template_values(
-                action.action,
-                variables,
-                render,
+                event_type = AlertEventType.NOTIFICATION_ACTION_FAILED
+                message = "Action failed."
+                error = str(err)
+            self._hass.bus.async_fire(
+                EVENT_ALERT_EVENT,
+                {
+                    "id": uuid.uuid4().hex,
+                    "timestamp": request.now.isoformat(),
+                    "alert_id": request.alert["id"],
+                    "alert_name": request.alert["name"],
+                    "type": event_type.value,
+                    "message": message,
+                    "details": raw_action,
+                    "error": error,
+                },
             )
-            or ""
-        )
-        if not service or "." not in service:
-            raise ValueError("Invalid service action.")
-        target = await render_template_values(action.target, variables, render)
-        data = remove_nulls(
-            await render_template_values(action.data, variables, render)
-        )
-        domain, service_name = service.split(".", 1)
-        return ServiceCall(
-            domain=domain,
-            service=service_name,
-            data=data if isinstance(data, dict) else {},
-            target=target if target else None,
-        )
+            self._storage.persist()

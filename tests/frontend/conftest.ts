@@ -24,7 +24,7 @@ export const alertRuntimeFixture = alertFixtureData.runtime as Record<
   RuntimeAlertState
 >;
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
-export const draftTestResultFixture = alertFixtureData.draftTestResult as {
+export const previewSessionResultFixture = alertFixtureData.draftTestResult as {
   session_id: string;
 };
 

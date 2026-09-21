@@ -17,7 +17,7 @@ You are the application-flow specialist for the HA Notifications Home Assistant 
 ## Constraints
 - DO NOT move feature business decisions into `custom_components/ha_notifications/controller/core.py`.
 - DO NOT replace awaited ordering with detached tasks, `gather()`, or implicit fan-out without proving equivalent behavior.
-- DO NOT remove a compatibility path until every producer, consumer, callback, and focused test for that path has migrated.
+- For an explicitly approved breaking migration, remove the old compatibility path as part of the same producer, consumer, callback, and focused-test migration. Otherwise, do not remove a compatibility path until all of those callers have migrated.
 - DO NOT leave runtime mutation dependent on history recording for persistence; make state durability explicit.
 
 ## Approach

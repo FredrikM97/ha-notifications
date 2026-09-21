@@ -7,26 +7,25 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/ha_notifications/config_flow.py` — UI config flow and validation logic
 - `custom_components/ha_notifications/controller/core.py` — `HaNotificationsController`: the lifecycle host. Owns direct Home Assistant lifecycle effects, typed awaited workflow sequencing, and shared runtime state; feature-owned websocket routes are registered through the lifecycle.
 - `custom_components/ha_notifications/bridge/websocket.py` — the frontend-facing interface: registers the 12 `ha_notifications/*` websocket commands
-- `custom_components/ha_notifications/bridge/panel.py` — pure frontend panel registration data (`registration_plan`)
+- `custom_components/ha_notifications/controller/core.py` — frontend static path and panel registration
 
 ## Controller kernel and feature modules
 - `custom_components/ha_notifications/controller/core.py` — kernel: Home Assistant lifecycle effects, setup/reload sequencing, public operations, command interpretation, and notification send/clear routing
 - `custom_components/ha_notifications/controller/lifecycle.py` — controller-owned feature dependency validation, setup ordering, rollback, and unload
 - `custom_components/ha_notifications/delivery/` — recipient resolution for Home Assistant's generic Notify service
 - `custom_components/ha_notifications/domain/service_calls.py` — plain service-call values passed to Home Assistant execution
-- `custom_components/ha_notifications/domain/notification.py` — immutable notification delivery outcomes passed to ordered workflows
+- `custom_components/ha_notifications/domain/workflow.py` — immutable notification requests/outcomes and ordered workflow contracts
 - `custom_components/ha_notifications/domain/confirmation.py` — immutable confirmation contexts and response selections passed between workflows
 - `custom_components/ha_notifications/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
-- `custom_components/ha_notifications/features/confirmation.py` — confirmation model, direct confirmation-action workflow, sessions, and confirmation effects
+- `custom_components/ha_notifications/features/response_actions.py` — confirmation model, direct response-action workflow, sessions, and confirmation effects
 - `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
 - `custom_components/ha_notifications/features/follow_up_actions.py` — post-send and post-confirmation service calls
 - `custom_components/ha_notifications/features/history.py` — explicit history mutation and persistence decisions
 
 ## Shared/support modules
-- `custom_components/ha_notifications/features/configuration.py` — typed `Alert`, `Configuration`, and `AlertRuntime` objects used by feature workflows and the storage boundary
-- `custom_components/ha_notifications/domain/template_values.py` — shared recursive template rendering and null removal for service-call configuration
+- `custom_components/ha_notifications/features/configuration.py` — typed `Alert` and `Configuration` models used by feature workflows and the configuration storage boundary
+- `custom_components/ha_notifications/support/jinja.py` — shared Home Assistant Jinja evaluation, recursive values, context, and null removal
 - `custom_components/ha_notifications/features/conditions.py` — visual condition model and condition rows -> Jinja template string
-- `custom_components/ha_notifications/domain/durations.py` — duration parse/format helpers
 - `custom_components/ha_notifications/support/storage.py` — structured config persistence, validation, and state-shape repair
 - `custom_components/ha_notifications/features/history.py` — history formatting, queries, deletion cleanup, and recording
 
@@ -34,7 +33,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `frontend/api.ts` — API calls for listing/saving alerts (the only transport boundary)
 - `frontend/panel.ts` — dashboard/panel LitElement shell, tab navigation
 - `frontend/editor/index.ts` — `AlertEditorController`: dialog state, dirty tracking, save/test/validate wiring
-- `frontend/sections.ts` — barrel re-exporting one render function per alert-editor section from `frontend/sections/*.ts` (basic, monitor, condition, recipients, notification, reminder interval, confirmation, post-send/post-confirmation actions)
+- `frontend/sections/*.ts` — one render function per alert-editor section (basic, monitor, condition, recipients, notification, reminder interval, confirmation, post-send/post-confirmation actions)
 - `frontend/editor/helpers.ts` — shared render helpers (`field`, `section`, `codeEditor`, `durationInput`)
 - `frontend/yaml-view.ts` — frontend-only YAML parsing, formatting, validation, and import/export
 - `frontend/editor/types.ts` — `EditorContext` and other shared editor types/constants
@@ -52,9 +51,9 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 ## Good starting points by task
 - Save/edit lifecycle bug: `custom_components/ha_notifications/config_flow.py`, `custom_components/ha_notifications/support/storage.py`, `custom_components/ha_notifications/bridge/websocket.py`
 - Runtime trigger or interval issue: `custom_components/ha_notifications/features/conditions.py`, `custom_components/ha_notifications/controller/core.py`
-- Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections.ts`, `frontend/panel.ts`, `frontend/api.ts`
+- Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections/*.ts`, `frontend/panel.ts`, `frontend/api.ts`
 - YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `custom_components/ha_notifications/features/configuration.py`, `custom_components/ha_notifications/support/storage.py`
-- Notification/confirmation flow: `custom_components/ha_notifications/features/notification.py`, `custom_components/ha_notifications/features/confirmation.py`, `custom_components/ha_notifications/delivery/`, `custom_components/ha_notifications/bridge/websocket.py`
+- Notification/confirmation flow: `custom_components/ha_notifications/features/notification.py`, `custom_components/ha_notifications/features/response_actions.py`, `custom_components/ha_notifications/delivery/`, `custom_components/ha_notifications/bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.

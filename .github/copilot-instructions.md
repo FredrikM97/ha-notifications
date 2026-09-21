@@ -19,8 +19,11 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Before the first edit, identify one falsifiable local hypothesis and one cheap check that could disconfirm it. Once the control path and check are clear, make the smallest testable edit.
 - After the first substantive edit, run the narrowest relevant validation before reading broadly or opening another edit slice.
 - Do not rerun full suites or repeat the same checks after every small edit. During a coherent feature or breaking migration, use only cheap syntax, import, or targeted blocker checks as needed; run focused and full regression validation when the planned slice is complete.
+- During an active TODO migration, defer broad test suites until the current TODO item is coherent and ready to close. Use only focused syntax/import/blocker checks while an item is intentionally intermediate; run the full suite after the item is complete, not after every edit.
 - If an intermediate breaking state produces expected failures, finish the planned migration before repairing them. Stop early only when a failure blocks the next edit or disproves the current hypothesis.
 - Do not turn repeated `continue` prompts into an unbounded analysis loop. Keep one active objective, implement it, validate it, and only then choose the next objective.
+- When the user says `continue`, `keep iterating`, or asks to work through all TODO items, treat that as standing authorization to advance through the active unchecked items in document order during the same turn. After each item reaches its focused validation checkpoint, immediately select the next relevant unchecked item and continue without pausing for status confirmation. Stop only when the requested sequence is complete, a validation failure remains unresolved, or a genuine blocker requires user input.
+- For `continue with todo`, do not end the turn, call the completion signal, or ask for confirmation after a single TODO item. Keep advancing through every eligible unchecked item in document order during the same turn; skip only explicitly approval-gated items or items blocked by an unresolved validation failure, and record the reason in `docs/todo.md` before continuing.
 - Read only active items in `todo.md` and `docs/todo.md`; do not spend context on completed history. Mark an active item complete when the requested behavior and focused validation are done.
 - Treat broad rewrite requests as a sequence of bounded ownership changes. Do not begin a repository-wide rewrite or defer all validation unless the user explicitly requires that workflow.
 
@@ -72,12 +75,12 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   Core has no alert/notification/confirmation business decisions.
   Trigger/state-machine logic belongs in `features/conditions.py`;
   confirmation session tracking and confirmation-effect planning belongs
-  in `features/confirmation.py`; notification composition belongs in
+  in `features/response_actions.py`; notification composition belongs in
   `features/notification.py`; follow-up action rendering belongs in
   `features/follow_up_actions.py`; history formatting belongs in
   `features/history.py` and application workflows explicitly sequence recording
   and persistence;
-  alert-editor section UI belongs in `frontend/sections.ts`.
+  alert-editor section UI belongs in `frontend/sections/*.ts`.
 - Prefer named, typed, awaited application methods for ordered internal
   workflows. Use event fan-out when multiple independent consumers genuinely
   benefit from decoupling, and keep event payloads and failure behavior explicit.

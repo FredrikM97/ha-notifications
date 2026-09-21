@@ -26,7 +26,7 @@
   "runtime": {
     "door": {
       "active": true,
-      "attempts": 2
+      "confirmation_attempts": 2
     }
   },
   "editorAlert": {

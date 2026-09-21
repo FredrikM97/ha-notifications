@@ -10,12 +10,11 @@ from typing import Any
 from ..const import (
     MAX_HISTORY,
     STATE_HISTORY,
-    STATE_RUNTIME,
-    HistoryEventType,
+    AlertEventType,
     StateRoot,
 )
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from ..support.storage import RuntimeStateStorage
+from ..support.storage import Storage
 
 
 class HistoryFeature(FeatureBase):
@@ -28,134 +27,19 @@ class HistoryFeature(FeatureBase):
         _hass: Any,
         state: StateRoot,
         _config_storage: Any,
-        runtime_storage: RuntimeStateStorage,
+        storage: Storage,
     ) -> None:
         super().__init__()
         self._state = state
-        self._runtime_storage = runtime_storage
+        self._storage = storage
 
-    def record(
-        self,
-        alert: dict[str, Any],
-        event_type: HistoryEventType,
-        message: str,
-        details: dict[str, Any],
-        now: Any,
-    ) -> bool:
-        """Record one user-visible history event for an active alert."""
+    async def remove_alert(self, alert_id: str) -> None:
+        """Remove history entries belonging to a discarded preview alert."""
 
-        return self._record_event(
-            self._state[STATE_RUNTIME].get(alert["id"]),
-            alert,
-            event_type,
-            message,
-            details,
-            now,
+        self._state[STATE_HISTORY] = remove_alert(
+            self._state[STATE_HISTORY], alert_id
         )
-
-    def record_notification_outcome(
-        self,
-        alert: dict[str, Any],
-        *,
-        success: bool,
-        attempt: int,
-        now: Any,
-        error: str | None = None,
-    ) -> bool:
-        """Record the outcome of one notification attempt."""
-
-        runtime_state = self._state[STATE_RUNTIME].get(alert["id"])
-        if runtime_state is None:
-            return False
-        event_type = (
-            HistoryEventType.NOTIFICATION_SENT
-            if success
-            else HistoryEventType.NOTIFICATION_FAILED
-        )
-        details: dict[str, Any] = {"attempt": attempt}
-        if not success:
-            details["error"] = error
-        return self._record_event(
-            runtime_state,
-            alert,
-            event_type,
-            "Notification sent." if success else "Notification failed.",
-            details,
-            now,
-        )
-
-    def record_completion_outcome(
-        self,
-        alert: dict[str, Any],
-        *,
-        success: bool,
-        now: Any,
-        error: str | None = None,
-    ) -> bool:
-        """Record the outcome of a confirmation completion notification."""
-
-        return self.record(
-            alert,
-            HistoryEventType.COMPLETION_SENT
-            if success
-            else HistoryEventType.COMPLETION_FAILED,
-            "Completion notification sent."
-            if success
-            else "Completion notification failed.",
-            {} if success else {"error": error},
-            now,
-        )
-
-    def _record_event(
-        self,
-        runtime_state: dict[str, Any] | None,
-        alert: dict[str, Any],
-        event_type: HistoryEventType,
-        message: str,
-        details: dict[str, Any],
-        now: Any,
-    ) -> bool:
-        """Append one history entry and update the owning runtime record."""
-
-        if runtime_state is None:
-            return False
-        entry = self._format_entry(
-            alert,
-            event_type,
-            message,
-            details,
-            now,
-            runtime_state.get("flow_id"),
-        )
-        self._state[STATE_HISTORY] = append_entry(
-            self._state[STATE_HISTORY], entry
-        )
-        runtime_state["last_event"] = entry
-        return True
-
-    @staticmethod
-    def _format_entry(
-        alert: dict[str, Any],
-        event_type: HistoryEventType,
-        message: str,
-        details: dict[str, Any],
-        now: Any,
-        flow_id: str | None,
-    ) -> dict[str, Any]:
-        """Build one isolated persisted history entry."""
-
-        entry: dict[str, Any] = {
-            "id": uuid.uuid4().hex,
-            "timestamp": now.isoformat(),
-            "alert_id": alert["id"],
-            "alert_name": alert["name"],
-            "type": event_type,
-            "message": message,
-            "details": deepcopy(details),
-        }
-        if flow_id:
-            entry["flow_id"] = flow_id
-        return entry
+        self._storage.persist()
 
     @websocket_route(
         "history.list",
@@ -177,7 +61,7 @@ class HistoryFeature(FeatureBase):
 
 def format_entry(
     alert: dict[str, Any],
-    event_type: HistoryEventType,
+    event_type: AlertEventType,
     message: str,
     details: dict[str, Any],
     *,
@@ -260,71 +144,14 @@ def prune_entries_by_alert(
         if retention_days is None:
             result.append(entry)
             continue
-        result.extend(prune_entries([entry], retention_days, now=now))
+        try:
+            timestamp = datetime.fromisoformat(str(entry["timestamp"])).timestamp()
+        except (KeyError, TypeError, ValueError):
+            result.append(entry)
+            continue
+        cutoff = now.timestamp() - max(0, retention_days) * 86400
+        if timestamp >= cutoff:
+            result.append(entry)
     return result
 
 
-def record_notification_outcome(
-    state_root: dict[str, Any],
-    alert: dict[str, Any],
-    *,
-    success: bool,
-    attempt: int,
-    now: Any,
-    record_history: bool = True,
-    error: str | None = None,
-) -> bool:
-    """Record a notification outcome after its service batch completes."""
-
-    if not record_history:
-        return False
-
-    runtime_state = state_root[STATE_RUNTIME].get(alert["id"])
-    if runtime_state is None:
-        return False
-
-    event_type = (
-        HistoryEventType.NOTIFICATION_SENT
-        if success
-        else HistoryEventType.NOTIFICATION_FAILED
-    )
-    details: dict[str, Any] = {"attempt": attempt}
-    if not success:
-        details["error"] = error
-    entry = format_entry(
-        alert,
-        event_type,
-        "Notification sent." if success else "Notification failed.",
-        details,
-        now=now,
-        flow_id=runtime_state.get("flow_id"),
-    )
-    state_root[STATE_HISTORY] = append_entry(state_root[STATE_HISTORY], entry)
-    runtime_state["last_event"] = entry
-    return True
-
-
-def record_event(
-    state_root: dict[str, Any],
-    runtime_state: dict[str, Any] | None,
-    alert: dict[str, Any],
-    event_type: HistoryEventType,
-    message: str,
-    details: dict[str, Any],
-    now: Any,
-) -> bool:
-    if runtime_state is None:
-        return False
-
-    entry = format_entry(
-        alert,
-        event_type,
-        message,
-        details,
-        now=now,
-        flow_id=runtime_state.get("flow_id"),
-    )
-    state_root[STATE_HISTORY] = append_entry(state_root[STATE_HISTORY], entry)
-    runtime_state["last_event"] = entry
-
-    return True

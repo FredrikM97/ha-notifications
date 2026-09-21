@@ -38,8 +38,7 @@ describe("buildAlertPayload", () => {
     const original = defaultAlert();
     original.runtime = {
       active: true,
-      attempts: 20,
-      last_event: { type: "notification_sent" },
+      confirmation_attempts: 20,
     };
     const payload = buildAlertPayload(
       original,

@@ -12,6 +12,7 @@ hacs-export/
 .venv/
 .ruff_cache/
 .pytest_cache/
+docs/todo.md
 .coverage
 .mypy_cache/
 

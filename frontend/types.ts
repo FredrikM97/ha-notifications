@@ -73,9 +73,8 @@ export interface PostSendActionsConfig {
 
 export interface RuntimeAlertState {
   active?: boolean;
-  attempts?: number;
+  confirmation_attempts?: number;
   last_notified?: string;
-  last_event?: Record<string, unknown>;
 }
 
 export interface HistoryRetentionConfig {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,10 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 
 if TYPE_CHECKING:
-    from ..support.storage import ConfigEntryStorage
+    from ..support.storage import Storage
 
 
-class Alert(BaseModel):
+class Alert(BaseModel, Mapping[str, Any]):
     """The validated persisted alert document."""
 
     model_config = ConfigDict(extra="allow")
@@ -25,6 +26,27 @@ class Alert(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
 
+    def __getitem__(self, key: str) -> Any:
+        """Expose configured fields and preserved feature sections directly."""
+
+        if key in self.model_fields:
+            return getattr(self, key)
+        try:
+            return self.model_extra[key]
+        except KeyError as err:
+            raise KeyError(key) from err
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over the canonical entity fields and extra sections."""
+
+        yield from self.model_fields
+        yield from self.model_extra
+
+    def __len__(self) -> int:
+        """Return the number of configured fields exposed by the entity."""
+
+        return len(self.model_fields) + len(self.model_extra)
+
 
 class Configuration(BaseModel):
     """The complete persisted configuration document."""
@@ -33,26 +55,6 @@ class Configuration(BaseModel):
 
     version: int = 1
     alerts: list[Alert] = Field(default_factory=list)
-
-
-class AlertRuntime(BaseModel):
-    """The persisted runtime record for one alert."""
-
-    model_config = ConfigDict(extra="allow")
-
-    active: bool = False
-    acknowledged: bool = False
-    attempts: int = 0
-    notification_id: str | None = None
-    confirmation_action_ids: dict[str, str] = Field(default_factory=dict)
-    flow_id: str | None = None
-    started_at: str | None = None
-    last_evaluated: str | None = None
-    last_notified: str | None = None
-    confirmed_at: str | None = None
-    confirmed_by: str | None = None
-    last_error: str | None = None
-    last_event: dict[str, Any] | None = None
 
 
 class ConfigurationFeature(FeatureBase):
@@ -64,11 +66,11 @@ class ConfigurationFeature(FeatureBase):
         self,
         hass: Any,
         state: dict[str, Any],
-        config_storage: ConfigEntryStorage,
+        storage: Storage,
         _runtime_storage: Any,
     ) -> None:
         super().__init__()
-        self._config_storage = config_storage
+        self._storage = storage
 
     @websocket_route(
         "configuration.get_config",
@@ -79,7 +81,10 @@ class ConfigurationFeature(FeatureBase):
     async def get_config(self) -> dict[str, Any]:
         """Return the current structured configuration document."""
 
-        return await self._config_storage.load()
+        config = await self._storage.load_config()
+        ordered = dict(config)
+        version = ordered.pop("version", 1)
+        return {"version": version, **ordered}
 
     @websocket_route(
         "configuration.validate_config",
@@ -91,7 +96,7 @@ class ConfigurationFeature(FeatureBase):
     async def validate_config(self, config: dict[str, Any]) -> bool:
         """Validate configuration without changing its saved document."""
 
-        self._config_storage.validate(config)
+        Configuration.model_validate(config)
         return True
 
     @websocket_route(
@@ -104,8 +109,9 @@ class ConfigurationFeature(FeatureBase):
     async def save_config(self, config: dict[str, Any]) -> dict[str, Any]:
         """Validate and persist the supplied configuration document."""
 
-        mapped = await self._config_storage.save(config)
-        return {"saved": True, "config": mapped}
+        Configuration.model_validate(config)
+        saved = await self._storage.save_config(config)
+        return {"saved": True, "config": saved}
 
     @websocket_route(
         "configuration.reload",

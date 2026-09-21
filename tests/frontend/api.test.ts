@@ -4,21 +4,21 @@ import {
   getAlertRuntime,
   getConfig,
   getHistory,
-  discardDraftTestPayload,
+  discardPreview,
   deleteAlert,
   loadRegistries,
   reload,
   saveAlert,
   saveConfig,
-  testAlert,
-  testAlertPayload,
+  previewAlert,
+  previewAlertPayload,
   validateConfig,
 } from "../../frontend/api.js";
 import {
   alertFixture,
   configFixture,
   createHassClient,
-  draftTestResultFixture,
+  previewSessionResultFixture,
 } from "./conftest.js";
 
 describe("frontend API transport", () => {
@@ -60,7 +60,7 @@ describe("frontend API transport", () => {
   it("does not send a test command without an alert id", async () => {
     const client = createHassClient();
 
-    await expect(testAlert(client.hass, "")).rejects.toThrow(
+    await expect(previewAlert(client.hass, "")).rejects.toThrow(
       "Select an alert before testing it.",
     );
     expect(client.sendMessagePromise).not.toHaveBeenCalled();
@@ -81,9 +81,9 @@ describe("frontend API transport", () => {
 
     await getHistory(client.hass, "door", 150);
     await deleteAlert(client.hass, "door");
-    client.sendMessagePromise.mockResolvedValueOnce(draftTestResultFixture);
-    await testAlertPayload(client.hass, alert);
-    await discardDraftTestPayload(client.hass, "session");
+    client.sendMessagePromise.mockResolvedValueOnce(previewSessionResultFixture);
+    await previewAlertPayload(client.hass, alert);
+    await discardPreview(client.hass, "session");
     await reload(client.hass);
 
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();

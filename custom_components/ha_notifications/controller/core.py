@@ -4,21 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event as HassEvent
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from ..bridge import panel as panel_module
 from ..bridge import websocket as frontend_websocket
 from ..const import (
     DOMAIN,
+    EVENT_ALERT_EVENT,
+    FRONTEND_BUILD_DIR,
+    FRONTEND_STATIC_URL,
+    PANEL_ICON,
     PANEL_MODULE,
+    PANEL_TITLE,
     STATE_HISTORY,
     STATE_RUNTIME,
     STORAGE_KEY,
@@ -41,7 +46,7 @@ class AlertConfigurationPort(Protocol):
 class ConfirmationRebuildPort(Protocol):
     """Typed confirmation lifecycle operation used during setup/reload."""
 
-    async def rebuild(self) -> None: ...
+    def rebuild(self) -> None: ...
 
 
 class ConditionsPort(Protocol):
@@ -62,12 +67,10 @@ class HaNotificationsController:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
         self._state: StateRoot = {STATE_RUNTIME: {}, STATE_HISTORY: []}
-        self._runtime_storage = storage_module.RuntimeStateStorage(
-            self._store, self._state
-        )
         self._entry = entry
-        self._config_storage = storage_module.ConfigEntryStorage(hass, entry)
+        self._storage = storage_module.Storage(hass, entry, self._store, self._state)
         self._started_unsub: Any = None
+        self._alert_event_unsub: Any = None
         self._entry_update_unsub: Any = None
 
         self._started = False
@@ -82,8 +85,7 @@ class HaNotificationsController:
         return await FeatureLifecycle.async_create(
             self._hass,
             self._state,
-            self._config_storage,
-            self._runtime_storage,
+            self._storage,
             self.reload,
         )
 
@@ -122,14 +124,17 @@ class HaNotificationsController:
             return
 
         try:
-            await self._runtime_storage.load()
+            await self._storage.load_events()
+            self._alert_event_unsub = self._hass.bus.async_listen(
+                EVENT_ALERT_EVENT, self._handle_alert_event
+            )
 
             config = await self._load_config()
             await self._apply_config(config)
             await self._lifecycle.setup()
-            await cast(
+            cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("confirmation"),
+                self._lifecycle.feature("response_actions"),
             ).rebuild()
 
             await self._register_frontend(show_in_sidebar=show_in_sidebar)
@@ -156,23 +161,28 @@ class HaNotificationsController:
             raise
 
     async def _register_frontend(self, *, show_in_sidebar: bool) -> None:
-        plan = panel_module.registration_plan(show_in_sidebar=show_in_sidebar)
-        await self._hass.http.async_register_static_paths(
-            [StaticPathConfig(plan.static_url, plan.static_directory, False)]
-        )
-        frontend.add_extra_js_url(self._hass, plan.module_url)
+        frontend_directory = Path(__file__).parent.parent / FRONTEND_BUILD_DIR
+        panel_file = frontend_directory / "panel.js"
+        if not panel_file.is_file():
+            raise RuntimeError(f"HA Notifications frontend is missing: {panel_file}")
 
-        if plan.frontend_url_path in self._hass.data.get(frontend.DATA_PANELS, {}):
+        await self._hass.http.async_register_static_paths(
+            [StaticPathConfig(FRONTEND_STATIC_URL, str(frontend_directory), False)]
+        )
+        module_url = f"{PANEL_MODULE}?v={VERSION}"
+        frontend.add_extra_js_url(self._hass, module_url)
+
+        if DOMAIN in self._hass.data.get(frontend.DATA_PANELS, {}):
             frontend.async_remove_panel(
-                self._hass, plan.frontend_url_path, warn_if_unknown=False
+                self._hass, DOMAIN, warn_if_unknown=False
             )
         await panel_custom.async_register_panel(
             hass=self._hass,
-            frontend_url_path=plan.frontend_url_path,
-            webcomponent_name=plan.webcomponent_name,
-            module_url=plan.module_url,
-            sidebar_title=plan.sidebar_title,
-            sidebar_icon=plan.sidebar_icon,
+            frontend_url_path=DOMAIN,
+            webcomponent_name="ha-notifications-panel",
+            module_url=module_url,
+            sidebar_title=PANEL_TITLE if show_in_sidebar else None,
+            sidebar_icon=PANEL_ICON if show_in_sidebar else None,
         )
 
     async def _on_home_assistant_started(self, _event: HassEvent) -> None:
@@ -188,6 +198,9 @@ class HaNotificationsController:
         if self._started_unsub:
             self._started_unsub()
             self._started_unsub = None
+        if self._alert_event_unsub:
+            self._alert_event_unsub()
+            self._alert_event_unsub = None
         if self._entry_update_unsub:
             self._entry_update_unsub()
             self._entry_update_unsub = None
@@ -204,16 +217,22 @@ class HaNotificationsController:
         except (KeyError, ValueError):
             pass
 
-        await self._runtime_storage.save()
+        await self._storage.save_events()
         self._started = False
 
         return True
+
+    @callback
+    def _handle_alert_event(self, event: HassEvent) -> None:
+        """Store one complete alert event without interpreting its payload."""
+
+        self._storage.store_event(event.data)
 
     async def async_remove(self) -> None:
         """Unload the controller and remove integration-owned runtime state."""
 
         await self.async_unload()
-        await self._runtime_storage.remove()
+        await self._storage.remove_events()
 
     # ------------------------------------------------------------------
     # Config load/apply/reload
@@ -229,7 +248,7 @@ class HaNotificationsController:
         await self.reload()
 
     async def _load_config(self) -> dict[str, Any]:
-        return await self._config_storage.load()
+        return await self._storage.load_config()
 
     async def _apply_config(self, config: dict[str, Any]) -> set[str]:
         await self._lifecycle.unload()
@@ -245,9 +264,9 @@ class HaNotificationsController:
             config = await self._load_config()
             newly_enabled_alert_ids = await self._apply_config(config)
             await self._lifecycle.setup()
-            await cast(
+            cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("confirmation"),
+                self._lifecycle.feature("response_actions"),
             ).rebuild()
 
             if self._started:
