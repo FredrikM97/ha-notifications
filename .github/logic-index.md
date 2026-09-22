@@ -21,8 +21,8 @@ This is the compact routing map for the direct-workflow architecture.
 - `custom_components/ha_notifications/features/alert_flow.py`: explicit ordering for condition and confirmation effects; it publishes alert facts and serializes alert effects.
 - `custom_components/ha_notifications/features/notification.py`: `NotificationFeature` owns notification composition and delivery outcome mutation; `custom_components/ha_notifications/features/conditions.py` owns monitor and confirmation-resend listeners and due policy.
 - `custom_components/ha_notifications/features/conditions.py`: condition-editor Pydantic model, validation, and HA template compilation.
-- `custom_components/ha_notifications/features/response_actions.py`: `ResponseActionsFeature` owns response-action session state, Home Assistant action subscription lifecycle, action matching, reminders, and resolution into confirmation facts.
-- `custom_components/ha_notifications/features/notification_preview.py`: `NotificationPreviewFeature` owns saved-alert and editor-payload preview delivery, confirmation-session creation, TTL expiry, disposal, and its websocket routes.
+- `custom_components/ha_notifications/features/confirmations.py`: `ConfirmationFeature` owns confirmation session state, Home Assistant action subscription lifecycle, action matching, reminders, and resolution into confirmation facts.
+- `custom_components/ha_notifications/features/notification_preview.py`: `NotificationPreviewFeature` validates preview payloads and manually triggers the normal condition workflow; it owns no alert lifecycle state.
 - `custom_components/ha_notifications/features/notification.py`: notification and repeat Pydantic models, target normalization, rendering/composition, direct send/clear planning, and `ConfirmationDeliveryPlanner` for clear/completion requests.
 - `custom_components/ha_notifications/delivery/`: recipient and notification-channel resolution; mobile-app entities use their concrete data-capable service and other targets use generic Notify.
 - `custom_components/ha_notifications/features/follow_up_actions.py`: post-send and post-confirmation service-call planning with per-action failure isolation.
@@ -52,11 +52,11 @@ Home Assistant startup/template/timer callback -> `ConditionFeature` -> `AlertFl
 
 ### Confirmation
 
-Home Assistant notification-action callback -> `ResponseActionsFeature.resolve_action_event()` -> `AlertFlow` -> notification clear/completion plan -> Home Assistant service calls -> follow-up actions -> alert-event publication and persistence.
+Home Assistant notification-action callback -> `ConfirmationFeature.resolve_action_event()` -> `AlertFlow` -> notification clear/completion plan -> Home Assistant service calls -> follow-up actions -> alert-event publication and persistence.
 
 ### Frontend test payload
 
-Websocket transport -> `NotificationPreviewFeature` preview session creation -> direct notification delivery -> optional confirmation session -> explicit discard or TTL cleanup without changing saved alert configuration.
+Websocket transport -> `NotificationPreviewFeature` validates and triggers `ConditionFeature` -> `AlertFlow` -> normal notification and optional confirmation workflow.
 
 ## Ownership rules
 
@@ -70,7 +70,7 @@ Websocket transport -> `NotificationPreviewFeature` preview session creation -> 
 ## Verification routing
 
 - Condition behavior: `custom_components/ha_notifications/features/conditions.py`, `tests/backend/features/test_conditions.py`.
-- Response-action behavior: `custom_components/ha_notifications/features/response_actions.py`, `tests/backend/features/test_response_actions.py`.
+- Confirmation behavior: `custom_components/ha_notifications/features/confirmations.py`, `tests/backend/features/test_confirmations.py`.
 - Delivery behavior: `custom_components/ha_notifications/features/notification.py`, notification-service modules, `tests/backend/features/test_notification.py`.
 - History query behavior: `custom_components/ha_notifications/features/history.py`, `tests/backend/features/test_history*.py`.
 - Alert-event persistence: `custom_components/ha_notifications/controller/core.py`, `custom_components/ha_notifications/support/storage.py`, `tests/backend/features/test_history_feature.py`.

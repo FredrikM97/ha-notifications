@@ -39,6 +39,10 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
       "active": false,
       "label": "YAML",
     },
+    {
+      "active": false,
+      "label": "Debug",
+    },
   ],
 }
 `;

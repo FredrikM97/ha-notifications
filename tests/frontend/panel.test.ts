@@ -150,6 +150,24 @@ describe("panel view", () => {
     expect(panel.shadowRoot.querySelector("ha-notifications-yaml-view")).not.toBeNull();
   });
 
+  it("shows active runtime details in the Debug view", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+
+    await testUser().click(
+      within(panel.shadowRoot).getByRole("button", { name: "Debug" }),
+    );
+    await settleElement(panel);
+
+    expect(panel.shadowRoot.querySelector(".nc-debug-alert")?.textContent).toContain(
+      "Active",
+    );
+    expect(panel.shadowRoot.querySelector(".nc-debug-alert")?.textContent).toContain(
+      "Attempts",
+    );
+  });
+
   it("caches registry loading for editor entry points", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());

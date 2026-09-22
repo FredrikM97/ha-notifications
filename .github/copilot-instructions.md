@@ -75,7 +75,7 @@ This repository is a Home Assistant custom integration named HA Notifications. T
   Core has no alert/notification/confirmation business decisions.
   Trigger/state-machine logic belongs in `features/conditions.py`;
   confirmation session tracking and confirmation-effect planning belongs
-  in `features/response_actions.py`; notification composition belongs in
+  in `features/confirmations.py`; notification composition belongs in
   `features/notification.py`; follow-up action rendering belongs in
   `features/follow_up_actions.py`; history formatting belongs in
   `features/history.py` and application workflows explicitly sequence recording

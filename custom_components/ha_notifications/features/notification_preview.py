@@ -19,8 +19,8 @@ class NotificationPreviewFeature(FeatureBase):
 
     def __init__(
         self,
-        _hass: Any,
-        _state: Any,
+        hass: Any,
+        state: Any,
         _config_storage: Any,
         _runtime_storage: Any,
     ) -> None:

@@ -46,6 +46,7 @@ export function defaultAlert(): Alert {
     monitor: {
       on_change: true,
       startup: true,
+      clear_on_condition_change: true,
       retention: {
         enabled: true,
         days: 30,
@@ -65,6 +66,7 @@ export function defaultAlert(): Alert {
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
+        timeout: "00:15:00",
       },
       actions: { enabled: false, items: [] },
     },

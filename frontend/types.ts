@@ -39,6 +39,14 @@ export interface NotificationTarget {
   user_id?: string[];
 }
 
+export interface MonitorConfig {
+  on_change: boolean;
+  startup: boolean;
+  interval?: string | number | Record<string, number>;
+  clear_on_condition_change?: boolean;
+  retention?: HistoryRetentionConfig;
+}
+
 export interface ConfirmationConfig {
   enabled: boolean;
   buttons: { id: string; label: string }[];
@@ -52,6 +60,7 @@ export interface ConfirmationConfig {
     interval: string | number | Record<string, number>;
     max_attempts: number;
     show_attempts: boolean;
+    timeout: string | number | Record<string, number>;
   };
   actions: {
     enabled: boolean;
@@ -73,7 +82,13 @@ export interface PostSendActionsConfig {
 
 export interface RuntimeAlertState {
   active?: boolean;
+  acknowledged?: boolean;
   confirmation_attempts?: number;
+  confirmation?: {
+    action_ids?: Record<string, string>;
+    attempts?: number;
+  };
+  started_at?: string;
   last_notified?: string;
 }
 
@@ -89,12 +104,7 @@ export interface Alert {
   icon?: string;
   enabled: boolean;
   conditions: AlertCondition[];
-  monitor: {
-    on_change: boolean;
-    startup: boolean;
-    interval?: string | number | Record<string, number>;
-    retention?: HistoryRetentionConfig;
-  };
+  monitor: MonitorConfig;
   notification: NotificationConfig;
   confirmation?: ConfirmationConfig;
   post_send_actions?: PostSendActionsConfig;

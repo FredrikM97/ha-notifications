@@ -37,6 +37,7 @@ class ConfirmationReminderConfig(BaseModel):
     interval: int | float | None = 1800
     max_attempts: int = 5
     show_attempts: bool = False
+    timeout: int | float | None = 900
 
 
 class ConfirmationButtonConfig(BaseModel):
@@ -87,10 +88,10 @@ class ConfirmationSession(BaseModel):
     created_at: datetime
 
 
-class ResponseActionsFeature(FeatureBase):
+class ConfirmationFeature(FeatureBase):
     """Own response-action sessions and the Home Assistant subscription."""
 
-    name = "response_actions"
+    name = "confirmations"
     dependencies = ("alerts",)
     SESSION_TTL = timedelta(days=7)
 
@@ -207,6 +208,31 @@ class ResponseActionsFeature(FeatureBase):
         except ValueError:
             return False
         if now - created_at < self.SESSION_TTL:
+            return False
+        expired_action_ids = tuple(state.confirmation.action_ids)
+        state.confirmation.action_ids.clear()
+        state.write_to(runtime)
+        for action_id in expired_action_ids:
+            self.clear(action_id)
+        return True
+
+    def expire_exhausted(
+        self,
+        alert: Mapping[str, Any],
+        runtime: dict[str, Any],
+    ) -> bool:
+        """Expire pending confirmation actions after the reminder limit."""
+
+        state = AlertRuntimeState.from_runtime(runtime)
+        if not state.confirmation.action_ids:
+            return False
+        settings = ConfirmationConfig.from_alert(alert)
+        if (
+            settings is None
+            or not settings.enabled
+            or not settings.reminders.enabled
+            or state.confirmation.attempts < settings.reminders.max_attempts
+        ):
             return False
         expired_action_ids = tuple(state.confirmation.action_ids)
         state.confirmation.action_ids.clear()

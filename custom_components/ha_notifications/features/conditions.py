@@ -142,7 +142,7 @@ class ConditionFeature(FeatureBase):
     """Own condition compilation, evaluation, and condition watchers."""
 
     name = "conditions"
-    dependencies = ("alerts", "alert_flow", "response_actions")
+    dependencies = ("alerts", "alert_flow", "confirmations")
 
     def __init__(
         self,
@@ -165,7 +165,7 @@ class ConditionFeature(FeatureBase):
 
     async def on_setup(self) -> None:
         alert_feature = self.feature("alerts")
-        confirmation_feature = self.feature("response_actions")
+        confirmation_feature = self.feature("confirmations")
         self._watchers = ConditionWatchers(
             self._hass,
             self._schedule_condition_result,
@@ -260,8 +260,8 @@ class ConditionFeature(FeatureBase):
         alert_id = str(alert["id"])
         runtime = self._state.setdefault("runtime", {}).setdefault(alert_id, {})
         facts = await self._condition_facts(alert)
-        response_actions = self.feature("response_actions")
-        response_actions.expire_stale(runtime, now)
+        confirmations = self.feature("confirmations")
+        confirmations.expire_stale(runtime, now)
         evaluation = ConditionTransition(active, error, source, facts)
         if evaluation.active is None and evaluation.error is None:
             return

@@ -125,6 +125,15 @@ class Notification:
             self.order.append("clear")
         self.cleared.append((alert, now))
 
+    @staticmethod
+    def should_clear_on_condition_change(alert):
+        monitor = alert.get("monitor") or {}
+        configured = monitor.get("clear_on_condition_change")
+        if configured is not None:
+            return bool(configured)
+        confirmation = alert.get("confirmation")
+        return confirmation is None or not bool(confirmation.get("enabled"))
+
 
 class FlakyNotification(Notification):
     def __init__(self):
@@ -161,6 +170,10 @@ class Confirmation:
         runtime["confirmation"]["action_ids"] = {"confirm": "confirm"}
         return True, "confirm"
 
+    @staticmethod
+    def expire_exhausted(_alert, _runtime):
+        return False
+
     def pending_actions(self, _alert, runtime):
         return SimpleNamespace(
             primary_action_id="confirm",
@@ -187,9 +200,7 @@ class FollowUp:
     @staticmethod
     def actions_for_confirmation(_alert):
         return []
-
-
-def build_flow(notification=None, order=None):
+def build_flow(notification=None, order=None, confirmations=None):
     alerts = RuntimeAlerts()
     state = {"runtime": alerts.values, "history": []}
     history = History(order)
@@ -205,9 +216,11 @@ def build_flow(notification=None, order=None):
     persistence.runtime = lambda alert_id: alerts.runtime(alert_id)
     if notification is None:
         notification = Notification(order=order)
+    if confirmations is None:
+        confirmations = Confirmation()
     features = {
         "alerts": alerts,
-        "response_actions": Confirmation(),
+        "confirmations": confirmations,
         "notification": notification,
         "history": history,
         "follow_up_actions": follow_up,
@@ -224,7 +237,30 @@ def build_flow(notification=None, order=None):
 
 
 @pytest.mark.asyncio
-async def test_condition_error_and_inactive_are_recorded_without_cleanup():
+async def test_exhausted_confirmation_clears_notification():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    class ExhaustedConfirmation(Confirmation):
+        def expire_exhausted(self, _alert, _runtime):
+            return True
+
+    flow, features = build_flow(confirmations=ExhaustedConfirmation())
+
+    await flow.handle_condition(
+        make_alert(),
+        ConditionTransition(True, source="confirmation"),
+        now,
+    )
+
+    assert features["notification"].cleared
+    assert any(
+        event[2] == const.AlertEventType.CONFIRMATION_ATTEMPTS_EXHAUSTED
+        for event in features["history"].events
+    )
+
+
+@pytest.mark.asyncio
+async def test_condition_error_and_inactive_clear_notification():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     flow, features = build_flow()
     alert = make_alert()
@@ -238,6 +274,19 @@ async def test_condition_error_and_inactive_are_recorded_without_cleanup():
 
     transition = ConditionTransition(False, source="change")
     await flow.handle_condition(alert, transition, now)
+    assert features["notification"].cleared
+
+
+@pytest.mark.asyncio
+async def test_condition_change_clear_can_be_disabled():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    flow, features = build_flow()
+    alert = make_alert(monitor={"clear_on_condition_change": False})
+
+    await flow.handle_condition(
+        alert, ConditionTransition(False, source="change"), now
+    )
+
     assert not features["notification"].cleared
 
 
@@ -352,11 +401,11 @@ async def test_condition_and_confirmation_effects_persist_runtime_state():
     )
     assert len(features["runtime_storage"].calls) == 1
 
-    result = module.response_actions.ConfirmationResult(
+    result = module.confirmations.ConfirmationResult(
         make_alert(),
-        module.response_actions.ConfirmationContext(
+        module.confirmations.ConfirmationContext(
             "Alice",
-            module.response_actions.ConfirmationSelection(
+            module.confirmations.ConfirmationSelection(
                 "confirm", "confirm", "Done"
             ),
         ),
@@ -388,11 +437,11 @@ async def test_confirmation_completion_and_completion_failure_are_recorded(monke
             )
 
     monkeypatch.setattr(module.notification, "ConfirmationDeliveryPlanner", Planner)
-    result = module.response_actions.ConfirmationResult(
+    result = module.confirmations.ConfirmationResult(
         alert,
-        module.response_actions.ConfirmationContext(
+        module.confirmations.ConfirmationContext(
             "Alice",
-            module.response_actions.ConfirmationSelection(
+            module.confirmations.ConfirmationSelection(
                 "confirm", "confirm", "Done"
             ),
         ),

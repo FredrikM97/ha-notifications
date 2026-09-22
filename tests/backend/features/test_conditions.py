@@ -138,7 +138,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
                     reminder_due=lambda *_args: False,
                     expire_stale=expire_stale,
                 )
-                if name == "response_actions"
+                if name == "confirmations"
                 else SimpleNamespace(
                     handle_condition=on_transition
                 )

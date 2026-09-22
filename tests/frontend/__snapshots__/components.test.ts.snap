@@ -85,6 +85,7 @@ conditions: []
 monitor:
   on_change: true
   startup: true
+  clear_on_condition_change: true
 notification:
   target: {}
   title: ""
@@ -103,6 +104,7 @@ confirmation:
     interval: 1800
     max_attempts: 5
     show_attempts: false
+    timeout: 00:15:00
   actions:
     enabled: false
 "
@@ -242,9 +244,12 @@ exports[`alert editor interactions > renders the Reminder policy editor section 
   "controls": [
     "ha-selector:Duration",
     "ha-input",
+    "ha-selector:Duration",
     "ha-switch",
   ],
-  "help": [],
+  "help": [
+    "Set to 00:00:00 to keep the notification until confirmation.",
+  ],
   "title": "Reminder policy",
 }
 `;
@@ -253,6 +258,7 @@ exports[`alert editor interactions > renders the When to check editor section 1`
 {
   "buttons": [],
   "controls": [
+    "ha-switch",
     "ha-switch",
     "ha-switch",
     "ha-switch:interval-toggle",
@@ -297,6 +303,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
       "interval": 1800,
       "max_attempts": 5,
       "show_attempts": false,
+      "timeout": "00:15:00",
     },
   },
   "description": "",
@@ -304,6 +311,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "icon": "mdi:bell-outline",
   "id": "editable_alert",
   "monitor": {
+    "clear_on_condition_change": true,
     "on_change": true,
     "startup": true,
   },

@@ -21,7 +21,7 @@ import type { TemplateResult } from "lit";
 import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
 import "./yaml-view.js";
 
-type PanelTab = "alerts" | "history" | "yaml";
+type PanelTab = "alerts" | "history" | "yaml" | "debug";
 
 interface PanelTabDefinition {
   key: PanelTab;
@@ -47,6 +47,7 @@ const panelTabs: PanelTabDefinition[] = [
   { key: "alerts", label: "Alerts" },
   { key: "history", label: "History" },
   { key: "yaml", label: "YAML" },
+  { key: "debug", label: "Debug" },
 ];
 
 function alertStatus(alert: Alert): AlertCardStatus {
@@ -335,12 +336,50 @@ class HaNotificationsPanel extends LitElement {
       ></ha-notifications-history-view>`;
     }
 
+    if (this.tab === "debug") {
+      return this.debugTemplate();
+    }
+
     return html`<ha-notifications-yaml-view
       .hass=${this._hass}
       .showToast=${(message: string, error?: boolean) =>
         this.showToast(message, error)}
       .refreshPanel=${() => this.refresh()}
     ></ha-notifications-yaml-view>`;
+  }
+
+  private debugTemplate(): TemplateResult {
+    const activeAlerts = this.alerts.filter((alert) => alert.runtime?.active);
+    if (!activeAlerts.length) {
+      return html`<div class="nc-card nc-empty">
+        <h2>No active alerts</h2>
+        <p>Alerts with pending runtime state will appear here.</p>
+      </div>`;
+    }
+
+    return html`<div class="nc-debug-list">
+      ${activeAlerts.map((alert) => {
+        const runtime = alert.runtime!;
+        const actionCount = Object.keys(
+          runtime.confirmation?.action_ids || {},
+        ).length;
+        const attempts =
+          runtime.confirmation?.attempts ?? runtime.confirmation_attempts ?? 0;
+        return html`<div class="nc-card nc-debug-alert">
+          <div class="nc-debug-heading">
+            <ha-icon icon=${alert.icon || "mdi:bell-badge-outline"}></ha-icon>
+            <strong>${alert.name}</strong>
+          </div>
+          <dl class="nc-debug-details">
+            <div><dt>State</dt><dd>Active</dd></div>
+            <div><dt>Confirmation</dt><dd>${actionCount ? "Pending" : "None"}</dd></div>
+            <div><dt>Attempts</dt><dd>${attempts}</dd></div>
+            <div><dt>Started</dt><dd>${formatLocalDateTime(runtime.started_at, true, this._hass?.locale)}</dd></div>
+            <div><dt>Last notified</dt><dd>${formatLocalDateTime(runtime.last_notified, true, this._hass?.locale)}</dd></div>
+          </dl>
+        </div>`;
+      })}
+    </div>`;
   }
 
   private alertsTemplate(): TemplateResult {

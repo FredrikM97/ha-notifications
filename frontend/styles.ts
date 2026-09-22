@@ -129,6 +129,46 @@ select {
   gap: 12px;
 }
 
+.nc-debug-list {
+  display: grid;
+  gap: 12px;
+}
+
+.nc-debug-alert {
+  display: grid;
+  gap: 14px;
+}
+
+.nc-debug-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-text-color);
+}
+
+.nc-debug-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.nc-debug-details div {
+  padding: 9px 10px;
+  background: var(--secondary-background-color);
+  border-radius: var(--ha-border-radius-s, 4px);
+}
+
+.nc-debug-details dt {
+  color: var(--secondary-text-color);
+  font-size: 12px;
+}
+
+.nc-debug-details dd {
+  margin: 3px 0 0;
+  font-weight: 600;
+}
+
 .nc-card {
   background: var(--card-background-color);
   border-radius: var(--ha-card-border-radius, 12px);

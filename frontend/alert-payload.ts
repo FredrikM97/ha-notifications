@@ -55,12 +55,14 @@ export interface AlertMonitorFormValues {
   onChange: boolean;
   startup: boolean;
   interval?: string;
+  clearOnConditionChange?: boolean;
 }
 
 export interface AlertNotificationFormValues {
   target: NotificationTarget;
   title: string;
   message: string;
+  clearOnConditionChange?: boolean;
 }
 
 export interface AlertConfirmationFormValues {
@@ -76,6 +78,7 @@ export interface AlertConfirmationFormValues {
     interval: string;
     max_attempts: number;
     show_attempts: boolean;
+    timeout: string;
   };
   actions: {
     enabled: boolean;
@@ -134,6 +137,10 @@ export function buildAlertPayload(
     on_change: values.monitor.onChange,
     startup: values.monitor.startup,
   };
+  if (values.monitor.clearOnConditionChange !== undefined) {
+    result.monitor.clear_on_condition_change =
+      values.monitor.clearOnConditionChange;
+  }
   if (values.monitor.interval) {
     result.monitor.interval = values.monitor.interval;
   }

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import unittest
 
+from custom_components.ha_notifications.features.confirmations import (
+    ConfirmationConfig,
+)
 from custom_components.ha_notifications.features.notification import (
     NotificationConfig,
-)
-from custom_components.ha_notifications.features.response_actions import (
-    ConfirmationConfig,
 )
 from tests.backend.conftest import alert_fixture
 from tests.backend.support.test_support import load_const_and_models

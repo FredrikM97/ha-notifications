@@ -280,6 +280,7 @@ def real_target_registry(hass: HomeAssistant):
 class _TestNotification:
     def __init__(self) -> None:
         self.payloads: list[dict[str, Any]] = []
+        self.cleared: list[dict[str, Any]] = []
 
     async def send(self, request: Any) -> NotificationOutcome:
         self.payloads.append(
@@ -294,6 +295,9 @@ class _TestNotification:
             }
         )
         return NotificationOutcome(request.attempt, request.now, True)
+
+    async def clear(self, alert: dict[str, Any], now: Any) -> None:
+        self.cleared.append({"alert": dict(alert), "now": now})
 
 
 class _TestAlerts:
@@ -341,10 +345,10 @@ class _TestLifecycle:
 
 @pytest.fixture
 def test_feature_context(hass: HomeAssistant):
-    """Provide a real HA context and captured delivery/timer test features."""
+    """Provide a real HA context and captured delivery test features."""
 
     confirmation = importlib.import_module(
-        "custom_components.ha_notifications.features.response_actions"
+        "custom_components.ha_notifications.features.confirmations"
     )
     preview = importlib.import_module(
         "custom_components.ha_notifications.features.notification_preview"
@@ -362,7 +366,7 @@ def test_feature_context(hass: HomeAssistant):
     state = {"runtime": {}}
     notification = _TestNotification()
     history = _TestHistory()
-    confirmation_feature = confirmation.ResponseActionsFeature(
+    confirmation_feature = confirmation.ConfirmationFeature(
         hass, state, None, None
     )
     storage = SimpleNamespace(persist=lambda: None)
@@ -371,14 +375,16 @@ def test_feature_context(hass: HomeAssistant):
     )
     alert_flow_feature = alert_flow.AlertFlow(hass, state, None, storage)
     conditions_feature = conditions.ConditionFeature(hass, state, None, None)
-    test_feature = preview.NotificationPreviewFeature(hass, state, None, None)
+    test_feature = preview.NotificationPreviewFeature(
+        hass, state, None, storage
+    )
     lifecycle = _TestLifecycle(
         {
             "alerts": _TestAlerts(saved_alert, state["runtime"]),
             "alert_flow": alert_flow_feature,
             "conditions": conditions_feature,
             "history": history,
-            "response_actions": confirmation_feature,
+            "confirmations": confirmation_feature,
             "notification": notification,
             "follow_up_actions": follow_up_feature,
         }
@@ -393,6 +399,7 @@ def test_feature_context(hass: HomeAssistant):
         feature=test_feature,
         notification=notification,
         history=history,
+        state=state,
     )
 
 

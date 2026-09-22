@@ -771,6 +771,8 @@ class AlertEditorController {
         onChange: value.monitor.on_change,
         startup: value.monitor.startup,
         interval: this.monitorIntervalPayload(),
+        clearOnConditionChange:
+          value.monitor.clear_on_condition_change !== false,
       },
       notification: {
         target: this.recipients.target(),
@@ -793,6 +795,10 @@ class AlertEditorController {
           ),
           max_attempts: confirmation.reminders.max_attempts,
           show_attempts: confirmation.reminders.show_attempts === true,
+          timeout: durationInputValue(
+            confirmation.reminders.timeout,
+            "00:15:00",
+          ),
         },
         actions: {
           enabled: Boolean(confirmation.actions.enabled),

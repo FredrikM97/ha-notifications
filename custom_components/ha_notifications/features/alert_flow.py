@@ -29,7 +29,7 @@ from ..domain.workflow import (
 )
 from ..support.jinja import JinjaEvaluator
 from ..support.storage import Storage
-from . import notification, response_actions
+from . import confirmations, notification
 
 
 class WorkflowPhase(str, Enum):
@@ -71,7 +71,7 @@ class AlertFlow(FeatureBase):
     name = "alert_flow"
     dependencies = (
         "alerts",
-        "response_actions",
+        "confirmations",
         "notification",
         "follow_up_actions",
     )
@@ -134,7 +134,7 @@ class AlertFlow(FeatureBase):
         )
 
     async def handle_confirmation(
-        self, result: response_actions.ConfirmationResult
+        self, result: confirmations.ConfirmationResult
     ) -> None:
         """Accept a resolved response at the feature boundary."""
 
@@ -173,6 +173,33 @@ class AlertFlow(FeatureBase):
         evaluation = event.evaluation
         effects: list[WorkflowEffect] = []
         async with self._locks.setdefault(alert_id, asyncio.Lock()):
+            if self.feature("confirmations").expire_exhausted(
+                alert, runtime
+            ):
+                confirmation = confirmations.ConfirmationConfig.from_alert(
+                    alert
+                )
+                effects.append(
+                    ClearNotificationEffect(
+                        NotificationClearRequest(alert, event.now)
+                    )
+                )
+                self._publish_event(
+                    alert,
+                    AlertEventType.CONFIRMATION_ATTEMPTS_EXHAUSTED,
+                    "Confirmation attempts exhausted; notification cleared.",
+                    {
+                        "attempts": runtime.get("confirmation", {}).get(
+                            "attempts", 0
+                        ),
+                        "max_attempts": (
+                            confirmation.reminders.max_attempts
+                            if confirmation is not None
+                            else None
+                        ),
+                    },
+                    event.now,
+                )
             if evaluation.error is not None:
                 self._publish_event(
                     alert, AlertEventType.CONDITION_ERROR,
@@ -182,7 +209,16 @@ class AlertFlow(FeatureBase):
                 )
             elif evaluation.active is False:
                 if not runtime.get("active", False):
+                    await self._flush_effects(effects)
                     return
+                if self.feature("notification").should_clear_on_condition_change(
+                    alert
+                ):
+                    effects.append(
+                        ClearNotificationEffect(
+                            NotificationClearRequest(alert, event.now)
+                        )
+                    )
                 runtime_state.active = False
                 runtime_state.acknowledged = False
                 runtime_state.notification_id = None
@@ -211,10 +247,12 @@ class AlertFlow(FeatureBase):
                     )
                     runtime_state.write_to(runtime)
                 elif runtime.get("acknowledged", False):
+                    await self._flush_effects(effects)
                     return
                 elif not self._should_send(
                     alert, runtime, evaluation.source, event.now
                 ):
+                    await self._flush_effects(effects)
                     return
                 self._prepare_confirmation(
                     alert, runtime, event.now
@@ -247,8 +285,15 @@ class AlertFlow(FeatureBase):
                 )
             else:
                 return
-            effects.append(PersistEffect())
-            await self._execute_effects(effects)
+            await self._flush_effects(effects)
+
+    async def _flush_effects(self, effects: list[WorkflowEffect]) -> None:
+        """Run queued effects and persist when a workflow made changes."""
+
+        if not effects:
+            return
+        effects.append(PersistEffect())
+        await self._execute_effects(effects)
 
     def _should_send(
         self,
@@ -267,8 +312,8 @@ class AlertFlow(FeatureBase):
             return True
         if source not in ("reload", "startup", "interval", "confirmation"):
             return False
-        response_actions = self.feature("response_actions")
-        reminder_due = getattr(response_actions, "reminder_due", None)
+        confirmations_feature = self.feature("confirmations")
+        reminder_due = getattr(confirmations_feature, "reminder_due", None)
         if reminder_due is None:
             return True
         return bool(reminder_due(alert, dict(runtime), now))
@@ -316,7 +361,7 @@ class AlertFlow(FeatureBase):
         self._ensure_plan(alert)
         lock = self._locks.setdefault(str(alert["id"]), asyncio.Lock())
         async with lock:
-            self.feature("response_actions").acknowledge(
+            self.feature("confirmations").acknowledge(
                 alert["id"], event.confirmation.confirmed_by, event.now
             )
             self._publish_event(
@@ -369,7 +414,7 @@ class AlertFlow(FeatureBase):
     def _prepare_confirmation(
         self, alert: Mapping[str, Any], runtime: dict[str, Any], now: datetime
     ) -> None:
-        confirmation_feature = self.feature("response_actions")
+        confirmation_feature = self.feature("confirmations")
         confirmation_feature.prepare_action(alert, runtime, now=now)
 
     async def _send_notification(
@@ -377,11 +422,11 @@ class AlertFlow(FeatureBase):
         request: NotificationRequest,
     ) -> NotificationOutcome:
         feature = self.feature("notification")
-        confirmation_feature = self.feature("response_actions")
+        confirmation_feature = self.feature("confirmations")
         runtime = self._state.setdefault("runtime", {}).setdefault(
             str(request.alert["id"]), {}
         )
-        pending_actions = self.feature("response_actions").pending_actions(
+        pending_actions = self.feature("confirmations").pending_actions(
             request.alert, runtime
         )
         attempt = (

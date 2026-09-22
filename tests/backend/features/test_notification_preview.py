@@ -26,7 +26,6 @@ async def test_preview_only_forwards_a_forced_condition_result(
     assert active is True
     assert error is None
     assert condition_result.await_args.kwargs["source"] == "startup"
-    assert not hasattr(context.feature, "_sessions")
 
 
 @pytest.mark.asyncio

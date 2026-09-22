@@ -12,7 +12,7 @@ from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
 confirmation = importlib.import_module(
-    f"{PACKAGE_NAME}.features.response_actions"
+    f"{PACKAGE_NAME}.features.confirmations"
 )
 preview = importlib.import_module(
     f"{PACKAGE_NAME}.features.notification_preview"
@@ -63,10 +63,10 @@ class ConfirmationConfigTests(unittest.TestCase):
         self.assertEqual(config.buttons[0].label, "Done")
 
 
-class ResponseActionsFeatureTests(unittest.IsolatedAsyncioTestCase):
+class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.sessions = {}
-        self.feature = confirmation.ResponseActionsFeature(
+        self.feature = confirmation.ConfirmationFeature(
             None,
             {},
             None,
@@ -147,6 +147,28 @@ class ResponseActionsFeatureTests(unittest.IsolatedAsyncioTestCase):
         expired = self.feature.expire_stale(
             runtime, datetime(2024, 1, 1, tzinfo=timezone.utc)
         )
+
+        self.assertTrue(expired)
+        self.assertEqual(runtime["confirmation"]["action_ids"], {})
+        self.assertFalse(self.feature.has_pending("action"))
+
+    async def test_expire_exhausted_clears_actions_at_max_attempts(self):
+        runtime = {
+            "confirmation": {
+                "action_ids": {"action": "confirm"},
+                "attempts": 2,
+            }
+        }
+        alert = {
+            "id": "alert_1",
+            "confirmation": {
+                "enabled": True,
+                "reminders": {"enabled": True, "max_attempts": 2},
+            },
+        }
+        self.feature.track("action", now=self.now, alert_id="alert_1")
+
+        expired = self.feature.expire_exhausted(alert, runtime)
 
         self.assertTrue(expired)
         self.assertEqual(runtime["confirmation"]["action_ids"], {})

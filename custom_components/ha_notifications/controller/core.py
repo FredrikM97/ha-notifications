@@ -134,7 +134,7 @@ class HaNotificationsController:
             await self._lifecycle.setup()
             cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("response_actions"),
+                self._lifecycle.feature("confirmations"),
             ).rebuild()
 
             await self._register_frontend(show_in_sidebar=show_in_sidebar)
@@ -266,7 +266,7 @@ class HaNotificationsController:
             await self._lifecycle.setup()
             cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("response_actions"),
+                self._lifecycle.feature("confirmations"),
             ).rebuild()
 
             if self._started:

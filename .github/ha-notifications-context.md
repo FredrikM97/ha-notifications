@@ -17,7 +17,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - `custom_components/ha_notifications/domain/workflow.py` — immutable notification requests/outcomes and ordered workflow contracts
 - `custom_components/ha_notifications/domain/confirmation.py` — immutable confirmation contexts and response selections passed between workflows
 - `custom_components/ha_notifications/features/conditions.py` — monitor model, condition registration, and alert state-machine decisions
-- `custom_components/ha_notifications/features/response_actions.py` — confirmation model, direct response-action workflow, sessions, and confirmation effects
+- `custom_components/ha_notifications/features/confirmations.py` — confirmation model, response workflow, sessions, and confirmation effects
 - `custom_components/ha_notifications/features/notification.py` — notification/repeat models, target normalization, and notification composition/delivery decisions
 - `custom_components/ha_notifications/features/follow_up_actions.py` — post-send and post-confirmation service calls
 - `custom_components/ha_notifications/features/history.py` — explicit history mutation and persistence decisions
@@ -53,7 +53,7 @@ This file is a lightweight map of the repository so agents can narrow to the rig
 - Runtime trigger or interval issue: `custom_components/ha_notifications/features/conditions.py`, `custom_components/ha_notifications/controller/core.py`
 - Panel/editor UI issue: `frontend/editor/index.ts`, `frontend/sections/*.ts`, `frontend/panel.ts`, `frontend/api.ts`
 - YAML/import or validation issue: `frontend/yaml-view.ts`, `frontend/api.ts`, `custom_components/ha_notifications/features/configuration.py`, `custom_components/ha_notifications/support/storage.py`
-- Notification/confirmation flow: `custom_components/ha_notifications/features/notification.py`, `custom_components/ha_notifications/features/response_actions.py`, `custom_components/ha_notifications/delivery/`, `custom_components/ha_notifications/bridge/websocket.py`
+- Notification/confirmation flow: `custom_components/ha_notifications/features/notification.py`, `custom_components/ha_notifications/features/confirmations.py`, `custom_components/ha_notifications/delivery/`, `custom_components/ha_notifications/bridge/websocket.py`
 
 ## Keep it narrow
 - Prefer exact reads over broad repo reads.

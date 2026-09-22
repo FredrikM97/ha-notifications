@@ -45,7 +45,19 @@ export function renderConfirmationReminderSection(
             }}
           ></ha-input>`,
         )}
+        ${field(
+          "Forget after",
+          durationInput(
+            durationInputValue(confirmation.reminders.timeout, "00:15:00"),
+            (next) => {
+              confirmation.reminders.timeout = next;
+              context.markDirty();
+            },
+            context.hass,
+          ),
+        )}
       </div>
+      <div class="nc-help">Set to 00:00:00 to keep the notification until confirmation.</div>
       <div class="nc-reminder-options">
         <label class="nc-switch-label">
           <ha-switch

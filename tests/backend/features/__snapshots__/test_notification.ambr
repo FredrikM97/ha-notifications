@@ -22,6 +22,7 @@
             }),
           ]),
           'tag': 'ha_notifications_alert_1',
+          'timeout': 900,
         }),
         'message': 'Message',
         'title': 'Testing (2/5)',

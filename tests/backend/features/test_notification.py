@@ -121,8 +121,51 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             result[0].data["data"]["actions"],
             [{"action": "confirm_1", "title": "Acknowledge"}],
         )
+        self.assertEqual(result[0].data["data"]["timeout"], 900)
         self.assertEqual(result[0].data["data"]["tag"], "ha_notifications_alert_1")
         NOTIFY_SERVICE_SCHEMA(result[0].data)
+
+    async def test_confirmation_timeout_is_independent_of_reminders(self):
+        configured_alert = alert()
+        configured_alert["confirmation"] = {
+            "enabled": True,
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
+            "reminders": {"enabled": False, "timeout": 600},
+        }
+        capabilities = notifications.NotificationCapabilitySet(
+            render=render,
+            snapshot=empty_snapshot(),
+        )
+
+        result = await notifications.plan_delivery(
+            notification_request(configured_alert),
+            capabilities.snapshot,
+            capabilities.render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
+        )
+
+        self.assertEqual(result[0].data["data"]["timeout"], 600)
+
+    async def test_zero_confirmation_timeout_disables_native_expiry(self):
+        configured_alert = alert()
+        configured_alert["confirmation"] = {
+            "enabled": True,
+            "buttons": [{"id": "confirm", "label": "Acknowledge"}],
+            "reminders": {"timeout": 0},
+        }
+
+        result = await notifications.plan_delivery(
+            notification_request(configured_alert),
+            empty_snapshot(),
+            render,
+            notification_actions=[
+                {"action": "confirm_1", "title": "Acknowledge"}
+            ],
+        )
+
+        self.assertNotIn("timeout", result[0].data["data"])
 
     async def test_mobile_device_target_uses_mobile_service(self):
         configured_alert = alert()

@@ -36,7 +36,7 @@ from ..support.jinja import (
     remove_nulls,
     render_values,
 )
-from .response_actions import ConfirmationConfig
+from .confirmations import ConfirmationConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,6 +144,19 @@ class NotificationFeature(FeatureBase):
         super().__init__()
         self._hass = hass
         self._jinja = JinjaEvaluator.for_hass(hass)
+
+    @staticmethod
+    def should_clear_on_condition_change(
+        alert: Mapping[str, Any],
+    ) -> bool:
+        """Decide whether a false condition clears its notification."""
+
+        monitor = alert.get("monitor") or {}
+        configured = monitor.get("clear_on_condition_change")
+        if configured is not None:
+            return bool(configured)
+        confirmation = ConfirmationConfig.from_alert(alert)
+        return confirmation is None or not bool(confirmation.enabled)
 
     def capabilities(self) -> NotificationCapabilitySet:
         """Build the Home Assistant values required for one delivery plan."""
@@ -454,6 +467,9 @@ def _service_data_for_notification(
         actions = list(extra_data.get("actions", []))
         actions.extend(notification_actions or [])
         extra_data["actions"] = actions
+        timeout = rendered.confirmation.reminders.timeout
+        if timeout is not None and float(timeout) > 0:
+            extra_data["timeout"] = int(float(timeout))
 
     service_data: dict[str, Any] = {"message": str(rendered.message)}
     if rendered.title:

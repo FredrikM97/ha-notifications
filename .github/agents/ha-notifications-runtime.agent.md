@@ -14,7 +14,7 @@ You are the runtime and backend specialist for HA Notifications. Keep alert exec
   `controller/core.py` is the lifecycle and composition root for
   setup/unload/reload sequencing and public API delegation. Confirmation
   decisions belong in
-  `features/response_actions.py`.
+  `features/confirmations.py`.
 - Only `features/notification.py` (`compose_send`/`compose_clear`) decides
   notification content, recipients, and route. Application workflows execute
   its plans through direct Home Assistant service calls owned by the feature. If you
