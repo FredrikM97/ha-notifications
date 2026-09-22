@@ -21,13 +21,10 @@ const loadRegistries = vi.fn();
 const getConfig = vi.fn();
 const saveAlert = vi.fn();
 const deleteAlert = vi.fn();
-const previewAlert = vi.fn();
 const previewAlertPayload = vi.fn();
 const validateConditions = vi.fn();
-const discardPreview = vi.fn();
 
 vi.mock("../../frontend/api.js", () => ({
-  discardPreview,
   deleteAlert,
   errorMessage: (error: unknown) => String(error),
   getAlerts,
@@ -36,7 +33,6 @@ vi.mock("../../frontend/api.js", () => ({
   getHistory,
   loadRegistries,
   saveAlert,
-  previewAlert,
   previewAlertPayload,
   validateConditions,
 }));
@@ -59,10 +55,8 @@ function setupApi(): void {
   getConfig.mockResolvedValue(configFixture);
   saveAlert.mockResolvedValue(alert);
   deleteAlert.mockResolvedValue({});
-  previewAlert.mockResolvedValue({});
   previewAlertPayload.mockResolvedValue(previewSessionResultFixture);
   validateConditions.mockResolvedValue({});
-  discardPreview.mockResolvedValue({});
 }
 
 function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
@@ -189,7 +183,7 @@ describe("panel view", () => {
     const user = testUser();
 
     await user.click(queries.getByRole("button", { name: "Test alert" }));
-    await vi.waitFor(() => expect(previewAlert).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(previewAlertPayload).toHaveBeenCalledOnce());
 
     await user.click(queries.getByRole("button", { name: "View history" }));
     await vi.waitFor(() =>

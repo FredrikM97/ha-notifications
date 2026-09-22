@@ -45,12 +45,6 @@ exports[`frontend API transport > snapshots history, delete, draft test, and rel
   ],
   [
     {
-      "session_id": "session",
-      "type": "ha_notifications/discard_preview",
-    },
-  ],
-  [
-    {
       "type": "ha_notifications/reload",
     },
   ],

@@ -242,6 +242,22 @@ class ConditionFeature(FeatureBase):
         alert = self._alerts.get(alert_id)
         if alert is None:
             return
+        await self.condition_result_for_alert(
+            alert, active, error, source=source, now=now
+        )
+
+    async def condition_result_for_alert(
+        self,
+        alert: dict[str, Any],
+        active: bool | None,
+        error: str | None,
+        *,
+        source: str,
+        now: datetime,
+    ) -> None:
+        """Forward one evaluated result for an explicit alert mapping."""
+
+        alert_id = str(alert["id"])
         runtime = self._state.setdefault("runtime", {}).setdefault(alert_id, {})
         facts = await self._condition_facts(alert)
         response_actions = self.feature("response_actions")

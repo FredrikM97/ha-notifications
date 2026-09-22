@@ -56,9 +56,8 @@ interface OpenEditorOptions {
   onSave: (alert: Alert) => Promise<Alert | void>;
   onSaved?: (alert: Alert) => Promise<void> | void;
   onClosed?: () => void;
-  onTest: (alert: Alert) => Promise<{ session_id: string }>;
+  onTest: (alert: Alert) => Promise<unknown>;
   onValidateCondition: (alert: Alert) => Promise<unknown>;
-  onDiscardTest: (sessionId: string) => Promise<unknown>;
 }
 
 // The dialog's DOM, dirty-tracking, and section wiring are all tightly
@@ -72,9 +71,8 @@ class AlertEditorController {
   private readonly onSave: (alert: Alert) => Promise<Alert | void>;
   private readonly onSaved?: (alert: Alert) => Promise<void> | void;
   private readonly onClosed?: () => void;
-  private readonly onTest: (alert: Alert) => Promise<{ session_id: string }>;
+  private readonly onTest: (alert: Alert) => Promise<unknown>;
   private readonly onValidateCondition: (alert: Alert) => Promise<unknown>;
-  private readonly onDiscardTest: (sessionId: string) => Promise<unknown>;
 
   private readonly value: Alert;
   private readonly host: HTMLElement = document.createElement("div");
@@ -83,7 +81,6 @@ class AlertEditorController {
   private readonly collapsedParents = new Set<string>();
 
   private dirty = false;
-  private previewSessionId: string | null = null;
   private discardDialogOpen = false;
   private activeSectionIndex = 0;
   private mobileSectionsOpen = false;
@@ -125,7 +122,6 @@ class AlertEditorController {
     this.onClosed = options.onClosed;
     this.onTest = options.onTest;
     this.onValidateCondition = options.onValidateCondition;
-    this.onDiscardTest = options.onDiscardTest;
 
     this.value = clone(options.alert || defaultAlert());
     this.value.confirmation = {
@@ -685,17 +681,6 @@ class AlertEditorController {
     return "mdi:chevron-down";
   }
 
-  private discardPreview = async (): Promise<void> => {
-    const sessionId = this.previewSessionId;
-    this.previewSessionId = null;
-    if (!sessionId) return;
-    try {
-      await this.onDiscardTest(sessionId);
-    } catch {
-      // The server-side TTL releases drafts if this best-effort cleanup fails.
-    }
-  };
-
   private showDiscardDialog = (): void => {
     if (this.discardDialogOpen) return;
     this.discardDialogOpen = true;
@@ -749,7 +734,6 @@ class AlertEditorController {
       return false;
     }
     this.discardDialogOpen = false;
-    void this.discardPreview();
     document.removeEventListener("pointerdown", this.handleOutsideSectionPointer);
     this.host.remove();
     this.onClosed?.();
@@ -937,9 +921,7 @@ class AlertEditorController {
     const button = event.currentTarget as HTMLButtonElement;
     try {
       button.disabled = true;
-      await this.discardPreview();
       const result = await this.onTest(this.formPayload());
-      this.previewSessionId = result.session_id;
     } catch (error) {
       showEditorToast(this.root, errorMessage(error));
     } finally {
@@ -957,7 +939,6 @@ class AlertEditorController {
         throw new Error("Enable condition changes, an interval, or both.");
       const result = this.formPayload();
       button.disabled = true;
-      await this.discardPreview();
       const saved = await this.onSave(result);
       const savedAlert = saved || result;
       Object.assign(this.value, savedAlert);

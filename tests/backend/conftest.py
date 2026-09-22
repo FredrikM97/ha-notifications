@@ -8,10 +8,8 @@ being forced through here.
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 from copy import deepcopy
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -299,13 +297,30 @@ class _TestNotification:
 
 
 class _TestAlerts:
-    def __init__(self, saved_alert: dict[str, Any]) -> None:
+    def __init__(
+        self, saved_alert: dict[str, Any], runtime: dict[str, dict[str, Any]]
+    ) -> None:
         self.saved_alert = saved_alert
+        self._runtime = runtime
 
     async def get_alert(self, alert_id: str) -> dict[str, Any] | None:
         if alert_id == self.saved_alert["id"]:
             return self.saved_alert
         return None
+
+    def record_delivery_result(
+        self,
+        _alert_id: str,
+        _attempt: int | None,
+        _now: Any,
+        *,
+        success: bool,
+        error: str | None = None,
+    ) -> None:
+        return None
+
+    def runtime(self, alert_id: str) -> dict[str, Any]:
+        return self._runtime.setdefault(alert_id, {})
 
 
 class _TestHistory:
@@ -325,7 +340,7 @@ class _TestLifecycle:
 
 
 @pytest.fixture
-def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
+def test_feature_context(hass: HomeAssistant):
     """Provide a real HA context and captured delivery/timer test features."""
 
     confirmation = importlib.import_module(
@@ -334,41 +349,43 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
     preview = importlib.import_module(
         "custom_components.ha_notifications.features.notification_preview"
     )
+    alert_flow = importlib.import_module(
+        "custom_components.ha_notifications.features.alert_flow"
+    )
+    conditions = importlib.import_module(
+        "custom_components.ha_notifications.features.conditions"
+    )
+    follow_up_actions = importlib.import_module(
+        "custom_components.ha_notifications.features.follow_up_actions"
+    )
     saved_alert = make_confirmation_alert()
+    state = {"runtime": {}}
     notification = _TestNotification()
     history = _TestHistory()
     confirmation_feature = confirmation.ResponseActionsFeature(
-        hass, {}, None, None
+        hass, state, None, None
     )
-    test_feature = preview.NotificationPreviewFeature(hass, {}, None, None)
-    scheduled: list[tuple[Any, Any]] = []
-
-    def schedule(_hass: HomeAssistant, delay: Any, callback: Any):
-        scheduled.append((delay, callback))
-
-        def cancel() -> None:
-            scheduled[:] = [
-                item for item in scheduled if item[1] is not callback
-            ]
-
-        return cancel
-
-    monkeypatch.setattr(preview, "async_call_later", schedule)
-    test_feature.lifecycle = _TestLifecycle(
+    storage = SimpleNamespace(persist=lambda: None)
+    follow_up_feature = follow_up_actions.FollowUpActionsFeature(
+        hass, state, None, storage
+    )
+    alert_flow_feature = alert_flow.AlertFlow(hass, state, None, storage)
+    conditions_feature = conditions.ConditionFeature(hass, state, None, None)
+    test_feature = preview.NotificationPreviewFeature(hass, state, None, None)
+    lifecycle = _TestLifecycle(
         {
-            "alerts": _TestAlerts(saved_alert),
+            "alerts": _TestAlerts(saved_alert, state["runtime"]),
+            "alert_flow": alert_flow_feature,
+            "conditions": conditions_feature,
             "history": history,
             "response_actions": confirmation_feature,
             "notification": notification,
+            "follow_up_actions": follow_up_feature,
         }
     )
-
-    async def run_reminders() -> None:
-        while scheduled and len(notification.payloads) < 5:
-            index = min(range(len(scheduled)), key=lambda item: scheduled[item][0])
-            _, callback = scheduled.pop(index)
-            callback(datetime.now(timezone.utc))
-            await asyncio.sleep(0)
+    test_feature.lifecycle = lifecycle
+    alert_flow_feature.lifecycle = lifecycle
+    conditions_feature.lifecycle = lifecycle
 
     return SimpleNamespace(
         alert=saved_alert,
@@ -376,8 +393,6 @@ def test_feature_context(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch):
         feature=test_feature,
         notification=notification,
         history=history,
-        scheduled=scheduled,
-        run_reminders=run_reminders,
     )
 
 

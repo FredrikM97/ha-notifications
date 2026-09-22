@@ -4,13 +4,11 @@ import {
   getAlertRuntime,
   getConfig,
   getHistory,
-  discardPreview,
   deleteAlert,
   loadRegistries,
   reload,
   saveAlert,
   saveConfig,
-  previewAlert,
   previewAlertPayload,
   validateConfig,
 } from "../../frontend/api.js";
@@ -57,15 +55,6 @@ describe("frontend API transport", () => {
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
   });
 
-  it("does not send a test command without an alert id", async () => {
-    const client = createHassClient();
-
-    await expect(previewAlert(client.hass, "")).rejects.toThrow(
-      "Select an alert before testing it.",
-    );
-    expect(client.sendMessagePromise).not.toHaveBeenCalled();
-  });
-
   it("rejects a malformed alert list instead of clearing the dashboard", async () => {
     const client = createHassClient();
     client.sendMessagePromise.mockResolvedValueOnce({ alerts: [] });
@@ -83,7 +72,6 @@ describe("frontend API transport", () => {
     await deleteAlert(client.hass, "door");
     client.sendMessagePromise.mockResolvedValueOnce(previewSessionResultFixture);
     await previewAlertPayload(client.hass, alert);
-    await discardPreview(client.hass, "session");
     await reload(client.hass);
 
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();

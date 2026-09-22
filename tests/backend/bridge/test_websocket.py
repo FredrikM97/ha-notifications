@@ -38,8 +38,6 @@ class Lifecycle:
         self.websocket_routes = routes
 
     async def dispatch(self, name: str, **kwargs: object) -> object:
-        if name == "notification_preview.discard":
-            raise RuntimeError("discard failed")
         return {"route": name, **kwargs}
 
 
@@ -93,35 +91,6 @@ class WebsocketTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(handlers), 12)
         self.assertTrue(all(handler.__name__ == "handle" for handler in handlers))
-
-    async def test_discard_errors_use_transport_error_contract(self) -> None:
-        handlers = []
-
-        with (
-            patch.object(websocket_api, "websocket_command", _passthrough_decorator),
-            patch.object(websocket_api, "async_response", lambda fn: fn),
-        ):
-            module = importlib.reload(websocket)
-            module.register(
-                Lifecycle(
-                    (
-                        WebsocketRoute(
-                            "notification_preview.discard",
-                            "discard_preview",
-                            (WebsocketArgument("session_id", str),),
-                            "discard_failed",
-                            "Unable to discard preview.",
-                        ),
-                    )
-                ),
-                handlers.append,
-            )
-
-        connection = Connection()
-        await handlers[0](None, connection, {"id": 3, "session_id": "session"})
-
-        self.assertEqual(connection.errors, [(3, "discard_failed", "discard failed")])
-        self.assertEqual(connection.results, [])
 
     async def test_results_convert_mappingproxy_values_for_json(self) -> None:
         handlers = []

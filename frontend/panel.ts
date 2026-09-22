@@ -1,5 +1,4 @@
 import {
-  discardPreview,
   deleteAlert,
   errorMessage,
   getAlerts,
@@ -7,7 +6,6 @@ import {
   getHistory,
   loadRegistries,
   saveAlert,
-  previewAlert,
   previewAlertPayload,
   validateConditions,
 } from "./api.js";
@@ -544,9 +542,6 @@ class HaNotificationsPanel extends LitElement {
         await validateConditions(this._hass, draft);
         this.showToast("Condition is valid.");
       },
-      onDiscardTest: async (sessionId) => {
-        await discardPreview(this._hass, sessionId);
-      },
       onSave: async (alert) => {
         const saved = await saveAlert(this._hass, alert);
         this.showToast("Alert created.");
@@ -587,9 +582,6 @@ class HaNotificationsPanel extends LitElement {
         await validateConditions(this._hass, draft);
         this.showToast("Condition is valid.");
       },
-      onDiscardTest: async (sessionId) => {
-        await discardPreview(this._hass, sessionId);
-      },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
         this.replaceSavedAlert(saved);
@@ -623,9 +615,8 @@ class HaNotificationsPanel extends LitElement {
 
   private async testAlertFromCard(alert: Alert): Promise<void> {
     try {
-      await previewAlert(this._hass, alert.id);
+      await previewAlertPayload(this._hass, alert);
       this.showToast("Test notification sent.");
-      await this.refresh();
     } catch (err) {
       this.showToast(errorMessage(err), true);
     }

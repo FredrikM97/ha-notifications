@@ -151,7 +151,6 @@ export function editorOptions(
     onSave: vi.fn().mockResolvedValue(alert),
     onTest: vi.fn().mockResolvedValue({ session_id: "session" }),
     onValidateCondition: vi.fn().mockResolvedValue({}),
-    onDiscardTest: vi.fn().mockResolvedValue({}),
     onSaved: vi.fn().mockResolvedValue(undefined),
     onClosed: vi.fn(),
   };
