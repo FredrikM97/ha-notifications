@@ -84,6 +84,93 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(runtime, {})
 
+    async def test_apply_confirmation_owns_state_delivery_and_persistence(self):
+        now = self.now
+        alert = {
+            "id": "alert_1",
+            "name": "Alert",
+            "notification": {"message": "Original"},
+            "confirmation": {
+                "enabled": True,
+                "buttons": [{"id": "confirm", "label": "Done"}],
+                "notification": {
+                    "enabled": True,
+                    "clear": True,
+                    "message": "Confirmed by {{ confirmed_by }}",
+                },
+            },
+        }
+        state = {
+            "runtime": {
+                "alert_1": {
+                    "confirmation": {
+                        "action_ids": {"action": "confirm"},
+                        "attempts": 1,
+                    }
+                }
+            }
+        }
+        events = []
+        sent = []
+        cleared = []
+        follow_up = []
+        persisted = []
+
+        class Alerts:
+            def publish_event(self, *_args):
+                events.append(_args[1])
+
+        class Notification:
+            async def clear(self, alert, timestamp):
+                cleared.append((alert, timestamp))
+
+            async def send(self, request):
+                sent.append(request)
+                return SimpleNamespace(success=True, error=None)
+
+        class FollowUp:
+            @staticmethod
+            def actions_for_confirmation(_alert):
+                return []
+
+            async def execute(self, request):
+                follow_up.append(request)
+
+        self.feature._state = state
+        self.feature._storage = SimpleNamespace(
+            persist=lambda: persisted.append(True)
+        )
+        async def render_template(source, _variables=None):
+            return source
+
+        self.feature._render_template = render_template
+        self.feature.lifecycle = SimpleNamespace(
+            feature=lambda name: {
+                "alerts": Alerts(),
+                "notification": Notification(),
+                "follow_up_actions": FollowUp(),
+            }[name]
+        )
+
+        result = confirmation.ConfirmationResult(
+            alert,
+            confirmation.ConfirmationContext(
+                "Alice",
+                confirmation.ConfirmationSelection("action", "confirm", "Done"),
+            ),
+            now,
+        )
+        await self.feature._apply_confirmation(result)
+
+        runtime = state["runtime"]["alert_1"]
+        self.assertEqual(runtime["confirmation"]["action_ids"], {})
+        self.assertTrue(runtime["acknowledged"])
+        self.assertEqual(events[0].value, "confirmed")
+        self.assertEqual(len(cleared), 1)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(len(follow_up), 1)
+        self.assertEqual(persisted, [True])
+
     async def test_prepare_action_is_idempotent_for_pending_action(self):
         runtime = {}
         alert = {"id": "alert_1", "confirmation": {"enabled": True}}
@@ -170,7 +257,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         expired = self.feature.expire_exhausted(alert, runtime)
 
-        self.assertTrue(expired)
+        self.assertEqual(expired.attempts, 2)
+        self.assertEqual(expired.max_attempts, 2)
         self.assertEqual(runtime["confirmation"]["action_ids"], {})
         self.assertFalse(self.feature.has_pending("action"))
 

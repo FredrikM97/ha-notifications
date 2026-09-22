@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Mapping
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    EVENT_ALERT_EVENT,
     STATE_HISTORY,
     STATE_RUNTIME,
+    AlertEventType,
     StateRoot,
 )
 from ..controller.lifecycle import (
@@ -39,6 +44,7 @@ class AlertFeature(FeatureBase):
         runtime_storage: Storage,
     ) -> None:
         super().__init__()
+        self._hass = _hass
         self._state = state
         self._config_storage = config_storage
         self._runtime_storage = runtime_storage
@@ -71,6 +77,90 @@ class AlertFeature(FeatureBase):
         state.confirmed_by = None
         state.last_error = None
         state.write_to(runtime)
+
+    async def deactivate(
+        self,
+        alert: Mapping[str, Any],
+        now: datetime,
+        source: str,
+    ) -> None:
+        """Mark an active alert inactive and clear its notification if configured."""
+
+        runtime = self.runtime(str(alert["id"]))
+        if not runtime.get("active", False):
+            return
+        state = AlertRuntimeState.from_runtime(runtime)
+        state.active = False
+        state.acknowledged = False
+        state.notification_id = None
+        state.flow_id = None
+        state.write_to(runtime)
+        notification = self.feature("notification")
+        if notification.should_clear_on_condition_change(alert):
+            await notification.clear(alert, now)
+        self.publish_event(
+            alert,
+            AlertEventType.CONDITION_INACTIVE,
+            "Condition became false.",
+            {"source": source},
+            now,
+        )
+
+    def activate(
+        self,
+        alert: Mapping[str, Any],
+        now: datetime,
+        source: str,
+    ) -> None:
+        """Mark an alert active and publish its state transition."""
+
+        alert_id = str(alert["id"])
+        runtime = self.runtime(alert_id)
+        state = AlertRuntimeState.from_runtime(runtime)
+        was_active = bool(state.active)
+        state.last_evaluated = now.isoformat()
+        if not was_active:
+            state.active = True
+            state.acknowledged = False
+            state.started_at = now.isoformat()
+            state.notification_id = (
+                f"ha_notifications_{alert_id}_{uuid.uuid4().hex[:10]}"
+            )
+            state.flow_id = f"flow_{alert_id}_{uuid.uuid4().hex[:8]}"
+        state.write_to(runtime)
+        if not was_active:
+            self.publish_event(
+                alert,
+                AlertEventType.CONDITION_ACTIVE,
+                "Condition became true.",
+                {"source": source},
+                now,
+            )
+
+    def publish_event(
+        self,
+        alert: Mapping[str, Any],
+        event_type: AlertEventType,
+        message: str,
+        details: Mapping[str, Any],
+        now: datetime,
+    ) -> None:
+        """Publish an event fact with the alert's current flow identity."""
+
+        runtime = self.runtime(str(alert["id"]))
+        self._hass.bus.async_fire(
+            EVENT_ALERT_EVENT,
+            {
+                "id": uuid.uuid4().hex,
+                "timestamp": now.isoformat(),
+                "alert_id": alert["id"],
+                "alert_name": alert["name"],
+                "type": event_type.value,
+                "message": message,
+                "details": dict(details),
+                "flow_id": runtime.get("flow_id"),
+            },
+        )
 
     @route("alerts.apply")
     async def apply_config(self, config: dict[str, Any]) -> set[str]:

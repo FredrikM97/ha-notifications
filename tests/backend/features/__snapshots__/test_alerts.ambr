@@ -1,23 +1,4 @@
 # serializer version: 1
-# name: test_acknowledge_updates_confirmation_runtime
-  dict({
-    'acknowledged': True,
-    'active': False,
-    'confirmation': dict({
-      'action_ids': dict({
-      }),
-      'attempts': 0,
-    }),
-    'confirmed_at': '2026-01-01T00:00:00+00:00',
-    'confirmed_by': 'Alice',
-    'flow_id': None,
-    'last_error': None,
-    'last_evaluated': None,
-    'last_notified': None,
-    'notification_id': None,
-    'started_at': None,
-  })
-# ---
 # name: test_disabled_runtime_reset_contract_snapshot
   dict({
     'acknowledged': False,

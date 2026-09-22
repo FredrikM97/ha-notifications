@@ -119,11 +119,14 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         }
         self.transitions = []
 
-        async def on_transition(alert, transition, now):
-            self.transitions.append(transition)
+        async def on_transition(event):
+            self.transitions.append(event)
 
         def expire_stale(runtime, now):
             return False
+
+        async def run(_alert_id, operation):
+            await operation()
 
         runtime_storage = SimpleNamespace(runtime=lambda _alert_id: self.runtime)
         self.feature = ConditionFeature(
@@ -139,9 +142,9 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
                     expire_stale=expire_stale,
                 )
                 if name == "confirmations"
-                else SimpleNamespace(
-                    handle_condition=on_transition
-                )
+                else SimpleNamespace(handle_condition=on_transition)
+                if name == "alert_flow"
+                else SimpleNamespace(run=run)
             )
         )
 
@@ -154,7 +157,10 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
             now=self.now,
         )
 
-        self.assertEqual(self.transitions[0].active, False)
+        self.assertEqual(self.transitions[0].source, "change")
+        self.assertEqual(
+            self.transitions[0].__class__.__name__, "ConditionInactiveEvent"
+        )
         self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
 
     async def test_condition_error_does_not_allocate_confirmation(self):
@@ -166,15 +172,17 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
             now=self.now,
         )
 
-        self.assertIsNone(self.transitions[0].active)
-        self.assertIsNotNone(self.transitions[0].error)
+        self.assertEqual(self.transitions[0].source, "change")
+        self.assertEqual(self.transitions[0].error, "template failed")
         self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
 
 
 class ConditionFeatureTests(unittest.TestCase):
-    def test_conditions_depend_on_alert_flow(self):
+    def test_conditions_depend_on_alert_coordinator(self):
         conditions = importlib.import_module(f"{PACKAGE_NAME}.features.conditions")
-        self.assertIn("alert_flow", conditions.ConditionFeature.dependencies)
+        self.assertIn(
+            "alert_coordinator", conditions.ConditionFeature.dependencies
+        )
 
     def test_watchers_register_change_and_both_interval_sources(self):
         calls = []

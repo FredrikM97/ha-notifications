@@ -16,12 +16,13 @@ This is the compact routing map for the direct-workflow architecture.
 
 ## Features
 
-- `custom_components/ha_notifications/features/alerts.py`: `AlertFeature` owns typed alerts, runtime state coordination, and the `alerts.apply`/`alerts.get`/`alerts.runtime`/`alerts.list`/`alerts.save` routes.
-- `custom_components/ha_notifications/features/conditions.py`: `ConditionFeature` owns condition listeners, per-alert evaluation serialization, and condition facts; it produces the shared `domain/workflow.py` condition-transition value.
-- `custom_components/ha_notifications/features/alert_flow.py`: explicit ordering for condition and confirmation effects; it publishes alert facts and serializes alert effects.
+- `custom_components/ha_notifications/features/alerts.py`: `AlertFeature` owns typed alerts, active/inactive runtime transitions through `activate()`/`deactivate()`, condition-change notification clearing, and the `alerts.apply`/`alerts.get`/`alerts.runtime`/`alerts.list`/`alerts.save` routes.
+- `custom_components/ha_notifications/features/conditions.py`: `ConditionFeature` owns condition listeners, evaluation, condition facts, and classification into explicit active, inactive, or error workflow events.
+- `custom_components/ha_notifications/features/alert_flow.py`: explicit ordering for condition effects and notification delivery; it publishes alert facts and interprets ordered delivery effects without owning alert runtime transitions or confirmation workflows.
+- `custom_components/ha_notifications/features/alert_coordinator.py`: `AlertCoordinatorFeature` runs feature-supplied async operations serialized by alert ID while allowing different alerts to run concurrently; it knows no workflow event types.
 - `custom_components/ha_notifications/features/notification.py`: `NotificationFeature` owns notification composition and delivery outcome mutation; `custom_components/ha_notifications/features/conditions.py` owns monitor and confirmation-resend listeners and due policy.
 - `custom_components/ha_notifications/features/conditions.py`: condition-editor Pydantic model, validation, and HA template compilation.
-- `custom_components/ha_notifications/features/confirmations.py`: `ConfirmationFeature` owns confirmation session state, Home Assistant action subscription lifecycle, action matching, reminders, and resolution into confirmation facts.
+- `custom_components/ha_notifications/features/confirmations.py`: `ConfirmationFeature` owns confirmation configuration, session state, Home Assistant action subscription lifecycle, action matching, reminder limits, max-attempt expiry, and resolution into confirmation facts.
 - `custom_components/ha_notifications/features/notification_preview.py`: `NotificationPreviewFeature` validates preview payloads and manually triggers the normal condition workflow; it owns no alert lifecycle state.
 - `custom_components/ha_notifications/features/notification.py`: notification and repeat Pydantic models, target normalization, rendering/composition, direct send/clear planning, and `ConfirmationDeliveryPlanner` for clear/completion requests.
 - `custom_components/ha_notifications/delivery/`: recipient and notification-channel resolution; mobile-app entities use their concrete data-capable service and other targets use generic Notify.
@@ -35,7 +36,7 @@ This is the compact routing map for the direct-workflow architecture.
 - `custom_components/ha_notifications/domain/service_calls.py`: typed Home Assistant service-call values and service-effects requests produced by workflows.
 - `custom_components/ha_notifications/domain/confirmation.py`: immutable confirmation contexts and response selections passed between ordered workflows.
 - `custom_components/ha_notifications/domain/runtime.py`: typed alert runtime state and its mapping persistence boundary.
-- `custom_components/ha_notifications/domain/workflow.py`: notification requests/outcomes, condition transitions, typed condition/confirmation events, and ordered workflow effects passed to `AlertFlow`; runtime state remains a persistence-boundary mapping.
+- `custom_components/ha_notifications/domain/workflow.py`: notification requests/outcomes, condition transitions, typed condition facts, and ordered workflow effects passed to `AlertFlow`; runtime state remains a persistence-boundary mapping.
 - `custom_components/ha_notifications/support/storage.py`: raw configuration-object and event-state-object persistence.
 - `custom_components/ha_notifications/support/jinja.py`: shared Home Assistant Jinja evaluation, recursive configuration rendering, template context, and null removal.
 - `custom_components/ha_notifications/support/scheduler.py`: `TaskScheduler` owns tracked feature background tasks and lifecycle cleanup.
@@ -48,22 +49,14 @@ This is the compact routing map for the direct-workflow architecture.
 
 ### Trigger and delivery
 
-Home Assistant startup/template/timer callback -> `ConditionFeature` -> `AlertFlow` -> confirmation, notification, alert-event publication, follow-up, and persistence operations.
+Home Assistant startup/template/timer callback -> `ConditionFeature` -> `AlertCoordinatorFeature` -> `AlertFlow` -> confirmation, notification, follow-up, and persistence operations; `AlertFeature` publishes active/inactive state facts during its runtime transitions.
 
 ### Confirmation
 
-Home Assistant notification-action callback -> `ConfirmationFeature.resolve_action_event()` -> `AlertFlow` -> notification clear/completion plan -> Home Assistant service calls -> follow-up actions -> alert-event publication and persistence.
+Home Assistant notification-action callback -> `ConfirmationFeature.resolve_action_event()` -> `AlertCoordinatorFeature` -> `ConfirmationFeature` -> notification clear/completion plan -> Home Assistant service calls -> follow-up actions -> alert-event publication and persistence.
 
 ### Frontend test payload
 
-Websocket transport -> `NotificationPreviewFeature` validates and triggers `ConditionFeature` -> `AlertFlow` -> normal notification and optional confirmation workflow.
-
-## Ownership rules
-
-- Required ordered steps use direct awaited calls, not internal events.
-- Home Assistant's external event bus remains for genuine external callbacks.
-- The composition module constructs features with the shared `(hass, state, storage, storage)` context. `Storage` is one persistence owner for the raw configuration object and raw event state object; it does not validate, remap, or repair feature data.
-- Features may access the Home Assistant instance directly for effects they own; they must not import the whole controller or use a capability aggregate.
 - Pydantic v2 owns feature/domain models; Voluptuous remains for HA websocket envelopes during migration.
 - Configuration validation happens in `ConfigurationFeature` before writing; YAML parsing and formatting belong to the frontend editor.
 

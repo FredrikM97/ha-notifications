@@ -25,7 +25,11 @@ from pydantic import BaseModel, ConfigDict
 
 from ..const import ConditionType
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
-from ..domain.workflow import ConditionTransition
+from ..domain.workflow import (
+    ConditionActiveEvent,
+    ConditionErrorEvent,
+    ConditionInactiveEvent,
+)
 from ..support.jinja import JinjaEvaluator
 from .configuration import Alert
 
@@ -142,7 +146,12 @@ class ConditionFeature(FeatureBase):
     """Own condition compilation, evaluation, and condition watchers."""
 
     name = "conditions"
-    dependencies = ("alerts", "alert_flow", "confirmations")
+    dependencies = (
+        "alerts",
+        "alert_flow",
+        "alert_coordinator",
+        "confirmations",
+    )
 
     def __init__(
         self,
@@ -153,7 +162,6 @@ class ConditionFeature(FeatureBase):
     ) -> None:
         super().__init__()
         self._hass = hass
-        self._state = _state
         self._jinja = JinjaEvaluator.for_hass(hass)
         self._alerts: dict[str, Alert] = {}
         self._watchers: ConditionWatchers | None = None
@@ -258,14 +266,30 @@ class ConditionFeature(FeatureBase):
         """Forward one evaluated result for an explicit alert mapping."""
 
         alert_id = str(alert["id"])
-        runtime = self._state.setdefault("runtime", {}).setdefault(alert_id, {})
+        runtime = self.feature("alerts").runtime(alert_id)
         facts = await self._condition_facts(alert)
-        confirmations = self.feature("confirmations")
-        confirmations.expire_stale(runtime, now)
-        evaluation = ConditionTransition(active, error, source, facts)
-        if evaluation.active is None and evaluation.error is None:
+        if error is not None:
+            condition_event = ConditionErrorEvent(alert, error, source, now)
+        elif active is False:
+            condition_event = ConditionInactiveEvent(alert, source, now)
+        elif active is True:
+            was_active = bool(runtime.get("active", False))
+            self.feature("alerts").activate(alert, now, source)
+            condition_event = ConditionActiveEvent(
+                alert,
+                source,
+                facts or {},
+                now,
+                replace_existing=was_active,
+            )
+        else:
             return
-        await self.feature("alert_flow").handle_condition(alert, evaluation, now)
+        await self.feature("alert_coordinator").run(
+            alert_id,
+            lambda: self.feature("alert_flow").handle_condition(
+                condition_event
+            ),
+        )
 
     async def condition_result(
         self,

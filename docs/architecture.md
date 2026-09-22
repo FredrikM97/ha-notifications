@@ -18,6 +18,7 @@ flowchart LR
     Life[custom_components/ha_notifications/controller/lifecycle.py\nfeature setup/unload + scheduler]
     WS[custom_components/ha_notifications/bridge/websocket.py\nwebsocket transport]
     Trigger[custom_components/ha_notifications/features/conditions.py\nCondition evaluation and listeners]
+    Coordinator[custom_components/ha_notifications/features/alert_coordinator.py\ngeneric per-alert coordinator]
     Flow[custom_components/ha_notifications/features/alert_flow.py\nordered alert effects]
     Alerts[custom_components/ha_notifications/features/alerts.py\nAlert queries]
     Conditions[custom_components/ha_notifications/features/conditions.py\nConditionConfig + compiler]
@@ -42,10 +43,6 @@ flowchart LR
     Core --> Life
     Core --> Alert
     Core --> Storage
-    Core --> Trigger
-    Core --> Alerts
-    Core --> Confirm
-    Core --> Preview
     Core --> Flow
     Core --> Notify
     Core --> Actions
@@ -55,14 +52,14 @@ flowchart LR
     Flow --> RuntimeValue
     Notify --> ConfirmValue
     Actions --> ConfirmValue
-    Flow --> WorkflowValue
     Notify --> WorkflowValue
     Flow --> WorkflowValue
     Alert --> Trigger
     Alert --> Confirm
     Alert --> Notify
     Trigger --> Conditions
-    Trigger --> Flow
+    Trigger --> Coordinator
+    Coordinator --> Flow
     Notify --> Confirm
     Notify --> Delivery
     Confirm --> Actions
@@ -90,12 +87,13 @@ flowchart LR
 - Features and the controller access Home Assistant directly for effects they own. There is no gateway or service locator; feature dependencies remain explicit through lifecycle composition.
 - `controller/lifecycle.py` composes each feature with the shared `(hass, state, storage, storage)` context; the single `Storage` class owns raw config and event-state persistence.
 - `bridge/websocket.py` generates Home Assistant handlers from feature websocket-route declarations and handles HA connection/result serialization. It remains a transport adapter, not a domain router. Frontend static path and panel registration belong to `controller/core.py`.
-- `features/alerts.py` owns `AlertFeature`, its alert routes, runtime-state projection, alert validation, timestamps, and reload request.
+- `features/alerts.py` owns `AlertFeature`, its alert routes, runtime-state projection, alert validation, active/inactive condition transitions, timestamps, condition-change clearing, and reload request.
 - `features/alerts.py` owns typed alerts and the persisted runtime boundary; `domain/runtime.py` owns the typed runtime state and its mapping serialization. Other features request alert runtime through its lifecycle route instead of constructing generic trigger state.
-- `features/conditions.py` owns condition listeners, watcher registration, startup/reload/interval/template callbacks, per-alert task serialization, and condition facts. It produces the immutable condition-transition value owned by `domain/workflow.py`; it does not allocate confirmations or apply delivery/history effects.
-- `features/conditions.py` passes condition facts to `AlertFlow`; it does not own notification, confirmation, event logging, or persistence decisions.
-- `features/alert_flow.py` owns ordered application sequencing, immutable per-alert plans, typed workflow events, and effect serialization. Confirmation, notification, event publication, follow-up, and persistence operations remain owned by their feature modules.
-- `features/confirmations.py` owns confirmation sessions, its Home Assistant action subscription, matching, reminders, and resolution into confirmation facts. `AlertFeature` owns acknowledgement mutation after a fact is resolved.
+- `features/conditions.py` owns condition listeners, watcher registration, startup/reload/interval/template callbacks, evaluation, condition facts, and classification into explicit active, inactive, or error workflow events; it does not apply notification or delivery effects.
+- `features/alert_coordinator.py` owns keyed runtime serialization: feature-supplied operations for one alert run in order, while different alert IDs can run concurrently. It is lifecycle-managed and knows no condition, confirmation, or workflow event types.
+- `features/conditions.py` and `features/confirmations.py` pass typed facts through `AlertCoordinatorFeature`; they do not own notification, event logging, follow-up, or persistence decisions.
+- `features/alert_flow.py` owns ordered application sequencing, immutable per-alert plans, typed workflow events, and delivery-effect interpretation. Alert runtime transitions are performed before active/inactive events reach the flow; confirmation, notification, event publication, follow-up, and persistence operations remain owned by their feature modules.
+- `features/confirmations.py` owns confirmation sessions, its Home Assistant action subscription, matching, reminders, max-attempt expiry, and resolution into confirmation facts. `AlertFeature` owns acknowledgement mutation after a fact is resolved.
 - `features/notification_preview.py` validates preview payloads and manually triggers the normal condition workflow. It owns no alert lifecycle state; delivery and confirmation decisions remain in the normal workflow.
 - `features/notification.py` owns message composition, notification send/clear planning, condition-change clearing policy, confirmation clear/completion delivery planning, and delivery attempt outcome state; `features/confirmations.py` owns the alert-level confirmation configuration and pending sessions; `features/conditions.py` owns monitor and confirmation reminder listeners; `delivery/` resolves recipients and selects concrete mobile-app services versus generic Notify.
 - `features/follow_up_actions.py` owns post-send and post-confirmation action planning.
@@ -103,16 +101,13 @@ flowchart LR
 - `domain/service_calls.py` owns immutable service-call values and service-effects requests passed to follow-up execution.
 - `features/history.py` is read-only at the feature boundary: it owns history query transport and formatting helpers.
 - `controller/core.py` passively listens for `ha_notifications_alert_event` and persists raw alert facts. Workflows publish facts through Home Assistant's event bus and do not depend on history storage.
-- `features/configuration.py` owns the flat `Alert` and `Configuration` models because they compose the persisted configuration document. `domain/workflow.py` owns condition-transition values and workflow event/effect contracts used by ordered workflows. Each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model.
+- `features/configuration.py` owns the flat `Alert` and `Configuration` models because they compose the persisted configuration document. `domain/workflow.py` owns typed workflow event/effect contracts used by ordered workflows. Each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model.
 - `domain/confirmation.py` owns immutable confirmation contexts and response selections passed between workflows; it does not own confirmation configuration, sessions, or persistence.
 - `domain/workflow.py` owns immutable notification requests/outcomes, workflow events, and ordered effects passed between application features; it does not own delivery or runtime state.
 - `features/conditions.py` owns `MonitorConfig`, watcher settings, and condition decisions.
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
-- `features/confirmations.py` owns `ConfirmationConfig` and confirmation sessions; `features/alert_flow.py` owns confirmation effect ordering.
+- `features/confirmations.py` owns `ConfirmationConfig` and confirmation sessions; `features/alert_coordinator.py` owns per-alert confirmation serialization; `features/alert_flow.py` owns confirmation effect ordering.
 - `features/conditions.py` owns condition-editor validation and pure condition compilation. Duration values arrive as numeric seconds from the frontend; runtime timer conversion remains local to the owning feature.
-- `support/storage.py` owns raw config-entry option and event-state loading/saving; it does not validate, remap, extract, or repair feature data. `ConfigurationFeature` validates config before calling it. The frontend owns YAML import/export.
-- `support/jinja.py` owns the small awaitable-aware Home Assistant Jinja evaluator; feature workflows still own when rendering occurs.
-- `support/scheduler.py` owns background task tracking and lifecycle cleanup for feature-scheduled work.
 - Feature models remain Pydantic objects at feature boundaries. Mapping output is
     created only at YAML/websocket edges with `model_dump()`.
 - Confirmation runtime workflows receive typed configuration objects at their
@@ -133,8 +128,9 @@ Invalid configuration is validated before config-entry options are updated, so i
 
 ## Workflow contracts
 
-- Trigger evaluation mutates runtime state first and passes the evaluation to
-    `AlertFlow`. The flow publishes active or inactive alert facts, then sends
+- Trigger evaluation asks `AlertFeature` to perform the active or inactive
+    runtime transition; the alert feature publishes the corresponding state
+    fact, and `AlertFlow` sends
     the notification, publishes send success or failure, runs enabled follow-up
     actions sequentially, and persists state. Delivery failures are published
     and stop that delivery attempt; they do not run follow-up actions.

@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from types import MappingProxyType, SimpleNamespace
 
 from custom_components.ha_notifications.const import STATE_RUNTIME
 from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
-from custom_components.ha_notifications.features.confirmations import (
-    ConfirmationFeature,
-)
 from tests.backend.conftest import make_alert, make_runtime_state
 
 
@@ -149,14 +145,3 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
     assert notification.cleared
     assert state[STATE_RUNTIME] == {}
     assert state["history"] == [{"alert_id": "other"}]
-
-
-def test_acknowledge_updates_confirmation_runtime(snapshot):
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    state = {STATE_RUNTIME: {"alert_1": {}}}
-    feature = ConfirmationFeature(None, state, None, None)
-
-    feature.acknowledge("alert_1", "Alice", now)
-
-    assert state[STATE_RUNTIME]["alert_1"] == snapshot
-

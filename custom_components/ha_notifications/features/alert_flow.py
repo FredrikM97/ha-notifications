@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
-import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from ..const import EVENT_ALERT_EVENT, AlertEventType, StateRoot
+from ..const import AlertEventType, StateRoot
 from ..controller.lifecycle import FeatureBase
-from ..domain.runtime import AlertRuntimeState
 from ..domain.service_calls import ServiceEffectsRequest
 from ..domain.workflow import (
     ClearNotificationEffect,
+    ConditionActiveEvent,
+    ConditionErrorEvent,
+    ConditionInactiveEvent,
     ConditionWorkflowEvent,
-    ConfirmationWorkflowEvent,
     NotificationClearRequest,
     NotificationOutcome,
     NotificationRequest,
@@ -27,9 +26,7 @@ from ..domain.workflow import (
     WorkflowEffect,
     WorkflowEvent,
 )
-from ..support.jinja import JinjaEvaluator
 from ..support.storage import Storage
-from . import confirmations, notification
 
 
 class WorkflowPhase(str, Enum):
@@ -87,8 +84,6 @@ class AlertFlow(FeatureBase):
         self._hass = hass
         self._state = _state
         self._storage = storage
-        self._jinja = JinjaEvaluator.for_hass(hass)
-        self._locks: dict[str, asyncio.Lock] = {}
         self._plans: dict[str, AlertWorkflowPlan] = {}
 
     async def on_setup(self) -> None:
@@ -98,7 +93,6 @@ class AlertFlow(FeatureBase):
         }
 
     async def on_unload(self) -> None:
-        self._locks.clear()
         self._plans.clear()
 
     def plan(self, alert_id: str) -> AlertWorkflowPlan:
@@ -120,172 +114,135 @@ class AlertFlow(FeatureBase):
         return plan
 
     async def handle_condition(
-        self,
-        alert: Mapping[str, Any],
-        transition: Any,
-        now: datetime,
+        self, event: ConditionWorkflowEvent
     ) -> None:
-        """Accept a condition callback at the feature boundary."""
+        """Accept a classified condition workflow event."""
 
-        await self.handle_event(
-            ConditionWorkflowEvent(
-                alert, transition, now
-            )
-        )
-
-    async def handle_confirmation(
-        self, result: confirmations.ConfirmationResult
-    ) -> None:
-        """Accept a resolved response at the feature boundary."""
-
-        await self.handle_event(
-            ConfirmationWorkflowEvent(
-                result.alert,
-                result.confirmation,
-                result.now,
-            )
-        )
+        await self.handle_event(event)
 
     async def handle_event(self, event: WorkflowEvent) -> None:
         """Dispatch one typed workflow event to its ordered effect path."""
 
         if isinstance(event, ConditionWorkflowEvent):
             await self._handle_condition(event)
-            return
-        await self._handle_confirmation(event)
 
     async def _handle_condition(self, event: ConditionWorkflowEvent) -> None:
-        """Apply the ordered effects for one condition transition."""
+        """Run the operation selected by the condition feature."""
 
         alert = event.alert
         self._ensure_plan(alert)
-        await self._handle_condition_locked(event)
+        runtime = self._state.setdefault("runtime", {}).setdefault(
+            str(alert["id"]), {}
+        )
+        self.feature("confirmations").expire_stale(runtime, event.now)
+        effects = self._exhaustion_effects(alert, runtime, event.now)
+        if isinstance(event, ConditionErrorEvent):
+            self._handle_condition_error(event)
+        elif isinstance(event, ConditionInactiveEvent):
+            await self.feature("alerts").deactivate(
+                event.alert, event.now, event.source
+            )
+        elif isinstance(event, ConditionActiveEvent):
+            self._handle_condition_active(event, effects)
+        else:
+            return
+        await self._flush_effects(effects)
 
-    async def _handle_condition_locked(
-        self, event: ConditionWorkflowEvent
+    def _exhaustion_effects(
+        self,
+        alert: Mapping[str, Any],
+        runtime: dict[str, Any],
+        now: datetime,
+    ) -> list[WorkflowEffect]:
+        """Expire exhausted confirmations and return their clear effect."""
+
+        exhaustion = self.feature("confirmations").expire_exhausted(
+            alert, runtime
+        )
+        if exhaustion is None:
+            return []
+        self.feature("alerts").publish_event(
+            alert,
+            AlertEventType.CONFIRMATION_ATTEMPTS_EXHAUSTED,
+            "Confirmation attempts exhausted; notification cleared.",
+            {
+                "attempts": exhaustion.attempts,
+                "max_attempts": exhaustion.max_attempts,
+            },
+            now,
+        )
+        return [
+            ClearNotificationEffect(NotificationClearRequest(alert, now))
+        ]
+
+    def _handle_condition_error(self, event: ConditionErrorEvent) -> None:
+        """Publish a condition evaluation error."""
+
+        self.feature("alerts").publish_event(
+            event.alert,
+            AlertEventType.CONDITION_ERROR,
+            "Template evaluation failed.",
+            {"error": event.error, "source": event.source},
+            event.now,
+        )
+    def _handle_condition_active(
+        self,
+        event: ConditionActiveEvent,
+        effects: list[WorkflowEffect],
     ) -> None:
-        """Apply one condition event while preserving per-alert ordering."""
+        """Queue notification and follow-up effects for an active alert."""
 
         alert = event.alert
-        alert_id = str(alert["id"])
-        runtime = self._state.setdefault("runtime", {}).setdefault(alert_id, {})
-        runtime_state = AlertRuntimeState.from_runtime(runtime)
-        evaluation = event.evaluation
-        effects: list[WorkflowEffect] = []
-        async with self._locks.setdefault(alert_id, asyncio.Lock()):
-            if self.feature("confirmations").expire_exhausted(
-                alert, runtime
-            ):
-                confirmation = confirmations.ConfirmationConfig.from_alert(
-                    alert
-                )
-                effects.append(
-                    ClearNotificationEffect(
-                        NotificationClearRequest(alert, event.now)
-                    )
-                )
-                self._publish_event(
-                    alert,
-                    AlertEventType.CONFIRMATION_ATTEMPTS_EXHAUSTED,
-                    "Confirmation attempts exhausted; notification cleared.",
-                    {
-                        "attempts": runtime.get("confirmation", {}).get(
-                            "attempts", 0
-                        ),
-                        "max_attempts": (
-                            confirmation.reminders.max_attempts
-                            if confirmation is not None
-                            else None
-                        ),
-                    },
-                    event.now,
-                )
-            if evaluation.error is not None:
-                self._publish_event(
-                    alert, AlertEventType.CONDITION_ERROR,
-                    "Template evaluation failed.",
-                    {"error": evaluation.error, "source": evaluation.source},
-                    event.now,
-                )
-            elif evaluation.active is False:
-                if not runtime.get("active", False):
-                    await self._flush_effects(effects)
-                    return
-                if self.feature("notification").should_clear_on_condition_change(
-                    alert
-                ):
-                    effects.append(
-                        ClearNotificationEffect(
-                            NotificationClearRequest(alert, event.now)
-                        )
-                    )
-                runtime_state.active = False
-                runtime_state.acknowledged = False
-                runtime_state.notification_id = None
-                runtime_state.flow_id = None
-                runtime_state.write_to(runtime)
-                self._publish_event(
-                    alert, AlertEventType.CONDITION_INACTIVE,
-                    "Condition became false.",
-                    {"source": evaluation.source},
-                    event.now,
-                )
-            elif evaluation.active is True:
-                was_active = bool(runtime.get("active", False))
-                runtime_state.last_evaluated = event.now.isoformat()
-                runtime_state.write_to(runtime)
-                if not was_active:
-                    runtime_state.active = True
-                    runtime_state.acknowledged = False
-                    runtime_state.started_at = event.now.isoformat()
-                    runtime_state.notification_id = (
-                        f"ha_notifications_{alert_id}_"
-                        f"{uuid.uuid4().hex[:10]}"
-                    )
-                    runtime_state.flow_id = (
-                        f"flow_{alert_id}_{uuid.uuid4().hex[:8]}"
-                    )
-                    runtime_state.write_to(runtime)
-                elif runtime.get("acknowledged", False):
-                    await self._flush_effects(effects)
-                    return
-                elif not self._should_send(
-                    alert, runtime, evaluation.source, event.now
-                ):
-                    await self._flush_effects(effects)
-                    return
-                self._prepare_confirmation(
-                    alert, runtime, event.now
-                )
-                if not was_active:
-                    self._publish_event(
-                        alert, AlertEventType.CONDITION_ACTIVE,
-                        "Condition became true.",
-                        {"source": evaluation.source},
+        runtime = self._state.setdefault("runtime", {}).setdefault(
+            str(alert["id"]), {}
+        )
+        if not self._should_notify(alert, runtime, event.source, event.now):
+            return
+        self.feature("confirmations").prepare_action(
+            alert, runtime, now=event.now
+        )
+        effects.extend(
+            (
+                SendNotificationEffect(
+                    NotificationRequest(
+                        alert,
+                        None,
                         event.now,
+                        event.replace_existing,
+                        condition_facts=event.facts,
+                        trigger_source=event.source,
                     )
-                effects.extend(
-                    (
-                        SendNotificationEffect(
-                            NotificationRequest(
-                                alert,
-                                None,
-                                event.now,
-                                was_active,
-                                condition_facts=(
-                                    evaluation.facts or {}
-                                ),
-                                trigger_source=evaluation.source,
-                            )
-                        ),
-                        ServiceEffectsEffect(
-                            ServiceEffectsRequest(alert, event.now)
-                        ),
-                    )
-                )
-            else:
-                return
-            await self._flush_effects(effects)
+                ),
+                ServiceEffectsEffect(ServiceEffectsRequest(alert, event.now)),
+            )
+        )
+
+    def _should_notify(
+        self,
+        alert: Mapping[str, Any],
+        runtime: Mapping[str, Any],
+        source: str,
+        now: datetime,
+    ) -> bool:
+        """Apply trigger policy before queuing notification effects."""
+
+        if source == "startup" and (alert.get("monitor") or {}).get(
+            "startup", True
+        ):
+            return not runtime.get("last_notified")
+        if source == "startup":
+            return False
+        if source == "enabled" and not runtime.get("last_notified"):
+            return True
+        if source not in ("reload", "startup", "interval", "confirmation"):
+            return False
+        if runtime.get("acknowledged", False):
+            return False
+        return bool(
+            self.feature("confirmations").reminder_due(
+                alert, dict(runtime), now
+            )
+        )
 
     async def _flush_effects(self, effects: list[WorkflowEffect]) -> None:
         """Run queued effects and persist when a workflow made changes."""
@@ -295,28 +252,6 @@ class AlertFlow(FeatureBase):
         effects.append(PersistEffect())
         await self._execute_effects(effects)
 
-    def _should_send(
-        self,
-        alert: Mapping[str, Any],
-        runtime: Mapping[str, Any],
-        source: str,
-        now: datetime,
-    ) -> bool:
-        """Apply trigger policy after a condition evaluated true."""
-
-        if source == "startup" and (alert.get("monitor") or {}).get(
-            "startup", True
-        ) and not runtime.get("last_notified"):
-            return True
-        if source == "enabled" and not runtime.get("last_notified"):
-            return True
-        if source not in ("reload", "startup", "interval", "confirmation"):
-            return False
-        confirmations_feature = self.feature("confirmations")
-        reminder_due = getattr(confirmations_feature, "reminder_due", None)
-        if reminder_due is None:
-            return True
-        return bool(reminder_due(alert, dict(runtime), now))
 
     async def _execute_effects(self, effects: list[WorkflowEffect]) -> None:
         """Execute typed effects in their declared order."""
@@ -351,71 +286,6 @@ class AlertFlow(FeatureBase):
                 )
             elif isinstance(effect, PersistEffect):
                 self._storage.persist()
-
-    async def _handle_confirmation(
-        self, event: ConfirmationWorkflowEvent
-    ) -> None:
-        """Apply the ordered effects for one resolved confirmation."""
-
-        alert = event.alert
-        self._ensure_plan(alert)
-        lock = self._locks.setdefault(str(alert["id"]), asyncio.Lock())
-        async with lock:
-            self.feature("confirmations").acknowledge(
-                alert["id"], event.confirmation.confirmed_by, event.now
-            )
-            self._publish_event(
-                alert,
-                AlertEventType.CONFIRMED,
-                "Notification confirmed.",
-                {
-                    "confirmed_by": event.confirmation.confirmed_by,
-                    "response_id": event.confirmation.selection.response_id,
-                    "response": event.confirmation.selection.label,
-                },
-                event.now,
-            )
-            effects: list[WorkflowEffect] = []
-
-            delivery = await notification.ConfirmationDeliveryPlanner(
-                alert,
-                event.confirmation,
-                event.now,
-            ).build(self._render_template)
-            if delivery.clear_notification:
-                effects.append(
-                    ClearNotificationEffect(
-                        NotificationClearRequest(alert, event.now)
-                    )
-                )
-            await self._execute_effects(effects)
-
-            if delivery.completion_alert is not None:
-                await self._send_completion(delivery.completion_alert, event)
-
-            actions = self.feature("follow_up_actions").actions_for_confirmation(
-                alert
-            )
-            await self._execute_effects(
-                [
-                    ServiceEffectsEffect(
-                        ServiceEffectsRequest(
-                            alert,
-                            event.now,
-                            attempt=1,
-                            actions=tuple(actions),
-                            confirmation=event.confirmation,
-                        )
-                    )
-                ]
-            )
-            self._storage.persist()
-
-    def _prepare_confirmation(
-        self, alert: Mapping[str, Any], runtime: dict[str, Any], now: datetime
-    ) -> None:
-        confirmation_feature = self.feature("confirmations")
-        confirmation_feature.prepare_action(alert, runtime, now=now)
 
     async def _send_notification(
         self,
@@ -473,7 +343,7 @@ class AlertFlow(FeatureBase):
         }
         if not outcome.success:
             details["error"] = outcome.error
-        self._publish_event(
+        self.feature("alerts").publish_event(
             alert,
             AlertEventType.NOTIFICATION_SENT
             if outcome.success
@@ -481,67 +351,4 @@ class AlertFlow(FeatureBase):
             "Notification sent." if outcome.success else "Notification failed.",
             details,
             outcome.now,
-        )
-
-    async def _render_template(
-        self, source: str, variables: dict[str, Any] | None = None
-    ) -> Any:
-        return await self._jinja.render(source, variables)
-
-    async def _send_completion(
-        self,
-        completion_alert: dict[str, Any],
-        event: ConfirmationWorkflowEvent,
-    ) -> None:
-        try:
-            outcome = await self.feature("notification").send(
-                NotificationRequest(
-                    alert=completion_alert,
-                    attempt=1,
-                    now=event.now,
-                    replace_existing=False,
-                )
-            )
-            if not outcome.success:
-                raise RuntimeError(outcome.error or "completion notification failed")
-        except Exception as err:
-            self._publish_event(
-                event.alert,
-                AlertEventType.COMPLETION_FAILED,
-                "Completion notification failed.",
-                {"error": str(err)},
-                event.now,
-            )
-        else:
-            self._publish_event(
-                event.alert,
-                AlertEventType.COMPLETION_SENT,
-                "Completion notification sent.",
-                {},
-                event.now,
-            )
-
-    def _publish_event(
-        self,
-        alert: Mapping[str, Any],
-        event_type: AlertEventType,
-        message: str,
-        details: Mapping[str, Any],
-        now: datetime,
-    ) -> None:
-        runtime = self._state.setdefault("runtime", {}).setdefault(
-            str(alert["id"]), {}
-        )
-        self._hass.bus.async_fire(
-            EVENT_ALERT_EVENT,
-            {
-                "id": uuid.uuid4().hex,
-                "timestamp": now.isoformat(),
-                "alert_id": alert["id"],
-                "alert_name": alert["name"],
-                "type": event_type.value,
-                "message": message,
-                "details": dict(details),
-                "flow_id": runtime.get("flow_id"),
-            },
         )

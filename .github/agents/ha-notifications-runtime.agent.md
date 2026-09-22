@@ -10,7 +10,8 @@ You are the runtime and backend specialist for HA Notifications. Keep alert exec
 - Work on validation, storage, scheduling, trigger logic, notifications, confirmation actions, and history.
 - Trace how saved config becomes active runtime behavior.
 - `features/conditions.py` owns condition/interval watch specs and the
-  active/acknowledged/repeat state machine (returned as a `ConditionTransition`).
+  active/acknowledged/repeat state machine and emits explicit active, inactive,
+  or error workflow events.
   `controller/core.py` is the lifecycle and composition root for
   setup/unload/reload sequencing and public API delegation. Confirmation
   decisions belong in

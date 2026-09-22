@@ -52,11 +52,33 @@ class ConditionTransition:
 
 
 @dataclass(frozen=True, slots=True)
-class ConditionWorkflowEvent:
-    """A condition transition ready for ordered alert effects."""
+class ConditionActiveEvent:
+    """An active condition ready for notification workflow effects."""
 
     alert: Mapping[str, Any]
-    evaluation: ConditionTransition
+    source: str
+    facts: Mapping[str, bool]
+    now: datetime
+    notify: bool = True
+    replace_existing: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ConditionInactiveEvent:
+    """An inactive condition ready for deactivation effects."""
+
+    alert: Mapping[str, Any]
+    source: str
+    now: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ConditionErrorEvent:
+    """A condition evaluation error ready for history effects."""
+
+    alert: Mapping[str, Any]
+    error: str
+    source: str
     now: datetime
 
 
@@ -69,6 +91,9 @@ class ConfirmationWorkflowEvent:
     now: datetime
 
 
+ConditionWorkflowEvent = (
+    ConditionActiveEvent | ConditionInactiveEvent | ConditionErrorEvent
+)
 WorkflowEvent = ConditionWorkflowEvent | ConfirmationWorkflowEvent
 
 

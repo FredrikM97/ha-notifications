@@ -84,6 +84,11 @@ This repository is a Home Assistant custom integration named HA Notifications. T
 - Prefer named, typed, awaited application methods for ordered internal
   workflows. Use event fan-out when multiple independent consumers genuinely
   benefit from decoupling, and keep event payloads and failure behavior explicit.
+- Prefer existing typed runtime state or enums for state and transition decisions.
+  Do not add a dataclass wrapper merely to report a boolean, enum value, or
+  projection of `AlertRuntimeState`; use a direct value or extend the existing
+  state model. Keep dataclasses for real cross-boundary payloads such as
+  workflow events, requests, outcomes, and effects.
 - Treat feature routes as frontend transport only. Backend feature workflows call
   their declared class dependencies directly, never through string route dispatch.
 - When the user explicitly approves a structural migration, it is acceptable to
