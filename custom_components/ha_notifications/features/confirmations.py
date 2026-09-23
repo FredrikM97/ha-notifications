@@ -13,22 +13,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..const import (
     EVENT_NOTIFICATION_ACTION,
-    STATE_RUNTIME,
     AlertEventType,
-    StateRoot,
+    FeatureName,
 )
 from ..controller.lifecycle import FeatureBase
 from ..domain.confirmation import (
-    ConfirmationActionSet,
     ConfirmationContext,
     ConfirmationSelection,
-    PendingConfirmationState,
 )
 from ..domain.runtime import AlertRuntimeState
-from ..domain.service_calls import ServiceEffectsRequest
+from ..domain.service_calls import FollowUpActionsRequest
 from ..domain.workflow import NotificationRequest
 from ..support.jinja import JinjaEvaluator
-from ..support.storage import Storage
 
 
 class ConfirmationNotificationConfig(BaseModel):
@@ -87,14 +83,12 @@ class ConfirmationConfig(BaseModel):
         return cls.model_validate(value)
 
 
-class ConfirmationSession(BaseModel):
+@dataclass(slots=True)
+class ConfirmationSession:
     """Mutable runtime state for one pending confirmation action."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    alert_id: str | None = None
+    runtime: AlertRuntimeState
     selection: ConfirmationSelection
-    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,24 +111,25 @@ class ConfirmationFeature(FeatureBase):
     )
     SESSION_TTL = timedelta(days=7)
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         hass: Any,
-        state: StateRoot,
-        _config_storage: Any,
-        storage: Storage,
-    ) -> None:
+        _runtime: dict[str, AlertRuntimeState],
+        _storage: Any,
+    ) -> ConfirmationFeature:
+        """Construct confirmations without unrelated shared services."""
+
+        return cls(hass)
+
+    def __init__(self, hass: Any) -> None:
         super().__init__()
         self._hass = hass
-        self._state = state
-        self._storage = storage
         self._jinja = JinjaEvaluator.for_hass(hass)
         self._sessions: dict[str, ConfirmationSession] = {}
-        self._alerts: dict[str, Any] = {}
         self._unsubscribe: Callable[[], None] | None = None
 
     async def on_setup(self) -> None:
-        self._alerts = self.feature("alerts").alerts
         self._unsubscribe = self._hass.bus.async_listen(
             EVENT_NOTIFICATION_ACTION, self._on_action_event
         )
@@ -158,11 +153,12 @@ class ConfirmationFeature(FeatureBase):
 
     @staticmethod
     def reminder_due(
-        alert: dict[str, Any], runtime: dict[str, Any], now: datetime
+        runtime: AlertRuntimeState, now: datetime
     ) -> bool:
         """Decide whether a pending confirmation should be resent."""
 
-        pending = PendingConfirmationState.from_runtime(runtime)
+        alert = runtime.alert
+        pending = runtime.confirmation
         if not pending.action_ids:
             return False
         settings = ConfirmationConfig.from_alert(alert)
@@ -170,7 +166,7 @@ class ConfirmationFeature(FeatureBase):
             return False
         if pending.attempts >= int(settings.reminders.max_attempts or 1):
             return False
-        last_notified = runtime.get("last_notified")
+        last_notified = runtime.last_notified
         if not last_notified:
             return True
         try:
@@ -185,31 +181,22 @@ class ConfirmationFeature(FeatureBase):
         return interval is None or now - previous >= interval
 
     @staticmethod
-    def next_attempt(runtime: dict[str, Any]) -> int:
-        """Return the next confirmation reminder attempt."""
-
-        return PendingConfirmationState.from_runtime(runtime).attempts + 1
-
-    @staticmethod
-    def record_attempt(runtime: dict[str, Any]) -> None:
+    def record_attempt(runtime: AlertRuntimeState) -> None:
         """Commit one delivered confirmation reminder attempt."""
 
-        state = AlertRuntimeState.from_runtime(runtime)
-        state.confirmation.attempts += 1
-        state.write_to(runtime)
+        runtime.confirmation.attempts += 1
 
     def expire_stale(
         self,
-        runtime: dict[str, Any],
+        runtime: AlertRuntimeState,
         now: datetime,
     ) -> bool:
         """Expire persisted response sessions that exceed the ownership TTL."""
 
-        state = AlertRuntimeState.from_runtime(runtime)
-        action_ids = state.confirmation.action_ids
+        action_ids = runtime.confirmation.action_ids
         if not action_ids:
             return False
-        timestamp = state.last_notified or state.started_at
+        timestamp = runtime.last_notified or runtime.started_at
         if not timestamp:
             return False
         try:
@@ -218,56 +205,55 @@ class ConfirmationFeature(FeatureBase):
             return False
         if now - created_at < self.SESSION_TTL:
             return False
-        expired_action_ids = tuple(state.confirmation.action_ids)
-        state.confirmation.action_ids.clear()
-        state.write_to(runtime)
+        expired_action_ids = tuple(runtime.confirmation.action_ids)
+        runtime.confirmation.action_ids.clear()
         for action_id in expired_action_ids:
             self.clear(action_id)
         return True
 
     def expire_exhausted(
         self,
-        alert: Mapping[str, Any],
-        runtime: dict[str, Any],
+        runtime: AlertRuntimeState,
     ) -> ConfirmationAttemptsExhausted | None:
         """Expire pending actions and report the confirmation limit reached."""
 
-        state = AlertRuntimeState.from_runtime(runtime)
-        if not state.confirmation.action_ids:
-            return False
+        alert = runtime.alert
+        if not runtime.confirmation.action_ids:
+            return None
         settings = ConfirmationConfig.from_alert(alert)
         if (
             settings is None
             or not settings.enabled
             or not settings.reminders.enabled
-            or state.confirmation.attempts < settings.reminders.max_attempts
+            or runtime.confirmation.attempts < settings.reminders.max_attempts
         ):
             return None
-        expired_action_ids = tuple(state.confirmation.action_ids)
-        state.confirmation.action_ids.clear()
-        state.write_to(runtime)
+        expired_action_ids = tuple(runtime.confirmation.action_ids)
+        runtime.confirmation.action_ids.clear()
         for action_id in expired_action_ids:
             self.clear(action_id)
         return ConfirmationAttemptsExhausted(
-            attempts=state.confirmation.attempts,
+            attempts=runtime.confirmation.attempts,
             max_attempts=settings.reminders.max_attempts,
         )
 
     async def _on_action_event(self, event: Any) -> None:
         result = await self.resolve_action_event(event)
         if result:
-            await self.feature("alert_coordinator").run(
-                str(result.alert["id"]),
+            await self.feature(FeatureName.ALERT_COORDINATOR).run(
+                str(result.runtime.alert["id"]),
                 lambda: self._apply_confirmation(result),
             )
 
     async def _apply_confirmation(self, result: ConfirmationResult) -> None:
         """Apply one resolved confirmation and all of its ordered effects."""
 
+        runtime = result.runtime
+        alert = runtime.alert
         self._acknowledge(result)
-        alerts = self.feature("alerts")
+        alerts = self.feature(FeatureName.ALERTS)
         alerts.publish_event(
-            result.alert,
+            runtime,
             AlertEventType.CONFIRMED,
             "Notification confirmed.",
             {
@@ -275,66 +261,58 @@ class ConfirmationFeature(FeatureBase):
                 "response_id": result.confirmation.selection.response_id,
                 "response": result.confirmation.selection.label,
             },
-            result.now,
         )
         # notification imports ConfirmationConfig, so defer this cycle-breaking
         # import until the confirmation workflow is executed.
         from .notification import ConfirmationDeliveryPlanner
 
         delivery = await ConfirmationDeliveryPlanner(
-            result.alert,
+            alert,
             result.confirmation,
             result.now,
         ).build(self._render_template)
         if delivery.clear_notification:
-            await self.feature("notification").clear(result.alert, result.now)
+            await self.feature(FeatureName.NOTIFICATION).clear(runtime)
         if delivery.completion_alert is not None:
             await self._send_completion(
-                result.alert, delivery.completion_alert, result.now
+                runtime, delivery.completion_alert, result.now
             )
-        actions = self.feature("follow_up_actions").actions_for_confirmation(
-            result.alert
+        actions = self.feature(FeatureName.FOLLOW_UP_ACTIONS).actions_for_confirmation(
+            runtime
         )
-        await self.feature("follow_up_actions").execute(
-            ServiceEffectsRequest(
-                result.alert,
-                result.now,
-                attempt=1,
+        await self.feature(FeatureName.FOLLOW_UP_ACTIONS).execute(
+            FollowUpActionsRequest(
+                runtime,
                 actions=tuple(actions),
                 confirmation=result.confirmation,
             )
         )
-        self._storage.persist()
-
     def _acknowledge(self, result: ConfirmationResult) -> None:
         """Record confirmation-owned response state."""
 
-        runtime = self._state[STATE_RUNTIME][str(result.alert["id"])]
-        state = AlertRuntimeState.from_runtime(runtime)
-        state.confirmation.action_ids.clear()
-        state.acknowledged = True
-        state.confirmed_at = result.now.isoformat()
-        state.confirmed_by = result.confirmation.confirmed_by
-        state.write_to(runtime)
+        runtime = result.runtime
+        runtime.confirmation.action_ids.clear()
+        runtime.acknowledged = True
+        runtime.confirmed_at = result.now.isoformat()
+        runtime.confirmed_by = result.confirmation.confirmed_by
 
     async def _send_completion(
         self,
-        alert: Mapping[str, Any],
+        runtime: AlertRuntimeState,
         completion_alert: Mapping[str, Any],
         now: datetime,
     ) -> None:
         """Send and record the optional completion notification."""
 
-        outcome = await self.feature("notification").send(
+        completion_runtime = AlertRuntimeState.for_alert(completion_alert)
+        outcome = await self.feature(FeatureName.NOTIFICATION).send(
             NotificationRequest(
-                alert=completion_alert,
-                attempt=1,
-                now=now,
+                runtime=completion_runtime,
                 replace_existing=False,
             )
         )
-        self.feature("alerts").publish_event(
-            alert,
+        self.feature(FeatureName.ALERTS).publish_event(
+            runtime,
             AlertEventType.COMPLETION_SENT
             if outcome.success
             else AlertEventType.COMPLETION_FAILED,
@@ -342,7 +320,6 @@ class ConfirmationFeature(FeatureBase):
             if outcome.success
             else "Completion notification failed.",
             {} if outcome.success else {"error": outcome.error},
-            now,
         )
 
     async def _render_template(
@@ -354,17 +331,15 @@ class ConfirmationFeature(FeatureBase):
         self,
         session_id: str,
         *,
-        now: datetime,
-        alert_id: str,
+        runtime: AlertRuntimeState,
         selection: ConfirmationSelection | None = None,
     ) -> None:
         """Track a pending confirmation owned by this feature."""
 
         self._sessions[session_id] = ConfirmationSession(
-            alert_id=alert_id,
+            runtime=runtime,
             selection=selection
             or ConfirmationSelection(session_id, "confirm", "Done"),
-            created_at=now,
         )
 
     def clear(self, session_id: str) -> None:
@@ -378,10 +353,7 @@ class ConfirmationFeature(FeatureBase):
         related_ids = [
             session_id
             for session_id, candidate in self._sessions.items()
-            if (
-                session.alert_id is not None
-                and candidate.alert_id == session.alert_id
-            )
+            if candidate.runtime.alert["id"] == session.runtime.alert["id"]
         ]
         for session_id in related_ids:
             self.clear(session_id)
@@ -391,23 +363,20 @@ class ConfirmationFeature(FeatureBase):
 
         return session_id in self._sessions
 
-    def rebuild(self) -> None:
+    def rebuild(self, runtimes: Mapping[str, AlertRuntimeState]) -> None:
         """Restore pending saved-alert confirmations from runtime state."""
 
         self._sessions.clear()
-        now = dt_util.utcnow()
-        for alert_id, state in self._state[STATE_RUNTIME].items():
-            action_ids = PendingConfirmationState.from_runtime(state).action_ids
-            alert = self._alerts.get(alert_id)
+        for state in runtimes.values():
+            action_ids = state.confirmation.action_ids
             selections = self.selections_for(
-                alert or {},
+                state.alert,
                 action_ids,
             )
             for selection in selections:
                 self.track(
                     selection.action_id,
-                    now=now,
-                    alert_id=alert_id,
+                    runtime=state,
                     selection=selection,
                 )
 
@@ -431,21 +400,15 @@ class ConfirmationFeature(FeatureBase):
             user_id,
         )
 
-        if session.alert_id is None:
-            return None
-        alert = self._alerts.get(session.alert_id)
-        state = self._state[STATE_RUNTIME].get(session.alert_id)
+        state = session.runtime
         if (
-            alert is None
-            or state is None
-            or action_id
-            not in PendingConfirmationState.from_runtime(state).action_ids
+            action_id not in state.confirmation.action_ids
         ):
             return None
 
         self._clear_related(session)
         return ConfirmationResult(
-            alert,
+            state,
             ConfirmationContext(confirmed_by, session.selection),
             now,
         )
@@ -470,76 +433,67 @@ class ConfirmationFeature(FeatureBase):
         )
 
     def pending_actions(
-        self, alert: Mapping[str, Any], runtime: dict[str, Any]
-    ) -> ConfirmationActionSet:
+        self, runtime: AlertRuntimeState
+    ) -> tuple[ConfirmationSelection, ...]:
         """Return prepared notification actions for one pending alert."""
 
-        action_ids = PendingConfirmationState.from_runtime(runtime).action_ids
-        return ConfirmationActionSet(self.selections_for(alert, action_ids))
+        alert = runtime.alert
+        action_ids = runtime.confirmation.action_ids
+        return self.selections_for(alert, action_ids)
 
     def prepare_action(
         self,
-        alert: Mapping[str, Any],
-        runtime: dict[str, Any],
-        *,
-        now: datetime | None = None,
+        runtime: AlertRuntimeState,
     ) -> None:
         """Create a pending action only when confirmation is configured."""
 
+        alert = runtime.alert
         confirmation = ConfirmationConfig.model_validate(
             alert.get("confirmation") or {}
         )
         if not confirmation.enabled:
             return
-        pending = PendingConfirmationState.from_runtime(runtime)
+        pending = runtime.confirmation
         existing = pending.action_ids
         if existing:
-            if now is not None:
-                for selection in self.selections_for(alert, existing):
-                    self.track(
-                        selection.action_id,
-                        now=now,
-                        alert_id=str(alert["id"]),
-                        selection=selection,
-                    )
+            for selection in self.selections_for(alert, existing):
+                self.track(
+                    selection.action_id,
+                        runtime=runtime,
+                    selection=selection,
+                )
             return
-        self.begin_pending_response(alert, runtime, confirmation, now=now)
+        self.begin_pending_response(runtime, confirmation)
 
     def begin_pending_response(
         self,
-        alert: Mapping[str, Any],
-        runtime: dict[str, Any],
+        runtime: AlertRuntimeState,
         confirmation: ConfirmationConfig,
-        *,
-        now: datetime | None = None,
     ) -> None:
         """Create and track the canonical pending response session."""
 
+        alert = runtime.alert
         action_ids = {
             f"NC_CONFIRM_{alert['id']}_{uuid4().hex}_{button.id}": button.id
             for button in confirmation.buttons
         }
-        state = AlertRuntimeState.from_runtime(runtime)
-        state.confirmation.action_ids = action_ids
-        state.confirmation.attempts = 0
-        state.write_to(runtime)
-        if now is not None:
-            for selection in self.selections_for(alert, action_ids):
-                self.track(
-                    selection.action_id,
-                    now=now,
-                    alert_id=str(alert["id"]),
-                    selection=selection,
-                )
+        runtime.confirmation.action_ids = action_ids
+        runtime.confirmation.attempts = 0
+        for selection in self.selections_for(alert, action_ids):
+            self.track(
+                selection.action_id,
+                    runtime=runtime,
+                selection=selection,
+            )
 
 # ----------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class ConfirmationResult:
-    """Resolved action with the alert data needed by the controller."""
+    """Resolved action with its canonical runtime aggregate."""
 
-    alert: Mapping[str, Any]
+    runtime: AlertRuntimeState
     confirmation: ConfirmationContext
     now: datetime
 

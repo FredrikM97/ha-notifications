@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +22,10 @@ from yaml import safe_load
 
 import custom_components.ha_notifications  # noqa: F401
 from custom_components.ha_notifications.const import CONF_SHOW_SIDEBAR, DOMAIN
+from custom_components.ha_notifications.domain.confirmation import (
+    PendingConfirmationState,
+)
+from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.domain.workflow import NotificationOutcome
 
 _ALERT_FIXTURES = safe_load(
@@ -285,19 +290,25 @@ class _TestNotification:
     async def send(self, request: Any) -> NotificationOutcome:
         self.payloads.append(
             {
-                "alert": dict(request.alert),
-                "attempt": request.attempt,
+                "alert": dict(request.runtime.alert),
+                "attempt": (
+                    request.runtime.confirmation.attempts + 1
+                    if request.runtime.confirmation.action_ids
+                    else None
+                ),
                 "notification_actions": list(request.notification_actions),
                 "replace_existing": request.replace_existing,
-                "now": request.now,
+                "now": datetime.now(timezone.utc),
                 "condition_facts": dict(request.condition_facts),
                 "trigger_source": request.trigger_source,
             }
         )
-        return NotificationOutcome(request.attempt, request.now, True)
+        return NotificationOutcome(
+            datetime.now(timezone.utc), True
+        )
 
-    async def clear(self, alert: dict[str, Any], now: Any) -> None:
-        self.cleared.append({"alert": dict(alert), "now": now})
+    async def clear(self, alert: dict[str, Any]) -> None:
+        self.cleared.append({"alert": dict(alert)})
 
 
 class _TestAlerts:
@@ -314,8 +325,7 @@ class _TestAlerts:
 
     def record_delivery_result(
         self,
-        _alert_id: str,
-        _attempt: int | None,
+        _runtime: AlertRuntimeState,
         _now: Any,
         *,
         success: bool,
@@ -363,12 +373,10 @@ def test_feature_context(hass: HomeAssistant):
         "custom_components.ha_notifications.features.follow_up_actions"
     )
     saved_alert = make_confirmation_alert()
-    state = {"runtime": {}}
+    state: dict[str, dict[str, Any]] = {}
     notification = _TestNotification()
     history = _TestHistory()
-    confirmation_feature = confirmation.ConfirmationFeature(
-        hass, state, None, None
-    )
+    confirmation_feature = confirmation.ConfirmationFeature(hass)
     storage = SimpleNamespace(persist=lambda: None)
     follow_up_feature = follow_up_actions.FollowUpActionsFeature(
         hass, state, None, storage
@@ -380,7 +388,7 @@ def test_feature_context(hass: HomeAssistant):
     )
     lifecycle = _TestLifecycle(
         {
-            "alerts": _TestAlerts(saved_alert, state["runtime"]),
+            "alerts": _TestAlerts(saved_alert, state),
             "alert_flow": alert_flow_feature,
             "conditions": conditions_feature,
             "history": history,
@@ -412,24 +420,15 @@ def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
     return base
 
 
-def make_runtime_state(**overrides: Any) -> dict[str, Any]:
+def make_runtime_state(**overrides: Any) -> AlertRuntimeState:
     """Build a complete default runtime record with focused test overrides."""
 
-    runtime = {
-        "active": False,
-        "acknowledged": False,
-        "confirmation": {"action_ids": {}, "attempts": 0},
-        "notification_id": None,
-        "flow_id": None,
-        "started_at": None,
-        "last_evaluated": None,
-        "last_notified": None,
-        "confirmed_at": None,
-        "confirmed_by": None,
-        "last_error": None,
-    }
-    runtime.update(overrides)
-    return runtime
+    alert = overrides.pop("alert", deepcopy(_ALERT_FIXTURES["base"]))
+    confirmation = overrides.pop("confirmation", {})
+    return AlertRuntimeState(
+        alert=alert,
+        confirmation=PendingConfirmationState(**confirmation), **overrides
+    )
 
 
 @pytest.fixture

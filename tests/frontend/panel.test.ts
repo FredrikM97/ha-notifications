@@ -150,7 +150,7 @@ describe("panel view", () => {
     expect(panel.shadowRoot.querySelector("ha-notifications-yaml-view")).not.toBeNull();
   });
 
-  it("shows active runtime details in the Debug view", async () => {
+  it("shows raw runtime data in the Debug view", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await settleElement(panel);
@@ -160,12 +160,9 @@ describe("panel view", () => {
     );
     await settleElement(panel);
 
-    expect(panel.shadowRoot.querySelector(".nc-debug-alert")?.textContent).toContain(
-      "Active",
-    );
-    expect(panel.shadowRoot.querySelector(".nc-debug-alert")?.textContent).toContain(
-      "Attempts",
-    );
+    const raw = panel.shadowRoot.querySelector(".nc-debug-raw")?.textContent;
+    expect(raw).toContain('"active": true');
+    expect(raw).toContain('"confirmation_attempts": 2');
   });
 
   it("caches registry loading for editor entry points", async () => {

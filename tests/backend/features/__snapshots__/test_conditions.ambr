@@ -5,13 +5,3 @@
   {{ ((is_state("binary_sensor.door", "on") or is_state("binary_sensor.door", "open")) and (now() - states["binary_sensor.door"].last_changed).total_seconds() >= 5) or (states("sensor.temperature") | float(0) > 20.0 and states("sensor.temperature") | float(0) < 30.0) or state_attr("light.kitchen", "brightness") == 255 or (nc_condition_0 | bool) }}
   '''
 # ---
-# name: test_condition_transition_contract_snapshot
-  dict({
-    'active': True,
-    'error': None,
-    'facts': dict({
-      'front_door': True,
-    }),
-    'source': 'confirmation',
-  })
-# ---

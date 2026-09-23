@@ -80,16 +80,31 @@ export interface PostSendActionsConfig {
   actions?: Record<string, unknown>[];
 }
 
+export interface RuntimeAlertEvent {
+  event_id: string;
+  timestamp: string;
+  type: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
 export interface RuntimeAlertState {
+  alert?: Alert;
+  event?: RuntimeAlertEvent;
   active?: boolean;
   acknowledged?: boolean;
-  confirmation_attempts?: number;
   confirmation?: {
     action_ids?: Record<string, string>;
     attempts?: number;
   };
+  notification_id?: string;
+  flow_id?: string;
   started_at?: string;
+  last_evaluated?: string;
   last_notified?: string;
+  confirmed_at?: string;
+  confirmed_by?: string;
+  last_error?: string;
 }
 
 export interface HistoryRetentionConfig {
@@ -109,17 +124,6 @@ export interface Alert {
   confirmation?: ConfirmationConfig;
   post_send_actions?: PostSendActionsConfig;
   runtime?: RuntimeAlertState;
-  [key: string]: unknown;
-}
-
-export interface HistoryEntry {
-  alert_id?: string;
-  flow_id?: string;
-  timestamp?: string;
-  alert_name?: string;
-  type?: string;
-  message?: string;
-  details?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

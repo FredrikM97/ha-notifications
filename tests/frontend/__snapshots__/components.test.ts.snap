@@ -104,7 +104,7 @@ confirmation:
     interval: 1800
     max_attempts: 5
     show_attempts: false
-    timeout: 00:15:00
+    timeout: 900
   actions:
     enabled: false
 "
@@ -303,7 +303,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
       "interval": 1800,
       "max_attempts": 5,
       "show_attempts": false,
-      "timeout": "00:15:00",
+      "timeout": 900,
     },
   },
   "description": "",

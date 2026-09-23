@@ -1,7 +1,6 @@
 import type {
   Alert,
   Hass,
-  HistoryEntry,
   Registries,
   RegistryArea,
   RegistryDevice,
@@ -12,6 +11,7 @@ import type {
   RegistryUser,
   RuntimeAlertState,
 } from "./types.js";
+import { serializeAlertDurations } from "./alert-payload.js";
 
 const DOMAIN = "ha_notifications";
 
@@ -110,7 +110,7 @@ export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {
     throw new Error("ha_notifications/save: alert.id is required.");
   }
   return call<Alert>(hass, "save", {
-    alert,
+    alert: serializeAlertDurations(alert),
   });
 }
 
@@ -127,14 +127,18 @@ export async function previewAlertPayload(
   hass: Hass,
   alert: Alert,
 ): Promise<unknown> {
-  return call(hass, "preview_payload", { alert });
+  return call(hass, "preview_payload", {
+    alert: serializeAlertDurations(alert),
+  });
 }
 
 export async function validateConditions(
   hass: Hass,
   alert: Alert,
 ): Promise<unknown> {
-  return call(hass, "validate_conditions", { alert });
+  return call(hass, "validate_conditions", {
+    alert: serializeAlertDurations(alert),
+  });
 }
 
 export async function getHistory(
@@ -147,7 +151,7 @@ export async function getHistory(
     data.alert_id = alertId;
   }
 
-  return call<HistoryEntry[]>(hass, "history", data);
+  return call<RuntimeAlertState[]>(hass, "history", data);
 }
 
 export async function getConfig(

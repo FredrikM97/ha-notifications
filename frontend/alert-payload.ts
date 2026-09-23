@@ -1,7 +1,9 @@
 import type { Alert, AlertCondition, NotificationTarget } from "./types.js";
 import { clone } from "./editor/types.js";
 
-function durationToSeconds(
+type DurationValue = string | number | Record<string, number>;
+
+export function durationToSeconds(
   value: string | number | Record<string, number> | undefined,
 ): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -25,23 +27,65 @@ function durationToSeconds(
   return undefined;
 }
 
-function serializeDurations(result: Alert): void {
-  const monitorInterval = durationToSeconds(result.monitor.interval);
-  if (monitorInterval !== undefined) result.monitor.interval = monitorInterval;
-
-  result.conditions = result.conditions.map((condition) => ({
-    ...condition,
-    ...(durationToSeconds(condition.for) !== undefined
-      ? { for: durationToSeconds(condition.for) }
-      : {}),
-  }));
-
-  const resendInterval = durationToSeconds(
-    result.confirmation?.reminders.interval,
-  );
-  if (resendInterval !== undefined && result.confirmation) {
-    result.confirmation.reminders.interval = resendInterval;
+function requiredDurationSeconds(
+  value: DurationValue | undefined,
+  field: string,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
   }
+  const seconds = durationToSeconds(value);
+  if (seconds === undefined) {
+    throw new Error(`${field} must be a valid duration.`);
+  }
+  return seconds;
+}
+
+export function serializeAlertDurations(alert: Alert): Alert {
+  const result = clone(alert);
+  if (result.monitor) {
+    const monitorInterval = requiredDurationSeconds(
+      result.monitor.interval,
+      "Monitor interval",
+    );
+    if (monitorInterval !== undefined) {
+      result.monitor.interval = monitorInterval;
+    }
+  }
+
+  if (Array.isArray(result.conditions)) {
+    result.conditions = result.conditions.map((condition, index) => {
+      const conditionFor = requiredDurationSeconds(
+        condition.for,
+        `Condition ${index + 1} duration`,
+      );
+      if (conditionFor === undefined) {
+        return condition;
+      }
+      return { ...condition, for: conditionFor };
+    });
+  }
+
+  if (result.confirmation?.reminders) {
+    const interval = requiredDurationSeconds(
+      result.confirmation.reminders.interval,
+      "Confirmation reminder interval",
+    );
+    const timeout = requiredDurationSeconds(
+      result.confirmation.reminders.timeout,
+      "Confirmation timeout",
+    );
+    result.confirmation = {
+      ...result.confirmation,
+      reminders: {
+        ...result.confirmation.reminders,
+        ...(interval === undefined ? {} : { interval }),
+        ...(timeout === undefined ? {} : { timeout }),
+      },
+    };
+  }
+
+  return result;
 }
 
 export interface AlertIdentityFormValues {
@@ -164,7 +208,5 @@ export function buildAlertPayload(
     result.post_send_actions = { enabled: true };
   }
 
-  serializeDurations(result);
-
-  return result;
+  return serializeAlertDurations(result);
 }

@@ -9,7 +9,8 @@ from importlib import import_module
 from pkgutil import iter_modules
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-from ..const import StateRoot
+from ..const import FeatureName
+from ..domain.runtime import AlertRuntimeState
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -102,6 +103,17 @@ class FeatureBase:
     def __init__(self) -> None:
         self.lifecycle: FeatureLifecycle | None = None
 
+    @classmethod
+    def create(
+        cls,
+        hass: HomeAssistant,
+        runtime: dict[str, AlertRuntimeState],
+        storage: Storage,
+    ) -> FeatureBase:
+        """Construct a feature from the shared application context."""
+
+        return cls(hass, runtime, storage, storage)
+
     async def setup(self, lifecycle: FeatureLifecycle) -> None:
         self.lifecycle = lifecycle
         await self.on_setup()
@@ -109,7 +121,7 @@ class FeatureBase:
     async def on_setup(self) -> None:
         """Initialize this feature after its declared dependencies are ready."""
 
-    def feature(self, name: str) -> Feature:
+    def feature(self, name: FeatureName) -> Feature:
         if self.lifecycle is None:
             raise RuntimeError(f"Feature {self.name} has not been set up")
         return self.lifecycle.feature(name)
@@ -128,7 +140,7 @@ class FeatureLifecycle:
     def __init__(
         self,
         hass: HomeAssistant,
-        state: StateRoot,
+        runtime: dict[str, AlertRuntimeState],
         storage: Storage,
         reload_configuration: Callable[[], Awaitable[None]],
         *,
@@ -140,7 +152,7 @@ class FeatureLifecycle:
             self._construct_feature(
                 feature_class,
                 hass,
-                state,
+                runtime,
                 storage,
             )
             for feature_class in FeatureBase._registry
@@ -156,7 +168,7 @@ class FeatureLifecycle:
     async def async_create(
         cls,
         hass: HomeAssistant,
-        state: StateRoot,
+        runtime: dict[str, AlertRuntimeState],
         storage: Storage,
         reload_configuration: Callable[[], Awaitable[None]],
     ) -> FeatureLifecycle:
@@ -165,7 +177,7 @@ class FeatureLifecycle:
         await hass.async_add_executor_job(cls._load_feature_classes)
         return cls(
             hass,
-            state,
+            runtime,
             storage,
             reload_configuration,
             feature_classes_loaded=True,
@@ -175,12 +187,12 @@ class FeatureLifecycle:
     def _construct_feature(
         feature_class: type[FeatureBase],
         hass: HomeAssistant,
-        state: StateRoot,
+        runtime: dict[str, AlertRuntimeState],
         storage: Storage,
     ) -> FeatureBase:
-        """Compose each feature with the shared application context."""
+        """Compose each feature with its declared construction contract."""
 
-        return feature_class(hass, state, storage, storage)
+        return feature_class.create(hass, runtime, storage)
 
     async def reload(self) -> None:
         """Request the composition host to reload feature configuration."""
@@ -203,7 +215,7 @@ class FeatureLifecycle:
         for module in iter_modules(features.__path__, f"{features.__name__}."):
             import_module(module.name)
 
-    def feature(self, name: str) -> Feature:
+    def feature(self, name: FeatureName) -> Feature:
         """Return a declared feature dependency by its stable feature name."""
 
         for feature in self._features:

@@ -1,7 +1,7 @@
 import { html, LitElement, render } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { formatLocalDateTime } from "./date-time.js";
-import type { Hass, HassLocale, HistoryEntry } from "./types.js";
+import type { Hass, HassLocale, RuntimeAlertState } from "./types.js";
 
 export interface HistoryFilters {
   search: string;
@@ -59,25 +59,28 @@ export function historyDetailSummary(
 }
 
 export function filterHistoryEntries(
-  history: HistoryEntry[],
+  history: RuntimeAlertState[],
   filters: HistoryFilters,
-): HistoryEntry[] {
+): RuntimeAlertState[] {
   const search = filters.search.trim().toLowerCase();
 
   return history.filter((item) => {
-    if (filters.alertId && item.alert_id !== filters.alertId) return false;
-    if (filters.type && item.type !== filters.type) return false;
-    if (filters.severity && historySeverity(item.type) !== filters.severity) {
+    if (filters.alertId && item.alert?.id !== filters.alertId) return false;
+    if (filters.type && item.event?.type !== filters.type) return false;
+    if (
+      filters.severity &&
+      historySeverity(item.event?.type) !== filters.severity
+    ) {
       return false;
     }
     if (!search) return true;
 
     const searchable = [
-      item.alert_name,
-      item.message,
-      item.type,
+      item.alert?.name,
+      item.event?.message,
+      item.event?.type,
       item.flow_id,
-      historyDetailSummary(item.details),
+      historyDetailSummary(item.event?.details),
     ]
       .filter(Boolean)
       .join(" ")
@@ -88,7 +91,7 @@ export function filterHistoryEntries(
 
 export function renderHistory(
   container: HTMLElement,
-  history: HistoryEntry[],
+  history: RuntimeAlertState[],
   options: HistoryRenderOptions = {},
 ): void {
   let element: HistoryViewElement | undefined;
@@ -106,7 +109,7 @@ export function renderHistory(
 }
 
 class HistoryViewElement extends LitElement {
-  declare history: HistoryEntry[];
+  declare history: RuntimeAlertState[];
 
   declare options: HistoryRenderOptions;
 
@@ -152,7 +155,7 @@ class HistoryViewElement extends LitElement {
 customElements.define("ha-notifications-history-view", HistoryViewElement);
 
 function historyTemplate(
-  history: HistoryEntry[],
+  history: RuntimeAlertState[],
   totalCount: number,
   options: HistoryRenderOptions,
   expandedDetails: Set<number>,
@@ -166,7 +169,7 @@ function historyTemplate(
 }
 
 function historyItemsTemplate(
-  history: HistoryEntry[],
+  history: RuntimeAlertState[],
   options: HistoryRenderOptions,
   expandedDetails: Set<number>,
   toggleDetails: (index: number) => void,
@@ -379,12 +382,12 @@ function countSecondaryHistoryFilters(filters: HistoryFilters): number {
 }
 
 function historyItemTemplate(
-  item: HistoryEntry,
+  item: RuntimeAlertState,
   options: HistoryRenderOptions,
   detailsOpen: boolean,
   toggleDetails: () => void,
 ) {
-  const details = item.details as Record<string, unknown> | undefined;
+  const details = item.event?.details;
   const hasDetails = Boolean(details && Object.keys(details).length);
 
   return html`<div
@@ -403,17 +406,17 @@ function historyItemTemplate(
     }
   >
     <div class="nc-history-time">
-      ${formatLocalDateTime(item.timestamp, true, options.locale)}
+      ${formatLocalDateTime(item.event?.timestamp, true, options.locale)}
     </div>
     <div class="nc-history-main">
       <div class="nc-history-title">
         ${historyAlertTemplate(item, options)}
-        <span class=${`nc-history-badge ${historySeverity(item.type)}`}
-          >${formatType(item.type)}</span
+        <span class=${`nc-history-badge ${historySeverity(item.event?.type)}`}
+          >${formatType(item.event?.type)}</span
         >
-        ${item.flow_id
+          ${item.flow_id
           ? html`<span class="nc-history-flow"
-              >Flow ${shortFlowId(item.flow_id)}</span
+            >Flow ${shortFlowId(item.flow_id)}</span
             >`
           : ""}
       </div>
@@ -439,11 +442,11 @@ function historyDetailsTemplate(
 }
 
 function historyAlertTemplate(
-  item: HistoryEntry,
+  item: RuntimeAlertState,
   options: HistoryRenderOptions,
 ) {
-  const alertName = item.alert_name || "Unknown alert";
-  if (!item.alert_id) {
+  const alertName = item.alert?.name || "Unknown alert";
+  if (!item.alert?.id) {
     return html`<span>${alertName}</span>`;
   }
 
@@ -451,7 +454,7 @@ function historyAlertTemplate(
     class="nc-history-alert-link"
     @click=${(event: Event) => {
       event.stopPropagation();
-      options.onAlertSelected?.(item.alert_id!, alertName);
+      options.onAlertSelected?.(item.alert.id, alertName);
     }}
   >
     ${alertName}

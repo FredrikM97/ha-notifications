@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.features.confirmations import (
     ConfirmationConfig,
 )
@@ -28,6 +29,16 @@ def test_configuration_model_contract_snapshot(snapshot):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_runtime_writes_complete_independent_state(self):
+        runtime = AlertRuntimeState.for_alert({"id": "one"})
+        target = {"stale": True}
+
+        runtime.write_to(target)
+        runtime.alert["name"] = "Changed"
+
+        self.assertNotIn("stale", target)
+        self.assertNotIn("name", target["alert"])
+
     def test_alert_owns_feature_sections_as_extra_fields(self):
         self.assertEqual(
             set(models.Alert.model_fields),

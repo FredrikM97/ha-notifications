@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
@@ -17,9 +18,6 @@ ConditionFeature = importlib.import_module(
 ConditionWatchers = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).ConditionWatchers
-ConditionTransition = importlib.import_module(
-    f"{PACKAGE_NAME}.domain.workflow"
-).ConditionTransition
 compile_condition = importlib.import_module(
     f"{PACKAGE_NAME}.features.conditions"
 ).compile_condition
@@ -91,21 +89,6 @@ def test_compile_condition_skips_empty_template_conditions():
     )
 
 
-def test_condition_transition_contract_snapshot(snapshot):
-    evaluation = ConditionTransition(
-        True,
-        None,
-        "confirmation",
-        {"front_door": True},
-    )
-
-    assert {
-        "active": evaluation.active,
-        "error": evaluation.error,
-        "source": evaluation.source,
-        "facts": evaluation.facts,
-    } == snapshot
-
 class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.now = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -113,10 +96,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
             "id": "alert_1",
             "notification": {"message": "Test"},
         }
-        self.runtime = {
-            "active": False,
-            "confirmation": {"action_ids": {}, "attempts": 0},
-        }
+        self.runtime = AlertRuntimeState.for_alert(self.alert)
         self.transitions = []
 
         async def on_transition(event):
@@ -130,7 +110,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
 
         runtime_storage = SimpleNamespace(runtime=lambda _alert_id: self.runtime)
         self.feature = ConditionFeature(
-            None, {"runtime": {"alert_1": self.runtime}}, None, runtime_storage
+            None, {"alert_1": self.runtime}, None, runtime_storage
         )
         self.feature._alerts = {"alert_1": self.alert}
         self.feature.lifecycle = SimpleNamespace(
@@ -142,7 +122,7 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
                     expire_stale=expire_stale,
                 )
                 if name == "confirmations"
-                else SimpleNamespace(handle_condition=on_transition)
+                else SimpleNamespace(handle_event=on_transition)
                 if name == "alert_flow"
                 else SimpleNamespace(run=run)
             )
@@ -158,10 +138,11 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(self.transitions[0].source, "change")
+        self.assertEqual(self.transitions[0].status.value, "inactive")
+        self.assertEqual(self.runtime.confirmation.action_ids, {})
         self.assertEqual(
-            self.transitions[0].__class__.__name__, "ConditionInactiveEvent"
+            self.runtime.last_evaluated, "2024-01-01T00:00:00+00:00"
         )
-        self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
 
     async def test_condition_error_does_not_allocate_confirmation(self):
         await self.feature.condition_result(
@@ -174,7 +155,10 @@ class ConditionEvaluationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.transitions[0].source, "change")
         self.assertEqual(self.transitions[0].error, "template failed")
-        self.assertEqual(self.runtime["confirmation"]["action_ids"], {})
+        self.assertEqual(self.runtime.confirmation.action_ids, {})
+        self.assertEqual(
+            self.runtime.last_evaluated, "2024-01-01T00:00:00+00:00"
+        )
 
 
 class ConditionFeatureTests(unittest.TestCase):

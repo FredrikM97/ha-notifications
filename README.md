@@ -7,8 +7,8 @@ repetitive notification automations or external scripts. Define a condition,
 choose the recipients, and optionally add confirmation, reminders, follow-up
 actions, and history in one Home Assistant panel.
 
-Active alerts and their runtime state survive Home Assistant restarts, so an
-unresolved alert can continue notifying its configured recipients.
+Alert history survives Home Assistant restarts. Active alert runtime state is
+recreated from the current configuration when Home Assistant starts.
 
 Use the **Add to HACS** button above to install the integration. HACS includes
 the compiled frontend; no separate Lovelace resource is required. Restart Home
@@ -37,7 +37,7 @@ Each alert can include:
 - Multiple notification targets, including devices, areas, labels, entities, and services
 - Optional confirmation actions, user attribution, completion notifications, and follow-up service calls
 - Reminder retries with configurable intervals and attempt limits
-- Persistent runtime state and delivery history across Home Assistant restarts
+- Delivery history across Home Assistant restarts; active runtime state is process-local
 - YAML import/export using the same configuration model as the editor
 
 ## YAML
@@ -66,7 +66,9 @@ alerts:
       message: Something needs your attention.
     confirmation:
       enabled: true
-      button: Activity completed
+      buttons:
+        - id: confirm
+          label: Activity completed
       reminders:
         enabled: true
         interval: 1800

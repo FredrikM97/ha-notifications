@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pydantic import BaseModel, ConfigDict
 
 from ..controller.lifecycle import FeatureBase
@@ -23,6 +23,7 @@ from ..delivery.targets import (
     target_values,
 )
 from ..domain.confirmation import ConfirmationContext
+from ..domain.runtime import AlertRuntimeState
 from ..domain.service_calls import HomeAssistantServiceCall
 from ..domain.workflow import (
     ConfirmationWorkflowEvent,
@@ -96,7 +97,7 @@ class ConfirmationDeliveryPlanner:
             confirmation.notification.message
             or "{{ request.confirmation.confirmed_by }} confirmed this notification."
         )
-        completion_alert = deepcopy(dict(self.alert))
+        completion_alert = dict(self.alert)
         completion_alert["notification"] = self.notification.model_dump(
             exclude_none=True
         )
@@ -196,19 +197,29 @@ class NotificationFeature(FeatureBase):
             )
             await self._execute(calls)
         except Exception as err:
-            return NotificationOutcome(request.attempt, request.now, False, str(err))
-        return NotificationOutcome(request.attempt, request.now, True)
+            return NotificationOutcome(
+                dt_util.utcnow(), False, str(err)
+            )
+        return NotificationOutcome(dt_util.utcnow(), True)
 
-    async def clear(self, alert: Mapping[str, Any], now: Any) -> None:
+    async def clear(
+        self, alert_or_runtime: Mapping[str, Any] | AlertRuntimeState
+    ) -> None:
         """Plan and best-effort execute a notification clear request."""
 
-        request = NotificationClearRequest(alert, now)
+        runtime = (
+            alert_or_runtime
+            if isinstance(alert_or_runtime, AlertRuntimeState)
+            else AlertRuntimeState.for_alert(alert_or_runtime)
+        )
+        request = NotificationClearRequest(runtime)
         calls = await clear_requested(request, self.capabilities())
         try:
             await self._execute(calls)
         except Exception:
             _LOGGER.exception(
-                "Failed clearing notification before deleting %s", alert["id"]
+                "Failed clearing notification before deleting %s",
+                runtime.alert["id"],
             )
 
 
@@ -239,7 +250,7 @@ async def plan_delivery(
 ) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that send one notification."""
 
-    alert = request.alert
+    alert = request.runtime.alert
     notification = NotificationConfig.model_validate(alert["notification"])
     rendered = await _render_notification(
         notification,
@@ -297,7 +308,7 @@ async def plan_clear(
 ) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that clear one notification."""
 
-    alert = request.alert
+    alert = request.runtime.alert
     notification = NotificationConfig.model_validate(alert["notification"])
     target = await render_values(notification.target, {"request": request}, render)
     target = resolve_user_notification_target(snapshot, target)
@@ -342,15 +353,16 @@ async def _render_notification(
     template_values = {"request": request}
     title = await render_values(notification.title, template_values, render)
     message = await render_values(notification.message, template_values, render)
+    attempt = request.runtime.confirmation.next_attempt
     if (
         confirmation
         and confirmation.reminders.show_attempts
         and isinstance(title, str)
-        and isinstance(request.attempt, int)
-        and request.attempt > 1
+        and attempt is not None
+        and attempt > 1
     ):
         title = (
-            f"{title} ({request.attempt}/"
+            f"{title} ({attempt}/"
             f"{confirmation.reminders.max_attempts or 1})"
         )
     target = await render_values(notification.target, template_values, render)
@@ -367,7 +379,7 @@ async def _render_notification(
 def _normalized_extra_data(extra_data: Any) -> dict[str, Any]:
     if not isinstance(extra_data, dict):
         return {}
-    return remove_nulls(deepcopy(extra_data))
+    return remove_nulls(extra_data)
 
 
 # ----------------------------------------------------------------------
@@ -394,7 +406,6 @@ async def send_requested(
     *,
     propagate_errors: bool = False,
 ) -> list[HomeAssistantServiceCall]:
-    alert = request.alert
     notification_actions = list(request.notification_actions)
 
     render = capabilities.render
@@ -404,7 +415,9 @@ async def send_requested(
     if request.replace_existing:
         commands.extend(
             await _clear_commands(
-                NotificationClearRequest(alert, request.now), snapshot, render
+                NotificationClearRequest(request.runtime),
+                snapshot,
+                render,
             )
         )
 
@@ -445,7 +458,7 @@ async def _clear_commands(
         commands = await plan_clear(request, snapshot, render)
     except Exception:
         _LOGGER.exception(
-            "Failed clearing notification for %s", request.alert["id"]
+            "Failed clearing notification for %s", request.runtime.alert["id"]
         )
         return []
 

@@ -3,13 +3,20 @@
 exports[`filterHistoryEntries > combines alert, event type, and severity filters 1`] = `
 [
   {
-    "alert_id": "garage",
-    "alert_name": "Garage door",
-    "details": {
-      "source": "sensor",
+    "alert": {
+      "id": "garage",
+      "name": "Garage door",
     },
-    "message": "The garage is open",
-    "type": "notification_sent",
+    "event": {
+      "details": {
+        "source": "sensor",
+      },
+      "event_id": "event_garage",
+      "message": "The garage is open",
+      "timestamp": "2026-01-01T00:00:00+00:00",
+      "type": "notification_sent",
+    },
+    "flow_id": "flow_garage",
   },
 ]
 `;
@@ -17,13 +24,19 @@ exports[`filterHistoryEntries > combines alert, event type, and severity filters
 exports[`filterHistoryEntries > matches search text across the event content 1`] = `
 [
   {
-    "alert_id": "water",
-    "alert_name": "Water leak",
-    "details": {
-      "error": "Device unavailable",
+    "alert": {
+      "id": "water",
+      "name": "Water leak",
     },
-    "message": "Could not notify",
-    "type": "delivery_failed",
+    "event": {
+      "details": {
+        "error": "Device unavailable",
+      },
+      "event_id": "event_water",
+      "message": "Could not notify",
+      "timestamp": "2026-01-01T00:00:00+00:00",
+      "type": "delivery_failed",
+    },
   },
 ]
 `;
@@ -31,22 +44,35 @@ exports[`filterHistoryEntries > matches search text across the event content 1`]
 exports[`filterHistoryEntries > returns all entries when no filters are active 1`] = `
 [
   {
-    "alert_id": "garage",
-    "alert_name": "Garage door",
-    "details": {
-      "source": "sensor",
+    "alert": {
+      "id": "garage",
+      "name": "Garage door",
     },
-    "message": "The garage is open",
-    "type": "notification_sent",
+    "event": {
+      "details": {
+        "source": "sensor",
+      },
+      "event_id": "event_garage",
+      "message": "The garage is open",
+      "timestamp": "2026-01-01T00:00:00+00:00",
+      "type": "notification_sent",
+    },
+    "flow_id": "flow_garage",
   },
   {
-    "alert_id": "water",
-    "alert_name": "Water leak",
-    "details": {
-      "error": "Device unavailable",
+    "alert": {
+      "id": "water",
+      "name": "Water leak",
     },
-    "message": "Could not notify",
-    "type": "delivery_failed",
+    "event": {
+      "details": {
+        "error": "Device unavailable",
+      },
+      "event_id": "event_water",
+      "message": "Could not notify",
+      "timestamp": "2026-01-01T00:00:00+00:00",
+      "type": "delivery_failed",
+    },
   },
 ]
 `;

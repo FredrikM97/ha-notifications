@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from ..const import (
-    EVENT_ALERT_EVENT,
     AlertEventType,
-    StateRoot,
+    FeatureName,
 )
 from ..controller.lifecycle import FeatureBase
-from ..domain.service_calls import ServiceEffectsRequest
+from ..domain.runtime import AlertRuntimeState
+from ..domain.service_calls import FollowUpActionsRequest
 from ..support.storage import Storage
 
 
@@ -19,11 +18,12 @@ class FollowUpActionsFeature(FeatureBase):
     """Own follow-up action rendering, execution, and outcome recording."""
 
     name = "follow_up_actions"
+    dependencies = ("alerts",)
 
     def __init__(
         self,
         hass: Any,
-        _state: StateRoot,
+        _runtime: dict[str, AlertRuntimeState],
         _config_storage: Any,
         storage: Storage,
     ) -> None:
@@ -33,10 +33,11 @@ class FollowUpActionsFeature(FeatureBase):
 
     @staticmethod
     def actions_for_confirmation(
-        alert: dict[str, Any],
+        runtime: AlertRuntimeState,
     ) -> list[dict[str, Any]]:
         """Return raw actions configured after confirmation."""
 
+        alert = runtime.alert
         confirmation = alert.get("confirmation") or {}
         actions = confirmation.get("actions") or {}
         if not actions.get("enabled"):
@@ -45,13 +46,13 @@ class FollowUpActionsFeature(FeatureBase):
 
     async def execute(
         self,
-        request: ServiceEffectsRequest,
+        request: FollowUpActionsRequest,
     ) -> None:
         """Render, execute, and record post-send or confirmation actions."""
 
         actions = request.actions
         if not actions:
-            post_send = request.alert.get("post_send_actions") or {}
+            post_send = request.runtime.alert.get("post_send_actions") or {}
             if not post_send.get("enabled"):
                 return
             actions = tuple(post_send.get("actions") or ())
@@ -88,17 +89,12 @@ class FollowUpActionsFeature(FeatureBase):
                 event_type = AlertEventType.NOTIFICATION_ACTION_FAILED
                 message = "Action failed."
                 error = str(err)
-            self._hass.bus.async_fire(
-                EVENT_ALERT_EVENT,
-                {
-                    "id": uuid.uuid4().hex,
-                    "timestamp": request.now.isoformat(),
-                    "alert_id": request.alert["id"],
-                    "alert_name": request.alert["name"],
-                    "type": event_type.value,
-                    "message": message,
-                    "details": raw_action,
-                    "error": error,
-                },
+            details = dict(raw_action)
+            if error is not None:
+                details["error"] = error
+            self.feature(FeatureName.ALERTS).publish_event(
+                request.runtime,
+                event_type,
+                message,
+                details,
             )
-            self._storage.persist()

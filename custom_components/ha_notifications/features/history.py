@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import uuid
-from copy import deepcopy
+import asyncio
 from datetime import datetime
 from typing import Any
 
+from homeassistant.core import Event, HomeAssistant, callback
+
 from ..const import (
+    EVENT_ALERT_EVENT,
     MAX_HISTORY,
-    STATE_HISTORY,
-    AlertEventType,
-    StateRoot,
 )
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..support.storage import Storage
@@ -22,24 +21,57 @@ class HistoryFeature(FeatureBase):
 
     name = "history"
 
+    @classmethod
+    def create(
+        cls,
+        hass: HomeAssistant,
+        _runtime: dict[str, Any],
+        storage: Storage,
+    ) -> HistoryFeature:
+        """Construct history with only its owned dependencies."""
+
+        return cls(hass, storage)
+
     def __init__(
         self,
-        _hass: Any,
-        state: StateRoot,
-        _config_storage: Any,
+        hass: HomeAssistant,
         storage: Storage,
     ) -> None:
         super().__init__()
-        self._state = state
+        self._hass = hass
         self._storage = storage
+        self._event_unsub: Any = None
+        self._event_tasks: set[asyncio.Task[Any]] = set()
+
+    async def on_setup(self) -> None:
+        """Listen for completed alert facts and persist them independently."""
+
+        self._event_unsub = self._hass.bus.async_listen(
+            EVENT_ALERT_EVENT, self._handle_alert_event
+        )
+
+    async def on_unload(self) -> None:
+        """Release the alert event listener owned by this feature."""
+
+        if self._event_unsub is not None:
+            self._event_unsub()
+            self._event_unsub = None
+        if self._event_tasks:
+            await asyncio.gather(*self._event_tasks, return_exceptions=True)
+            self._event_tasks.clear()
+
+    @callback
+    def _handle_alert_event(self, event: Event) -> None:
+        """Schedule persistence for one raw alert event."""
+
+        task = self._hass.async_create_task(self._storage.store_event(event.data))
+        self._event_tasks.add(task)
+        task.add_done_callback(self._event_tasks.discard)
 
     async def remove_alert(self, alert_id: str) -> None:
         """Remove history entries belonging to a discarded preview alert."""
 
-        self._state[STATE_HISTORY] = remove_alert(
-            self._state[STATE_HISTORY], alert_id
-        )
-        self._storage.persist()
+        await self._storage.remove_history_for_alert(alert_id)
 
     @websocket_route(
         "history.list",
@@ -56,32 +88,8 @@ class HistoryFeature(FeatureBase):
     ) -> list[dict[str, Any]]:
         """Return persisted history owned by this feature."""
 
-        return list_entries(self._state[STATE_HISTORY], alert_id, limit)
-
-
-def format_entry(
-    alert: dict[str, Any],
-    event_type: AlertEventType,
-    message: str,
-    details: dict[str, Any],
-    *,
-    now: datetime,
-    flow_id: str | None = None,
-) -> dict[str, Any]:
-    """Build one history event record."""
-
-    event: dict[str, Any] = {
-        "id": uuid.uuid4().hex,
-        "timestamp": now.isoformat(),
-        "alert_id": alert["id"],
-        "alert_name": alert["name"],
-        "type": event_type,
-        "message": message,
-        "details": deepcopy(details),
-    }
-    if flow_id:
-        event["flow_id"] = flow_id
-    return event
+        await self._storage.load_history()
+        return list_entries(self._storage.history, alert_id, limit)
 
 
 def append_entry(
@@ -102,14 +110,14 @@ def list_entries(
 
     filtered = history
     if alert_id:
-        filtered = [item for item in filtered if item.get("alert_id") == alert_id]
+        filtered = [item for item in filtered if item["alert"]["id"] == alert_id]
     return list(reversed(filtered[-max(1, min(limit, MAX_HISTORY)) :]))
 
 
 def remove_alert(history: list[dict[str, Any]], alert_id: str) -> list[dict[str, Any]]:
     """Return history with all events for a deleted alert removed."""
 
-    return [item for item in history if item.get("alert_id") != alert_id]
+    return [item for item in history if item["alert"]["id"] != alert_id]
 
 
 def prune_entries(
@@ -123,7 +131,9 @@ def prune_entries(
     result = []
     for entry in history:
         try:
-            timestamp = datetime.fromisoformat(str(entry["timestamp"])).timestamp()
+            timestamp = datetime.fromisoformat(
+                str(entry["event"]["timestamp"])
+            ).timestamp()
         except (KeyError, TypeError, ValueError):
             result.append(entry)
             continue
@@ -140,12 +150,14 @@ def prune_entries_by_alert(
     now = datetime.now().astimezone()
     result = []
     for entry in history:
-        retention_days = retention_by_alert.get(entry.get("alert_id"))
+        retention_days = retention_by_alert.get(str(entry["alert"]["id"]))
         if retention_days is None:
             result.append(entry)
             continue
         try:
-            timestamp = datetime.fromisoformat(str(entry["timestamp"])).timestamp()
+            timestamp = datetime.fromisoformat(
+                str(entry["event"]["timestamp"])
+            ).timestamp()
         except (KeyError, TypeError, ValueError):
             result.append(entry)
             continue

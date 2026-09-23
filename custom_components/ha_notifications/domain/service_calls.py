@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .confirmation import ConfirmationContext
+
+if TYPE_CHECKING:
+    from .runtime import AlertRuntimeState
 
 
 class HomeAssistantServiceCall(BaseModel):
@@ -24,11 +26,9 @@ class HomeAssistantServiceCall(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
-class ServiceEffectsRequest:
-    """Typed request for ordered post-delivery service effects."""
+class FollowUpActionsRequest:
+    """Typed request for ordered post-delivery follow-up actions."""
 
-    alert: Mapping[str, Any]
-    now: datetime
-    attempt: int | None = None
+    runtime: AlertRuntimeState
     actions: tuple[Mapping[str, Any], ...] = ()
     confirmation: ConfirmationContext | None = None

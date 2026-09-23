@@ -117,12 +117,6 @@ async def async_setup_entry(
 
     except Exception:
         _LOGGER.exception("Failed to set up HA Notifications")
-
-        try:
-            await controller.async_unload()
-        except Exception:
-            _LOGGER.exception("Failed cleaning up HA Notifications after setup failure")
-
         raise
 
     entry.runtime_data = controller

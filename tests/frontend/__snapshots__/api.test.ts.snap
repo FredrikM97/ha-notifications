@@ -88,6 +88,9 @@ exports[`frontend API transport > uses the runtime command for alert runtime sta
       },
     ],
   ],
+  "request": {
+    "type": "ha_notifications/runtime",
+  },
   "result": {
     "door": {
       "active": true,

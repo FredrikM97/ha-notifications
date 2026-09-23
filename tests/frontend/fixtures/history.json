@@ -1,21 +1,24 @@
 {
   "history": [
     {
-      "alert_id": "garage",
-      "alert_name": "Garage door",
-      "type": "notification_sent",
-      "message": "The garage is open",
-      "details": {
-        "source": "sensor"
+      "alert": { "id": "garage", "name": "Garage door" },
+      "flow_id": "flow_garage",
+      "event": {
+        "event_id": "event_garage",
+        "type": "notification_sent",
+        "message": "The garage is open",
+        "timestamp": "2026-01-01T00:00:00+00:00",
+        "details": { "source": "sensor" }
       }
     },
     {
-      "alert_id": "water",
-      "alert_name": "Water leak",
-      "type": "delivery_failed",
-      "message": "Could not notify",
-      "details": {
-        "error": "Device unavailable"
+      "alert": { "id": "water", "name": "Water leak" },
+      "event": {
+        "event_id": "event_water",
+        "type": "delivery_failed",
+        "message": "Could not notify",
+        "timestamp": "2026-01-01T00:00:00+00:00",
+        "details": { "error": "Device unavailable" }
       }
     }
   ],

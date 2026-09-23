@@ -6,7 +6,6 @@ import type { TemplateResult } from "lit";
 import type {
   Alert,
   Hass,
-  HistoryEntry,
   Registries,
   RuntimeAlertState,
 } from "../../frontend/types.js";
@@ -17,7 +16,7 @@ import alertFormValuesData from "./fixtures/alert-form-values.json";
 import fixtureData from "./fixtures/history.json";
 import registriesFixtureData from "./fixtures/registries.json";
 
-export const historyFixture = fixtureData.history as HistoryEntry[];
+export const historyFixture = fixtureData.history as RuntimeAlertState[];
 export const emptyHistoryFilters = fixtureData.emptyFilters;
 export const alertRuntimeFixture = alertFixtureData.runtime as Record<
   string,

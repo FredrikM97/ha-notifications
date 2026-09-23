@@ -18,7 +18,7 @@ import { showToast as showToastOn, toastListTemplate } from "./toast.js";
 import type { Toast } from "./toast.js";
 import { LitElement, html } from "lit";
 import type { TemplateResult } from "lit";
-import type { Alert, Hass, HistoryEntry, Registries } from "./types.js";
+import type { Alert, Hass, Registries, RuntimeAlertState } from "./types.js";
 import "./yaml-view.js";
 
 type PanelTab = "alerts" | "history" | "yaml" | "debug";
@@ -111,7 +111,8 @@ function toggleAlertToast(alert: Alert): string {
 class HaNotificationsPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
-  private history: HistoryEntry[] = [];
+  private runtime: Record<string, RuntimeAlertState> = {};
+  private history: RuntimeAlertState[] = [];
   private historyAlertId: string | null = null;
   private historyAlertName: string | null = null;
   private historyFilters: HistoryFilters = {
@@ -241,7 +242,9 @@ class HaNotificationsPanel extends LitElement {
         this.showToast(errorMessage(alertsResult.reason), true);
       }
 
-      if (runtimeResult.status === "rejected" && !silent) {
+      if (runtimeResult.status === "fulfilled") {
+        this.runtime = runtimeResult.value;
+      } else if (!silent) {
         this.showToast(errorMessage(runtimeResult.reason), true);
       }
 
@@ -349,37 +352,17 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private debugTemplate(): TemplateResult {
-    const activeAlerts = this.alerts.filter((alert) => alert.runtime?.active);
-    if (!activeAlerts.length) {
+    if (!Object.keys(this.runtime).length) {
       return html`<div class="nc-card nc-empty">
-        <h2>No active alerts</h2>
-        <p>Alerts with pending runtime state will appear here.</p>
+        <h2>No runtime data</h2>
       </div>`;
     }
 
-    return html`<div class="nc-debug-list">
-      ${activeAlerts.map((alert) => {
-        const runtime = alert.runtime!;
-        const actionCount = Object.keys(
-          runtime.confirmation?.action_ids || {},
-        ).length;
-        const attempts =
-          runtime.confirmation?.attempts ?? runtime.confirmation_attempts ?? 0;
-        return html`<div class="nc-card nc-debug-alert">
-          <div class="nc-debug-heading">
-            <ha-icon icon=${alert.icon || "mdi:bell-badge-outline"}></ha-icon>
-            <strong>${alert.name}</strong>
-          </div>
-          <dl class="nc-debug-details">
-            <div><dt>State</dt><dd>Active</dd></div>
-            <div><dt>Confirmation</dt><dd>${actionCount ? "Pending" : "None"}</dd></div>
-            <div><dt>Attempts</dt><dd>${attempts}</dd></div>
-            <div><dt>Started</dt><dd>${formatLocalDateTime(runtime.started_at, true, this._hass?.locale)}</dd></div>
-            <div><dt>Last notified</dt><dd>${formatLocalDateTime(runtime.last_notified, true, this._hass?.locale)}</dd></div>
-          </dl>
-        </div>`;
-      })}
-    </div>`;
+    return html`<pre class="nc-debug-raw">${JSON.stringify(
+      this.runtime,
+      null,
+      2,
+    )}</pre>`;
   }
 
   private alertsTemplate(): TemplateResult {
@@ -412,7 +395,7 @@ class HaNotificationsPanel extends LitElement {
       })),
       filters: this.historyFilters,
       types: [
-        ...new Set(this.history.map((item) => item.type).filter(Boolean)),
+        ...new Set(this.history.map((item) => item.event?.type).filter(Boolean)),
       ] as string[],
       onFiltersChanged: (filters) => {
         this.historyFilters = filters;

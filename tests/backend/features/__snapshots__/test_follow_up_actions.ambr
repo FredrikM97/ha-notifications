@@ -18,6 +18,7 @@
     dict({
       'details': dict({
         'action': 'bad-value',
+        'error': 'Invalid service action.',
       }),
       'error': 'Invalid service action.',
       'message': 'Action failed.',

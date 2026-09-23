@@ -14,12 +14,12 @@ flowchart LR
     Store[HA Store and ConfigEntry options]
     Init[__init__.py\nHA lifecycle glue]
     Compose[__init__.py\nfeature construction]
-    Core[custom_components/ha_notifications/controller/core.py\nlifecycle host, frontend registration, event listener, and ordered workflows]
+    Core[custom_components/ha_notifications/controller/core.py\nlifecycle host, frontend registration, and ordered workflows]
     Life[custom_components/ha_notifications/controller/lifecycle.py\nfeature setup/unload + scheduler]
     WS[custom_components/ha_notifications/bridge/websocket.py\nwebsocket transport]
     Trigger[custom_components/ha_notifications/features/conditions.py\nCondition evaluation and listeners]
     Coordinator[custom_components/ha_notifications/features/alert_coordinator.py\ngeneric per-alert coordinator]
-    Flow[custom_components/ha_notifications/features/alert_flow.py\nordered alert effects]
+    Flow[custom_components/ha_notifications/features/alert_flow.py\ndirect ordered alert workflow]
     Alerts[custom_components/ha_notifications/features/alerts.py\nAlert queries]
     Conditions[custom_components/ha_notifications/features/conditions.py\nConditionConfig + compiler]
     Confirm[custom_components/ha_notifications/features/confirmations.py\nConfirmationConfig + response sessions]
@@ -31,8 +31,8 @@ flowchart LR
     Alert[custom_components/ha_notifications/features/configuration.py\nAlert + Configuration]
     ConfirmValue[custom_components/ha_notifications/domain/confirmation.py\nconfirmation contexts and response selections]
     RuntimeValue[custom_components/ha_notifications/domain/runtime.py\ntyped alert runtime state]
-    WorkflowValue[custom_components/ha_notifications/domain/workflow.py\nnotification requests/outcomes, events, and ordered effects]
-    Storage[custom_components/ha_notifications/support/storage.py\nraw config and event-state persistence]
+    WorkflowValue[custom_components/ha_notifications/domain/workflow.py\nnotification requests/outcomes and condition events]
+    Storage[custom_components/ha_notifications/support/storage.py\nconfig and history persistence]
     Front[frontend/api.ts + Lit UI]
 
     Init --> Compose
@@ -83,27 +83,27 @@ flowchart LR
 
 ## Ownership rules
 
-- `__init__.py` constructs and attaches the feature lifecycle. `controller/core.py` hosts integration lifecycle and shared runtime state but never constructs, initializes, configures, or unloads individual features. `controller/lifecycle.py` owns generic feature setup/unload ordering, rollback, annotated feature/websocket-route dispatch, and the task scheduler.
+- `__init__.py` constructs and attaches the feature lifecycle. `controller/core.py` hosts integration lifecycle and direct runtime state but never constructs, initializes, configures, or unloads individual features. `controller/lifecycle.py` owns generic feature setup/unload ordering, rollback, annotated feature/websocket-route dispatch, and the task scheduler.
 - Features and the controller access Home Assistant directly for effects they own. There is no gateway or service locator; feature dependencies remain explicit through lifecycle composition.
-- `controller/lifecycle.py` composes each feature with the shared `(hass, state, storage, storage)` context; the single `Storage` class owns raw config and event-state persistence.
+- `controller/lifecycle.py` composes each feature with the shared `(hass, runtime, storage, storage)` context; runtime is process-local, while `Storage` owns configuration and independent history persistence.
 - `bridge/websocket.py` generates Home Assistant handlers from feature websocket-route declarations and handles HA connection/result serialization. It remains a transport adapter, not a domain router. Frontend static path and panel registration belong to `controller/core.py`.
-- `features/alerts.py` owns `AlertFeature`, its alert routes, runtime-state projection, alert validation, active/inactive condition transitions, timestamps, condition-change clearing, and reload request.
-- `features/alerts.py` owns typed alerts and the persisted runtime boundary; `domain/runtime.py` owns the typed runtime state and its mapping serialization. Other features request alert runtime through its lifecycle route instead of constructing generic trigger state.
+- `features/alerts.py` owns `AlertFeature`, its alert routes, direct runtime mappings, alert validation, active/inactive condition transitions, timestamps, condition-change clearing, and reload request.
+- `features/alerts.py` owns typed alerts and the process-local runtime mapping; `domain/runtime.py` owns the typed runtime aggregate, including the current serialized alert snapshot and an optional nested event fact, and its API serialization. Alert events publish an independent aggregate snapshot so configuration, mutable runtime facts, and event metadata travel together without conflating event IDs, workflow IDs, or notification IDs. History is a separate persistence/query boundary owned by `features/history.py` and stores those aggregates directly.
 - `features/conditions.py` owns condition listeners, watcher registration, startup/reload/interval/template callbacks, evaluation, condition facts, and classification into explicit active, inactive, or error workflow events; it does not apply notification or delivery effects.
 - `features/alert_coordinator.py` owns keyed runtime serialization: feature-supplied operations for one alert run in order, while different alert IDs can run concurrently. It is lifecycle-managed and knows no condition, confirmation, or workflow event types.
 - `features/conditions.py` and `features/confirmations.py` pass typed facts through `AlertCoordinatorFeature`; they do not own notification, event logging, follow-up, or persistence decisions.
-- `features/alert_flow.py` owns ordered application sequencing, immutable per-alert plans, typed workflow events, and delivery-effect interpretation. Alert runtime transitions are performed before active/inactive events reach the flow; confirmation, notification, event publication, follow-up, and persistence operations remain owned by their feature modules.
-- `features/confirmations.py` owns confirmation sessions, its Home Assistant action subscription, matching, reminders, max-attempt expiry, and resolution into confirmation facts. `AlertFeature` owns acknowledgement mutation after a fact is resolved.
+- `features/alert_flow.py` owns direct ordered condition-workflow sequencing, notification policy, confirmation preparation/expiry, delivery facts, follow-up ordering, and persistence. Alert runtime transitions remain in `AlertFeature`; resolved confirmation workflows remain in `ConfirmationFeature`.
+- `features/confirmations.py` owns confirmation sessions, its Home Assistant action subscription, matching, reminder policy, max-attempt expiry, acknowledgement mutation, and resolution effects after a response is accepted.
 - `features/notification_preview.py` validates preview payloads and manually triggers the normal condition workflow. It owns no alert lifecycle state; delivery and confirmation decisions remain in the normal workflow.
-- `features/notification.py` owns message composition, notification send/clear planning, condition-change clearing policy, confirmation clear/completion delivery planning, and delivery attempt outcome state; `features/confirmations.py` owns the alert-level confirmation configuration and pending sessions; `features/conditions.py` owns monitor and confirmation reminder listeners; `delivery/` resolves recipients and selects concrete mobile-app services versus generic Notify.
-- `features/follow_up_actions.py` owns post-send and post-confirmation action planning.
+- `features/notification.py` owns message composition and notification send/clear effects, including confirmation completion delivery planning; `features/confirmations.py` owns alert-level confirmation configuration, pending sessions, reminder policy, and response workflows; `features/conditions.py` owns monitor and confirmation reminder listeners; `delivery/` resolves recipients and selects concrete mobile-app services versus generic Notify.
+- `features/follow_up_actions.py` owns post-send and post-confirmation action planning and execution; `features/alerts.py` owns publication of their alert-event facts.
 - `support/jinja.py` owns Home Assistant Jinja evaluation, recursive configuration-template rendering, template context, and null removal before service calls.
 - `domain/service_calls.py` owns immutable service-call values and service-effects requests passed to follow-up execution.
-- `features/history.py` is read-only at the feature boundary: it owns history query transport and formatting helpers.
-- `controller/core.py` passively listens for `ha_notifications_alert_event` and persists raw alert facts. Workflows publish facts through Home Assistant's event bus and do not depend on history storage.
+- `features/history.py` owns history query transport, formatting, alert cleanup, and its independent persisted history list.
+- `features/history.py` listens for `ha_notifications_alert_event` and forwards raw alert facts to independent history persistence. Workflows publish facts through Home Assistant's event bus and do not depend on history storage.
 - `features/configuration.py` owns the flat `Alert` and `Configuration` models because they compose the persisted configuration document. `domain/workflow.py` owns typed workflow event/effect contracts used by ordered workflows. Each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model.
 - `domain/confirmation.py` owns immutable confirmation contexts and response selections passed between workflows; it does not own confirmation configuration, sessions, or persistence.
-- `domain/workflow.py` owns immutable notification requests/outcomes, workflow events, and ordered effects passed between application features; it does not own delivery or runtime state.
+- `domain/workflow.py` owns immutable notification requests/outcomes and condition workflow events passed between application features; it does not own delivery, orchestration, or runtime state.
 - `features/conditions.py` owns `MonitorConfig`, watcher settings, and condition decisions.
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
 - `features/confirmations.py` owns `ConfirmationConfig` and confirmation sessions; `features/alert_coordinator.py` owns per-alert confirmation serialization; `features/alert_flow.py` owns confirmation effect ordering.
@@ -116,7 +116,7 @@ flowchart LR
     decisions remain ordinary functions because they have no lifecycle resources.
 - Follow-up action rendering validates each action as a feature-owned object;
     malformed actions remain isolated as typed `ActionResult` errors.
-- `support/storage.py` stores configuration and event objects without interpreting feature behavior; YAML parsing/dumping and configuration validation belong at their feature/UI boundaries.
+- `support/storage.py` stores configuration and history objects without interpreting feature behavior; runtime is discarded on restart, while YAML parsing/dumping and configuration validation belong at their feature/UI boundaries.
 
 ## Dependencies and validation
 
@@ -147,7 +147,7 @@ Invalid configuration is validated before config-entry options are updated, so i
     confirmation sessions, and then evaluates newly enabled or reload-eligible
     alerts. The reload lock serializes concurrent reloads.
 - Unload removes external listeners, unloads feature watchers, cancels and
-    awaits lifecycle-managed feature tasks, unregisters the frontend panel, persists runtime
+    awaits lifecycle-managed feature tasks, unregisters the frontend panel, flushes history
     state, and resets the setup guard. Setup failure uses the same unload path to
     roll back resources created before the failure.
 

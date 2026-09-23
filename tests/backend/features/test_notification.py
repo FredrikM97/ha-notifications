@@ -14,6 +14,7 @@ from custom_components.ha_notifications.domain.confirmation import (
     ConfirmationContext,
     ConfirmationSelection,
 )
+from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
 from tests.backend.conftest import (
@@ -37,13 +38,11 @@ async def render(source, _variables):
     return source
 
 
-def notification_request(alert, *, attempt=1, condition_facts=None):
+def notification_request(alert, *, condition_facts=None):
     return notifications.NotificationRequest(
-        alert=alert,
-        attempt=attempt,
-        condition_facts=condition_facts or {},
-        now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        runtime=AlertRuntimeState.for_alert(alert),
         replace_existing=False,
+        condition_facts=condition_facts or {},
     )
 
 
@@ -61,12 +60,10 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
 
         await notifications.send_requested(
             notifications.NotificationRequest(
-                alert=configured_alert,
-                attempt=1,
+                runtime=AlertRuntimeState.for_alert(configured_alert),
+                replace_existing=False,
                 condition_facts={"front_door": True},
                 trigger_source="change",
-                now=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                replace_existing=False,
             ),
             notifications.NotificationCapabilitySet(
                 render=capture_render,
@@ -356,10 +353,8 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
 
         result = await notifications.send_requested(
             notifications.NotificationRequest(
-                alert=alert(),
-                attempt=1,
+                runtime=AlertRuntimeState.for_alert(alert()),
                 replace_existing=True,
-                now="now",
             ),
             capabilities,
         )
@@ -381,8 +376,7 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
 
         result = await notifications.plan_clear(
             notifications.NotificationClearRequest(
-                configured_alert,
-                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                AlertRuntimeState.for_alert(configured_alert),
             ),
             mobile_snapshot(),
             render,
@@ -406,8 +400,7 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
 
         result = await notifications.plan_clear(
             notifications.NotificationClearRequest(
-                configured_alert,
-                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                AlertRuntimeState.for_alert(configured_alert),
             ),
             labeled_device_snapshot(),
             render,
@@ -419,13 +412,11 @@ class NotificationWorkflowTests(unittest.IsolatedAsyncioTestCase):
 async def test_mobile_replacement_contract_snapshot(snapshot):
     result = await notifications.send_requested(
         notifications.NotificationRequest(
-            alert=alert(),
-            attempt=2,
+            runtime=AlertRuntimeState.for_alert(alert()),
+            replace_existing=True,
             notification_actions=(
                 {"action": "confirm_1", "title": "Confirm"}
             ,),
-            replace_existing=True,
-            now="now",
         ),
         notifications.NotificationCapabilitySet(
             render=render,
@@ -446,15 +437,16 @@ async def test_mobile_replacement_contract_snapshot(snapshot):
 
 
 async def test_confirmation_reminder_replacement_contract_snapshot(snapshot):
+    runtime = AlertRuntimeState.for_alert(make_confirmation_alert())
+    runtime.confirmation.attempts = 1
+    runtime.confirmation.action_ids = {"confirm": "confirm"}
     result = await notifications.send_requested(
         notifications.NotificationRequest(
-            alert=make_confirmation_alert(),
-            attempt=2,
+            runtime=runtime,
+            replace_existing=True,
             notification_actions=(
                 {"action": "confirm_1", "title": "Confirm"}
             ,),
-            replace_existing=True,
-            now="now",
         ),
         notifications.NotificationCapabilitySet(
             render=render,
@@ -475,49 +467,38 @@ async def test_confirmation_reminder_replacement_contract_snapshot(snapshot):
 
 
 def test_delivery_result_commits_only_successful_confirmation_attempts():
-    runtime = {
-        "confirmation": {"action_ids": {}, "attempts": 1},
-        "last_notified": "previous",
-        "last_error": None,
-    }
-    state = {"runtime": {"alert_1": runtime}}
+    runtime = AlertRuntimeState(
+        alert={"id": "alert_1"}, last_notified="previous"
+    )
+    runtime.confirmation.attempts = 1
+    state = {"alert_1": runtime}
     persistence = SimpleNamespace(
-        runtime=lambda alert_id: state["runtime"][alert_id]
+        runtime=lambda alert_id: state[alert_id]
     )
     feature = AlertFeature(None, state, None, persistence)
 
     feature.record_delivery_result(
-        "alert_1",
-        2,
+        runtime,
         datetime(2026, 1, 1, tzinfo=timezone.utc),
         success=False,
         error="delivery failed",
     )
 
-    assert {
-        key: runtime[key]
-        for key in ("confirmation", "last_notified", "last_error")
-    } == {
-        "confirmation": {"action_ids": {}, "attempts": 1},
-        "last_notified": "previous",
-        "last_error": "delivery failed",
-    }
+    assert runtime.confirmation.attempts == 1
+    assert runtime.confirmation.action_ids == {}
+    assert runtime.last_notified == "previous"
+    assert runtime.last_error == "delivery failed"
 
     feature.record_delivery_result(
-        "alert_1",
-        2,
+        runtime,
         datetime(2026, 1, 2, tzinfo=timezone.utc),
         success=True,
     )
 
-    assert {
-        key: runtime[key]
-        for key in ("confirmation", "last_notified", "last_error")
-    } == {
-        "confirmation": {"action_ids": {}, "attempts": 1},
-        "last_notified": "2026-01-02T00:00:00+00:00",
-        "last_error": None,
-    }
+    assert runtime.confirmation.attempts == 1
+    assert runtime.confirmation.action_ids == {}
+    assert runtime.last_notified == "2026-01-02T00:00:00+00:00"
+    assert runtime.last_error is None
 
 
 async def test_confirmation_completion_planner_renders_message_and_clear_policy():
@@ -643,14 +624,12 @@ async def test_notification_feature_send_and_clear_use_capabilities(hass, monkey
 
     result = await feature.send(
         notifications.NotificationRequest(
-            alert=alert(),
-            attempt=1,
+            runtime=AlertRuntimeState.for_alert(alert()),
             replace_existing=False,
-            now="now",
         )
     )
     assert result.success
-    await feature.clear(alert(), "now")
+    await feature.clear(alert())
     assert len(sent) == 2
 
 
@@ -660,10 +639,8 @@ async def test_send_requested_propagates_or_swallows_planning_errors(monkeypatch
 
     monkeypatch.setattr(notifications, "plan_delivery", fail)
     request = notifications.NotificationRequest(
-        alert=alert(),
-        attempt=1,
+        runtime=AlertRuntimeState.for_alert(alert()),
         replace_existing=False,
-        now="now",
     )
     capabilities = notifications.NotificationCapabilitySet(
         render=render, snapshot=empty_snapshot()
@@ -723,10 +700,8 @@ async def test_notification_feature_returns_failed_outcome_for_planning_error(
     monkeypatch.setattr(notifications, "send_requested", fail)
     result = await feature.send(
         notifications.NotificationRequest(
-            alert=alert(),
-            attempt=1,
+            runtime=AlertRuntimeState.for_alert(alert()),
             replace_existing=False,
-            now="now",
         )
     )
 

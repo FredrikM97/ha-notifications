@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
 from custom_components.ha_notifications.const import EVENT_ALERT_EVENT, AlertEventType
+from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.domain.service_calls import (
-    ServiceEffectsRequest,
+    FollowUpActionsRequest,
 )
 from tests.backend.conftest import make_alert
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
@@ -24,6 +25,34 @@ class HistoryRecorder:
         self.events = []
 
 
+class AlertEventPublisher:
+    def __init__(self, hass) -> None:
+        self._hass = hass
+
+    def runtime(self, alert_or_id) -> AlertRuntimeState:
+        if isinstance(alert_or_id, str):
+            alert = {"id": alert_or_id}
+        else:
+            alert = alert_or_id
+        return AlertRuntimeState(alert=dict(alert))
+
+    def publish_event(
+        self, _runtime, event_type, message, details
+    ) -> None:
+        self._hass.bus.async_fire(
+            EVENT_ALERT_EVENT,
+            {
+                "id": uuid4().hex,
+                "timestamp": "event-time",
+                "alert_id": _runtime.alert["id"],
+                "alert_name": _runtime.alert["name"],
+                "type": event_type.value,
+                "message": message,
+                "details": details,
+            },
+        )
+
+
 def test_actions_for_confirmation_reads_owned_configuration():
     alert = make_alert(
         confirmation={
@@ -35,7 +64,8 @@ def test_actions_for_confirmation_reads_owned_configuration():
         }
     )
 
-    assert module.FollowUpActionsFeature.actions_for_confirmation(alert) == [
+    runtime = AlertRuntimeState.for_alert(alert)
+    assert module.FollowUpActionsFeature.actions_for_confirmation(runtime) == [
         {"action": "light.turn_on"}
     ]
 
@@ -50,12 +80,15 @@ def follow_up_context(hass):
                 event_type=AlertEventType(event.data["type"]),
                 message=event.data["message"],
                 details=event.data["details"],
-                error=event.data["error"],
+                error=event.data["details"].get("error"),
             )
         ),
     )
     feature = module.FollowUpActionsFeature(
         hass, {}, None, SimpleNamespace(persist=lambda: None)
+    )
+    feature.lifecycle = SimpleNamespace(
+        feature=lambda _name: AlertEventPublisher(hass)
     )
     return feature, history
 
@@ -86,8 +119,8 @@ async def test_run_renders_and_executes_multiple_actions(
     )
 
     await feature.execute(
-        ServiceEffectsRequest(
-            alert, datetime(2026, 1, 1, tzinfo=timezone.utc), attempt=2
+        FollowUpActionsRequest(
+            AlertRuntimeState.for_alert(alert),
         )
     )
 
@@ -113,15 +146,15 @@ async def test_run_records_service_failure(hass, follow_up_context):
 
     hass.services.async_register("light", "turn_on", handler)
     await feature.execute(
-        ServiceEffectsRequest(
-            make_alert(
-                post_send_actions={
-                    "enabled": True,
-                    "actions": [{"action": "light.turn_on"}],
-                }
+        FollowUpActionsRequest(
+            AlertRuntimeState.for_alert(
+                make_alert(
+                    post_send_actions={
+                        "enabled": True,
+                        "actions": [{"action": "light.turn_on"}],
+                    }
+                )
             ),
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            attempt=1,
         ),
     )
     await hass.async_block_till_done()
@@ -136,8 +169,8 @@ async def test_run_skips_disabled_or_empty_actions(hass, follow_up_context):
     alert = make_alert(post_send_actions={"enabled": False, "actions": []})
 
     await feature.execute(
-        ServiceEffectsRequest(
-            alert, datetime(2026, 1, 1, tzinfo=timezone.utc), attempt=1
+        FollowUpActionsRequest(
+            AlertRuntimeState.for_alert(alert),
         )
     )
 
@@ -152,16 +185,18 @@ async def test_run_records_malformed_service_names(
     feature, history = follow_up_context
 
     await feature.execute(
-        ServiceEffectsRequest(
-            make_alert(
-                post_send_actions={
-                    "enabled": True,
-                    "actions": [{"action": service}],
-                }
+        FollowUpActionsRequest(
+            AlertRuntimeState.for_alert(
+                make_alert(
+                    post_send_actions={
+                        "enabled": True,
+                        "actions": [{"action": service}],
+                    }
+                )
             ),
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
     )
+    await hass.async_block_till_done()
 
     assert history.events[0].event_type == AlertEventType.NOTIFICATION_ACTION_FAILED
     assert history.events[0].error == "Invalid service action."
@@ -172,18 +207,20 @@ async def test_run_records_non_mapping_data(hass, follow_up_context):
     feature, history = follow_up_context
 
     await feature.execute(
-        ServiceEffectsRequest(
-            make_alert(
-                post_send_actions={
-                    "enabled": True,
-                    "actions": [
-                        {"action": "light.turn_on", "data": "invalid"}
-                    ],
-                }
+        FollowUpActionsRequest(
+            AlertRuntimeState.for_alert(
+                make_alert(
+                    post_send_actions={
+                        "enabled": True,
+                        "actions": [
+                            {"action": "light.turn_on", "data": "invalid"}
+                        ],
+                    }
+                )
             ),
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
     )
+    await hass.async_block_till_done()
 
     assert history.events[0].event_type == AlertEventType.NOTIFICATION_ACTION_FAILED
     assert (

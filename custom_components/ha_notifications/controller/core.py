@@ -11,26 +11,21 @@ from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event as HassEvent
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.storage import Store
+from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..bridge import websocket as frontend_websocket
 from ..const import (
     DOMAIN,
-    EVENT_ALERT_EVENT,
     FRONTEND_BUILD_DIR,
     FRONTEND_STATIC_URL,
     PANEL_ICON,
     PANEL_MODULE,
     PANEL_TITLE,
-    STATE_HISTORY,
-    STATE_RUNTIME,
-    STORAGE_KEY,
-    STORAGE_VERSION,
     VERSION,
-    StateRoot,
+    FeatureName,
 )
+from ..domain.runtime import AlertRuntimeState
 from ..support import storage as storage_module
 from .lifecycle import FeatureLifecycle
 
@@ -46,7 +41,7 @@ class AlertConfigurationPort(Protocol):
 class ConfirmationRebuildPort(Protocol):
     """Typed confirmation lifecycle operation used during setup/reload."""
 
-    def rebuild(self) -> None: ...
+    def rebuild(self, runtimes: dict[str, AlertRuntimeState]) -> None: ...
 
 
 class ConditionsPort(Protocol):
@@ -64,13 +59,10 @@ class HaNotificationsController:
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._hass = hass
-        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-
-        self._state: StateRoot = {STATE_RUNTIME: {}, STATE_HISTORY: []}
+        self._runtime: dict[str, AlertRuntimeState] = {}
         self._entry = entry
-        self._storage = storage_module.Storage(hass, entry, self._store, self._state)
+        self._storage = storage_module.Storage(hass, entry)
         self._started_unsub: Any = None
-        self._alert_event_unsub: Any = None
         self._entry_update_unsub: Any = None
 
         self._started = False
@@ -84,7 +76,7 @@ class HaNotificationsController:
 
         return await FeatureLifecycle.async_create(
             self._hass,
-            self._state,
+            self._runtime,
             self._storage,
             self.reload,
         )
@@ -124,18 +116,13 @@ class HaNotificationsController:
             return
 
         try:
-            await self._storage.load_events()
-            self._alert_event_unsub = self._hass.bus.async_listen(
-                EVENT_ALERT_EVENT, self._handle_alert_event
-            )
-
             config = await self._load_config()
             await self._apply_config(config)
             await self._lifecycle.setup()
             cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("confirmations"),
-            ).rebuild()
+                self._lifecycle.feature(FeatureName.CONFIRMATIONS),
+            ).rebuild(self._runtime)
 
             await self._register_frontend(show_in_sidebar=show_in_sidebar)
             frontend_websocket.register(
@@ -198,9 +185,6 @@ class HaNotificationsController:
         if self._started_unsub:
             self._started_unsub()
             self._started_unsub = None
-        if self._alert_event_unsub:
-            self._alert_event_unsub()
-            self._alert_event_unsub = None
         if self._entry_update_unsub:
             self._entry_update_unsub()
             self._entry_update_unsub = None
@@ -217,22 +201,16 @@ class HaNotificationsController:
         except (KeyError, ValueError):
             pass
 
-        await self._storage.save_events()
+        await self._storage.save_history()
         self._started = False
 
         return True
-
-    @callback
-    def _handle_alert_event(self, event: HassEvent) -> None:
-        """Store one complete alert event without interpreting its payload."""
-
-        self._storage.store_event(event.data)
 
     async def async_remove(self) -> None:
         """Unload the controller and remove integration-owned runtime state."""
 
         await self.async_unload()
-        await self._storage.remove_events()
+        await self._storage.remove_history()
 
     # ------------------------------------------------------------------
     # Config load/apply/reload
@@ -254,7 +232,7 @@ class HaNotificationsController:
         await self._lifecycle.unload()
         return await cast(
             AlertConfigurationPort,
-            self._lifecycle.feature("alerts"),
+            self._lifecycle.feature(FeatureName.ALERTS),
         ).apply_config(config)
 
     async def reload(self) -> None:
@@ -266,8 +244,8 @@ class HaNotificationsController:
             await self._lifecycle.setup()
             cast(
                 ConfirmationRebuildPort,
-                self._lifecycle.feature("confirmations"),
-            ).rebuild()
+                self._lifecycle.feature(FeatureName.CONFIRMATIONS),
+            ).rebuild(self._runtime)
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
@@ -282,7 +260,7 @@ class HaNotificationsController:
     async def _evaluate_all(self, *, source: str) -> None:
         await cast(
             ConditionsPort,
-            self._lifecycle.feature("conditions"),
+            self._lifecycle.feature(FeatureName.CONDITIONS),
         ).evaluate_all(source=source, now=dt_util.utcnow())
 
     async def _request_condition_check(self, alert_id: str, *, source: str) -> None:
@@ -298,7 +276,7 @@ class HaNotificationsController:
 
         await cast(
             ConditionsPort,
-            self._lifecycle.feature("conditions"),
+            self._lifecycle.feature(FeatureName.CONDITIONS),
         ).check_alert(alert_id, source=source, now=dt_util.utcnow())
 
     # ------------------------------------------------------------------

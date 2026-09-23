@@ -1,0 +1,5 @@
+{
+  "request": {
+    "type": "ha_notifications/runtime"
+  }
+}

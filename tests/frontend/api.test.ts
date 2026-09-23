@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import runtimeContract from "../contracts/runtime.json";
 import {
   getAlerts,
   getAlertRuntime,
@@ -10,12 +11,15 @@ import {
   saveAlert,
   saveConfig,
   previewAlertPayload,
+  validateConditions,
   validateConfig,
 } from "../../frontend/api.js";
+import type { Alert } from "../../frontend/types.js";
 import {
   alertFixture,
   configFixture,
   createHassClient,
+  editorAlertFixture,
   previewSessionResultFixture,
 } from "./conftest.js";
 
@@ -29,6 +33,7 @@ describe("frontend API transport", () => {
 
     expect({
       result,
+      request: client.sendMessagePromise.mock.calls[0][0],
       calls: client.sendMessagePromise.mock.calls,
     }).toMatchSnapshot();
   });
@@ -42,6 +47,31 @@ describe("frontend API transport", () => {
     await saveAlert(client.hass, alert);
 
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
+  });
+
+  it("serializes durations for every alert transport endpoint", async () => {
+    const client = createHassClient();
+    const alert = editorAlertFixture();
+    alert.confirmation!.reminders.timeout = "00:15:00";
+
+    await saveAlert(client.hass, alert);
+    await previewAlertPayload(client.hass, alert);
+    await validateConditions(client.hass, alert);
+
+    expect(
+      client.sendMessagePromise.mock.calls.map(([request]) => request.type),
+    ).toEqual([
+      "ha_notifications/save",
+      "ha_notifications/preview_payload",
+      "ha_notifications/validate_conditions",
+    ]);
+    for (const [request] of client.sendMessagePromise.mock.calls) {
+      const payload = request as { alert: Alert };
+      expect(payload.alert.monitor.interval).toBe(3600);
+      expect(payload.alert.conditions[0].for).toBe(300);
+      expect(payload.alert.confirmation?.reminders.interval).toBe(1800);
+      expect(payload.alert.confirmation?.reminders.timeout).toBe(900);
+    }
   });
 
   it("uses structured config for configuration routes", async () => {

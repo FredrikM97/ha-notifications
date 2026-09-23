@@ -1,0 +1,15 @@
+{
+  "commands": [
+    "list",
+    "runtime",
+    "save",
+    "delete",
+    "preview_payload",
+    "validate_conditions",
+    "history",
+    "get_config",
+    "validate_config",
+    "save_config",
+    "reload"
+  ]
+}

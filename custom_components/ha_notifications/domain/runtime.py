@@ -1,21 +1,26 @@
-"""Typed alert runtime state and its persistence boundary."""
+"""Typed process-local alert runtime state."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping
+import uuid
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from typing import Any
 
 from .confirmation import PendingConfirmationState
 
 
 @dataclass(slots=True)
 class AlertRuntimeState:
-    """Mutable runtime values owned by one configured alert."""
+    """Mutable alert runtime state."""
 
+    alert: dict[str, Any]
     active: bool = False
     acknowledged: bool = False
-    confirmation: PendingConfirmationState | None = None
-    notification_id: str | None = None
+    confirmation: PendingConfirmationState = field(
+        default_factory=PendingConfirmationState
+    )
     flow_id: str | None = None
     started_at: str | None = None
     last_evaluated: str | None = None
@@ -24,47 +29,45 @@ class AlertRuntimeState:
     confirmed_by: str | None = None
     last_error: str | None = None
 
-    def __post_init__(self) -> None:
-        if self.confirmation is None:
-            self.confirmation = PendingConfirmationState()
-
     @classmethod
-    def from_runtime(cls, runtime: Mapping[str, Any]) -> AlertRuntimeState:
-        """Load alert runtime values from persisted state."""
+    def reset(cls, runtime: AlertRuntimeState) -> AlertRuntimeState:
+        """Create reset state while preserving the evaluation timestamp."""
 
         return cls(
-            active=bool(runtime.get("active", False)),
-            acknowledged=bool(runtime.get("acknowledged", False)),
-            confirmation=PendingConfirmationState.from_runtime(runtime),
-            notification_id=runtime.get("notification_id"),
-            flow_id=runtime.get("flow_id"),
-            started_at=runtime.get("started_at"),
-            last_evaluated=runtime.get("last_evaluated"),
-            last_notified=runtime.get("last_notified"),
-            confirmed_at=runtime.get("confirmed_at"),
-            confirmed_by=runtime.get("confirmed_by"),
-            last_error=runtime.get("last_error"),
+            alert=dict(runtime.alert),
+            last_evaluated=runtime.last_evaluated,
         )
 
-    def to_runtime(self) -> dict[str, Any]:
-        """Serialize alert runtime state at the persistence boundary."""
+    @classmethod
+    def for_alert(cls, alert: Mapping[str, Any]) -> AlertRuntimeState:
+        """Create runtime state from one configured alert snapshot."""
 
-        return {
-            "active": self.active,
-            "acknowledged": self.acknowledged,
-            **self.confirmation.to_runtime(),
-            "notification_id": self.notification_id,
-            "flow_id": self.flow_id,
-            "started_at": self.started_at,
-            "last_evaluated": self.last_evaluated,
-            "last_notified": self.last_notified,
-            "confirmed_at": self.confirmed_at,
-            "confirmed_by": self.confirmed_by,
-            "last_error": self.last_error,
-        }
+        return cls(alert=dict(alert))
 
-    def write_to(self, runtime: dict[str, Any]) -> None:
-        """Replace the persisted runtime mapping with this state."""
+    def activate(self, now: datetime) -> None:
+        """Start a new alert activation."""
 
-        runtime.clear()
-        runtime.update(self.to_runtime())
+        self.active = True
+        self.acknowledged = False
+        self.started_at = now.isoformat()
+        alert_id = str(self.alert["id"])
+        self.flow_id = f"flow_{alert_id}_{uuid.uuid4().hex[:8]}"
+
+    def evaluate(self, now: datetime) -> None:
+        """Record the latest condition evaluation time."""
+
+        self.last_evaluated = now.isoformat()
+
+    def deactivate(self) -> None:
+        """Clear state tied to the current alert activation."""
+
+        self.active = False
+        self.acknowledged = False
+        self.flow_id = None
+
+    def write_to(self, target: dict[str, Any]) -> None:
+        """Write an independent dictionary copy of the complete runtime state."""
+
+        target.clear()
+        target.update(asdict(self))
+

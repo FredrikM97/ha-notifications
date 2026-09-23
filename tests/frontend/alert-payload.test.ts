@@ -74,6 +74,43 @@ describe("buildAlertPayload", () => {
     expect(payload).toMatchSnapshot();
   });
 
+  it("serializes confirmation timeout durations for the backend", () => {
+    const payload = buildAlertPayload(
+      defaultAlert(),
+      alertFormValues({
+        notification: {
+          ...alertFormValues().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+        confirmation: {
+          ...alertFormValues().confirmation,
+          reminders: {
+            ...alertFormValues().confirmation.reminders,
+            timeout: "00:15:00",
+          },
+        },
+      }),
+    );
+
+    expect(payload.confirmation?.reminders.timeout).toBe(900);
+  });
+
+  it("rejects malformed durations before transport", () => {
+    const original = defaultAlert();
+    expect(() =>
+      buildAlertPayload(
+        original,
+        alertFormValues({
+          monitor: {
+            ...alertFormValues().monitor,
+            interval: "not-a-duration",
+          },
+        }),
+        false,
+      ),
+    ).toThrow("Monitor interval must be a valid duration.");
+  });
+
   it("throws when confirmation is enabled without recipients", () => {
     expect(() =>
       buildAlertPayload(

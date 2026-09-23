@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -12,10 +12,8 @@ from homeassistant.util import dt as dt_util
 
 from ..const import (
     EVENT_ALERT_EVENT,
-    STATE_HISTORY,
-    STATE_RUNTIME,
     AlertEventType,
-    StateRoot,
+    FeatureName,
 )
 from ..controller.lifecycle import (
     FeatureBase,
@@ -23,10 +21,8 @@ from ..controller.lifecycle import (
     route,
     websocket_route,
 )
-from ..domain.confirmation import PendingConfirmationState
 from ..domain.runtime import AlertRuntimeState
 from ..support.storage import Storage
-from . import history
 from .configuration import Alert
 
 
@@ -34,20 +30,19 @@ class AlertFeature(FeatureBase):
     """Expose alert read routes after configuration has been applied."""
 
     name = "alerts"
-    dependencies = ("notification",)
+    dependencies = ("notification", "history")
 
     def __init__(
         self,
         _hass: Any,
-        state: StateRoot,
+        runtime: dict[str, AlertRuntimeState],
         config_storage: Storage,
-        runtime_storage: Storage,
+        _runtime_storage: Storage,
     ) -> None:
         super().__init__()
         self._hass = _hass
-        self._state = state
+        self._runtime = runtime
         self._config_storage = config_storage
-        self._runtime_storage = runtime_storage
         self._alerts: dict[str, Alert] = {}
 
     @property
@@ -56,110 +51,95 @@ class AlertFeature(FeatureBase):
 
         return self._alerts
 
-    def runtime(self, alert_id: str) -> dict[str, Any]:
-        """Return the mutable runtime state for an owned alert."""
+    def runtime(
+        self, alert_or_id: str | Mapping[str, Any]
+    ) -> AlertRuntimeState:
+        """Return runtime state for an ID or synchronize it from an alert."""
 
-        return self._state[STATE_RUNTIME].setdefault(alert_id, {})
+        if isinstance(alert_or_id, str):
+            alert_id = alert_or_id
+            alert = None
+        else:
+            alert = alert_or_id
+            alert_id = str(alert["id"])
+        runtime = self._runtime.get(alert_id)
+        if runtime is None:
+            configured = alert or self._alerts.get(alert_id)
+            if configured is None:
+                raise ValueError(f"Alert {alert_id} is not configured")
+            runtime = AlertRuntimeState.for_alert(configured)
+            self._runtime[alert_id] = runtime
+        elif alert is not None:
+            runtime.alert = dict(alert)
+        return runtime
 
     def reset_runtime(self, alert_id: str) -> None:
         """Reset toggle-scoped runtime state using the typed defaults."""
 
         runtime = self.runtime(alert_id)
-        state = AlertRuntimeState.from_runtime(runtime)
-        state.active = False
-        state.acknowledged = False
-        state.confirmation = PendingConfirmationState()
-        state.notification_id = None
-        state.flow_id = None
-        state.started_at = None
-        state.last_notified = None
-        state.confirmed_at = None
-        state.confirmed_by = None
-        state.last_error = None
-        state.write_to(runtime)
+        self._runtime[alert_id] = AlertRuntimeState.reset(runtime)
 
     async def deactivate(
         self,
-        alert: Mapping[str, Any],
+        runtime: AlertRuntimeState,
         now: datetime,
         source: str,
     ) -> None:
         """Mark an active alert inactive and clear its notification if configured."""
 
-        runtime = self.runtime(str(alert["id"]))
-        if not runtime.get("active", False):
+        if not runtime.active:
             return
-        state = AlertRuntimeState.from_runtime(runtime)
-        state.active = False
-        state.acknowledged = False
-        state.notification_id = None
-        state.flow_id = None
-        state.write_to(runtime)
-        notification = self.feature("notification")
+        alert = runtime.alert
+        runtime.deactivate()
+        notification = self.feature(FeatureName.NOTIFICATION)
         if notification.should_clear_on_condition_change(alert):
-            await notification.clear(alert, now)
+            await notification.clear(runtime)
         self.publish_event(
-            alert,
+            runtime,
             AlertEventType.CONDITION_INACTIVE,
             "Condition became false.",
             {"source": source},
-            now,
         )
 
     def activate(
         self,
-        alert: Mapping[str, Any],
+        runtime: AlertRuntimeState,
         now: datetime,
         source: str,
     ) -> None:
         """Mark an alert active and publish its state transition."""
 
-        alert_id = str(alert["id"])
-        runtime = self.runtime(alert_id)
-        state = AlertRuntimeState.from_runtime(runtime)
-        was_active = bool(state.active)
-        state.last_evaluated = now.isoformat()
-        if not was_active:
-            state.active = True
-            state.acknowledged = False
-            state.started_at = now.isoformat()
-            state.notification_id = (
-                f"ha_notifications_{alert_id}_{uuid.uuid4().hex[:10]}"
-            )
-            state.flow_id = f"flow_{alert_id}_{uuid.uuid4().hex[:8]}"
-        state.write_to(runtime)
-        if not was_active:
-            self.publish_event(
-                alert,
-                AlertEventType.CONDITION_ACTIVE,
-                "Condition became true.",
-                {"source": source},
-                now,
-            )
+        if runtime.active:
+            return
+        runtime.activate(now)
+        self.publish_event(
+            runtime,
+            AlertEventType.CONDITION_ACTIVE,
+            "Condition became true.",
+            {"source": source},
+        )
 
     def publish_event(
         self,
-        alert: Mapping[str, Any],
+        runtime: AlertRuntimeState,
         event_type: AlertEventType,
         message: str,
         details: Mapping[str, Any],
-        now: datetime,
     ) -> None:
-        """Publish an event fact with the alert's current flow identity."""
+        """Publish a runtime aggregate as one event fact."""
 
-        runtime = self.runtime(str(alert["id"]))
+        event_runtime: dict[str, Any] = {}
+        runtime.write_to(event_runtime)
+        event_runtime["event"] = {
+            "event_id": uuid.uuid4().hex,
+            "timestamp": dt_util.utcnow().isoformat(),
+            "type": event_type.value,
+            "message": message,
+            "details": dict(details),
+        }
         self._hass.bus.async_fire(
             EVENT_ALERT_EVENT,
-            {
-                "id": uuid.uuid4().hex,
-                "timestamp": now.isoformat(),
-                "alert_id": alert["id"],
-                "alert_name": alert["name"],
-                "type": event_type.value,
-                "message": message,
-                "details": dict(details),
-                "flow_id": runtime.get("flow_id"),
-            },
+            event_runtime,
         )
 
     @route("alerts.apply")
@@ -170,10 +150,12 @@ class AlertFeature(FeatureBase):
         self._alerts = {
             alert["id"]: Alert.model_validate(alert) for alert in config["alerts"]
         }
+        for alert in self._alerts.values():
+            self.runtime(alert.model_dump(exclude_none=True))
         newly_enabled: set[str] = set()
-        for alert_id in list(self._state[STATE_RUNTIME]):
+        for alert_id in list(self._runtime):
             if alert_id not in self._alerts:
-                del self._state[STATE_RUNTIME][alert_id]
+                del self._runtime[alert_id]
         for alert in self._alerts.values():
             previous = previous_alerts.get(alert.id)
             if alert.enabled and previous is not None and not previous.enabled:
@@ -193,7 +175,7 @@ class AlertFeature(FeatureBase):
     async def get_runtime(self, alert_id: str) -> dict[str, Any]:
         """Return the runtime record owned by one configured alert."""
 
-        return self.runtime(alert_id)
+        return asdict(self.runtime(alert_id))
 
     @websocket_route(
         "alerts.runtime_mapping",
@@ -204,7 +186,10 @@ class AlertFeature(FeatureBase):
     async def get_runtime_mapping(self) -> dict[str, dict[str, Any]]:
         """Return runtime records for all configured alerts."""
 
-        return {alert_id: self.runtime(alert_id) for alert_id in self._alerts}
+        return {
+            alert_id: asdict(self.runtime(alert_id))
+            for alert_id in self._alerts
+        }
 
     @websocket_route(
         "alerts.list",
@@ -219,7 +204,7 @@ class AlertFeature(FeatureBase):
         for alert in self._alerts.values():
             mapped = alert.model_dump(exclude_none=True)
             state = self.runtime(alert.id)
-            result.append({**mapped, "runtime": deepcopy(state)})
+            result.append({**mapped, "runtime": asdict(state)})
         return result
 
     @websocket_route(
@@ -266,8 +251,8 @@ class AlertFeature(FeatureBase):
 
         alert = await self.get_alert(alert_id)
         if alert:
-            await self.feature("notification").clear(
-                alert, dt_util.utcnow()
+            await self.feature(FeatureName.NOTIFICATION).clear(
+                alert
             )
 
         config = dict(await self._config_storage.load_config())
@@ -275,17 +260,13 @@ class AlertFeature(FeatureBase):
             item for item in config["alerts"] if item["id"] != alert_id
         ]
         await self._config_storage.save_config(config)
-        self._state[STATE_RUNTIME].pop(alert_id, None)
-        self._state[STATE_HISTORY] = history.remove_alert(
-            self._state[STATE_HISTORY], alert_id
-        )
-        self._runtime_storage.persist()
+        self._runtime.pop(alert_id, None)
+        await self.feature(FeatureName.HISTORY).remove_alert(alert_id)
         return True
 
     def record_delivery_result(
         self,
-        alert_id: str,
-        attempt: int,
+        runtime: AlertRuntimeState,
         now: Any,
         *,
         success: bool,
@@ -293,9 +274,8 @@ class AlertFeature(FeatureBase):
     ) -> None:
         """Update delivery state without exposing the mutable runtime mapping."""
 
-        runtime = self.runtime(alert_id)
         if not success:
-            runtime["last_error"] = error
+            runtime.last_error = error
             return
-        runtime["last_notified"] = now.isoformat()
-        runtime["last_error"] = None
+        runtime.last_notified = now.isoformat()
+        runtime.last_error = None

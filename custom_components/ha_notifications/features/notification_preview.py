@@ -7,7 +7,9 @@ from uuid import uuid4
 
 from homeassistant.util import dt as dt_util
 
+from ..const import FeatureName
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
+from ..domain.runtime import AlertRuntimeState
 from .configuration import Alert
 
 
@@ -38,8 +40,9 @@ class NotificationPreviewFeature(FeatureBase):
 
         preview_alert = Alert.model_validate(alert).model_dump(exclude_none=True)
         preview_alert["id"] = f"NC_PREVIEW_{uuid4().hex}"
-        await self.feature("conditions").condition_result_for_alert(
-            preview_alert,
+        runtime = AlertRuntimeState.for_alert(preview_alert)
+        await self.feature(FeatureName.CONDITIONS).condition_result_for_alert(
+            runtime,
             True,
             None,
             source="startup",

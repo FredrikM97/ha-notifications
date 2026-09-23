@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, TypedDict
 
 DOMAIN = "ha_notifications"
 
@@ -15,19 +14,10 @@ SERVICE_TEST = "test"
 
 EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
 EVENT_ALERT_EVENT = "ha_notifications_alert_event"
-STATE_RUNTIME = "runtime"
-STATE_HISTORY = "history"
 STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
 
-
-class StateRoot(TypedDict):
-    """Persisted runtime and history state shared by feature workflows."""
-
-    runtime: dict[str, dict[str, Any]]
-    history: list[dict[str, Any]]
-
 STORAGE_VERSION = 1
-STORAGE_KEY = "ha_notifications"
+HISTORY_STORAGE_KEY = "ha_notifications_history"
 
 MAX_HISTORY = 500
 PANEL_TITLE = "HA Notifications"
@@ -64,6 +54,21 @@ class AlertEventType(StrEnum):
     CONFIRMATION_ACTION = "confirmation_action"
     CONFIRMATION_ACTION_FAILED = "confirmation_action_failed"
     TEST = "test"
+
+
+class FeatureName(StrEnum):
+    """Stable keys used to resolve feature dependencies."""
+
+    ALERTS = "alerts"
+    ALERT_COORDINATOR = "alert_coordinator"
+    ALERT_FLOW = "alert_flow"
+    CONDITIONS = "conditions"
+    CONFIGURATION = "configuration"
+    CONFIRMATIONS = "confirmations"
+    FOLLOW_UP_ACTIONS = "follow_up_actions"
+    HISTORY = "history"
+    NOTIFICATION = "notification"
+    NOTIFICATION_PREVIEW = "notification_preview"
 
 
 class ConditionType(StrEnum):
