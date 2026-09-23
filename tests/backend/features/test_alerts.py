@@ -159,6 +159,18 @@ def test_runtime_trace_does_not_evict_existing_facts() -> None:
     assert runtime.trace == facts
 
 
+def test_runtime_activation_clears_previous_notification_marker() -> None:
+    runtime = make_runtime_state(
+        alert={"id": "alert_1", "name": "Alert"},
+        active=True,
+        last_notified="2026-09-23T12:00:00+00:00",
+    )
+
+    runtime.activate(datetime(2026, 9, 23, 13, 0, 0))
+
+    assert runtime.last_notified is None
+
+
 async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
     snapshot,
 ):

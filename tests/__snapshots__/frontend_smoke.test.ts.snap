@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`frontend build contract > keeps the bundled panel and source contracts aligned 1`] = `
+{
+  "bundle": {
+    "administratorGuard": true,
+    "cardRegistration": true,
+    "confirmationActions": true,
+    "customCard": true,
+    "draftTestNotification": true,
+    "historyFlow": true,
+    "legacyCardRemoved": true,
+    "nativeLitImportRemoved": true,
+    "nativeSwitch": true,
+    "oldJsonCopyRemoved": true,
+    "oldSwitchRemoved": true,
+    "runtimeAccess": true,
+    "yamlEditorFill": true,
+    "yamlLayout": true,
+  },
+  "source": {
+    "apiListWrapper": true,
+    "defaultConfirmationDisabled": true,
+    "editorSectionLabels": true,
+    "editorTitleMarkup": true,
+    "previewWrapper": true,
+    "yamlEditorClass": true,
+  },
+}
+`;
