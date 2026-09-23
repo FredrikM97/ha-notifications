@@ -213,6 +213,18 @@ select {
   box-shadow: var(--ha-box-shadow);
 }
 
+.nc-yaml {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 180px);
+}
+
+ha-code-editor.nc-yaml-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  --nc-code-editor-height: 100%;
+}
+
 .nc-section {
   background: transparent;
 }
