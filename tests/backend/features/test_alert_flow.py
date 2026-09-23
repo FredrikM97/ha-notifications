@@ -8,9 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from custom_components.ha_notifications.domain.confirmation import (
-    PendingConfirmationState,
-)
 from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.domain.workflow import (
     ConditionStatus,
@@ -31,7 +28,7 @@ confirmation_module = importlib.import_module(
 
 def condition_event(alert, transition, now, runtime=None):
     runtime = runtime or AlertRuntimeState.for_alert(alert)
-    runtime.alert = dict(alert)
+    runtime.config = dict(alert)
     if getattr(transition, "error", None) is not None:
         return ConditionWorkflowEvent(
             runtime,
@@ -50,7 +47,7 @@ def condition_event(alert, transition, now, runtime=None):
         now,
         ConditionStatus.ACTIVE,
         facts=getattr(transition, "facts", {}) or {},
-        replace_existing=runtime.active,
+        replace_existing=runtime.condition_active,
     )
 
 
@@ -59,11 +56,9 @@ class RuntimeAlerts:
         self.notification = None
         self.history = None
         self.values = {
-            "alert_1": AlertRuntimeState(
-                alert=make_alert(),
-                active=True, confirmation=PendingConfirmationState()
-            )
+            "alert_1": AlertRuntimeState.for_alert(make_alert())
         }
+        self.values["alert_1"].activate(datetime.now(timezone.utc))
 
     def runtime(self, alert_or_id):
         if isinstance(alert_or_id, str):
@@ -74,16 +69,14 @@ class RuntimeAlerts:
             alert_id = str(alert["id"])
         runtime = self.values[alert_id]
         if alert is not None:
-            runtime.alert = dict(alert)
+            runtime.config = dict(alert)
         return runtime
 
     async def deactivate(self, runtime, now, _source):
-        alert = runtime.alert
-        if not runtime.active:
+        alert = runtime.config
+        if not runtime.condition_active:
             return None
-        runtime.active = False
-        runtime.acknowledged = False
-        runtime.flow_id = None
+        runtime.deactivate(now)
         monitor = alert.get("monitor") or {}
         configured = monitor.get("clear_on_condition_change")
         confirmation = alert.get("confirmation")
@@ -101,7 +94,7 @@ class RuntimeAlerts:
             return
         self.history.append_event(
             {
-                "alert_id": _runtime.alert["id"],
+                "alert_id": _runtime.config["id"],
                 "type": event_type.value,
                 "message": message,
                 "details": dict(details),
@@ -114,14 +107,6 @@ class RuntimeAlerts:
 
     def next_attempt(self, alert_id):
         return self.values[alert_id].confirmation.attempts + 1
-
-    def record_delivery_result(self, runtime, now, *, success, error=None):
-        if not success:
-            runtime.last_error = error
-            return
-        runtime.last_notified = now.isoformat()
-        runtime.last_error = None
-
 
 class History:
     def __init__(self, order=None):
@@ -164,7 +149,7 @@ class Notification:
             self.order.append("notification")
         self.sent.append(
             {
-                "alert": dict(request.runtime.alert),
+                "alert": dict(request.runtime.config),
                 "attempt": (
                     request.runtime.confirmation.next_attempt
                 ),
@@ -241,7 +226,7 @@ class Confirmation:
         runtime.confirmation.attempts += 1
 
     def prepare_action(self, runtime, **_kwargs):
-        if not (runtime.alert.get("confirmation") or {}).get("enabled", False):
+        if not (runtime.config.get("confirmation") or {}).get("enabled", False):
             return
         runtime.confirmation.action_ids = {"confirm": "confirm"}
         return True, "confirm"
@@ -416,6 +401,34 @@ async def test_active_condition_sends_and_runs_follow_up():
 
 
 @pytest.mark.asyncio
+async def test_startup_attempt_is_not_repeated_after_delivery_failure():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    notification = Notification(fail=True)
+    flow, features = build_flow(notification=notification)
+    alert = make_alert()
+    runtime = features["alerts"].values["alert_1"]
+
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="startup"),
+            now,
+            runtime,
+        )
+    )
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="startup"),
+            now,
+            runtime,
+        )
+    )
+
+    assert len(notification.sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_active_condition_orders_effects():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     order = []
@@ -496,7 +509,9 @@ async def test_reminder_sends_next_attempt_as_replacement():
     runtime = features["alerts"].values["alert_1"]
     runtime.confirmation.attempts = 1
     runtime.confirmation.action_ids = {"confirm": "confirm"}
-    runtime.last_notified = "2026-01-01T00:00:00+00:00"
+    runtime.record_event(
+        NotificationOutcome(datetime(2026, 1, 1, tzinfo=timezone.utc), True)
+    )
 
     await flow.handle_event(
         condition_event(
@@ -527,4 +542,4 @@ async def test_condition_effects_update_runtime_state():
             features["alerts"].values["alert_1"],
         )
     )
-    assert features["alerts"].values["alert_1"].active is True
+    assert features["alerts"].values["alert_1"].condition_active is True

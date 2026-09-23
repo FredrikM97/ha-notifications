@@ -23,7 +23,7 @@ from ..domain.confirmation import (
 )
 from ..domain.runtime import AlertRuntimeState
 from ..domain.service_calls import FollowUpActionsRequest
-from ..domain.workflow import NotificationRequest
+from ..domain.workflow import ConfirmationWorkflowEvent, NotificationRequest
 from ..support.jinja import JinjaEvaluator
 
 
@@ -157,7 +157,7 @@ class ConfirmationFeature(FeatureBase):
     ) -> bool:
         """Decide whether a pending confirmation should be resent."""
 
-        alert = runtime.alert
+        alert = runtime.config
         pending = runtime.confirmation
         if not pending.action_ids:
             return False
@@ -196,7 +196,9 @@ class ConfirmationFeature(FeatureBase):
         action_ids = runtime.confirmation.action_ids
         if not action_ids:
             return False
-        timestamp = runtime.last_notified or runtime.started_at
+        timestamp = (
+            runtime.last_notified or runtime.started_at
+        )
         if not timestamp:
             return False
         try:
@@ -217,7 +219,7 @@ class ConfirmationFeature(FeatureBase):
     ) -> ConfirmationAttemptsExhausted | None:
         """Expire pending actions and report the confirmation limit reached."""
 
-        alert = runtime.alert
+        alert = runtime.config
         if not runtime.confirmation.action_ids:
             return None
         settings = ConfirmationConfig.from_alert(alert)
@@ -241,7 +243,7 @@ class ConfirmationFeature(FeatureBase):
         result = await self.resolve_action_event(event)
         if result:
             await self.feature(FeatureName.ALERT_COORDINATOR).run(
-                str(result.runtime.alert["id"]),
+                str(result.runtime.config["id"]),
                 lambda: self._apply_confirmation(result),
             )
 
@@ -249,7 +251,7 @@ class ConfirmationFeature(FeatureBase):
         """Apply one resolved confirmation and all of its ordered effects."""
 
         runtime = result.runtime
-        alert = runtime.alert
+        alert = runtime.config
         self._acknowledge(result)
         alerts = self.feature(FeatureName.ALERTS)
         alerts.publish_event(
@@ -292,9 +294,18 @@ class ConfirmationFeature(FeatureBase):
 
         runtime = result.runtime
         runtime.confirmation.action_ids.clear()
-        runtime.acknowledged = True
-        runtime.confirmed_at = result.now.isoformat()
-        runtime.confirmed_by = result.confirmation.confirmed_by
+        runtime.state.update(
+            acknowledged=True,
+            confirmed_at=result.now.isoformat(),
+            confirmed_by=result.confirmation.confirmed_by,
+        )
+        runtime.record_event(
+            ConfirmationWorkflowEvent(
+                runtime=runtime,
+                confirmation=result.confirmation,
+                now=result.now,
+            )
+        )
 
     async def _send_completion(
         self,
@@ -353,7 +364,7 @@ class ConfirmationFeature(FeatureBase):
         related_ids = [
             session_id
             for session_id, candidate in self._sessions.items()
-            if candidate.runtime.alert["id"] == session.runtime.alert["id"]
+            if candidate.runtime.config["id"] == session.runtime.config["id"]
         ]
         for session_id in related_ids:
             self.clear(session_id)
@@ -370,7 +381,7 @@ class ConfirmationFeature(FeatureBase):
         for state in runtimes.values():
             action_ids = state.confirmation.action_ids
             selections = self.selections_for(
-                state.alert,
+                state.config,
                 action_ids,
             )
             for selection in selections:
@@ -437,7 +448,7 @@ class ConfirmationFeature(FeatureBase):
     ) -> tuple[ConfirmationSelection, ...]:
         """Return prepared notification actions for one pending alert."""
 
-        alert = runtime.alert
+        alert = runtime.config
         action_ids = runtime.confirmation.action_ids
         return self.selections_for(alert, action_ids)
 
@@ -447,7 +458,7 @@ class ConfirmationFeature(FeatureBase):
     ) -> None:
         """Create a pending action only when confirmation is configured."""
 
-        alert = runtime.alert
+        alert = runtime.config
         confirmation = ConfirmationConfig.model_validate(
             alert.get("confirmation") or {}
         )
@@ -472,7 +483,7 @@ class ConfirmationFeature(FeatureBase):
     ) -> None:
         """Create and track the canonical pending response session."""
 
-        alert = runtime.alert
+        alert = runtime.config
         action_ids = {
             f"NC_CONFIRM_{alert['id']}_{uuid4().hex}_{button.id}": button.id
             for button in confirmation.buttons
@@ -501,7 +512,7 @@ class ConfirmationResult:
 def extract_action_id(event_data: Any) -> str | None:
     """Return the confirmation action ID from a mobile-action event payload."""
 
-    if not isinstance(event_data, dict):
+    if not isinstance(event_data, Mapping):
         return None
 
     action = event_data.get("action")

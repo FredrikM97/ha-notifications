@@ -232,8 +232,7 @@ async def test_alert_routes_preserve_the_save_reload_edit_delete_flow(
     assert await controller.dispatch("alerts.get", "flow_alert") is not None
     assert "flow_alert" in await controller.dispatch("alerts.runtime_mapping")
     history = await controller.dispatch("history.list", alert_id="flow_alert")
-    assert history
-    assert all(entry["alert"]["id"] == "flow_alert" for entry in history)
+    assert all(entry["config"]["id"] == "flow_alert" for entry in history)
     assert await controller.dispatch("conditions.validate", alert)
 
     updated = {**alert, "name": "Updated alert", "enabled": False}
@@ -285,4 +284,4 @@ async def test_frontend_runtime_request_reaches_real_backend_route(
     runtime = connection.results[0][1]
     assert isinstance(runtime, dict)
     assert set(runtime) == {"alert_1"}
-    assert all("active" in state for state in runtime.values())
+    assert all("trace" in state for state in runtime.values())

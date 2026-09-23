@@ -110,14 +110,14 @@ def list_entries(
 
     filtered = history
     if alert_id:
-        filtered = [item for item in filtered if item["alert"]["id"] == alert_id]
+        filtered = [item for item in filtered if item["config"]["id"] == alert_id]
     return list(reversed(filtered[-max(1, min(limit, MAX_HISTORY)) :]))
 
 
 def remove_alert(history: list[dict[str, Any]], alert_id: str) -> list[dict[str, Any]]:
     """Return history with all events for a deleted alert removed."""
 
-    return [item for item in history if item["alert"]["id"] != alert_id]
+    return [item for item in history if item["config"]["id"] != alert_id]
 
 
 def prune_entries(
@@ -150,7 +150,7 @@ def prune_entries_by_alert(
     now = datetime.now().astimezone()
     result = []
     for entry in history:
-        retention_days = retention_by_alert.get(str(entry["alert"]["id"]))
+        retention_days = retention_by_alert.get(str(entry["config"]["id"]))
         if retention_days is None:
             result.append(entry)
             continue

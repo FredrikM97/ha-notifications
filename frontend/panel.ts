@@ -18,7 +18,13 @@ import { showToast as showToastOn, toastListTemplate } from "./toast.js";
 import type { Toast } from "./toast.js";
 import { LitElement, html } from "lit";
 import type { TemplateResult } from "lit";
-import type { Alert, Hass, Registries, RuntimeAlertState } from "./types.js";
+import type {
+  Alert,
+  Hass,
+  Registries,
+  RuntimeAlertHistoryEntry,
+  RuntimeAlertState,
+} from "./types.js";
 import "./yaml-view.js";
 
 type PanelTab = "alerts" | "history" | "yaml" | "debug";
@@ -69,7 +75,7 @@ function alertStatus(alert: Alert): AlertCardStatus {
     icon: "mdi:circle-outline",
     label: "Idle",
   };
-  if (alert.runtime?.active) {
+  if (alert.runtime?.state?.active) {
     conditionStatus = {
       className: "nc-status active",
       icon: "mdi:alert-circle",
@@ -108,11 +114,29 @@ function toggleAlertToast(alert: Alert): string {
   return "Alert enabled.";
 }
 
+interface DebugAlertEntry {
+  alert: Alert;
+  runtime: RuntimeAlertState;
+}
+
+function debugPayload(
+  alerts: Alert[],
+  runtime: Record<string, RuntimeAlertState>,
+): DebugAlertEntry[] {
+  return alerts.flatMap((alert) => {
+    const runtimeState = runtime[alert.id];
+    if (!alert.runtime?.state?.active || !runtimeState?.state?.active) {
+      return [];
+    }
+    return [{ alert, runtime: runtimeState }];
+  });
+}
+
 class HaNotificationsPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private runtime: Record<string, RuntimeAlertState> = {};
-  private history: RuntimeAlertState[] = [];
+  private history: RuntimeAlertHistoryEntry[] = [];
   private historyAlertId: string | null = null;
   private historyAlertName: string | null = null;
   private historyFilters: HistoryFilters = {
@@ -352,17 +376,35 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private debugTemplate(): TemplateResult {
-    if (!Object.keys(this.runtime).length) {
+    const entries = debugPayload(this.alerts, this.runtime);
+    if (!entries.length) {
       return html`<div class="nc-card nc-empty">
-        <h2>No runtime data</h2>
+        <h2>No active alerts</h2>
       </div>`;
     }
 
-    return html`<pre class="nc-debug-raw">${JSON.stringify(
-      this.runtime,
-      null,
-      2,
-    )}</pre>`;
+    return html`<div class="nc-debug-list">
+      ${entries.map(
+        ({ alert, runtime }) => html`
+          <details class="nc-debug-alert" open>
+            <summary>
+              <span>${alert.name}</span>
+              <code>${alert.id}</code>
+            </summary>
+            <div class="nc-debug-sections">
+              <details class="nc-debug-section" open>
+                <summary>State</summary>
+                <pre>${JSON.stringify(runtime.state ?? {}, null, 2)}</pre>
+              </details>
+              <details class="nc-debug-section">
+                <summary>Trace (${runtime.trace?.length ?? 0})</summary>
+                <pre>${JSON.stringify(runtime.trace ?? [], null, 2)}</pre>
+              </details>
+            </div>
+          </details>
+        `,
+      )}
+    </div>`;
   }
 
   private alertsTemplate(): TemplateResult {

@@ -80,7 +80,7 @@ export interface PostSendActionsConfig {
   actions?: Record<string, unknown>[];
 }
 
-export interface RuntimeAlertEvent {
+export interface RuntimeEvent {
   event_id: string;
   timestamp: string;
   type: string;
@@ -88,23 +88,26 @@ export interface RuntimeAlertEvent {
   details: Record<string, unknown>;
 }
 
-export interface RuntimeAlertState {
-  alert?: Alert;
-  event?: RuntimeAlertEvent;
+export interface RuntimeState {
   active?: boolean;
-  acknowledged?: boolean;
-  confirmation?: {
-    action_ids?: Record<string, string>;
-    attempts?: number;
-  };
-  notification_id?: string;
   flow_id?: string;
   started_at?: string;
   last_evaluated?: string;
   last_notified?: string;
+  last_error?: string;
+  acknowledged?: boolean;
   confirmed_at?: string;
   confirmed_by?: string;
-  last_error?: string;
+}
+
+export interface RuntimeAlertState {
+  config?: Alert;
+  state?: RuntimeState;
+  trace?: Record<string, unknown>[];
+}
+
+export interface RuntimeAlertHistoryEntry extends RuntimeAlertState {
+  event: RuntimeEvent;
 }
 
 export interface HistoryRetentionConfig {

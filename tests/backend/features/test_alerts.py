@@ -2,13 +2,38 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+import json
+from datetime import datetime
 from types import MappingProxyType, SimpleNamespace
 
 from custom_components.ha_notifications.const import AlertEventType, FeatureName
+from custom_components.ha_notifications.domain.runtime import serialize_runtime
+from custom_components.ha_notifications.domain.workflow import (
+    ConditionStatus,
+    ConditionWorkflowEvent,
+    NotificationOutcome,
+)
 from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
 from tests.backend.conftest import make_alert, make_runtime_state
+
+
+def test_runtime_trace_serializes_datetime_values_for_transport() -> None:
+    runtime = make_runtime_state()
+    runtime.record_event(
+        ConditionWorkflowEvent(
+            runtime=runtime,
+            source="test",
+            now=datetime(2026, 9, 23, 12, 0, 0),
+            status=ConditionStatus.ACTIVE,
+            flow_id="flow_alert_1",
+        )
+    )
+
+    payload = serialize_runtime(runtime)
+
+    json.dumps(payload)
+    assert payload["trace"][0]["now"] == "2026-09-23T12:00:00"
 
 
 async def test_disabled_runtime_reset_contract_snapshot(snapshot):
@@ -32,7 +57,7 @@ async def test_disabled_runtime_reset_contract_snapshot(snapshot):
         {"alerts": [make_alert(enabled=False, name="Alert")]}
     )
 
-    assert asdict(feature.runtime("alert_1")) == snapshot
+    assert serialize_runtime(feature.runtime("alert_1")) == snapshot
 
 
 async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts() -> None:
@@ -59,7 +84,7 @@ async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts() -
     runtime = feature.runtime("alert_1")
     assert runtime.confirmation.attempts == 0
     assert runtime.confirmation.action_ids == {}
-    assert runtime.active is False
+    assert runtime.condition_active is False
 
 
 async def test_runtime_reset_preserves_evaluation_context() -> None:
@@ -102,10 +127,34 @@ def test_publish_event_contains_complete_runtime_snapshot() -> None:
         {"attempt": 1},
     )
 
-    assert events[0]["alert"] == {"id": "alert_1", "name": "Alert"}
-    assert events[0]["flow_id"] == "flow_1"
+    assert events[0]["config"] == {"id": "alert_1", "name": "Alert"}
+    assert "trace" not in events[0]
     assert events[0]["event"]["type"] == AlertEventType.NOTIFICATION_SENT.value
     assert events[0]["event"]["details"] == {"attempt": 1}
+    assert state["alert_1"].trace == []
+
+
+def test_runtime_trace_preserves_existing_dataclass_order() -> None:
+    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
+    first = NotificationOutcome(datetime(2026, 1, 1), True)
+    second = NotificationOutcome(datetime(2026, 1, 2), False, "failed")
+    runtime.record_event(first)
+    runtime.record_event(second)
+
+    assert runtime.trace == [first, second]
+
+
+def test_runtime_trace_does_not_evict_existing_facts() -> None:
+    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
+    facts = [
+        NotificationOutcome(datetime(2026, 1, 1), True)
+        for _ in range(101)
+    ]
+
+    for fact in facts:
+        runtime.record_event(fact)
+
+    assert runtime.trace == facts
 
 
 async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(

@@ -28,6 +28,7 @@ This is the compact routing map for the direct-workflow architecture.
 - `custom_components/ha_notifications/delivery/`: recipient and notification-channel resolution; mobile-app entities use their concrete data-capable service and other targets use generic Notify.
 - `custom_components/ha_notifications/features/follow_up_actions.py`: post-send and post-confirmation service-call planning with per-action failure isolation.
 - `custom_components/ha_notifications/features/history.py`: runtime-aggregate history storage/query transport and formatting helpers; history is the only persisted runtime-adjacent state.
+- `custom_components/ha_notifications/domain/runtime.py`: the canonical process-local `AlertRuntimeState`, containing alert config, compact mutable state, and retained workflow and confirmation dataclass facts; it owns trace lifecycle and transport mapping.
 - `custom_components/ha_notifications/features/history.py`: registers the alert-event listener during feature setup and forwards raw event payloads to independent history persistence.
 
 ## Domain and support
@@ -35,9 +36,9 @@ This is the compact routing map for the direct-workflow architecture.
 - `custom_components/ha_notifications/features/configuration.py`: flat `Alert` and `Configuration` models plus structured configuration routes; each feature validates its own section at its workflow boundary.
 - `custom_components/ha_notifications/domain/service_calls.py`: typed Home Assistant service-call values and service-effects requests produced by workflows.
 - `custom_components/ha_notifications/domain/confirmation.py`: immutable confirmation contexts and response selections passed between ordered workflows.
-- `custom_components/ha_notifications/domain/runtime.py`: typed process-local alert/runtime aggregate, including serialized alert state and nested event facts, and its API serialization boundary.
+- `custom_components/ha_notifications/domain/runtime.py`: canonical process-local `AlertRuntimeState`; owns the configured alert snapshot, compact mutable state, raw bounded workflow dataclass facts, and their explicit transport mapping at API/event boundaries.
 - `custom_components/ha_notifications/domain/workflow.py`: notification requests/outcomes and condition workflow events passed to `AlertFlow`; runtime state remains process-local.
-- `custom_components/ha_notifications/support/storage.py`: raw configuration persistence and independent history persistence.
+- `custom_components/ha_notifications/support/storage.py`: validated runtime configuration loading, raw YAML recovery reads, and independent history persistence.
 - `custom_components/ha_notifications/support/jinja.py`: shared Home Assistant Jinja evaluation, recursive configuration rendering, template context, and null removal.
 - `custom_components/ha_notifications/support/scheduler.py`: `TaskScheduler` owns tracked feature background tasks and lifecycle cleanup.
 

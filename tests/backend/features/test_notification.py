@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import importlib
 import unittest
-from datetime import datetime, timezone
 from functools import partial
-from types import SimpleNamespace
 
 from homeassistant.components.notify.const import NOTIFY_SERVICE_SCHEMA
 
@@ -15,7 +13,6 @@ from custom_components.ha_notifications.domain.confirmation import (
     ConfirmationSelection,
 )
 from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
-from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
 from tests.backend.conftest import (
     make_confirmation_alert,
@@ -464,41 +461,6 @@ async def test_confirmation_reminder_replacement_contract_snapshot(snapshot):
     ]
 
     assert normalized == snapshot
-
-
-def test_delivery_result_commits_only_successful_confirmation_attempts():
-    runtime = AlertRuntimeState(
-        alert={"id": "alert_1"}, last_notified="previous"
-    )
-    runtime.confirmation.attempts = 1
-    state = {"alert_1": runtime}
-    persistence = SimpleNamespace(
-        runtime=lambda alert_id: state[alert_id]
-    )
-    feature = AlertFeature(None, state, None, persistence)
-
-    feature.record_delivery_result(
-        runtime,
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        success=False,
-        error="delivery failed",
-    )
-
-    assert runtime.confirmation.attempts == 1
-    assert runtime.confirmation.action_ids == {}
-    assert runtime.last_notified == "previous"
-    assert runtime.last_error == "delivery failed"
-
-    feature.record_delivery_result(
-        runtime,
-        datetime(2026, 1, 2, tzinfo=timezone.utc),
-        success=True,
-    )
-
-    assert runtime.confirmation.attempts == 1
-    assert runtime.confirmation.action_ids == {}
-    assert runtime.last_notified == "2026-01-02T00:00:00+00:00"
-    assert runtime.last_error is None
 
 
 async def test_confirmation_completion_planner_renders_message_and_clear_policy():

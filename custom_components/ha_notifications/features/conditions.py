@@ -266,7 +266,7 @@ class ConditionFeature(FeatureBase):
     ) -> None:
         """Forward one evaluated result for an explicit alert mapping."""
 
-        alert = runtime.alert
+        alert = runtime.config
         alert_id = str(alert["id"])
         runtime.evaluate(now)
         if error is not None:
@@ -285,11 +285,14 @@ class ConditionFeature(FeatureBase):
                 now,
                 ConditionStatus.ACTIVE,
                 facts=facts or {},
-                replace_existing=runtime.active,
+                replace_existing=runtime.condition_active,
             )
             self.feature(FeatureName.ALERTS).activate(runtime, now, source)
         else:
             return
+        runtime.record_event(condition_event)
+        if condition_event.status is ConditionStatus.ERROR:
+            runtime.state["last_error"] = error
         await self.feature(FeatureName.ALERT_COORDINATOR).run(
             alert_id,
             lambda: self.feature(FeatureName.ALERT_FLOW).handle_event(

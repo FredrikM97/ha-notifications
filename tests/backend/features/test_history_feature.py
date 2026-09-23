@@ -43,11 +43,11 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(timezone.utc)
         history = [
             {
-                "alert": {"id": "short"},
+                "config": {"id": "short"},
                 "event": {"timestamp": (now - timedelta(days=3)).isoformat()},
             },
             {
-                "alert": {"id": "long"},
+                "config": {"id": "long"},
                 "event": {"timestamp": (now - timedelta(days=3)).isoformat()},
             },
         ]
@@ -62,7 +62,7 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(timezone.utc)
         history = [
             {
-                "alert": {"id": "unlimited"},
+                "config": {"id": "unlimited"},
                 "event": {"timestamp": (now - timedelta(days=365)).isoformat()},
             }
         ]
@@ -73,14 +73,14 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
 
     def test_remove_alert_removes_only_matching_entries(self):
         history = [
-            {"alert": {"id": "alert_1"}},
-            {"alert": {"id": "alert_2"}},
-            {"alert": {"id": "alert_1"}},
+                {"config": {"id": "alert_1"}},
+            {"config": {"id": "alert_2"}},
+            {"config": {"id": "alert_1"}},
         ]
 
         self.assertEqual(
             history_feature.remove_alert(history, "alert_1"),
-            [{"alert": {"id": "alert_2"}}],
+            [{"config": {"id": "alert_2"}}],
         )
 
     async def test_history_listener_persists_published_event(self):
@@ -102,8 +102,8 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(
                 data={
                     "id": "event_1",
-                    "alert": {"id": "alert_1", "name": "Alert"},
-                    "flow_id": "flow_1",
+                        "config": {"id": "alert_1", "name": "Alert"},
+                    "condition": {"flow_id": "flow_1"},
                     "event": {
                         "event_id": "event_1",
                         "timestamp": now.isoformat(),
@@ -117,7 +117,7 @@ class HistoryFeatureTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         entry = history[0]
         self.assertEqual(entry["event"]["type"], "notification_failed")
-        self.assertEqual(entry["flow_id"], "flow_1")
+        self.assertEqual(entry["condition"]["flow_id"], "flow_1")
         self.assertEqual(
             entry["event"]["details"], {"attempt": 2, "error": "boom"}
         )

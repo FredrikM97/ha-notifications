@@ -26,7 +26,7 @@ class AppendListRemoveTests(unittest.TestCase):
         entries: list[dict] = []
         for index in range(5):
             entry = {
-                "alert": {"id": "first" if index % 2 == 0 else "second"},
+                    "config": {"id": "first" if index % 2 == 0 else "second"},
                 "event": {"details": {"index": index}},
             }
             entries = history.append_entry(entries, entry)
@@ -45,17 +45,17 @@ class AppendListRemoveTests(unittest.TestCase):
 
     def test_remove_alert_drops_only_matching_events(self):
         entries = [
-            {"alert": {"id": "first"}},
-            {"alert": {"id": "second"}},
+            {"config": {"id": "first"}},
+            {"config": {"id": "second"}},
         ]
         remaining = history.remove_alert(entries, "first")
-        self.assertTrue(all(event["alert"]["id"] == "second" for event in remaining))
+        self.assertTrue(all(event["config"]["id"] == "second" for event in remaining))
 
     def test_list_entries_limits_and_retention_preserves_invalid_timestamps(self):
         entries = [
-            {"alert": {"id": "alert_1"}, "event": {"timestamp": "not-a-date"}},
+            {"config": {"id": "alert_1"}, "event": {"timestamp": "not-a-date"}},
             {
-                "alert": {"id": "alert_1"},
+                "config": {"id": "alert_1"},
                 "event": {"timestamp": "2026-01-01T00:00:00+00:00"},
             },
         ]
@@ -73,14 +73,14 @@ class AppendListRemoveTests(unittest.TestCase):
     def test_prune_entries_by_alert_applies_each_retention_policy(self):
         entries = [
             {
-                "alert": {"id": "expired"},
+                "config": {"id": "expired"},
                 "event": {"timestamp": "2020-01-01T00:00:00+00:00"},
             },
             {
-                "alert": {"id": "kept"},
+                "config": {"id": "kept"},
                 "event": {"timestamp": "2020-01-01T00:00:00+00:00"},
             },
-            {"alert": {"id": "unconfigured"}, "event": {"timestamp": "not-a-date"}},
+            {"config": {"id": "unconfigured"}, "event": {"timestamp": "not-a-date"}},
         ]
 
         result = history.prune_entries_by_alert(

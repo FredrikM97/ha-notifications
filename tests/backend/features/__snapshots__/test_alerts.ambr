@@ -1,9 +1,7 @@
 # serializer version: 1
 # name: test_disabled_runtime_reset_contract_snapshot
   dict({
-    'acknowledged': False,
-    'active': False,
-    'alert': dict({
+    'config': dict({
       'conditions': list([
         dict({
           'template': '{{ true }}',
@@ -32,18 +30,11 @@
         'title': 'Title',
       }),
     }),
-    'confirmation': dict({
-      'action_ids': dict({
-      }),
-      'attempts': 0,
+    'state': dict({
+      'last_evaluated': '2026-01-01T00:00:00+00:00',
     }),
-    'confirmed_at': None,
-    'confirmed_by': None,
-    'flow_id': None,
-    'last_error': None,
-    'last_evaluated': None,
-    'last_notified': None,
-    'started_at': None,
+    'trace': list([
+    ]),
   })
 # ---
 # name: test_save_update_preserves_created_at_and_delete_cleans_owned_state

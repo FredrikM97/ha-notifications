@@ -79,9 +79,9 @@ class ConfigurationFeature(FeatureBase):
         error_message="Unable to load configuration.",
     )
     async def get_config(self) -> dict[str, Any]:
-        """Return the current structured configuration document."""
+        """Return the saved document for YAML export and recovery."""
 
-        config = await self._storage.load_config()
+        config = await self._storage.load_raw_config()
         ordered = dict(config)
         version = ordered.pop("version", 1)
         return {"version": version, **ordered}

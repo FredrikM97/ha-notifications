@@ -3,7 +3,7 @@
 exports[`filterHistoryEntries > combines alert, event type, and severity filters 1`] = `
 [
   {
-    "alert": {
+    "config": {
       "id": "garage",
       "name": "Garage door",
     },
@@ -16,7 +16,9 @@ exports[`filterHistoryEntries > combines alert, event type, and severity filters
       "timestamp": "2026-01-01T00:00:00+00:00",
       "type": "notification_sent",
     },
-    "flow_id": "flow_garage",
+    "state": {
+      "flow_id": "flow_garage",
+    },
   },
 ]
 `;
@@ -24,7 +26,7 @@ exports[`filterHistoryEntries > combines alert, event type, and severity filters
 exports[`filterHistoryEntries > matches search text across the event content 1`] = `
 [
   {
-    "alert": {
+    "config": {
       "id": "water",
       "name": "Water leak",
     },
@@ -44,7 +46,7 @@ exports[`filterHistoryEntries > matches search text across the event content 1`]
 exports[`filterHistoryEntries > returns all entries when no filters are active 1`] = `
 [
   {
-    "alert": {
+    "config": {
       "id": "garage",
       "name": "Garage door",
     },
@@ -57,10 +59,12 @@ exports[`filterHistoryEntries > returns all entries when no filters are active 1
       "timestamp": "2026-01-01T00:00:00+00:00",
       "type": "notification_sent",
     },
-    "flow_id": "flow_garage",
+    "state": {
+      "flow_id": "flow_garage",
+    },
   },
   {
-    "alert": {
+    "config": {
       "id": "water",
       "name": "Water leak",
     },

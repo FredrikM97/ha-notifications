@@ -37,7 +37,7 @@ class FollowUpActionsFeature(FeatureBase):
     ) -> list[dict[str, Any]]:
         """Return raw actions configured after confirmation."""
 
-        alert = runtime.alert
+        alert = runtime.config
         confirmation = alert.get("confirmation") or {}
         actions = confirmation.get("actions") or {}
         if not actions.get("enabled"):
@@ -52,7 +52,7 @@ class FollowUpActionsFeature(FeatureBase):
 
         actions = request.actions
         if not actions:
-            post_send = request.runtime.alert.get("post_send_actions") or {}
+            post_send = request.runtime.config.get("post_send_actions") or {}
             if not post_send.get("enabled"):
                 return
             actions = tuple(post_send.get("actions") or ())

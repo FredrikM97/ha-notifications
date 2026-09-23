@@ -7,7 +7,7 @@ import type {
   Alert,
   Hass,
   Registries,
-  RuntimeAlertState,
+  RuntimeAlertHistoryEntry,
 } from "../../frontend/types.js";
 import type { AlertFormValues } from "../../frontend/alert-payload.js";
 import { defaultAlert } from "../../frontend/editor/helpers.js";
@@ -16,7 +16,7 @@ import alertFormValuesData from "./fixtures/alert-form-values.json";
 import fixtureData from "./fixtures/history.json";
 import registriesFixtureData from "./fixtures/registries.json";
 
-export const historyFixture = fixtureData.history as RuntimeAlertState[];
+export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const emptyHistoryFilters = fixtureData.emptyFilters;
 export const alertRuntimeFixture = alertFixtureData.runtime as Record<
   string,

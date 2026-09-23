@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
+from custom_components.ha_notifications.domain.runtime import (
+    AlertRuntimeState,
+    serialize_runtime,
+)
 from custom_components.ha_notifications.features.confirmations import (
     ConfirmationConfig,
 )
@@ -33,11 +36,11 @@ class ConfigurationTests(unittest.TestCase):
         runtime = AlertRuntimeState.for_alert({"id": "one"})
         target = {"stale": True}
 
-        runtime.write_to(target)
-        runtime.alert["name"] = "Changed"
+        target = serialize_runtime(runtime)
+        runtime.config["name"] = "Changed"
 
         self.assertNotIn("stale", target)
-        self.assertNotIn("name", target["alert"])
+        self.assertNotIn("name", target["config"])
 
     def test_alert_owns_feature_sections_as_extra_fields(self):
         self.assertEqual(

@@ -22,7 +22,7 @@ async def test_preview_only_forwards_a_forced_condition_result(
     assert result is True
     condition_result.assert_awaited_once()
     runtime, active, error = condition_result.await_args.args[:3]
-    assert runtime.alert["id"].startswith("NC_PREVIEW_")
+    assert runtime.config["id"].startswith("NC_PREVIEW_")
     assert active is True
     assert error is None
     assert condition_result.await_args.kwargs["source"] == "startup"

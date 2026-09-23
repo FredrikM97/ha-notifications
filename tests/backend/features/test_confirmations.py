@@ -6,7 +6,7 @@ import asyncio
 import importlib
 import unittest
 from datetime import datetime, timezone
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 from custom_components.ha_notifications.domain.confirmation import (
     PendingConfirmationState,
@@ -21,6 +21,12 @@ confirmation = importlib.import_module(
 preview = importlib.import_module(
     f"{PACKAGE_NAME}.features.notification_preview"
 )
+
+
+def runtime_with_pending(alert, **pending):
+    runtime = AlertRuntimeState.for_alert(alert)
+    runtime.record_event(PendingConfirmationState(**pending))
+    return runtime
 
 
 def test_confirmation_configuration_contract_snapshot(snapshot):
@@ -80,7 +86,7 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         self.feature.prepare_action(runtime)
 
-        self.assertFalse(runtime.active)
+        self.assertFalse(runtime.condition_active)
         self.assertFalse(runtime.confirmation.action_ids)
 
     async def test_apply_confirmation_owns_state_delivery_and_persistence(self):
@@ -100,11 +106,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
             },
         }
         state = {
-            "alert_1": AlertRuntimeState(
-                alert=alert,
-                confirmation=PendingConfirmationState(
-                    action_ids={"action": "confirm"}, attempts=1
-                )
+            "alert_1": runtime_with_pending(
+                alert, action_ids={"action": "confirm"}, attempts=1
             )
         }
         events = []
@@ -122,7 +125,7 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
                     alert_id = str(alert["id"])
                 runtime = state[alert_id]
                 if alert is not None:
-                    runtime.alert = dict(alert)
+                    runtime.config = dict(alert)
                 return runtime
 
             def publish_event(self, *_args):
@@ -206,11 +209,9 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_prepare_action_preserves_pending_actions(self):
-        runtime = AlertRuntimeState(
-            alert={"id": "alert_1"},
-            confirmation=PendingConfirmationState(action_ids={"action": "confirm"})
+        runtime = runtime_with_pending(
+            {"id": "alert_1"}, action_ids={"action": "confirm"}
         )
-
         self.feature.prepare_action(runtime)
 
         self.assertEqual(
@@ -219,18 +220,17 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_clear_is_idempotent(self):
         self.feature.clear("missing")
-        runtime = AlertRuntimeState(alert={"id": "alert_1"})
+        runtime = AlertRuntimeState(config={"id": "alert_1"})
         self.feature.track("action", runtime=runtime)
         self.feature.clear("action")
 
         self.assertNotIn("action", self.sessions)
 
     async def test_expire_stale_clears_persisted_actions_and_sessions(self):
-        runtime = AlertRuntimeState(
-            alert={"id": "alert_1"},
-            confirmation=PendingConfirmationState(action_ids={"action": "confirm"}),
-            last_notified="2023-12-20T00:00:00+00:00",
+        runtime = runtime_with_pending(
+            {"id": "alert_1"}, action_ids={"action": "confirm"}
         )
+        runtime.state["last_notified"] = "2023-12-20T00:00:00+00:00"
         self.feature.track("action", runtime=runtime)
 
         expired = self.feature.expire_stale(
@@ -249,11 +249,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
                 "reminders": {"enabled": True, "max_attempts": 2},
             },
         }
-        runtime = AlertRuntimeState(
-            alert=alert,
-            confirmation=PendingConfirmationState(
-                action_ids={"action": "confirm"}, attempts=2
-            )
+        runtime = runtime_with_pending(
+            alert, action_ids={"action": "confirm"}, attempts=2
         )
         self.feature.track("action", runtime=runtime)
 
@@ -282,11 +279,8 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         alert = {"id": "alert_1", "name": "Saved"}
         self.feature._runtime = {
-            "alert_1": AlertRuntimeState(
-                alert=alert,
-                confirmation=PendingConfirmationState(
-                    action_ids={"saved_action": "confirm"}
-                )
+            "alert_1": runtime_with_pending(
+                alert, action_ids={"saved_action": "confirm"}
             )
         }
         self.feature.track("saved_action", runtime=self.feature._runtime["alert_1"])
@@ -296,7 +290,52 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
                 context=SimpleNamespace(user_id=None),
             )
         )
-        self.assertEqual(result.runtime.alert["name"], "Saved")
+        self.assertEqual(result.runtime.config["name"], "Saved")
+
+    async def test_mobile_done_action_dispatches_confirmation_workflow(self):
+        class Hass:
+            class States:
+                @staticmethod
+                def async_all(_domain):
+                    return []
+
+            class Auth:
+                async def async_get_user(self, _user_id):
+                    return None
+
+            states = States()
+            auth = Auth()
+
+        class Coordinator:
+            async def run(self, _alert_id, callback):
+                await callback()
+
+        self.feature._hass = Hass()
+        runtime = runtime_with_pending(
+            {"id": "alert_1", "name": "Saved"},
+            action_ids={"saved_action": "confirm"},
+        )
+        self.feature.track("saved_action", runtime=runtime)
+        dispatched = []
+
+        async def apply_confirmation(result):
+            dispatched.append(result)
+
+        self.feature._apply_confirmation = apply_confirmation
+        self.feature.lifecycle = SimpleNamespace(
+            feature=lambda _name: Coordinator()
+        )
+
+        await self.feature._on_action_event(
+            SimpleNamespace(
+                data=MappingProxyType({"action": "saved_action"}),
+                context=SimpleNamespace(user_id=None),
+            )
+        )
+
+        self.assertEqual(len(dispatched), 1)
+        self.assertEqual(dispatched[0].confirmation.selection.label, "Done")
+        self.assertEqual(dispatched[0].runtime.config["name"], "Saved")
 
     async def test_resolving_one_response_clears_sibling_responses(self):
         class Hass:
@@ -315,14 +354,12 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.feature._hass = Hass()
         alert = {"id": "alert_1", "name": "Saved"}
         self.feature._runtime = {
-            "alert_1": AlertRuntimeState(
-                alert=alert,
-                confirmation=PendingConfirmationState(
-                    action_ids={
-                        "snooze": "snooze",
-                        "escalate": "escalate",
-                    }
-                )
+            "alert_1": runtime_with_pending(
+                alert,
+                action_ids={
+                    "snooze": "snooze",
+                    "escalate": "escalate",
+                },
             )
         }
         self.feature.track(
@@ -395,6 +432,12 @@ class PersonResolutionTests(unittest.TestCase):
         self.assertIsNone(confirmation.extract_action_id({}))
         self.assertEqual(
             confirmation.extract_action_id({"action": "confirm_1"}), "confirm_1"
+        )
+        self.assertEqual(
+            confirmation.extract_action_id(
+                MappingProxyType({"action": "confirm_1"})
+            ),
+            "confirm_1",
         )
 
 

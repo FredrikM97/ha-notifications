@@ -219,7 +219,7 @@ class NotificationFeature(FeatureBase):
         except Exception:
             _LOGGER.exception(
                 "Failed clearing notification before deleting %s",
-                runtime.alert["id"],
+                runtime.config["id"],
             )
 
 
@@ -250,7 +250,7 @@ async def plan_delivery(
 ) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that send one notification."""
 
-    alert = request.runtime.alert
+    alert = request.runtime.config
     notification = NotificationConfig.model_validate(alert["notification"])
     rendered = await _render_notification(
         notification,
@@ -308,7 +308,7 @@ async def plan_clear(
 ) -> list[HomeAssistantServiceCall]:
     """Build the Home Assistant service calls that clear one notification."""
 
-    alert = request.runtime.alert
+    alert = request.runtime.config
     notification = NotificationConfig.model_validate(alert["notification"])
     target = await render_values(notification.target, {"request": request}, render)
     target = resolve_user_notification_target(snapshot, target)
@@ -458,7 +458,7 @@ async def _clear_commands(
         commands = await plan_clear(request, snapshot, render)
     except Exception:
         _LOGGER.exception(
-            "Failed clearing notification for %s", request.runtime.alert["id"]
+            "Failed clearing notification for %s", request.runtime.config["id"]
         )
         return []
 

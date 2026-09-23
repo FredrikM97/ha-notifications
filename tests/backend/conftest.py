@@ -25,8 +25,12 @@ from custom_components.ha_notifications.const import CONF_SHOW_SIDEBAR, DOMAIN
 from custom_components.ha_notifications.domain.confirmation import (
     PendingConfirmationState,
 )
-from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
-from custom_components.ha_notifications.domain.workflow import NotificationOutcome
+from custom_components.ha_notifications.domain.runtime import (
+    AlertRuntimeState,
+)
+from custom_components.ha_notifications.domain.workflow import (
+    NotificationOutcome,
+)
 
 _ALERT_FIXTURES = safe_load(
     (Path(__file__).parent / "fixtures" / "alerts.yaml").read_text()
@@ -290,7 +294,7 @@ class _TestNotification:
     async def send(self, request: Any) -> NotificationOutcome:
         self.payloads.append(
             {
-                "alert": dict(request.runtime.alert),
+                "alert": dict(request.runtime.config),
                 "attempt": (
                     request.runtime.confirmation.attempts + 1
                     if request.runtime.confirmation.action_ids
@@ -321,16 +325,6 @@ class _TestAlerts:
     async def get_alert(self, alert_id: str) -> dict[str, Any] | None:
         if alert_id == self.saved_alert["id"]:
             return self.saved_alert
-        return None
-
-    def record_delivery_result(
-        self,
-        _runtime: AlertRuntimeState,
-        _now: Any,
-        *,
-        success: bool,
-        error: str | None = None,
-    ) -> None:
         return None
 
     def runtime(self, alert_id: str) -> dict[str, Any]:
@@ -423,12 +417,30 @@ def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
 def make_runtime_state(**overrides: Any) -> AlertRuntimeState:
     """Build a complete default runtime record with focused test overrides."""
 
-    alert = overrides.pop("alert", deepcopy(_ALERT_FIXTURES["base"]))
+    config = overrides.pop("alert", deepcopy(_ALERT_FIXTURES["base"]))
+    state = dict(overrides.pop("state", {}))
     confirmation = overrides.pop("confirmation", {})
-    return AlertRuntimeState(
-        alert=alert,
-        confirmation=PendingConfirmationState(**confirmation), **overrides
-    )
+    condition = overrides.pop("condition", {})
+    notification = overrides.pop("notification", {})
+    for key in ("active", "last_evaluated", "flow_id", "started_at"):
+        if key in overrides:
+            state[key] = overrides.pop(key)
+    for key in ("last_notified", "last_error"):
+        if key in overrides:
+            state[key] = overrides.pop(key)
+    state.update(condition)
+    state.update(notification)
+    if state.get("active") or state.get("last_evaluated"):
+        state.setdefault(
+            "last_evaluated",
+            condition.get("last_evaluated")
+            or condition.get("started_at")
+            or "2026-01-01T00:00:00+00:00",
+        )
+    runtime = AlertRuntimeState(config=config, state=state, **overrides)
+    if confirmation:
+        runtime.record_event(PendingConfirmationState(**confirmation))
+    return runtime
 
 
 @pytest.fixture

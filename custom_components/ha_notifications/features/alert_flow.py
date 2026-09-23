@@ -37,6 +37,7 @@ class AlertFlow(FeatureBase):
         _storage: Storage,
     ) -> None:
         super().__init__()
+        self._startup_attempted_flows: dict[str, str] = {}
 
     async def handle_event(self, event: ConditionWorkflowEvent) -> None:
         """Run the operation selected by the condition feature."""
@@ -96,6 +97,8 @@ class AlertFlow(FeatureBase):
         runtime = event.runtime
         if not self._should_notify(runtime, event.source, event.now):
             return
+        if event.source == "startup" and runtime.flow_id:
+            self._startup_attempted_flows[str(runtime.config["id"])] = runtime.flow_id
         self.feature(FeatureName.CONFIRMATIONS).prepare_action(runtime)
         outcome = await self._send_notification(event)
         if outcome.success:
@@ -111,11 +114,16 @@ class AlertFlow(FeatureBase):
     ) -> bool:
         """Apply trigger policy before queuing notification effects."""
 
-        alert = runtime.alert
+        alert = runtime.config
         if source == "startup" and (alert.get("monitor") or {}).get(
             "startup", True
         ):
-            return not runtime.last_notified
+            return bool(
+                runtime.flow_id
+                and self._startup_attempted_flows.get(str(runtime.config["id"]))
+                != runtime.flow_id
+                and not runtime.last_notified
+            )
         if source == "startup":
             return False
         if source == "enabled" and not runtime.last_notified:
@@ -152,27 +160,11 @@ class AlertFlow(FeatureBase):
                 trigger_source=event.source,
             )
         )
-        self._record_notification_delivery(runtime, outcome, attempt)
-        if not outcome.success:
-            return outcome
-        if pending_actions:
-            confirmation_feature.record_attempt(runtime)
-        return outcome
-
-    def _record_notification_delivery(
-        self,
-        runtime: AlertRuntimeState,
-        outcome: NotificationOutcome,
-        attempt: int | None,
-    ) -> None:
-        """Apply the ordered delivery outcome to its owning feature boundaries."""
-
-        self.feature(FeatureName.ALERTS).record_delivery_result(
-            runtime,
-            outcome.now,
-            success=outcome.success,
-            error=outcome.error,
-        )
+        runtime.state["last_error"] = outcome.error
+        if outcome.success:
+            runtime.state["last_notified"] = outcome.now.isoformat()
+            runtime.state["last_error"] = None
+        runtime.record_event(outcome)
         details: dict[str, Any] = {
             "attempt": attempt,
             "success": outcome.success,
@@ -187,3 +179,8 @@ class AlertFlow(FeatureBase):
             "Notification sent." if outcome.success else "Notification failed.",
             details,
         )
+        if not outcome.success:
+            return outcome
+        if pending_actions:
+            confirmation_feature.record_attempt(runtime)
+        return outcome

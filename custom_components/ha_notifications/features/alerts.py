@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -21,7 +20,7 @@ from ..controller.lifecycle import (
     route,
     websocket_route,
 )
-from ..domain.runtime import AlertRuntimeState
+from ..domain.runtime import AlertRuntimeState, serialize_runtime
 from ..support.storage import Storage
 from .configuration import Alert
 
@@ -70,7 +69,7 @@ class AlertFeature(FeatureBase):
             runtime = AlertRuntimeState.for_alert(configured)
             self._runtime[alert_id] = runtime
         elif alert is not None:
-            runtime.alert = dict(alert)
+            runtime.config = dict(alert)
         return runtime
 
     def reset_runtime(self, alert_id: str) -> None:
@@ -87,10 +86,10 @@ class AlertFeature(FeatureBase):
     ) -> None:
         """Mark an active alert inactive and clear its notification if configured."""
 
-        if not runtime.active:
+        if not runtime.condition_active:
             return
-        alert = runtime.alert
-        runtime.deactivate()
+        alert = runtime.config
+        runtime.deactivate(now)
         notification = self.feature(FeatureName.NOTIFICATION)
         if notification.should_clear_on_condition_change(alert):
             await notification.clear(runtime)
@@ -109,7 +108,7 @@ class AlertFeature(FeatureBase):
     ) -> None:
         """Mark an alert active and publish its state transition."""
 
-        if runtime.active:
+        if runtime.condition_active:
             return
         runtime.activate(now)
         self.publish_event(
@@ -128,15 +127,16 @@ class AlertFeature(FeatureBase):
     ) -> None:
         """Publish a runtime aggregate as one event fact."""
 
-        event_runtime: dict[str, Any] = {}
-        runtime.write_to(event_runtime)
-        event_runtime["event"] = {
+        event = {
             "event_id": uuid.uuid4().hex,
             "timestamp": dt_util.utcnow().isoformat(),
             "type": event_type.value,
             "message": message,
             "details": dict(details),
         }
+        event_runtime = serialize_runtime(runtime)
+        event_runtime.pop("trace", None)
+        event_runtime["event"] = event
         self._hass.bus.async_fire(
             EVENT_ALERT_EVENT,
             event_runtime,
@@ -175,7 +175,7 @@ class AlertFeature(FeatureBase):
     async def get_runtime(self, alert_id: str) -> dict[str, Any]:
         """Return the runtime record owned by one configured alert."""
 
-        return asdict(self.runtime(alert_id))
+        return serialize_runtime(self.runtime(alert_id))
 
     @websocket_route(
         "alerts.runtime_mapping",
@@ -187,7 +187,7 @@ class AlertFeature(FeatureBase):
         """Return runtime records for all configured alerts."""
 
         return {
-            alert_id: asdict(self.runtime(alert_id))
+            alert_id: serialize_runtime(self.runtime(alert_id))
             for alert_id in self._alerts
         }
 
@@ -204,7 +204,7 @@ class AlertFeature(FeatureBase):
         for alert in self._alerts.values():
             mapped = alert.model_dump(exclude_none=True)
             state = self.runtime(alert.id)
-            result.append({**mapped, "runtime": asdict(state)})
+            result.append({**mapped, "runtime": serialize_runtime(state)})
         return result
 
     @websocket_route(
@@ -263,19 +263,3 @@ class AlertFeature(FeatureBase):
         self._runtime.pop(alert_id, None)
         await self.feature(FeatureName.HISTORY).remove_alert(alert_id)
         return True
-
-    def record_delivery_result(
-        self,
-        runtime: AlertRuntimeState,
-        now: Any,
-        *,
-        success: bool,
-        error: str | None = None,
-    ) -> None:
-        """Update delivery state without exposing the mutable runtime mapping."""
-
-        if not success:
-            runtime.last_error = error
-            return
-        runtime.last_notified = now.isoformat()
-        runtime.last_error = None

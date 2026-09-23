@@ -129,11 +129,78 @@ select {
   gap: 12px;
 }
 
-.nc-debug-raw {
-  margin: 0;
-  padding: 16px;
-  overflow: auto;
+.nc-debug-list {
+  display: grid;
+  gap: 12px;
+}
+
+.nc-debug-alert,
+.nc-debug-section {
   background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius, 12px);
+  box-shadow: var(--ha-box-shadow);
+}
+
+.nc-debug-alert > summary,
+.nc-debug-section > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.nc-debug-alert > summary::-webkit-details-marker,
+.nc-debug-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nc-debug-alert > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  font-weight: 600;
+}
+
+.nc-debug-alert > summary::before,
+.nc-debug-section > summary::before {
+  content: ">";
+  color: var(--secondary-text-color);
+  margin-right: 8px;
+}
+
+.nc-debug-alert[open] > summary::before,
+.nc-debug-section[open] > summary::before {
+  content: "v";
+}
+
+.nc-debug-alert > summary code {
+  color: var(--secondary-text-color);
+  font: var(--code-font, 14px monospace);
+  font-weight: 400;
+}
+
+.nc-debug-sections {
+  display: grid;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.nc-debug-section {
+  box-shadow: none;
+  background: var(--primary-background-color);
+}
+
+.nc-debug-section > summary {
+  padding: 10px 12px;
+  color: var(--secondary-text-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.nc-debug-section pre {
+  margin: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
   color: var(--primary-text-color);
   font: var(--code-font, 14px monospace);
   white-space: pre-wrap;

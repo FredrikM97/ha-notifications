@@ -34,7 +34,7 @@ class AlertEventPublisher:
             alert = {"id": alert_or_id}
         else:
             alert = alert_or_id
-        return AlertRuntimeState(alert=dict(alert))
+        return AlertRuntimeState(config=dict(alert))
 
     def publish_event(
         self, _runtime, event_type, message, details
@@ -44,8 +44,8 @@ class AlertEventPublisher:
             {
                 "id": uuid4().hex,
                 "timestamp": "event-time",
-                "alert_id": _runtime.alert["id"],
-                "alert_name": _runtime.alert["name"],
+                "alert_id": _runtime.config["id"],
+                "alert_name": _runtime.config["name"],
                 "type": event_type.value,
                 "message": message,
                 "details": details,

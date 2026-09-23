@@ -150,7 +150,7 @@ describe("panel view", () => {
     expect(panel.shadowRoot.querySelector("ha-notifications-yaml-view")).not.toBeNull();
   });
 
-  it("shows raw runtime data in the Debug view", async () => {
+  it("shows active alerts before their live runtime in Debug", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await settleElement(panel);
@@ -160,9 +160,40 @@ describe("panel view", () => {
     );
     await settleElement(panel);
 
-    const raw = panel.shadowRoot.querySelector(".nc-debug-raw")?.textContent;
-    expect(raw).toContain('"active": true');
-    expect(raw).toContain('"confirmation_attempts": 2');
+    const debugAlert = panel.shadowRoot.querySelector(".nc-debug-alert");
+    expect(debugAlert?.querySelector("summary")?.textContent).toContain(
+      "Front door",
+    );
+    expect(debugAlert?.querySelectorAll(".nc-debug-section")).toHaveLength(2);
+    expect(debugAlert?.textContent).not.toContain('"config"');
+    expect(debugAlert?.textContent).toContain('"flow_id": "flow_door"');
+  });
+
+  it("omits inactive alerts and runtime from Debug", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    getAlerts.mockResolvedValueOnce([
+      alert,
+      { ...alert, id: "inactive", name: "Inactive alert" },
+    ]);
+    getAlertRuntime.mockResolvedValueOnce({
+      ...alertRuntimeFixture,
+      inactive: {
+        ...alertRuntimeFixture.door,
+        config: { id: "inactive", name: "Inactive alert" },
+        state: { active: false },
+      },
+    });
+    await panel.refresh();
+    await settleElement(panel);
+
+    await testUser().click(
+      within(panel.shadowRoot).getByRole("button", { name: "Debug" }),
+    );
+    await settleElement(panel);
+
+    expect(panel.shadowRoot.querySelectorAll(".nc-debug-alert")).toHaveLength(1);
+    expect(panel.shadowRoot.textContent).not.toContain("Inactive alert");
   });
 
   it("caches registry loading for editor entry points", async () => {
@@ -186,7 +217,7 @@ describe("panel view", () => {
 
     expect(saveAlert).toHaveBeenCalledWith(
       expect.objectContaining({ user: { is_admin: true } }),
-      { ...alert, runtime: { active: true, confirmation_attempts: 2 }, enabled: false },
+      { ...alert, runtime: alertRuntimeFixture.door, enabled: false },
     );
   });
 

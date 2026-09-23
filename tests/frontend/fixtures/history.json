@@ -1,8 +1,8 @@
 {
   "history": [
     {
-      "alert": { "id": "garage", "name": "Garage door" },
-      "flow_id": "flow_garage",
+      "config": { "id": "garage", "name": "Garage door" },
+      "state": { "flow_id": "flow_garage" },
       "event": {
         "event_id": "event_garage",
         "type": "notification_sent",
@@ -12,7 +12,7 @@
       }
     },
     {
-      "alert": { "id": "water", "name": "Water leak" },
+      "config": { "id": "water", "name": "Water leak" },
       "event": {
         "event_id": "event_water",
         "type": "delivery_failed",

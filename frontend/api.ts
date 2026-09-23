@@ -9,6 +9,7 @@ import type {
   RegistryLabel,
   RegistryState,
   RegistryUser,
+  RuntimeAlertHistoryEntry,
   RuntimeAlertState,
 } from "./types.js";
 import { serializeAlertDurations } from "./alert-payload.js";
@@ -151,7 +152,7 @@ export async function getHistory(
     data.alert_id = alertId;
   }
 
-  return call<RuntimeAlertState[]>(hass, "history", data);
+  return call<RuntimeAlertHistoryEntry[]>(hass, "history", data);
 }
 
 export async function getConfig(

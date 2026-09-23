@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from .confirmation import ConfirmationContext
-from .runtime import AlertRuntimeState
+
+if TYPE_CHECKING:
+    from .runtime import AlertRuntimeState
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,7 @@ class ConditionWorkflowEvent:
     facts: Mapping[str, bool] = field(default_factory=dict)
     error: str | None = None
     replace_existing: bool = True
+    flow_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

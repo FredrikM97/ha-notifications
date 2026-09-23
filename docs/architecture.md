@@ -88,7 +88,7 @@ flowchart LR
 - `controller/lifecycle.py` composes each feature with the shared `(hass, runtime, storage, storage)` context; runtime is process-local, while `Storage` owns configuration and independent history persistence.
 - `bridge/websocket.py` generates Home Assistant handlers from feature websocket-route declarations and handles HA connection/result serialization. It remains a transport adapter, not a domain router. Frontend static path and panel registration belong to `controller/core.py`.
 - `features/alerts.py` owns `AlertFeature`, its alert routes, direct runtime mappings, alert validation, active/inactive condition transitions, timestamps, condition-change clearing, and reload request.
-- `features/alerts.py` owns typed alerts and the process-local runtime mapping; `domain/runtime.py` owns the typed runtime aggregate, including the current serialized alert snapshot and an optional nested event fact, and its API serialization. Alert events publish an independent aggregate snapshot so configuration, mutable runtime facts, and event metadata travel together without conflating event IDs, workflow IDs, or notification IDs. History is a separate persistence/query boundary owned by `features/history.py` and stores those aggregates directly.
+- `features/alerts.py` owns typed alerts, the process-local runtime mapping, and delivery-state projections; `features/conditions.py` and `features/confirmations.py` own their condition and confirmation projections. `domain/runtime.py` owns the typed runtime aggregate, trace lifecycle, and explicit API serialization. Alert events publish an independent aggregate snapshot so configuration, mutable runtime facts, and event metadata travel together without conflating event IDs, workflow IDs, or notification IDs. History is a separate persistence/query boundary owned by `features/history.py` and stores those aggregates directly.
 - `features/conditions.py` owns condition listeners, watcher registration, startup/reload/interval/template callbacks, evaluation, condition facts, and classification into explicit active, inactive, or error workflow events; it does not apply notification or delivery effects.
 - `features/alert_coordinator.py` owns keyed runtime serialization: feature-supplied operations for one alert run in order, while different alert IDs can run concurrently. It is lifecycle-managed and knows no condition, confirmation, or workflow event types.
 - `features/conditions.py` and `features/confirmations.py` pass typed facts through `AlertCoordinatorFeature`; they do not own notification, event logging, follow-up, or persistence decisions.
@@ -104,6 +104,7 @@ flowchart LR
 - `features/configuration.py` owns the flat `Alert` and `Configuration` models because they compose the persisted configuration document. `domain/workflow.py` owns typed workflow event/effect contracts used by ordered workflows. Each feature validates its own section at its workflow boundary, keeping feature ownership out of the configuration model.
 - `domain/confirmation.py` owns immutable confirmation contexts and response selections passed between workflows; it does not own confirmation configuration, sessions, or persistence.
 - `domain/workflow.py` owns immutable notification requests/outcomes and condition workflow events passed between application features; it does not own delivery, orchestration, or runtime state.
+- `domain/runtime.py` owns the single process-local runtime aggregate. `AlertRuntimeState` stores the alert configuration, compact mutable state, and retained workflow dataclasses; owning features update their projections when they create facts, and the runtime exposes one structural transport mapping without parallel runtime wrappers or fact-specific serializers. Trace facts are removed only when the runtime is reset or deactivated.
 - `features/conditions.py` owns `MonitorConfig`, watcher settings, and condition decisions.
 - `features/notification.py` owns `NotificationConfig`, target normalization, confirmation resend policy, and delivery planning.
 - `features/confirmations.py` owns `ConfirmationConfig` and confirmation sessions; `features/alert_coordinator.py` owns per-alert confirmation serialization; `features/alert_flow.py` owns confirmation effect ordering.
@@ -116,7 +117,7 @@ flowchart LR
     decisions remain ordinary functions because they have no lifecycle resources.
 - Follow-up action rendering validates each action as a feature-owned object;
     malformed actions remain isolated as typed `ActionResult` errors.
-- `support/storage.py` stores configuration and history objects without interpreting feature behavior; runtime is discarded on restart, while YAML parsing/dumping and configuration validation belong at their feature/UI boundaries.
+- `support/storage.py` stores configuration and history objects without interpreting feature behavior; runtime is discarded on restart, validated loading is used for runtime setup, and a separate raw read keeps the YAML recovery editor available for malformed saved documents.
 
 ## Dependencies and validation
 
