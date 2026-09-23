@@ -44,7 +44,7 @@ class AlertFlow(FeatureBase):
 
         runtime = event.runtime
         self.feature(FeatureName.CONFIRMATIONS).expire_stale(runtime, event.now)
-        await self._clear_exhausted_confirmation(runtime, event.now)
+        await self._clear_exhausted_confirmation(runtime)
         if event.status is ConditionStatus.ERROR:
             self._handle_condition_error(event)
         elif event.status is ConditionStatus.INACTIVE:
@@ -59,7 +59,6 @@ class AlertFlow(FeatureBase):
     async def _clear_exhausted_confirmation(
         self,
         runtime: AlertRuntimeState,
-        now: datetime,
     ) -> None:
         """Clear a notification when confirmation attempts are exhausted."""
 

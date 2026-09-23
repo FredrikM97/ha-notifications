@@ -213,18 +213,6 @@ select {
   box-shadow: var(--ha-box-shadow);
 }
 
-.nc-yaml {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 180px);
-}
-
-ha-code-editor.nc-yaml-editor {
-  flex: 1 1 auto;
-  min-height: 0;
-  --nc-code-editor-height: 100%;
-}
-
 .nc-section {
   background: transparent;
 }
@@ -725,8 +713,10 @@ ha-code-editor.nc-code-editor .cm-scroller {
 }
 
 .nc-yaml {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  min-height: calc(100vh - 180px);
 }
 
 .nc-yaml textarea,
@@ -740,8 +730,11 @@ ha-code-editor.nc-code-editor .cm-scroller {
 }
 
 ha-code-editor.nc-yaml-editor {
-  height: min(650px, 70vh);
-  max-height: min(650px, 70vh);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  --nc-code-editor-height: 100%;
 }
 
 .nc-modal-backdrop {

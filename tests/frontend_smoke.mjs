@@ -75,6 +75,8 @@ assert.match(panel, /mdi:alert-circle/);
 assert.match(panel, /must be a valid YAML list/);
 assert.doesNotMatch(panel, /must be a valid JSON array/);
 assert.match(panel, /ha-code-editor/);
+assert.match(panel, /\.nc-yaml \{[\s\S]*?display: flex;[\s\S]*?min-height: calc\(100vh - 180px\)/);
+assert.match(panel, /ha-code-editor\.nc-yaml-editor \{[\s\S]*?height: 100%;[\s\S]*?max-height: none;/);
 assert.match(panel, /Notify recipients when confirmed/);
 assert.doesNotMatch(panel, /Confirmed by \{\{ confirmed_by \}\}/);
 assert.match(panel, /Draft test notification sent\./);

@@ -42,6 +42,7 @@ class AlertRuntimeState:
             flow_id=self._new_flow_id(),
             started_at=now.isoformat(),
             last_error=None,
+            last_notified=None,
             acknowledged=False,
             confirmed_at=None,
             confirmed_by=None,

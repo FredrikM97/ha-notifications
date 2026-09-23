@@ -447,6 +447,43 @@ async def test_startup_attempt_is_not_repeated_after_delivery_failure():
 
 
 @pytest.mark.asyncio
+async def test_startup_attempt_is_allowed_for_a_new_activation_flow():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    flow, features = build_flow()
+    alert = make_alert()
+    runtime = features["alerts"].values["alert_1"]
+
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="startup"),
+            now,
+            runtime,
+        )
+    )
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="startup"),
+            now,
+            runtime,
+        )
+    )
+    runtime.deactivate(now)
+    runtime.activate(now)
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="startup"),
+            now,
+            runtime,
+        )
+    )
+
+    assert len(features["notification"].sent) == 2
+
+
+@pytest.mark.asyncio
 async def test_active_condition_orders_effects():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     order = []
