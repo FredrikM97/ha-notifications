@@ -110,6 +110,7 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
                 alert, action_ids={"action": "confirm"}, attempts=1
             )
         }
+        state["alert_1"].activate(now)
         events = []
         sent = []
         cleared = []
@@ -173,6 +174,7 @@ class ConfirmationFeatureTests(unittest.IsolatedAsyncioTestCase):
         runtime = state["alert_1"]
         self.assertEqual(runtime.confirmation.action_ids, {})
         self.assertTrue(runtime.acknowledged)
+        self.assertTrue(runtime.condition_active)
         self.assertEqual(events[0].value, "confirmed")
         self.assertEqual(len(cleared), 1)
         self.assertEqual(len(sent), 1)

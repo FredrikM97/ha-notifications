@@ -26,7 +26,6 @@ def test_runtime_trace_serializes_datetime_values_for_transport() -> None:
             source="test",
             now=datetime(2026, 9, 23, 12, 0, 0),
             status=ConditionStatus.ACTIVE,
-            flow_id="flow_alert_1",
         )
     )
 
@@ -119,6 +118,9 @@ def test_publish_event_contains_complete_runtime_snapshot() -> None:
         )
     }
     feature = AlertFeature(hass, state, None, None)
+    state["alert_1"].record_event(
+        NotificationOutcome(datetime(2026, 9, 23, 12, 0, 0), True)
+    )
 
     feature.publish_event(
         state["alert_1"],
@@ -128,10 +130,10 @@ def test_publish_event_contains_complete_runtime_snapshot() -> None:
     )
 
     assert events[0]["config"] == {"id": "alert_1", "name": "Alert"}
-    assert "trace" not in events[0]
+    assert events[0]["trace"][0]["success"] is True
     assert events[0]["event"]["type"] == AlertEventType.NOTIFICATION_SENT.value
     assert events[0]["event"]["details"] == {"attempt": 1}
-    assert state["alert_1"].trace == []
+    assert len(state["alert_1"].trace) == 1
 
 
 def test_runtime_trace_preserves_existing_dataclass_order() -> None:

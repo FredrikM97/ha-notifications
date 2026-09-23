@@ -135,7 +135,6 @@ class AlertFeature(FeatureBase):
             "details": dict(details),
         }
         event_runtime = serialize_runtime(runtime)
-        event_runtime.pop("trace", None)
         event_runtime["event"] = event
         self._hass.bus.async_fire(
             EVENT_ALERT_EVENT,
