@@ -25,7 +25,7 @@ async def test_preview_only_forwards_a_forced_condition_result(
     assert runtime.config["id"].startswith("NC_PREVIEW_")
     assert active is True
     assert error is None
-    assert condition_result.await_args.kwargs["source"] == "startup"
+    assert condition_result.await_args.kwargs["source"] == "test"
 
 
 @pytest.mark.asyncio

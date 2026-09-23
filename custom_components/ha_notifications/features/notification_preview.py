@@ -45,7 +45,7 @@ class NotificationPreviewFeature(FeatureBase):
             runtime,
             True,
             None,
-            source="startup",
+            source="test",
             now=dt_util.utcnow(),
         )
         return True

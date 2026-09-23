@@ -115,20 +115,13 @@ class AlertFlow(FeatureBase):
         """Apply trigger policy before queuing notification effects."""
 
         alert = runtime.config
-        if source == "startup" and (alert.get("monitor") or {}).get(
-            "startup", True
-        ):
-            return bool(
-                runtime.flow_id
-                and self._startup_attempted_flows.get(str(runtime.config["id"]))
-                != runtime.flow_id
-                and not runtime.last_notified
-            )
+        if source == "test":
+            return True
         if source == "startup":
-            return False
+            return self._should_notify_on_startup(runtime, alert)
         if source == "enabled" and not runtime.last_notified:
             return True
-        if source not in ("reload", "startup", "interval", "confirmation"):
+        if source not in ("reload", "interval", "confirmation"):
             return False
         if runtime.acknowledged:
             return False
@@ -137,6 +130,20 @@ class AlertFlow(FeatureBase):
                 runtime, now
             )
         )
+
+    def _should_notify_on_startup(
+        self, runtime: AlertRuntimeState, alert: dict[str, Any]
+    ) -> bool:
+        """Allow one startup delivery for an alert activation."""
+
+        flow_id = runtime.flow_id
+        if (
+            not (alert.get("monitor") or {}).get("startup", True)
+            or not flow_id
+            or runtime.last_notified
+        ):
+            return False
+        return self._startup_attempted_flows.get(str(alert["id"])) != flow_id
 
     async def _send_notification(
         self,

@@ -401,6 +401,24 @@ async def test_active_condition_sends_and_runs_follow_up():
 
 
 @pytest.mark.asyncio
+async def test_test_source_sends_even_when_startup_delivery_is_disabled():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    flow, features = build_flow()
+    alert = make_alert(monitor={"startup": False})
+
+    await flow.handle_event(
+        condition_event(
+            alert,
+            SimpleNamespace(active=True, source="test"),
+            now,
+            features["alerts"].values["alert_1"],
+        )
+    )
+
+    assert len(features["notification"].sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_startup_attempt_is_not_repeated_after_delivery_failure():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     notification = Notification(fail=True)
