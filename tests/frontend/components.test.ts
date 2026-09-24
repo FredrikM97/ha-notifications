@@ -230,8 +230,10 @@ describe("alert editor interactions", () => {
       '[data-role="editor-section-control"][data-setting="confirmation"]',
     );
     expect(confirmationSwitch).not.toBeNull();
-    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
-      .toBe("Disabled");
+    expect(confirmationControl?.querySelector(".nc-setting-state")).toBeNull();
+    expect(confirmationSwitch?.getAttribute("aria-label")).toBe(
+      "Enable confirmation",
+    );
     expect(
       root.querySelector(
         '.nc-section-status[data-status="confirmation"]',
@@ -244,8 +246,12 @@ describe("alert editor interactions", () => {
     expect((confirmationSwitch as HTMLElement & { checked: boolean }).checked).toBe(
       true,
     );
-    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
-      .toBe("Enabled");
+    const updatedConfirmationSwitch = root.querySelector<HTMLElement>(
+      '[data-role="editor-section-control"][data-setting="confirmation"] ha-switch',
+    );
+    expect(updatedConfirmationSwitch?.getAttribute("aria-label")).toBe(
+      "Disable confirmation",
+    );
     expect(
       root.querySelector(
         '.nc-section-status[data-status="confirmation"]',
@@ -261,8 +267,12 @@ describe("alert editor interactions", () => {
     expect((confirmationSwitch as HTMLElement & { checked: boolean }).checked).toBe(
       false,
     );
-    expect(confirmationControl?.querySelector(".nc-setting-state")?.textContent)
-      .toBe("Disabled");
+    const resetConfirmationSwitch = root.querySelector<HTMLElement>(
+      '[data-role="editor-section-control"][data-setting="confirmation"] ha-switch',
+    );
+    expect(resetConfirmationSwitch?.getAttribute("aria-label")).toBe(
+      "Enable confirmation",
+    );
     expect(
       root.querySelector(
         '.nc-section-status[data-status="confirmation"]',

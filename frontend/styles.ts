@@ -319,7 +319,7 @@ select {
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
-
+}
 
 .nc-alert-actions .nc-button {
   display: inline-flex;
@@ -1063,11 +1063,6 @@ ha-code-editor.nc-yaml-editor {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.nc-setting-state {
-  color: var(--secondary-text-color);
-  font-size: 12px;
 }
 
 .nc-icon-button {

@@ -322,15 +322,13 @@ export function optionalControls(
   onToggle: (enabled: boolean) => void,
   disabled = false,
 ): TemplateResult {
-  const stateText = enabledLabel(enabled);
   const title = toggleTitle(enabled, label);
 
   return html`<div class="nc-setting-controls">
-    <span class="nc-setting-state">${stateText}</span>
     <ha-switch
       .checked=${enabled}
       ?disabled=${disabled}
-      aria-label=${`Enable ${label}`}
+      aria-label=${title}
       title=${title}
       @change=${(event: Event) => onToggle(checkedOf(event))}
     ></ha-switch>
