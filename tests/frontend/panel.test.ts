@@ -104,6 +104,7 @@ describe("panel view", () => {
     await settleElement(panel);
 
     expect(panel.shadowRoot.textContent).not.toContain("Attempt 2/3");
+    expect(panel.shadowRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(0);
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
   });
 
@@ -115,6 +116,32 @@ describe("panel view", () => {
     const backLink =
       panel.shadowRoot.querySelector<HTMLAnchorElement>('a[href="/"]');
     expect(backLink?.getAttribute("aria-label")).toBe("Back to Home Assistant");
+  });
+
+  it("shows the last notification time in the overview when available", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+    getAlerts.mockResolvedValueOnce([
+      {
+        ...alert,
+      },
+    ]);
+    getAlertRuntime.mockResolvedValueOnce({
+      door: {
+        ...alertRuntimeFixture.door,
+        state: {
+          ...alertRuntimeFixture.door.state,
+          last_notified: "2026-09-23T12:57:37.627672+00:00",
+        },
+      },
+    });
+    await panel.refresh();
+    await settleElement(panel);
+
+    expect(panel.shadowRoot.querySelector(".nc-alert-meta")?.textContent).toContain(
+      "Last notified:",
+    );
   });
 
   it("uses Home Assistant navigation when exiting the panel", async () => {

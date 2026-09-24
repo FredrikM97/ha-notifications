@@ -486,6 +486,17 @@ class HaNotificationsPanel extends LitElement {
   private alertCardTemplate(alert: Alert): TemplateResult {
     const status = alertStatus(alert);
     const monitor = this.monitorSummary(alert);
+    const lastNotified = alert.runtime?.state?.last_notified
+      ? `Last notified: ${formatLocalDateTime(
+          alert.runtime.state.last_notified,
+          false,
+          this._hass?.locale,
+        )}`
+      : "";
+    const target = this.targetSummary(alert.notification?.target);
+    const metadata = [lastNotified, monitor, target]
+      .filter(Boolean)
+      .join(" · ");
 
     return html`<div class="nc-card nc-alert">
       <div class="nc-alert-icon">
@@ -506,7 +517,7 @@ class HaNotificationsPanel extends LitElement {
           </div>
         </div>
         <div class="nc-alert-meta">
-          ${monitor} · ${this.targetSummary(alert.notification?.target)}
+          ${metadata}
         </div>
       </div>
       <div class="nc-alert-actions">
@@ -517,8 +528,7 @@ class HaNotificationsPanel extends LitElement {
           ?disabled=${!alert.enabled}
           @click=${() => this.testAlertFromCard(alert)}
         >
-          <ha-icon icon="mdi:send-check-outline"></ha-icon
-          ><span class="nc-button-label">Test</span></button
+          <ha-icon icon="mdi:send-check-outline"></ha-icon></button
         ><button
           class="nc-button"
           title=${toggleAlertLabel(alert)}
@@ -529,34 +539,28 @@ class HaNotificationsPanel extends LitElement {
             icon=${alert.enabled
               ? "mdi:pause-circle-outline"
               : "mdi:play-circle-outline"}
-          ></ha-icon
-          ><span class="nc-button-label"
-            >${toggleAlertLabel(alert)}</span
-          ></button
+          ></ha-icon></button
         ><button
           class="nc-button"
           title="Edit alert"
           aria-label="Edit alert"
           @click=${() => this.editAlert(alert)}
         >
-          <ha-icon icon="mdi:pencil-outline"></ha-icon
-          ><span class="nc-button-label">Edit</span></button
+          <ha-icon icon="mdi:pencil-outline"></ha-icon></button
         ><button
           class="nc-button"
           title="View history"
           aria-label="View history"
           @click=${() => this.showAlertHistory(alert)}
         >
-          <ha-icon icon="mdi:history"></ha-icon
-          ><span class="nc-button-label">History</span></button
+          <ha-icon icon="mdi:history"></ha-icon></button
         ><button
           class="nc-button danger"
           title="Delete alert"
           aria-label="Delete alert"
           @click=${() => this.removeAlert(alert)}
         >
-          <ha-icon icon="mdi:delete-outline"></ha-icon
-          ><span class="nc-button-label">Delete</span>
+          <ha-icon icon="mdi:delete-outline"></ha-icon>
         </button>
       </div>
     </div>`;
@@ -564,9 +568,6 @@ class HaNotificationsPanel extends LitElement {
 
   private monitorSummary(alert: Alert): string {
     const parts: string[] = [];
-    if (alert.monitor?.on_change) {
-      parts.push("condition changes");
-    }
     if (alert.monitor?.interval) {
       parts.push(`every ${alert.monitor.interval}`);
     }
@@ -576,7 +577,7 @@ class HaNotificationsPanel extends LitElement {
       return summary;
     }
 
-    return "No trigger";
+    return "";
   }
 
   targetSummary(target: Alert["notification"]["target"] = {}): string {

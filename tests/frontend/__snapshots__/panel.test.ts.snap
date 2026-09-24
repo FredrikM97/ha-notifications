@@ -18,7 +18,7 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
         "View history",
         "Delete alert",
       ],
-      "meta": "condition changes · 1 entities",
+      "meta": "1 entities",
       "name": "Front door",
       "statuses": [
         "Enabled",

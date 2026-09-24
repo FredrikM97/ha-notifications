@@ -319,7 +319,7 @@ select {
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
+
 
 .nc-alert-actions .nc-button {
   display: inline-flex;
@@ -1574,10 +1574,6 @@ ha-code-editor.nc-action-editor {
     padding: 8px 4px;
   }
 
-  .nc-alert-actions .nc-button-label {
-    display: none;
-  }
-
   .nc-grid,
   .nc-condition-row,
   .nc-recipient-toolbar {
@@ -1821,10 +1817,6 @@ ha-code-editor.nc-action-editor {
     justify-content: center;
     min-width: 0;
     padding: 8px 4px;
-  }
-
-  .nc-alert-actions .nc-button-label {
-    display: none;
   }
 
   .nc-grid {
