@@ -762,9 +762,9 @@ ha-code-editor.nc-code-editor .cm-scroller {
 ha-code-editor.nc-yaml-editor {
   flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
+  height: min(650px, calc(100dvh - 250px));
   max-height: none;
-  --nc-code-editor-height: 100%;
+  --nc-code-editor-height: min(650px, calc(100dvh - 250px));
 }
 
 .nc-modal-backdrop {
@@ -867,6 +867,21 @@ ha-code-editor.nc-yaml-editor {
   color: var(--primary-text-color);
   border-radius: 18px;
   box-shadow: 0 20px 70px rgba(0,0,0,.35);
+}
+
+.nc-alert-yaml-modal {
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+}
+
+.nc-alert-yaml-modal .nc-modal-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+ha-code-editor.nc-alert-yaml-editor {
+  --nc-code-editor-height: min(650px, calc(100vh - 180px));
+  max-height: calc(100vh - 180px);
 }
 
 .nc-discard-modal {
