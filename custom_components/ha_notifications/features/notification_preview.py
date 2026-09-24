@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from homeassistant.util import dt as dt_util
 
-from ..const import FeatureName
+from ..const import FeatureName, WorkflowSource
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..domain.runtime import AlertRuntimeState
 from .configuration import Alert
@@ -45,7 +45,7 @@ class NotificationPreviewFeature(FeatureBase):
             runtime,
             True,
             None,
-            source="test",
+            source=WorkflowSource.TEST,
             now=dt_util.utcnow(),
         )
         return True

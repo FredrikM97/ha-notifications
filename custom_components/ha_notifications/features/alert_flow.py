@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ..const import AlertEventType, FeatureName
+from ..const import AlertEventType, FeatureName, WorkflowSource
 from ..controller.lifecycle import FeatureBase
 from ..domain.runtime import AlertRuntimeState
 from ..domain.service_calls import FollowUpActionsRequest
@@ -16,6 +16,7 @@ from ..domain.workflow import (
     NotificationRequest,
 )
 from ..support.storage import Storage
+from .configuration import monitor_config
 
 
 class AlertFlow(FeatureBase):
@@ -96,7 +97,7 @@ class AlertFlow(FeatureBase):
         runtime = event.runtime
         if not self._should_notify(runtime, event.source, event.now):
             return
-        if event.source == "startup" and runtime.flow_id:
+        if event.source == WorkflowSource.STARTUP and runtime.flow_id:
             self._startup_attempted_flows[str(runtime.config["id"])] = runtime.flow_id
         self.feature(FeatureName.CONFIRMATIONS).prepare_action(runtime)
         outcome = await self._send_notification(event)
@@ -108,19 +109,24 @@ class AlertFlow(FeatureBase):
     def _should_notify(
         self,
         runtime: AlertRuntimeState,
-        source: str,
+        source: WorkflowSource,
         now: datetime,
     ) -> bool:
         """Apply trigger policy before queuing notification effects."""
 
         alert = runtime.config
-        if source == "test":
+        if source == WorkflowSource.TEST:
             return True
-        if source == "startup":
+        if source == WorkflowSource.STARTUP:
             return self._should_notify_on_startup(runtime, alert)
-        if source == "enabled" and not runtime.last_notified:
+        if source == WorkflowSource.ENABLED and not runtime.last_notified:
             return True
-        if source not in ("change", "reload", "interval", "confirmation"):
+        if source not in (
+            WorkflowSource.CHANGE,
+            WorkflowSource.RELOAD,
+            WorkflowSource.INTERVAL,
+            WorkflowSource.CONFIRMATION,
+        ):
             return False
         if runtime.acknowledged:
             return False
@@ -137,7 +143,7 @@ class AlertFlow(FeatureBase):
 
         flow_id = runtime.flow_id
         if (
-            not (alert.get("monitor") or {}).get("startup", True)
+            monitor_config(alert).startup is False
             or not flow_id
             or runtime.last_notified
         ):

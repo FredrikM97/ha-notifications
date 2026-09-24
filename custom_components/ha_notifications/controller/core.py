@@ -24,6 +24,7 @@ from ..const import (
     PANEL_TITLE,
     VERSION,
     FeatureName,
+    WorkflowSource,
 )
 from ..domain.runtime import AlertRuntimeState
 from ..support import storage as storage_module
@@ -48,10 +49,10 @@ class ConditionsPort(Protocol):
     """Typed condition checks used by lifecycle callbacks."""
 
     async def check_alert(
-        self, alert_id: str, *, source: str, now: Any
+        self, alert_id: str, *, source: WorkflowSource, now: Any
     ) -> None: ...
 
-    async def evaluate_all(self, *, source: str, now: Any) -> None: ...
+    async def evaluate_all(self, *, source: WorkflowSource, now: Any) -> None: ...
 
 
 class HaNotificationsController:
@@ -132,7 +133,7 @@ class HaNotificationsController:
 
             if self._hass.is_running:
                 self._started = True
-                await self._evaluate_all(source="startup")
+                await self._evaluate_all(source=WorkflowSource.STARTUP)
             else:
                 self._started_unsub = self._hass.bus.async_listen_once(
                     "homeassistant_started", self._on_home_assistant_started
@@ -175,7 +176,7 @@ class HaNotificationsController:
     async def _on_home_assistant_started(self, _event: HassEvent) -> None:
         self._started_unsub = None
         self._started = True
-        await self._evaluate_all(source="startup")
+        await self._evaluate_all(source=WorkflowSource.STARTUP)
 
     async def async_unload(self) -> bool:
         """Unload the controller."""
@@ -249,21 +250,25 @@ class HaNotificationsController:
 
             if self._started:
                 for alert_id in newly_enabled_alert_ids:
-                    await self._request_condition_check(alert_id, source="enabled")
+                    await self._request_condition_check(
+                        alert_id, source=WorkflowSource.ENABLED
+                    )
 
-                await self._evaluate_all(source="reload")
+                await self._evaluate_all(source=WorkflowSource.RELOAD)
 
     # ------------------------------------------------------------------
     # Trigger evaluation - scheduling only, decisions live in features/
     # ------------------------------------------------------------------
 
-    async def _evaluate_all(self, *, source: str) -> None:
+    async def _evaluate_all(self, *, source: WorkflowSource) -> None:
         await cast(
             ConditionsPort,
             self._lifecycle.feature(FeatureName.CONDITIONS),
         ).evaluate_all(source=source, now=dt_util.utcnow())
 
-    async def _request_condition_check(self, alert_id: str, *, source: str) -> None:
+    async def _request_condition_check(
+        self, alert_id: str, *, source: WorkflowSource
+    ) -> None:
         """Ask the condition feature to evaluate one alert now.
 
         Pull-based (startup/reload/interval/enabled) - the push-based path

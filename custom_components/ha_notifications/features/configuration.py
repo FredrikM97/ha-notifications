@@ -13,6 +13,17 @@ if TYPE_CHECKING:
     from ..support.storage import Storage
 
 
+class MonitorConfig(BaseModel):
+    """Validated watcher settings for one alert."""
+
+    model_config = ConfigDict(extra="allow")
+
+    on_change: bool | None = None
+    startup: bool | None = None
+    interval: int | float | None = None
+    clear_on_condition_change: bool | None = None
+
+
 class Alert(BaseModel, Mapping[str, Any]):
     """The validated persisted alert document."""
 
@@ -25,6 +36,7 @@ class Alert(BaseModel, Mapping[str, Any]):
     icon: str = "mdi:bell-outline"
     created_at: str | None = None
     updated_at: str | None = None
+    monitor: MonitorConfig | None = None
 
     def __getitem__(self, key: str) -> Any:
         """Expose configured fields and preserved feature sections directly."""
@@ -55,6 +67,14 @@ class Configuration(BaseModel):
 
     version: int = 1
     alerts: list[Alert] = Field(default_factory=list)
+
+
+def monitor_config(alert: Mapping[str, Any] | Alert) -> MonitorConfig:
+    """Return typed monitor settings from a model or serialized alert."""
+
+    if isinstance(alert, Alert):
+        return alert.monitor or MonitorConfig()
+    return MonitorConfig.model_validate(alert.get("monitor") or {})
 
 
 class ConfigurationFeature(FeatureBase):

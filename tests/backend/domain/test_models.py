@@ -53,6 +53,7 @@ class ConfigurationTests(unittest.TestCase):
                 "icon",
                 "created_at",
                 "updated_at",
+                "monitor",
             },
         )
 

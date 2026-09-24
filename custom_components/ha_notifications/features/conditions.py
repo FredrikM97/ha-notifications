@@ -21,9 +21,8 @@ from homeassistant.helpers.template import (
     result_as_boolean,
 )
 from homeassistant.util import dt as dt_util
-from pydantic import BaseModel, ConfigDict
 
-from ..const import ConditionType, FeatureName
+from ..const import ConditionType, FeatureName, WorkflowSource
 from ..controller.lifecycle import FeatureBase, WebsocketArgument, websocket_route
 from ..domain.runtime import AlertRuntimeState
 from ..domain.workflow import (
@@ -31,17 +30,8 @@ from ..domain.workflow import (
     ConditionWorkflowEvent,
 )
 from ..support.jinja import JinjaEvaluator
-from .configuration import Alert
+from .configuration import Alert, monitor_config
 
-
-class MonitorConfig(BaseModel):
-    """Validated watcher settings for one alert."""
-
-    model_config = ConfigDict(extra="allow")
-
-    on_change: bool | None = None
-    startup: bool | None = None
-    interval: int | float | None = None
 
 class ConditionWatchers:
     """Own Home Assistant listeners for configured alert conditions."""
@@ -50,9 +40,9 @@ class ConditionWatchers:
         self,
         hass: HomeAssistant,
         on_condition_result: Callable[
-            [str, bool | None, str | None, str], None
+            [str, bool | None, str | None, WorkflowSource], None
         ],
-        on_check: Callable[[str, str], None],
+        on_check: Callable[[str, WorkflowSource], None],
         confirmation_interval: Callable[
             [dict[str, Any]], timedelta | None
         ] = lambda _alert: None,
@@ -104,14 +94,14 @@ class ConditionWatchers:
         if not alert.get("enabled", True) or not alert.get("notification"):
             return
 
-        monitor = MonitorConfig.model_validate(alert.get("monitor") or {})
+        monitor = monitor_config(alert)
         unsubscribers: list[Callable[[], None]] = []
         if monitor.on_change:
             unsubscribers.append(
                 self._track_template(
                     compile_condition(alert),
                     lambda active, error, _event: self._on_condition_result(
-                        alert_id, active, error, "change"
+                        alert_id, active, error, WorkflowSource.CHANGE
                     ),
                 )
             )
@@ -124,7 +114,10 @@ class ConditionWatchers:
         if interval is not None:
             unsubscribers.append(
                 self._track_interval(
-                    interval, lambda _now: self._on_check(alert_id, "interval")
+                    interval,
+                    lambda _now: self._on_check(
+                        alert_id, WorkflowSource.INTERVAL
+                    ),
                 )
             )
         confirmation_interval = self._confirmation_interval(alert)
@@ -132,7 +125,9 @@ class ConditionWatchers:
             unsubscribers.append(
                 self._track_interval(
                     confirmation_interval,
-                    lambda _now: self._on_check(alert_id, "confirmation"),
+                    lambda _now: self._on_check(
+                        alert_id, WorkflowSource.CONFIRMATION
+                    ),
                 )
             )
         self._unsubscribers[alert_id] = unsubscribers
@@ -192,20 +187,22 @@ class ConditionFeature(FeatureBase):
         self._tasks.clear()
 
     async def check_alert(
-        self, alert_id: str, *, source: str, now: datetime
+        self, alert_id: str, *, source: WorkflowSource, now: datetime
     ) -> None:
         lock = self._locks.setdefault(alert_id, asyncio.Lock())
         async with lock:
             await self._check(alert_id, source=source, now=now)
 
-    async def evaluate_all(self, *, source: str, now: datetime) -> None:
+    async def evaluate_all(
+        self, *, source: WorkflowSource, now: datetime
+    ) -> None:
         if self._watchers is None:
             return
         for alert in self._alerts.values():
             if not alert.get("enabled", True):
                 continue
-            monitor = alert.get("monitor") or {}
-            if source == "startup" and not monitor.get("startup", True):
+            monitor = monitor_config(alert)
+            if source == WorkflowSource.STARTUP and monitor.startup is False:
                 continue
             await self.check_alert(alert["id"], source=source, now=now)
 
@@ -224,7 +221,9 @@ class ConditionFeature(FeatureBase):
             await asyncio.gather(*tasks, return_exceptions=True)
         self._locks.pop(alert_id, None)
 
-    async def _check(self, alert_id: str, *, source: str, now: datetime) -> None:
+    async def _check(
+        self, alert_id: str, *, source: WorkflowSource, now: datetime
+    ) -> None:
         alert = self._alerts.get(alert_id)
         if alert is None or not alert.get("notification"):
             return
@@ -244,7 +243,7 @@ class ConditionFeature(FeatureBase):
         active: bool | None,
         error: str | None,
         *,
-        source: str,
+        source: WorkflowSource,
         now: datetime,
     ) -> None:
         alert = self._alerts.get(alert_id)
@@ -261,7 +260,7 @@ class ConditionFeature(FeatureBase):
         active: bool | None,
         error: str | None,
         *,
-        source: str,
+        source: WorkflowSource,
         now: datetime,
     ) -> None:
         """Forward one evaluated result for an explicit alert mapping."""
@@ -306,7 +305,7 @@ class ConditionFeature(FeatureBase):
         active: bool | None,
         error: str | None,
         *,
-        source: str,
+        source: WorkflowSource,
         now: datetime,
     ) -> None:
         lock = self._locks.setdefault(alert_id, asyncio.Lock())
@@ -335,7 +334,11 @@ class ConditionFeature(FeatureBase):
         return facts
 
     def _schedule_condition_result(
-        self, alert_id: str, active: bool | None, error: str | None, source: str
+        self,
+        alert_id: str,
+        active: bool | None,
+        error: str | None,
+        source: WorkflowSource,
     ) -> None:
         self._schedule_task(
             alert_id,
@@ -344,7 +347,7 @@ class ConditionFeature(FeatureBase):
             ),
         )
 
-    def _schedule_check(self, alert_id: str, source: str) -> None:
+    def _schedule_check(self, alert_id: str, source: WorkflowSource) -> None:
         self._schedule_task(
             alert_id,
             self.check_alert(alert_id, source=source, now=dt_util.utcnow()),

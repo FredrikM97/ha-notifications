@@ -13,7 +13,6 @@ from homeassistant.helpers.storage import Store
 from pydantic import ValidationError
 
 from ..const import HISTORY_STORAGE_KEY, MAX_HISTORY, STORAGE_VERSION
-from ..features.conditions import MonitorConfig
 from ..features.configuration import Configuration
 from ..features.confirmations import ConfirmationConfig
 
@@ -159,7 +158,6 @@ def _validate_alert(alert: dict[str, Any]) -> None:
     if not isinstance(alert, dict):
         raise TypeError("Alert must be an object")
     Configuration.model_validate({"version": 1, "alerts": [alert]})
-    MonitorConfig.model_validate(alert.get("monitor") or {})
     ConfirmationConfig.from_alert(alert)
 
 

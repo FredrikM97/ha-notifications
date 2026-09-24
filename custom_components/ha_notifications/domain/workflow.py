@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Mapping
 
+from ..const import WorkflowSource
 from .confirmation import ConfirmationContext
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ class NotificationRequest:
     replace_existing: bool
     notification_actions: tuple[Mapping[str, str], ...] = ()
     condition_facts: Mapping[str, bool] = field(default_factory=dict)
-    trigger_source: str = ""
+    trigger_source: WorkflowSource | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +54,7 @@ class ConditionWorkflowEvent:
     """One evaluated condition result ready for ordered alert handling."""
 
     runtime: AlertRuntimeState
-    source: str
+    source: WorkflowSource
     now: datetime
     status: ConditionStatus
     facts: Mapping[str, bool] = field(default_factory=dict)

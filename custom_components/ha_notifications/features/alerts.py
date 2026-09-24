@@ -13,6 +13,7 @@ from ..const import (
     EVENT_ALERT_EVENT,
     AlertEventType,
     FeatureName,
+    WorkflowSource,
 )
 from ..controller.lifecycle import (
     FeatureBase,
@@ -82,7 +83,7 @@ class AlertFeature(FeatureBase):
         self,
         runtime: AlertRuntimeState,
         now: datetime,
-        source: str,
+        source: WorkflowSource,
     ) -> None:
         """Mark an active alert inactive and clear its notification if configured."""
 
@@ -105,7 +106,7 @@ class AlertFeature(FeatureBase):
         self,
         runtime: AlertRuntimeState,
         now: datetime,
-        source: str,
+        source: WorkflowSource,
     ) -> None:
         """Mark an alert active and publish its state transition."""
 

@@ -37,6 +37,7 @@ from ..support.jinja import (
     remove_nulls,
     render_values,
 )
+from .configuration import monitor_config
 from .confirmations import ConfirmationConfig
 
 _LOGGER = logging.getLogger(__name__)
@@ -152,8 +153,7 @@ class NotificationFeature(FeatureBase):
     ) -> bool:
         """Decide whether a false condition clears its notification."""
 
-        monitor = alert.get("monitor") or {}
-        configured = monitor.get("clear_on_condition_change")
+        configured = monitor_config(alert).clear_on_condition_change
         if configured is not None:
             return bool(configured)
         confirmation = ConfirmationConfig.from_alert(alert)

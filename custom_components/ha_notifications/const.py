@@ -82,4 +82,16 @@ class ConditionType(StrEnum):
     NUMERIC = "numeric"
     ATTRIBUTE = "attribute"
 
+
+class WorkflowSource(StrEnum):
+    """Origin of a condition or notification workflow evaluation."""
+
+    CHANGE = "change"
+    STARTUP = "startup"
+    RELOAD = "reload"
+    INTERVAL = "interval"
+    CONFIRMATION = "confirmation"
+    ENABLED = "enabled"
+    TEST = "test"
+
 DEFAULT_MAX_ATTEMPTS = 5
