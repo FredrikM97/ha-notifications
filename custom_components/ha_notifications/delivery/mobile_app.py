@@ -93,7 +93,7 @@ def _mobile_app_entry_ids_and_names_for_devices(
     entry_ids: set[str] = set()
     names_by_entry_id: dict[str, list[str]] = {}
     for device_id in device_ids:
-        device = device_registry.devices.get(device_id)
+        device = device_registry.async_get(device_id)
         if device is None:
             continue
         for entry_id in set(getattr(device, "config_entries", set())).intersection(

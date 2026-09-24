@@ -6,6 +6,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from homeassistant.helpers.device_registry import (
+    async_entries_for_area,
+    async_entries_for_label,
+)
+
 
 @dataclass(frozen=True)
 class RegistrySnapshot:
@@ -105,15 +110,27 @@ def resolve_target_devices(
         for area in registry_snapshot.area_registry.areas.values()
         if getattr(area, "floor_id", None) in floor_ids
     )
-    for device in registry_snapshot.device_registry.devices.values():
-        if device.area_id in area_ids or label_ids.intersection(
-            getattr(device, "labels", set())
-        ):
-            device_ids.add(device.id)
+    devices = [
+        device
+        for area_id in area_ids
+        for device in async_entries_for_area(
+            registry_snapshot.device_registry, area_id
+        )
+    ]
+    for label_id in label_ids:
+        devices.extend(
+            async_entries_for_label(registry_snapshot.device_registry, label_id)
+        )
+    for device in devices:
+        device_ids.add(device.id)
+
     config_entry_ids = {
         entry_id
-        for device in registry_snapshot.device_registry.devices.values()
-        if device.id in device_ids
+        for device_id in device_ids
+        for device in [
+            registry_snapshot.device_registry.async_get(device_id)
+        ]
+        if device is not None
         for entry_id in getattr(device, "config_entries", set())
     }
     return TargetResolution(device_ids, area_ids, config_entry_ids)

@@ -83,6 +83,22 @@ def alert_fixture(name: str) -> dict[str, Any]:
     return deepcopy(_ALERT_FIXTURES[name])
 
 
+class _TargetDeviceCollection(dict[str, Any]):
+    def get_devices_for_area_id(self, area_id: str) -> list[Any]:
+        return [device for device in self.values() if device.area_id == area_id]
+
+    def get_devices_for_label(self, label: str) -> list[Any]:
+        return [device for device in self.values() if label in device.labels]
+
+
+class _TargetDeviceRegistry:
+    def __init__(self, devices: dict[str, Any]) -> None:
+        self.devices = _TargetDeviceCollection(devices)
+
+    def async_get(self, device_id: str) -> Any | None:
+        return self.devices.get(device_id)
+
+
 def notification_snapshot(kind: str):
     """Build a deterministic registry snapshot for notification planner tests."""
 
@@ -93,7 +109,7 @@ def notification_snapshot(kind: str):
     if kind == "mobile":
         return RegistrySnapshot(
             area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(devices={}),
+            device_registry=_TargetDeviceRegistry({}),
             entity_registry=SimpleNamespace(entities={}),
             mobile_app_entries=[
                 SimpleNamespace(
@@ -106,8 +122,8 @@ def notification_snapshot(kind: str):
     if kind == "mobile_device":
         return RegistrySnapshot(
             area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(
-                devices={
+            device_registry=_TargetDeviceRegistry(
+                {
                     "phone_device": SimpleNamespace(
                         id="phone_device",
                         area_id=None,
@@ -127,7 +143,7 @@ def notification_snapshot(kind: str):
     if kind == "empty":
         return RegistrySnapshot(
             area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(devices={}),
+            device_registry=_TargetDeviceRegistry({}),
             entity_registry=SimpleNamespace(
                 entities={
                     "notify.somebody": SimpleNamespace(
@@ -149,7 +165,7 @@ def notification_snapshot(kind: str):
     if kind == "labeled":
         return RegistrySnapshot(
             area_registry=SimpleNamespace(areas={}),
-            device_registry=SimpleNamespace(devices={}),
+            device_registry=_TargetDeviceRegistry({}),
             entity_registry=SimpleNamespace(entities={}),
             mobile_app_entries=[],
             person_states=[],
@@ -168,8 +184,8 @@ def target_registry_snapshot():
                 "area_1": SimpleNamespace(area_id="area_1", floor_id="floor_1")
             }
         ),
-        device_registry=SimpleNamespace(
-            devices={
+        device_registry=_TargetDeviceRegistry(
+            {
                 "device_1": SimpleNamespace(
                     id="device_1",
                     area_id="area_1",
