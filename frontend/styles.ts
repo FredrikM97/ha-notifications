@@ -1788,7 +1788,7 @@ ha-code-editor.nc-action-editor {
     grid-column: 1 / -1;
     grid-row: 1;
     min-width: 0;
-    justify-self: center;
+    justify-self: start;
   }
 
   .nc-title h1 {

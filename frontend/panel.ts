@@ -510,14 +510,28 @@ class HaNotificationsPanel extends LitElement {
         <div class="nc-alert-heading">
           <div class="nc-alert-name">${alert.name}</div>
           <div class="nc-alert-statuses">
-            <span class=${status.enabled.className}
-              ><ha-icon icon=${status.enabled.icon}></ha-icon>${status.enabled
-                .label}</span
-            >
-            <span class=${status.condition.className}
-              ><ha-icon icon=${status.condition.icon}></ha-icon>${status
-                .condition.label}</span
-            >
+            <span
+              class=${status.enabled.className}
+              role="img"
+              title=${status.enabled.label}
+              aria-label=${status.enabled.label}
+              ><ha-icon
+                icon=${status.enabled.icon}
+                aria-hidden="true"
+              ></ha-icon
+              >${status.enabled.label}
+            </span>
+            <span
+              class=${status.condition.className}
+              role="img"
+              title=${status.condition.label}
+              aria-label=${status.condition.label}
+              ><ha-icon
+                icon=${status.condition.icon}
+                aria-hidden="true"
+              ></ha-icon
+              >${status.condition.label}
+            </span>
           </div>
         </div>
         <div class="nc-alert-meta">
