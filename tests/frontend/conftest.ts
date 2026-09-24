@@ -35,20 +35,41 @@ export function createHassClient() {
   };
 }
 
-export function alertFixture(): Alert {
-  return { id: "door", name: "Door" } as Alert;
+export function alertFixture(overrides: Partial<Alert> = {}): Alert {
+  return { id: "door", name: "Door", ...overrides } as Alert;
 }
 
-export function configuredAlertFixture(): Alert {
-  return structuredClone(alertFixtureData.alert) as Alert;
+export function configuredAlertFixture(overrides: Partial<Alert> = {}): Alert {
+  return {
+    ...(structuredClone(alertFixtureData.alert) as Alert),
+    ...overrides,
+  };
 }
 
-export function editorAlertFixture(): Alert {
-  return structuredClone(alertFixtureData.editorAlert) as Alert;
+export function editorAlertFixture(overrides: Partial<Alert> = {}): Alert {
+  return {
+    ...(structuredClone(alertFixtureData.editorAlert) as Alert),
+    ...overrides,
+  };
 }
 
-export function populatedRegistries(): Registries {
-  return structuredClone(registriesFixtureData) as Registries;
+export function draftAlertFixture(overrides: Partial<Alert> = {}): Alert {
+  const alert = defaultAlert();
+  return {
+    ...alert,
+    ...overrides,
+    notification: {
+      ...alert.notification,
+      ...overrides.notification,
+    },
+  };
+}
+
+export function populatedRegistries(overrides: Partial<Registries> = {}): Registries {
+  return {
+    ...(structuredClone(registriesFixtureData) as Registries),
+    ...overrides,
+  };
 }
 
 export function alertFormValues(

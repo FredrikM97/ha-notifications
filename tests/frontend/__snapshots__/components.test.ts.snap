@@ -328,6 +328,23 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
 }
 `;
 
+exports[`alert editor interactions > sends a valid draft through the Test alert action 1`] = `
+{
+  "conditions": [
+    {
+      "template": "{{ true }}",
+      "type": "template",
+    },
+  ],
+  "name": "Testable alert",
+  "target": {
+    "entity_id": [
+      "notify.phone",
+    ],
+  },
+}
+`;
+
 exports[`alert editor interactions > shows validation feedback instead of saving an unnamed alert 1`] = `
 "<div class="nc-toast">
           Name is required.

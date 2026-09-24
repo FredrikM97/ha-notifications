@@ -13,6 +13,7 @@ import {
   editorQueries,
   editorRoot,
   domQueries,
+  draftAlertFixture,
   emptyRegistries,
   installHaTestElements,
   populatedRegistries,
@@ -380,11 +381,12 @@ describe("alert editor interactions", () => {
     const root = editorRoot();
     const queries = editorQueries(root);
     const user = testUser();
-    const alert = defaultAlert();
-    alert.id = "testable_alert";
-    alert.name = "Testable alert";
-    alert.conditions = [{ type: "template", template: "{{ true }}" }];
-    alert.notification.target = { entity_id: ["notify.phone"] };
+    const alert = draftAlertFixture({
+      id: "testable_alert",
+      name: "Testable alert",
+      conditions: [{ type: "template", template: "{{ true }}" }],
+      notification: { target: { entity_id: ["notify.phone"] } },
+    });
     const options = editorOptions(root, alert, {
       ...emptyRegistries(),
       entities: [{ entity_id: "notify.phone", name: "Phone" }],
@@ -395,26 +397,23 @@ describe("alert editor interactions", () => {
     await vi.waitFor(() => expect(options.onTest).toHaveBeenCalledOnce());
 
     const testedAlert = options.onTest.mock.calls[0][0];
-    expect(testedAlert.name).toBe("Testable alert");
-    expect(testedAlert.conditions).toEqual([
-      { type: "template", template: "{{ true }}" },
-    ]);
-    expect(testedAlert.notification.target).toEqual({
-      entity_id: ["notify.phone"],
-    });
+    expect({
+      name: testedAlert.name,
+      conditions: testedAlert.conditions,
+      target: testedAlert.notification.target,
+    }).toMatchSnapshot();
   });
 
   it("saves an edited alert and closes the editor", async () => {
     const root = editorRoot();
     const queries = editorQueries(root);
     const user = testUser();
-    const alert = defaultAlert();
-    alert.id = "editable_alert";
-    alert.name = "Original name";
-    alert.conditions = [
-      { type: "template", template: "{{ true }}" },
-    ];
-    alert.notification.target = { entity_id: ["notify.phone"] };
+    const alert = draftAlertFixture({
+      id: "editable_alert",
+      name: "Original name",
+      conditions: [{ type: "template", template: "{{ true }}" }],
+      notification: { target: { entity_id: ["notify.phone"] } },
+    });
     const registries = {
       ...emptyRegistries(),
       entities: [{ entity_id: "notify.phone", name: "Phone" }],
