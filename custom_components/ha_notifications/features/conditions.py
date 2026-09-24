@@ -8,10 +8,11 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any
 
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers.event import (
     TrackTemplate,
     TrackTemplateResult,
+    async_track_same_state,
     async_track_template_result,
     async_track_time_interval,
 )
@@ -97,14 +98,17 @@ class ConditionWatchers:
         monitor = monitor_config(alert)
         unsubscribers: list[Callable[[], None]] = []
         if monitor.on_change:
-            unsubscribers.append(
-                self._track_template(
-                    compile_condition(alert),
-                    lambda active, error, _event: self._on_condition_result(
-                        alert_id, active, error, WorkflowSource.CHANGE
-                    ),
+            if _has_duration_condition(alert):
+                unsubscribers.extend(self._track_duration_conditions(alert))
+            else:
+                unsubscribers.append(
+                    self._track_template(
+                        compile_condition(alert),
+                        lambda active, error, _event: self._on_condition_result(
+                            alert_id, active, error, WorkflowSource.CHANGE
+                        ),
+                    )
                 )
-            )
 
         interval = (
             timedelta(seconds=float(monitor.interval))
@@ -131,6 +135,131 @@ class ConditionWatchers:
                 )
             )
         self._unsubscribers[alert_id] = unsubscribers
+
+    def _track_duration_conditions(
+        self, alert: dict[str, Any]
+    ) -> list[Callable[[], None]]:
+        alert_id = str(alert["id"])
+        conditions = [
+            condition
+            for condition in alert.get("conditions", [])
+            if isinstance(condition, dict)
+            and condition.get("enabled") is not False
+            and compile_condition({"conditions": [condition]}, include_for=False)
+            != "{{ true }}"
+        ]
+        values: list[bool | None] = [None] * len(conditions)
+        errors: list[str | None] = [None] * len(conditions)
+        ready = [not _condition_duration(condition) for condition in conditions]
+        timers: dict[tuple[int, str], Callable[[], None]] = {}
+        unsubscribers: list[Callable[[], None]] = []
+
+        def emit() -> None:
+            active_values = [
+                value is True and is_ready
+                for value, is_ready in zip(values, ready)
+            ]
+            operator_any = alert.get("logic") in ("any", "or")
+            aggregate = any(active_values) if operator_any else all(active_values)
+            if any(errors) and not aggregate:
+                error = next(error for error in errors if error is not None)
+                self._on_condition_result(
+                    alert_id, None, error, WorkflowSource.CHANGE
+                )
+                return
+            self._on_condition_result(
+                alert_id, aggregate, None, WorkflowSource.CHANGE
+            )
+
+        def condition_membership(
+            condition: dict[str, Any], entity_id: str, state: State | None
+        ) -> bool:
+            if state is None:
+                return False
+            if condition.get("type") == ConditionType.STATE:
+                states = [str(item) for item in _list(condition.get("state")) if item]
+                return state.state in states
+            if condition.get("type") == ConditionType.NUMERIC:
+                try:
+                    value = float(state.state)
+                except (TypeError, ValueError):
+                    value = 0.0
+                if condition.get("above") is not None and not value > float(
+                    condition["above"]
+                ):
+                    return False
+                if condition.get("below") is not None and not value < float(
+                    condition["below"]
+                ):
+                    return False
+                return (
+                    condition.get("above") is not None
+                    or condition.get("below") is not None
+                )
+            return False
+
+        def start_timers(index: int, condition: dict[str, Any]) -> None:
+            duration = _condition_duration(condition)
+            if not duration:
+                return
+            entity_ids = [
+                str(item) for item in _list(condition.get("entity_id")) if item
+            ]
+            for entity_id in entity_ids:
+                key = (index, entity_id)
+                if key in timers or not condition_membership(
+                    condition, entity_id, self._hass.states.get(entity_id)
+                ):
+                    continue
+
+                def timer_action(index: int = index) -> None:
+                    ready[index] = True
+                    emit()
+
+                timers[key] = async_track_same_state(
+                    self._hass,
+                    timedelta(seconds=duration),
+                    timer_action,
+                    lambda changed_entity, old_state, new_state: condition_membership(
+                        condition, changed_entity, old_state
+                    )
+                    == condition_membership(condition, changed_entity, new_state),
+                    entity_id,
+                )
+
+        for index, condition in enumerate(conditions):
+            compiled = compile_condition(
+                {"conditions": [condition]}, include_for=False
+            )
+
+            def on_result(
+                active: bool | None,
+                error: str | None,
+                _event: Event | None,
+                index: int = index,
+                condition: dict[str, Any] = condition,
+            ) -> None:
+                values[index] = active
+                errors[index] = error
+                if active is False:
+                    ready[index] = not _condition_duration(condition)
+                    for key, unsubscribe in list(timers.items()):
+                        if key[0] == index:
+                            unsubscribe()
+                            del timers[key]
+                else:
+                    start_timers(index, condition)
+                emit()
+
+            unsubscribers.append(self._track_template(compiled, on_result))
+
+        def unsubscribe_timers() -> None:
+            for unsubscribe in timers.values():
+                unsubscribe()
+            timers.clear()
+
+        unsubscribers.append(unsubscribe_timers)
+        return unsubscribers
 
     def unconfigure(self, alert_id: str) -> None:
         for unsubscribe in self._unsubscribers.pop(alert_id, []):
@@ -425,7 +554,7 @@ def _template_condition_block(template: str, result_name: str) -> str | None:
     return f"{{% set {result_name} = ({stripped}) %}}"
 
 
-def compile_condition(alert: Any) -> str:
+def compile_condition(alert: Any, *, include_for: bool = True) -> str:
     """Compile visual conditions into one Jinja condition."""
 
     expressions: list[str] = []
@@ -457,7 +586,7 @@ def compile_condition(alert: Any) -> str:
                 ]
                 expression = _combine(state_expressions, " or ")
 
-                if duration:
+                if duration and include_for:
                     expression = (
                         "("
                         f"{expression}"
@@ -495,7 +624,7 @@ def compile_condition(alert: Any) -> str:
                 if condition.get("below") is not None:
                     parts.append(f"{value} < {float(condition['below'])}")
 
-                if duration:
+                if duration and include_for:
                     parts.append(
                         f"(now() - states[{json.dumps(entity_id)}].last_changed)"
                         f".total_seconds() >= {duration}"
@@ -543,3 +672,20 @@ def compile_condition(alert: Any) -> str:
         return "\n".join(template_blocks + [expression])
 
     return expression
+
+
+def _condition_duration(condition: dict[str, Any]) -> int:
+    if condition.get("type") not in (
+        ConditionType.STATE,
+        ConditionType.NUMERIC,
+    ):
+        return 0
+    return max(0, int(condition.get("for") or 0))
+
+
+def _has_duration_condition(alert: dict[str, Any]) -> bool:
+    return any(
+        _condition_duration(condition) > 0
+        for condition in alert.get("conditions", [])
+        if isinstance(condition, dict) and condition.get("enabled") is not False
+    )

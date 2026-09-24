@@ -6,6 +6,7 @@ import importlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.ha_notifications.const import WorkflowSource
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
@@ -221,3 +222,55 @@ async def test_real_template_watcher_tracks_home_assistant_state(hass):
     assert results[-1][0] is True
     assert results[-1][1] is None
     watchers.unconfigure("real_state_alert")
+
+
+@pytest.mark.asyncio
+async def test_numeric_duration_tracks_threshold_membership(hass):
+    results = []
+    watchers = ConditionWatchers(
+        hass,
+        lambda _alert_id, active, error, _source: results.append((active, error)),
+        lambda *_args: None,
+    )
+    hass.states.async_set("sensor.temperature", "19")
+    await hass.async_block_till_done()
+
+    watchers.configure(
+        {
+            "id": "numeric_duration_alert",
+            "enabled": True,
+            "notification": {"message": "Too cold"},
+            "conditions": [
+                {
+                    "type": "numeric",
+                    "entity_id": "sensor.temperature",
+                    "below": 20,
+                    "for": 60,
+                }
+            ],
+            "monitor": {"on_change": True},
+        }
+    )
+    await hass.async_block_till_done()
+
+    hass.states.async_set("sensor.temperature", "21")
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.temperature", "19")
+    await hass.async_block_till_done()
+    assert results[-1] == (False, None)
+
+    hass.states.async_set("sensor.temperature", "16")
+    await hass.async_block_till_done()
+    assert results[-1] == (False, None)
+
+    async_fire_time_changed(
+        hass, datetime.now(timezone.utc) + timedelta(seconds=61)
+    )
+    await hass.async_block_till_done()
+    assert results[-1] == (True, None)
+
+    hass.states.async_set("sensor.temperature", "21")
+    await hass.async_block_till_done()
+    assert results[-1] == (False, None)
+
+    watchers.unconfigure("numeric_duration_alert")
