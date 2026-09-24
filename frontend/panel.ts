@@ -320,6 +320,15 @@ class HaNotificationsPanel extends LitElement {
 
   private headerTemplate(): TemplateResult {
     return html`<div class="nc-header">
+      <a
+        class="nc-back-button"
+        href="/"
+        aria-label="Back to Home Assistant"
+        title="Back to Home Assistant"
+        @click=${this.navigateHome}
+      >
+        <ha-icon icon="mdi:arrow-left"></ha-icon>
+      </a>
       <div class="nc-title">
         <div class="nc-title-icon">
           <ha-icon icon="mdi:bell-badge"></ha-icon>
@@ -335,6 +344,15 @@ class HaNotificationsPanel extends LitElement {
         </button>
       </div>
     </div>`;
+  }
+
+  private navigateHome(event: Event): void {
+    if (!this._hass?.navigate) {
+      return;
+    }
+
+    event.preventDefault();
+    this._hass.navigate("/");
   }
 
   private tabsTemplate(): TemplateResult {

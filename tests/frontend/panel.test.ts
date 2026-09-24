@@ -107,6 +107,29 @@ describe("panel view", () => {
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
   });
 
+  it("keeps an exit to Home Assistant reachable from the dashboard", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+
+    const backLink =
+      panel.shadowRoot.querySelector<HTMLAnchorElement>('a[href="/"]');
+    expect(backLink?.getAttribute("aria-label")).toBe("Back to Home Assistant");
+  });
+
+  it("uses Home Assistant navigation when exiting the panel", async () => {
+    const navigate = vi.fn();
+    const panel = mountPanel({ navigate });
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+
+    await testUser().click(
+      panel.shadowRoot.querySelector<HTMLAnchorElement>('a[href="/"]')!,
+    );
+
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
   it("renders the access guard for non-admin users", async () => {
     const panel = mountPanel({ user: { is_admin: false } });
     await settleElement(panel);

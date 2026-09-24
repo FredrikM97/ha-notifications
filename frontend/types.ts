@@ -2,6 +2,7 @@ export interface Hass {
   connection: {
     sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
   };
+  navigate?(path: string): void;
   locale?: HassLocale;
   user?: {
     is_admin: boolean;

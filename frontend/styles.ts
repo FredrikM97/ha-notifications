@@ -40,6 +40,26 @@ select {
   margin-bottom: 20px;
 }
 
+.nc-back-button {
+  display: none;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary-text-color);
+  background: var(--secondary-background-color);
+  text-decoration: none;
+}
+
+.nc-back-button:hover {
+  background: var(--divider-color);
+}
+
+:host(ha-notifications-card) .nc-back-button {
+  display: none;
+}
+
 .nc-title {
   display: flex;
   align-items: center;
@@ -74,6 +94,9 @@ select {
 }
 
 .nc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
   border-radius: var(--ha-border-radius-m, 8px);
   padding: 8px 12px;
@@ -81,6 +104,7 @@ select {
   background: var(--primary-color);
   color: white;
   font-weight: 600;
+  text-decoration: none;
 }
 
 .nc-button.secondary {
@@ -1502,8 +1526,34 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-header {
-    align-items: flex-start;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nc-back-button {
+    display: inline-grid;
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .nc-title {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-width: 0;
+    justify-self: center;
+  }
+
+  .nc-title h1 {
+    font-size: 24px;
+  }
+
+  .nc-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+    width: 100%;
   }
 
   .nc-alert {
@@ -1725,8 +1775,34 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-header {
-    align-items: flex-start;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nc-back-button {
+    display: inline-grid;
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .nc-title {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-width: 0;
+    justify-self: center;
+  }
+
+  .nc-title h1 {
+    font-size: 24px;
+  }
+
+  .nc-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+    width: 100%;
   }
 
   .nc-alert {
