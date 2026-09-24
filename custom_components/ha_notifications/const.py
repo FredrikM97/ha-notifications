@@ -21,7 +21,6 @@ HISTORY_STORAGE_KEY = "ha_notifications_history"
 
 MAX_HISTORY = 500
 PANEL_TITLE = "HA Notifications"
-PANEL_ICON = "mdi:bell-cog"
 CONF_SHOW_SIDEBAR = "show_sidebar"
 FRONTEND_STATIC_URL = f"/{DOMAIN}_static"
 FRONTEND_BUILD_DIR = "dist"

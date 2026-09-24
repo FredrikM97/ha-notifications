@@ -77,6 +77,12 @@ select {
   font-size: 24px;
 }
 
+.nc-title-icon img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
 .nc-title h1 {
   margin: 0;
   font-size: 28px;
@@ -1537,7 +1543,7 @@ ha-code-editor.nc-action-editor {
     grid-column: 1 / -1;
     grid-row: 1;
     min-width: 0;
-    justify-self: center;
+    justify-self: start;
   }
 
   .nc-title h1 {

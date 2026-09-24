@@ -19,7 +19,6 @@ from ..const import (
     DOMAIN,
     FRONTEND_BUILD_DIR,
     FRONTEND_STATIC_URL,
-    PANEL_ICON,
     PANEL_MODULE,
     PANEL_TITLE,
     VERSION,
@@ -170,7 +169,7 @@ class HaNotificationsController:
             webcomponent_name="ha-notifications-panel",
             module_url=module_url,
             sidebar_title=PANEL_TITLE if show_in_sidebar else None,
-            sidebar_icon=PANEL_ICON if show_in_sidebar else None,
+            sidebar_icon="mdi:bell" if show_in_sidebar else None,
         )
 
     async def _on_home_assistant_started(self, _event: HassEvent) -> None:

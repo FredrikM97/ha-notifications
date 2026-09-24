@@ -331,7 +331,11 @@ class HaNotificationsPanel extends LitElement {
       </a>
       <div class="nc-title">
         <div class="nc-title-icon">
-          <ha-icon icon="mdi:bell-badge"></ha-icon>
+          <img
+            src="/ha_notifications_static/brand/icon.png"
+            alt=""
+            aria-hidden="true"
+          />
         </div>
         <div>
           <h1>HA Notifications</h1>
