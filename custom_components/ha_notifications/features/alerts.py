@@ -87,6 +87,7 @@ class AlertFeature(FeatureBase):
         """Mark an active alert inactive and clear its notification if configured."""
 
         if not runtime.condition_active:
+            runtime.trace.clear()
             return
         alert = runtime.config
         runtime.deactivate(now)

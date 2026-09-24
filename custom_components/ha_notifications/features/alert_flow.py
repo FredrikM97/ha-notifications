@@ -120,7 +120,7 @@ class AlertFlow(FeatureBase):
             return self._should_notify_on_startup(runtime, alert)
         if source == "enabled" and not runtime.last_notified:
             return True
-        if source not in ("reload", "interval", "confirmation"):
+        if source not in ("change", "reload", "interval", "confirmation"):
             return False
         if runtime.acknowledged:
             return False

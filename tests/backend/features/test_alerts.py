@@ -159,6 +159,19 @@ def test_runtime_trace_does_not_evict_existing_facts() -> None:
     assert runtime.trace == facts
 
 
+async def test_inactive_deactivation_clears_stale_trace() -> None:
+    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
+    runtime.state["active"] = False
+    runtime.record_event(
+        NotificationOutcome(datetime(2026, 1, 1), True)
+    )
+    feature = AlertFeature(None, {"alert_1": runtime}, None, None)
+
+    await feature.deactivate(runtime, datetime(2026, 1, 2), "reload")
+
+    assert runtime.trace == []
+
+
 def test_runtime_activation_clears_previous_notification_marker() -> None:
     runtime = make_runtime_state(
         alert={"id": "alert_1", "name": "Alert"},

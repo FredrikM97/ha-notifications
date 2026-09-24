@@ -419,6 +419,43 @@ async def test_test_source_sends_even_when_startup_delivery_is_disabled():
 
 
 @pytest.mark.asyncio
+async def test_condition_change_source_sends_notification():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    flow, features = build_flow()
+
+    await flow.handle_event(
+        condition_event(
+            make_alert(),
+            SimpleNamespace(active=True, source="change"),
+            now,
+            features["alerts"].values["alert_1"],
+        )
+    )
+
+    assert len(features["notification"].sent) == 1
+    assert features["notification"].sent[0]["trigger_source"] == "change"
+
+
+@pytest.mark.asyncio
+async def test_acknowledged_alert_blocks_condition_change_notification():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    flow, features = build_flow()
+    runtime = features["alerts"].values["alert_1"]
+    runtime.state["acknowledged"] = True
+
+    await flow.handle_event(
+        condition_event(
+            make_alert(),
+            SimpleNamespace(active=True, source="change"),
+            now,
+            runtime,
+        )
+    )
+
+    assert not features["notification"].sent
+
+
+@pytest.mark.asyncio
 async def test_startup_attempt_is_not_repeated_after_delivery_failure():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     notification = Notification(fail=True)
