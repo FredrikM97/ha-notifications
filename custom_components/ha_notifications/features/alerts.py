@@ -67,10 +67,14 @@ class AlertFeature(FeatureBase):
             configured = alert or self._alerts.get(alert_id)
             if configured is None:
                 raise ValueError(f"Alert {alert_id} is not configured")
-            runtime = AlertRuntimeState.for_alert(configured)
+            runtime = AlertRuntimeState.for_alert(
+                Alert.model_validate(configured).model_dump(exclude_none=True)
+            )
             self._runtime[alert_id] = runtime
         elif alert is not None:
-            runtime.config = dict(alert)
+            runtime.config = Alert.model_validate(alert).model_dump(
+                exclude_none=True
+            )
         return runtime
 
     def reset_runtime(self, alert_id: str) -> None:

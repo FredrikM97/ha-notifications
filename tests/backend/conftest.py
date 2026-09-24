@@ -8,16 +8,17 @@ being forced through here.
 
 from __future__ import annotations
 
-import importlib
 from copy import deepcopy
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_mock_service,
+)
 from yaml import safe_load
 
 import custom_components.ha_notifications  # noqa: F401
@@ -28,21 +29,11 @@ from custom_components.ha_notifications.domain.confirmation import (
 from custom_components.ha_notifications.domain.runtime import (
     AlertRuntimeState,
 )
-from custom_components.ha_notifications.domain.workflow import (
-    NotificationOutcome,
-)
+from custom_components.ha_notifications.support.storage import Storage
 
 _ALERT_FIXTURES = safe_load(
     (Path(__file__).parent / "fixtures" / "alerts.yaml").read_text()
 )
-
-
-def make_confirmation_alert(alert_id: str = "alert_1") -> dict[str, Any]:
-    """Build an alert with a short, observable confirmation reminder policy."""
-
-    alert = deepcopy(_ALERT_FIXTURES["confirmation"])
-    alert["id"] = alert_id
-    return alert
 
 
 def stable_test_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -69,166 +60,10 @@ def stable_test_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]
     return normalized
 
 
-def make_notification_alert(alert_id: str = "alert_1") -> dict[str, Any]:
-    """Build the compact alert shape used by notification planner tests."""
-
-    alert = deepcopy(_ALERT_FIXTURES["notification"])
-    alert["id"] = alert_id
-    return alert
-
-
 def alert_fixture(name: str) -> dict[str, Any]:
     """Return a copy of a named reusable YAML alert fixture."""
 
     return deepcopy(_ALERT_FIXTURES[name])
-
-
-class _TargetDeviceCollection(dict[str, Any]):
-    def get_devices_for_area_id(self, area_id: str) -> list[Any]:
-        return [device for device in self.values() if device.area_id == area_id]
-
-    def get_devices_for_label(self, label: str) -> list[Any]:
-        return [device for device in self.values() if label in device.labels]
-
-
-class _TargetDeviceRegistry:
-    def __init__(self, devices: dict[str, Any]) -> None:
-        self.devices = _TargetDeviceCollection(devices)
-
-    def async_get(self, device_id: str) -> Any | None:
-        return self.devices.get(device_id)
-
-
-def notification_snapshot(kind: str):
-    """Build a deterministic registry snapshot for notification planner tests."""
-
-    from custom_components.ha_notifications.features.notification import (
-        RegistrySnapshot,
-    )
-
-    if kind == "mobile":
-        return RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=_TargetDeviceRegistry({}),
-            entity_registry=SimpleNamespace(entities={}),
-            mobile_app_entries=[
-                SimpleNamespace(
-                    entry_id="mobile_entry",
-                    data={"device_id": "phone_device", "device_name": "somebody"},
-                )
-            ],
-            person_states=[],
-        )
-    if kind == "mobile_device":
-        return RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=_TargetDeviceRegistry(
-                {
-                    "phone_device": SimpleNamespace(
-                        id="phone_device",
-                        area_id=None,
-                        labels=set(),
-                        config_entries={"mobile_entry"},
-                    )
-                }
-            ),
-            entity_registry=SimpleNamespace(entities={}),
-            mobile_app_entries=[
-                SimpleNamespace(
-                    entry_id="mobile_entry", data={"device_name": "somebody"}
-                )
-            ],
-            person_states=[],
-        )
-    if kind == "empty":
-        return RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=_TargetDeviceRegistry({}),
-            entity_registry=SimpleNamespace(
-                entities={
-                    "notify.somebody": SimpleNamespace(
-                        entity_id="notify.somebody",
-                        device_id=None,
-                        config_entry_id="mobile_entry",
-                        area_id=None,
-                        labels=set(),
-                    )
-                }
-            ),
-            mobile_app_entries=[
-                SimpleNamespace(
-                    entry_id="mobile_entry", data={"device_name": "somebody"}
-                )
-            ],
-            person_states=[],
-        )
-    if kind == "labeled":
-        return RegistrySnapshot(
-            area_registry=SimpleNamespace(areas={}),
-            device_registry=_TargetDeviceRegistry({}),
-            entity_registry=SimpleNamespace(entities={}),
-            mobile_app_entries=[],
-            person_states=[],
-        )
-    raise ValueError(f"Unknown notification snapshot kind: {kind}")
-
-
-def target_registry_snapshot():
-    """Build registries covering user, device, area, floor, and label targets."""
-
-    from custom_components.ha_notifications.delivery.targets import RegistrySnapshot
-
-    return RegistrySnapshot(
-        area_registry=SimpleNamespace(
-            areas={
-                "area_1": SimpleNamespace(area_id="area_1", floor_id="floor_1")
-            }
-        ),
-        device_registry=_TargetDeviceRegistry(
-            {
-                "device_1": SimpleNamespace(
-                    id="device_1",
-                    area_id="area_1",
-                    labels={"critical"},
-                    config_entries={"mobile_entry"},
-                )
-            }
-        ),
-        entity_registry=SimpleNamespace(
-            entities={
-                "sensor.tracker": SimpleNamespace(
-                    entity_id="sensor.tracker",
-                    device_id="device_1",
-                    config_entry_id=None,
-                ),
-                "notify.phone": SimpleNamespace(
-                    entity_id="notify.phone",
-                    device_id="device_1",
-                    config_entry_id="mobile_entry",
-                ),
-            }
-        ),
-        mobile_app_entries=[
-            SimpleNamespace(
-                entry_id="mobile_entry",
-                data={
-                    "user_id": "user_1",
-                    "device_id": "device_1",
-                    "device_name": "phone",
-                },
-            )
-        ],
-        person_states=[
-            SimpleNamespace(
-                attributes={
-                    "user_id": "user_1",
-                    "device_trackers": ["sensor.tracker"],
-                }
-            )
-        ],
-        has_service=lambda domain, service: domain == "notify"
-        and service == "mobile_app_phone",
-    )
 
 
 @pytest.fixture
@@ -251,7 +86,7 @@ def real_target_registry(hass: HomeAssistant):
         },
     )
     mobile_entry.add_to_hass(hass)
-    hass.services.async_register("notify", "mobile_app_phone", lambda _call: None)
+    async_mock_service(hass, "notify", "mobile_app_phone")
 
     area = ar.async_get(hass).async_create("Living Room", floor_id="floor_1")
     device_registry = dr.async_get(hass)
@@ -302,161 +137,145 @@ def real_target_registry(hass: HomeAssistant):
     )
 
 
-class _TestNotification:
-    def __init__(self) -> None:
-        self.payloads: list[dict[str, Any]] = []
-        self.cleared: list[dict[str, Any]] = []
+@pytest.fixture
+def alert_factory():
+    """Provide the full alert builder for tests with focused overrides."""
 
-    async def send(self, request: Any) -> NotificationOutcome:
-        self.payloads.append(
-            {
-                "alert": dict(request.runtime.config),
-                "attempt": (
-                    request.runtime.confirmation.attempts + 1
-                    if request.runtime.confirmation.action_ids
-                    else None
-                ),
-                "notification_actions": list(request.notification_actions),
-                "replace_existing": request.replace_existing,
-                "now": datetime.now(timezone.utc),
-                "condition_facts": dict(request.condition_facts),
-                "trigger_source": request.trigger_source,
-            }
-        )
-        return NotificationOutcome(
-            datetime.now(timezone.utc), True
-        )
+    def build_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
+        base = deepcopy(_ALERT_FIXTURES["base"])
+        base["id"] = alert_id
+        base.update(overrides)
+        return base
 
-    async def clear(self, alert: dict[str, Any]) -> None:
-        self.cleared.append({"alert": dict(alert)})
-
-
-class _TestAlerts:
-    def __init__(
-        self, saved_alert: dict[str, Any], runtime: dict[str, dict[str, Any]]
-    ) -> None:
-        self.saved_alert = saved_alert
-        self._runtime = runtime
-
-    async def get_alert(self, alert_id: str) -> dict[str, Any] | None:
-        if alert_id == self.saved_alert["id"]:
-            return self.saved_alert
-        return None
-
-    def runtime(self, alert_id: str) -> dict[str, Any]:
-        return self._runtime.setdefault(alert_id, {})
-
-
-class _TestHistory:
-    def __init__(self) -> None:
-        self.removed_alert_ids: list[str] = []
-
-    async def remove_alert(self, alert_id: str) -> None:
-        self.removed_alert_ids.append(alert_id)
-
-
-class _TestLifecycle:
-    def __init__(self, feature_map: dict[str, Any]) -> None:
-        self.feature_map = feature_map
-
-    def feature(self, name: str) -> Any:
-        return self.feature_map[name]
+    return build_alert
 
 
 @pytest.fixture
-def test_feature_context(hass: HomeAssistant):
-    """Provide a real HA context and captured delivery test features."""
+def alert(alert_factory) -> dict[str, Any]:
+    """Provide a fresh full alert configuration for each test."""
 
-    confirmation = importlib.import_module(
-        "custom_components.ha_notifications.features.confirmations"
-    )
-    preview = importlib.import_module(
-        "custom_components.ha_notifications.features.notification_preview"
-    )
-    alert_flow = importlib.import_module(
-        "custom_components.ha_notifications.features.alert_flow"
-    )
-    conditions = importlib.import_module(
-        "custom_components.ha_notifications.features.conditions"
-    )
-    follow_up_actions = importlib.import_module(
-        "custom_components.ha_notifications.features.follow_up_actions"
-    )
-    saved_alert = make_confirmation_alert()
-    state: dict[str, dict[str, Any]] = {}
-    notification = _TestNotification()
-    history = _TestHistory()
-    confirmation_feature = confirmation.ConfirmationFeature(hass)
-    storage = SimpleNamespace(persist=lambda: None)
-    follow_up_feature = follow_up_actions.FollowUpActionsFeature(
-        hass, state, None, storage
-    )
-    alert_flow_feature = alert_flow.AlertFlow(hass, state, None, storage)
-    conditions_feature = conditions.ConditionFeature(hass, state, None, None)
-    test_feature = preview.NotificationPreviewFeature(
-        hass, state, None, storage
-    )
-    lifecycle = _TestLifecycle(
-        {
-            "alerts": _TestAlerts(saved_alert, state),
-            "alert_flow": alert_flow_feature,
-            "conditions": conditions_feature,
-            "history": history,
-            "confirmations": confirmation_feature,
-            "notification": notification,
-            "follow_up_actions": follow_up_feature,
-        }
-    )
-    test_feature.lifecycle = lifecycle
-    alert_flow_feature.lifecycle = lifecycle
-    conditions_feature.lifecycle = lifecycle
-
-    return SimpleNamespace(
-        alert=saved_alert,
-        confirmation=confirmation_feature,
-        feature=test_feature,
-        notification=notification,
-        history=history,
-        state=state,
-    )
+    return alert_factory()
 
 
-def make_alert(alert_id: str = "alert_1", **overrides: Any) -> dict[str, Any]:
-    """Build a full alert dict for controller/alerts.py and controller/core.py tests."""
+@pytest.fixture
+def confirmation_alert_factory():
+    """Provide the confirmation alert builder for tests with focused overrides."""
 
-    base = deepcopy(_ALERT_FIXTURES["base"])
-    base["id"] = alert_id
-    base.update(overrides)
-    return base
+    def build_confirmation_alert(alert_id: str = "alert_1") -> dict[str, Any]:
+        alert = deepcopy(_ALERT_FIXTURES["confirmation"])
+        alert["id"] = alert_id
+        return alert
+
+    return build_confirmation_alert
 
 
-def make_runtime_state(**overrides: Any) -> AlertRuntimeState:
-    """Build a complete default runtime record with focused test overrides."""
+@pytest.fixture
+def notification_alert_factory():
+    """Provide the notification alert builder for tests with focused overrides."""
 
-    config = overrides.pop("alert", deepcopy(_ALERT_FIXTURES["base"]))
-    state = dict(overrides.pop("state", {}))
-    confirmation = overrides.pop("confirmation", {})
-    condition = overrides.pop("condition", {})
-    notification = overrides.pop("notification", {})
-    for key in ("active", "last_evaluated", "flow_id", "started_at"):
-        if key in overrides:
-            state[key] = overrides.pop(key)
-    for key in ("last_notified", "last_error"):
-        if key in overrides:
-            state[key] = overrides.pop(key)
-    state.update(condition)
-    state.update(notification)
-    if state.get("active") or state.get("last_evaluated"):
-        state.setdefault(
-            "last_evaluated",
-            condition.get("last_evaluated")
-            or condition.get("started_at")
-            or "2026-01-01T00:00:00+00:00",
-        )
-    runtime = AlertRuntimeState(config=config, state=state, **overrides)
-    if confirmation:
-        runtime.record_event(PendingConfirmationState(**confirmation))
-    return runtime
+    def build_notification_alert(alert_id: str = "alert_1") -> dict[str, Any]:
+        alert = deepcopy(_ALERT_FIXTURES["notification"])
+        alert["id"] = alert_id
+        return alert
+
+    return build_notification_alert
+
+
+@pytest.fixture
+def confirmation_alert(
+    real_target_registry, confirmation_alert_factory
+) -> dict[str, Any]:
+    """Provide a confirmation alert targeting the real mobile entity."""
+
+    configured_alert = confirmation_alert_factory()
+    configured_alert["notification"]["target"] = {
+        "entity_id": [real_target_registry.notify_entity_id]
+    }
+    return configured_alert
+
+
+@pytest.fixture
+def notification_alert(
+    real_target_registry, notification_alert_factory
+) -> dict[str, Any]:
+    """Provide a notification alert targeting the real mobile entity."""
+
+    configured_alert = notification_alert_factory()
+    configured_alert["notification"]["target"] = {
+        "entity_id": [real_target_registry.notify_entity_id]
+    }
+    return configured_alert
+
+
+@pytest.fixture
+def registry_snapshot(real_target_registry):
+    """Provide the real Home Assistant registry snapshot."""
+
+    return real_target_registry.snapshot
+
+
+@pytest.fixture
+def runtime_state(runtime_state_factory) -> AlertRuntimeState:
+    """Provide a fresh runtime state for each test."""
+
+    return runtime_state_factory()
+
+
+@pytest.fixture
+def runtime_state_factory():
+    """Provide the runtime state builder for tests with focused overrides."""
+
+    def build_runtime_state(**overrides: Any) -> AlertRuntimeState:
+        config = overrides.pop("alert", deepcopy(_ALERT_FIXTURES["base"]))
+        state = dict(overrides.pop("state", {}))
+        confirmation = overrides.pop("confirmation", {})
+        condition = overrides.pop("condition", {})
+        notification = overrides.pop("notification", {})
+        for key in ("active", "last_evaluated", "flow_id", "started_at"):
+            if key in overrides:
+                state[key] = overrides.pop(key)
+        for key in ("last_notified", "last_error"):
+            if key in overrides:
+                state[key] = overrides.pop(key)
+        state.update(condition)
+        state.update(notification)
+        if state.get("active") or state.get("last_evaluated"):
+            state.setdefault(
+                "last_evaluated",
+                condition.get("last_evaluated")
+                or condition.get("started_at")
+                or "2026-01-01T00:00:00+00:00",
+            )
+        runtime = AlertRuntimeState(config=config, state=state, **overrides)
+        if confirmation:
+            runtime.record_event(PendingConfirmationState(**confirmation))
+        return runtime
+
+    return build_runtime_state
+
+
+@pytest.fixture
+def runtime_with_pending_factory():
+    """Build runtime state with an explicit pending confirmation event."""
+
+    def build_runtime(alert: dict[str, Any] | None = None, **pending: Any):
+        runtime = AlertRuntimeState.for_alert(alert or {"id": "alert_1"})
+        runtime.record_event(PendingConfirmationState(**pending))
+        return runtime
+
+    return build_runtime
+
+
+@pytest.fixture
+def storage_context_factory(hass: HomeAssistant):
+    """Build a real Storage instance with a test config entry."""
+
+    def build_context(options: dict[str, Any] | None = None):
+        entry = MockConfigEntry(domain=DOMAIN, data={}, options=options or {})
+        entry.add_to_hass(hass)
+        return SimpleNamespace(entry=entry, storage=Storage(hass, entry))
+
+    return build_context
 
 
 @pytest.fixture

@@ -6,7 +6,13 @@ import json
 from datetime import datetime
 from types import MappingProxyType, SimpleNamespace
 
-from custom_components.ha_notifications.const import AlertEventType, FeatureName
+import pytest
+
+from custom_components.ha_notifications.const import (
+    EVENT_ALERT_EVENT,
+    AlertEventType,
+    FeatureName,
+)
 from custom_components.ha_notifications.domain.runtime import serialize_runtime
 from custom_components.ha_notifications.domain.workflow import (
     ConditionStatus,
@@ -15,11 +21,10 @@ from custom_components.ha_notifications.domain.workflow import (
 )
 from custom_components.ha_notifications.features.alerts import AlertFeature
 from custom_components.ha_notifications.features.configuration import Alert
-from tests.backend.conftest import make_alert, make_runtime_state
 
 
-def test_runtime_trace_serializes_datetime_values_for_transport() -> None:
-    runtime = make_runtime_state()
+def test_runtime_trace_serializes_datetime_values_for_transport(runtime_state) -> None:
+    runtime = runtime_state
     runtime.record_event(
         ConditionWorkflowEvent(
             runtime=runtime,
@@ -35,50 +40,65 @@ def test_runtime_trace_serializes_datetime_values_for_transport() -> None:
     assert payload["trace"][0]["now"] == "2026-09-23T12:00:00"
 
 
-async def test_disabled_runtime_reset_contract_snapshot(snapshot):
-    state = {"alert_1": make_runtime_state(
-        active=True,
-        confirmation={
-            "attempts": 4,
-            "action_ids": {"confirm_1": "confirm"},
-        },
-        last_notified="2026-09-16T12:00:00+00:00",
-    )}
+def test_runtime_normalizes_typed_alert_to_json_safe_configuration() -> None:
+    state = {}
+    feature = AlertFeature(None, state, None, None)
+    alert = Alert(
+        id="alert_1",
+        name="Alert",
+        monitor={"on_change": True},
+    )
+
+    runtime = feature.runtime(alert)
+
+    assert runtime.config["monitor"] == {"on_change": True}
+    assert all(not isinstance(value, Alert) for value in runtime.config.values())
+
+
+async def test_disabled_runtime_reset_contract_snapshot(
+    snapshot, runtime_state_factory, alert_factory
+):
+    state = {
+        "alert_1": runtime_state_factory(
+            active=True,
+            confirmation={
+                "attempts": 4,
+                "action_ids": {"confirm_1": "confirm"},
+            },
+            last_notified="2026-09-16T12:00:00+00:00",
+        )
+    }
     runtime_storage = SimpleNamespace(
         persist=lambda: None,
     )
     feature = AlertFeature(None, state, None, runtime_storage)
-    feature._alerts = {
-        "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
-    }
+    feature._alerts = {"alert_1": Alert(id="alert_1", name="Alert", enabled=True)}
 
-    await feature.apply_config(
-        {"alerts": [make_alert(enabled=False, name="Alert")]}
-    )
+    await feature.apply_config({"alerts": [alert_factory(enabled=False, name="Alert")]})
 
     assert serialize_runtime(feature.runtime("alert_1")) == snapshot
 
 
-async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts() -> None:
-    state = {"alert_1": make_runtime_state(
-        active=True,
-        confirmation={
-            "attempts": 4,
-            "action_ids": {"confirm_1": "confirm"},
-        },
-        last_notified="2026-09-16T12:00:00+00:00",
-    )}
+async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts(
+    runtime_state_factory, alert_factory
+) -> None:
+    state = {
+        "alert_1": runtime_state_factory(
+            active=True,
+            confirmation={
+                "attempts": 4,
+                "action_ids": {"confirm_1": "confirm"},
+            },
+            last_notified="2026-09-16T12:00:00+00:00",
+        )
+    }
     runtime_storage = SimpleNamespace(
         persist=lambda: None,
     )
     feature = AlertFeature(None, state, None, runtime_storage)
-    feature._alerts = {
-        "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
-    }
+    feature._alerts = {"alert_1": Alert(id="alert_1", name="Alert", enabled=True)}
 
-    await feature.apply_config(
-        {"alerts": [make_alert(enabled=False, name="Alert")]}
-    )
+    await feature.apply_config({"alerts": [alert_factory(enabled=False, name="Alert")]})
 
     runtime = feature.runtime("alert_1")
     assert runtime.confirmation.attempts == 0
@@ -86,34 +106,33 @@ async def test_disabling_and_reenabling_resets_runtime_confirmation_attempts() -
     assert runtime.condition_active is False
 
 
-async def test_runtime_reset_preserves_evaluation_context() -> None:
-    state = {"alert_1": make_runtime_state(
-        last_evaluated="2026-09-21T10:00:00+00:00",
-    )}
+async def test_runtime_reset_preserves_evaluation_context(
+    runtime_state_factory, alert_factory
+) -> None:
+    state = {
+        "alert_1": runtime_state_factory(
+            last_evaluated="2026-09-21T10:00:00+00:00",
+        )
+    }
     runtime_storage = SimpleNamespace(persist=lambda: None)
     feature = AlertFeature(None, state, None, runtime_storage)
-    feature._alerts = {
-        "alert_1": Alert(id="alert_1", name="Alert", enabled=True)
-    }
+    feature._alerts = {"alert_1": Alert(id="alert_1", name="Alert", enabled=True)}
 
-    await feature.apply_config(
-        {"alerts": [make_alert(enabled=False, name="Alert")]}
-    )
+    await feature.apply_config({"alerts": [alert_factory(enabled=False, name="Alert")]})
 
     runtime = feature.runtime("alert_1")
     assert runtime.last_evaluated == "2026-09-21T10:00:00+00:00"
     assert not hasattr(runtime, "last_event")
 
 
-def test_publish_event_contains_complete_runtime_snapshot() -> None:
+@pytest.mark.asyncio
+async def test_publish_event_contains_complete_runtime_snapshot(
+    hass, runtime_state_factory, snapshot
+) -> None:
     events = []
-    hass = SimpleNamespace(
-        bus=SimpleNamespace(
-            async_fire=lambda _event_type, data: events.append(data)
-        )
-    )
+    hass.bus.async_listen(EVENT_ALERT_EVENT, lambda event: events.append(event.data))
     state = {
-        "alert_1": make_runtime_state(
+        "alert_1": runtime_state_factory(
             alert={"id": "alert_1", "name": "Alert"}, flow_id="flow_1"
         )
     }
@@ -128,16 +147,21 @@ def test_publish_event_contains_complete_runtime_snapshot() -> None:
         "Notification sent.",
         {"attempt": 1},
     )
+    await hass.async_block_till_done()
 
-    assert events[0]["config"] == {"id": "alert_1", "name": "Alert"}
-    assert events[0]["trace"][0]["success"] is True
-    assert events[0]["event"]["type"] == AlertEventType.NOTIFICATION_SENT.value
-    assert events[0]["event"]["details"] == {"attempt": 1}
+    event = dict(events[0])
+    event_details = dict(event["event"])
+    event_details["event_id"] = "<event_id>"
+    event_details["timestamp"] = "<timestamp>"
+    event["event"] = event_details
+    assert event == snapshot
     assert len(state["alert_1"].trace) == 1
 
 
-def test_runtime_trace_preserves_existing_dataclass_order() -> None:
-    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
+def test_runtime_trace_preserves_existing_dataclass_order(
+    runtime_state_factory,
+) -> None:
+    runtime = runtime_state_factory(alert={"id": "alert_1", "name": "Alert"})
     first = NotificationOutcome(datetime(2026, 1, 1), True)
     second = NotificationOutcome(datetime(2026, 1, 2), False, "failed")
     runtime.record_event(first)
@@ -146,12 +170,9 @@ def test_runtime_trace_preserves_existing_dataclass_order() -> None:
     assert runtime.trace == [first, second]
 
 
-def test_runtime_trace_does_not_evict_existing_facts() -> None:
-    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
-    facts = [
-        NotificationOutcome(datetime(2026, 1, 1), True)
-        for _ in range(101)
-    ]
+def test_runtime_trace_does_not_evict_existing_facts(runtime_state_factory) -> None:
+    runtime = runtime_state_factory(alert={"id": "alert_1", "name": "Alert"})
+    facts = [NotificationOutcome(datetime(2026, 1, 1), True) for _ in range(101)]
 
     for fact in facts:
         runtime.record_event(fact)
@@ -159,12 +180,10 @@ def test_runtime_trace_does_not_evict_existing_facts() -> None:
     assert runtime.trace == facts
 
 
-async def test_inactive_deactivation_clears_stale_trace() -> None:
-    runtime = make_runtime_state(alert={"id": "alert_1", "name": "Alert"})
+async def test_inactive_deactivation_clears_stale_trace(runtime_state_factory) -> None:
+    runtime = runtime_state_factory(alert={"id": "alert_1", "name": "Alert"})
     runtime.state["active"] = False
-    runtime.record_event(
-        NotificationOutcome(datetime(2026, 1, 1), True)
-    )
+    runtime.record_event(NotificationOutcome(datetime(2026, 1, 1), True))
     feature = AlertFeature(None, {"alert_1": runtime}, None, None)
 
     await feature.deactivate(runtime, datetime(2026, 1, 2), "reload")
@@ -172,8 +191,10 @@ async def test_inactive_deactivation_clears_stale_trace() -> None:
     assert runtime.trace == []
 
 
-def test_runtime_activation_clears_previous_notification_marker() -> None:
-    runtime = make_runtime_state(
+def test_runtime_activation_clears_previous_notification_marker(
+    runtime_state_factory,
+) -> None:
+    runtime = runtime_state_factory(
         alert={"id": "alert_1", "name": "Alert"},
         active=True,
         last_notified="2026-09-23T12:00:00+00:00",
@@ -185,7 +206,7 @@ def test_runtime_activation_clears_previous_notification_marker() -> None:
 
 
 async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
-    snapshot,
+    snapshot, runtime_state_factory, alert_factory
 ):
     class Storage:
         def __init__(self):
@@ -217,7 +238,7 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
 
     storage = Storage()
     notification = Notification()
-    state = {"alert_1": make_runtime_state(active=True)}
+    state = {"alert_1": runtime_state_factory(active=True)}
     history_storage = SimpleNamespace(
         history=[{"alert_id": "alert_1"}, {"alert_id": "other"}],
         persist_history=lambda: None,
@@ -225,15 +246,11 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
 
     async def remove_alert(alert_id):
         history_storage.history[:] = [
-            entry
-            for entry in history_storage.history
-            if entry["alert_id"] != alert_id
+            entry for entry in history_storage.history if entry["alert_id"] != alert_id
         ]
 
     history_storage.remove_alert = remove_alert
-    feature = AlertFeature(
-        None, state, storage, SimpleNamespace(persist=lambda: None)
-    )
+    feature = AlertFeature(None, state, storage, SimpleNamespace(persist=lambda: None))
     feature._alerts = {"alert_1": Alert(id="alert_1", name="Old")}
     feature.lifecycle = SimpleNamespace(
         feature=lambda name: (
@@ -241,7 +258,7 @@ async def test_save_update_preserves_created_at_and_delete_cleans_owned_state(
         )
     )
 
-    saved = await feature.save_alert(make_alert(name="New"))
+    saved = await feature.save_alert(alert_factory(name="New"))
     saved["updated_at"] = "<timestamp>"
     assert saved == snapshot
 

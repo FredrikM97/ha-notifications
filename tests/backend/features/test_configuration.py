@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import MappingProxyType
-
 import pytest
 
 from custom_components.ha_notifications.features.configuration import (
@@ -10,17 +8,14 @@ from custom_components.ha_notifications.features.configuration import (
 
 
 @pytest.mark.asyncio
-async def test_get_config_places_version_first():
-    class Storage:
-        async def load_raw_config(self):
-            return MappingProxyType(
-                {
-                    "alerts": [],
-                    "version": 1,
-                }
-            )
-
-    feature = ConfigurationFeature(None, {}, Storage(), None)
+async def test_get_config_places_version_first(hass, storage_context_factory):
+    storage_context = storage_context_factory({"alerts": [], "version": 1})
+    feature = ConfigurationFeature(
+        hass,
+        {},
+        storage_context.storage,
+        None,
+    )
 
     result = await feature.get_config()
 
@@ -28,15 +23,18 @@ async def test_get_config_places_version_first():
 
 
 @pytest.mark.asyncio
-async def test_get_config_keeps_invalid_saved_alerts_for_yaml_recovery():
-    class Storage:
-        async def load_raw_config(self):
-            return {
-                "version": 1,
-                "alerts": [{"name": "Missing id"}],
-            }
-
-    feature = ConfigurationFeature(None, {}, Storage(), None)
+async def test_get_config_keeps_invalid_saved_alerts_for_yaml_recovery(
+    hass, storage_context_factory
+):
+    storage_context = storage_context_factory(
+        {"version": 1, "alerts": [{"name": "Missing id"}]}
+    )
+    feature = ConfigurationFeature(
+        hass,
+        {},
+        storage_context.storage,
+        None,
+    )
 
     result = await feature.get_config()
 

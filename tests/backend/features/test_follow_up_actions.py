@@ -7,13 +7,13 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.ha_notifications.const import EVENT_ALERT_EVENT, AlertEventType
 from custom_components.ha_notifications.domain.runtime import AlertRuntimeState
 from custom_components.ha_notifications.domain.service_calls import (
     FollowUpActionsRequest,
 )
-from tests.backend.conftest import make_alert
 from tests.backend.support.test_support import PACKAGE_NAME, ensure_package
 
 ensure_package()
@@ -53,8 +53,8 @@ class AlertEventPublisher:
         )
 
 
-def test_actions_for_confirmation_reads_owned_configuration():
-    alert = make_alert(
+def test_actions_for_confirmation_reads_owned_configuration(alert_factory):
+    alert = alert_factory(
         confirmation={
             "enabled": True,
             "actions": {
@@ -95,16 +95,11 @@ def follow_up_context(hass):
 
 @pytest.mark.asyncio
 async def test_run_renders_and_executes_multiple_actions(
-    hass, follow_up_context, snapshot
+    hass, follow_up_context, snapshot, alert_factory
 ):
     feature, history = follow_up_context
-    calls = []
-
-    async def handler(call):
-        calls.append(call)
-
-    hass.services.async_register("light", "turn_on", handler)
-    alert = make_alert(
+    calls = async_mock_service(hass, "light", "turn_on")
+    alert = alert_factory(
         post_send_actions={
             "enabled": True,
             "actions": [
@@ -138,17 +133,18 @@ async def test_run_renders_and_executes_multiple_actions(
 
 
 @pytest.mark.asyncio
-async def test_run_records_service_failure(hass, follow_up_context):
+async def test_run_records_service_failure(hass, follow_up_context, alert_factory):
     feature, history = follow_up_context
-
-    async def handler(_call):
-        raise RuntimeError("service unavailable")
-
-    hass.services.async_register("light", "turn_on", handler)
+    async_mock_service(
+        hass,
+        "light",
+        "turn_on",
+        raise_exception=RuntimeError("service unavailable"),
+    )
     await feature.execute(
         FollowUpActionsRequest(
             AlertRuntimeState.for_alert(
-                make_alert(
+                alert_factory(
                     post_send_actions={
                         "enabled": True,
                         "actions": [{"action": "light.turn_on"}],
@@ -164,9 +160,11 @@ async def test_run_records_service_failure(hass, follow_up_context):
 
 
 @pytest.mark.asyncio
-async def test_run_skips_disabled_or_empty_actions(hass, follow_up_context):
+async def test_run_skips_disabled_or_empty_actions(
+    hass, follow_up_context, alert_factory
+):
     feature, history = follow_up_context
-    alert = make_alert(post_send_actions={"enabled": False, "actions": []})
+    alert = alert_factory(post_send_actions={"enabled": False, "actions": []})
 
     await feature.execute(
         FollowUpActionsRequest(
@@ -180,14 +178,14 @@ async def test_run_skips_disabled_or_empty_actions(hass, follow_up_context):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service", [".", "notify.", ".send"])
 async def test_run_records_malformed_service_names(
-    hass, follow_up_context, service
+    hass, follow_up_context, alert_factory, service
 ):
     feature, history = follow_up_context
 
     await feature.execute(
         FollowUpActionsRequest(
             AlertRuntimeState.for_alert(
-                make_alert(
+                alert_factory(
                     post_send_actions={
                         "enabled": True,
                         "actions": [{"action": service}],
@@ -203,13 +201,15 @@ async def test_run_records_malformed_service_names(
 
 
 @pytest.mark.asyncio
-async def test_run_records_non_mapping_data(hass, follow_up_context):
+async def test_run_records_non_mapping_data(
+    hass, follow_up_context, alert_factory
+):
     feature, history = follow_up_context
 
     await feature.execute(
         FollowUpActionsRequest(
             AlertRuntimeState.for_alert(
-                make_alert(
+                alert_factory(
                     post_send_actions={
                         "enabled": True,
                         "actions": [

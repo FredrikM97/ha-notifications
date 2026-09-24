@@ -1,4 +1,58 @@
 # serializer version: 1
+# name: test_apply_confirmation_uses_real_feature_workflow
+  dict({
+    'follow_up_calls': list([
+      ReadOnlyDict({
+        'brightness': 100,
+        'entity_id': list([
+          'light.confirmation',
+        ]),
+      }),
+    ]),
+    'history_types': list([
+      'notification_action',
+      'completion_sent',
+      'confirmed',
+      'notification_sent',
+      'condition_active',
+    ]),
+    'notifications': list([
+      dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': '<confirmation_action>',
+              'title': 'Confirm',
+            }),
+          ]),
+          'tag': 'ha_notifications_workflow_confirmation',
+          'timeout': 900,
+        }),
+        'message': 'Message',
+        'title': 'Testing',
+      }),
+      dict({
+        'data': dict({
+          'tag': 'ha_notifications_workflow_confirmation',
+        }),
+        'message': 'clear_notification',
+      }),
+      dict({
+        'data': dict({
+          'tag': 'ha_notifications_workflow_confirmation',
+        }),
+        'message': 'Confirmed by Alice',
+        'title': 'Testing',
+      }),
+    ]),
+    'runtime': dict({
+      'acknowledged': True,
+      'action_ids': dict({
+      }),
+      'confirmed_by': 'Alice',
+    }),
+  })
+# ---
 # name: test_confirmation_configuration_contract_snapshot
   dict({
     'buttons': list([

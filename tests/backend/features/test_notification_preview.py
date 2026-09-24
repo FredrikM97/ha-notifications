@@ -2,41 +2,36 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 
 @pytest.mark.asyncio
-async def test_preview_only_forwards_a_forced_condition_result(
-    test_feature_context,
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_preview_forwards_a_forced_condition_result(
+    hass: HomeAssistant,
+    loaded_config_entry,
+    notification_alert_factory,
 ):
-    context = test_feature_context
-    condition_result = AsyncMock()
-    context.feature.lifecycle.feature_map["conditions"].condition_result_for_alert = (
-        condition_result
-    )
+    calls = async_mock_service(hass, "notify", "send_message")
+    controller = loaded_config_entry.runtime_data
+    alert = notification_alert_factory("preview_forced_condition")
 
-    result = await context.feature.preview_payload(context.alert)
+    result = await controller.dispatch("notification_preview.payload", alert)
 
     assert result is True
-    condition_result.assert_awaited_once()
-    runtime, active, error = condition_result.await_args.args[:3]
-    assert runtime.config["id"].startswith("NC_PREVIEW_")
-    assert active is True
-    assert error is None
-    assert condition_result.await_args.kwargs["source"] == "test"
+    await hass.async_block_till_done()
+    assert len(calls) == 1
+    assert calls[0].data["message"] == alert["notification"]["message"]
 
 
 @pytest.mark.asyncio
-async def test_preview_validates_payload_before_triggering(test_feature_context):
-    context = test_feature_context
-    condition_result = AsyncMock()
-    context.feature.lifecycle.feature_map["conditions"].condition_result_for_alert = (
-        condition_result
-    )
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_preview_validates_payload_before_triggering(
+    loaded_config_entry,
+):
+    controller = loaded_config_entry.runtime_data
 
     with pytest.raises(ValueError):
-        await context.feature.preview_payload({"invalid": True})
-
-    condition_result.assert_not_awaited()
+        await controller.dispatch("notification_preview.payload", {"invalid": True})

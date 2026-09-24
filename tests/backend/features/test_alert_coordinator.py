@@ -65,3 +65,42 @@ async def test_different_alerts_can_run_concurrently() -> None:
     assert entered == {"alert_1", "alert_2"}
     release.set()
     await asyncio.gather(*tasks)
+
+
+@pytest.mark.asyncio
+async def test_operation_failure_releases_alert_lock() -> None:
+    coordinator = AlertCoordinatorFeature(None, {}, None, None)
+    attempts = 0
+
+    async def fail_once():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("workflow failed")
+
+    with pytest.raises(RuntimeError, match="workflow failed"):
+        await coordinator.run("alert_1", fail_once)
+
+    await coordinator.run("alert_1", fail_once)
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_unload_clears_coordinator_locks() -> None:
+    coordinator = AlertCoordinatorFeature(None, {}, None, None)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def operation():
+        entered.set()
+        await release.wait()
+
+    task = asyncio.create_task(coordinator.run("alert_1", operation))
+    await entered.wait()
+    assert "alert_1" in coordinator._locks
+
+    await coordinator.on_unload()
+    assert coordinator._locks == {}
+
+    release.set()
+    await task

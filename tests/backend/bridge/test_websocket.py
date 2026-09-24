@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import unittest
 from types import MappingProxyType
 from unittest.mock import patch
 
@@ -41,92 +40,84 @@ class Lifecycle:
         return {"route": name, **kwargs}
 
 
-class WebsocketTests(unittest.IsolatedAsyncioTestCase):
-    def test_optional_none_argument_is_validated_as_optional(self) -> None:
-        handlers = []
-        schemas = []
+def test_optional_none_argument_is_validated_as_optional() -> None:
+    handlers = []
+    schemas = []
 
-        def capture_decorator(schema):
-            schemas.append(schema)
-            return lambda function: function
+    def capture_decorator(schema):
+        schemas.append(schema)
+        return lambda function: function
 
-        with (
-            patch.object(websocket_api, "websocket_command", capture_decorator),
-            patch.object(websocket_api, "async_response", lambda fn: fn),
-        ):
-            module = importlib.reload(websocket)
-            module.register(
-                Lifecycle(
-                    (
-                        WebsocketRoute(
-                            "history.list",
-                            "history",
-                            (WebsocketArgument("alert_id", str, False, None),),
-                        ),
-                    )
-                ),
-                handlers.append,
-            )
-
-        validated = vol.Schema(schemas[0])({"type": "ha_notifications/history"})
-        self.assertIsNone(validated["alert_id"])
-
-    def test_registers_all_public_commands(self) -> None:
-        handlers = []
-
-        with (
-            patch.object(websocket_api, "websocket_command", _passthrough_decorator),
-            patch.object(websocket_api, "async_response", lambda fn: fn),
-        ):
-            module = importlib.reload(websocket)
-            module.register(
-                Lifecycle(
-                    tuple(
-                        WebsocketRoute(f"route.{index}", f"command_{index}")
-                        for index in range(12)
-                    )
-                ),
-                handlers.append,
-            )
-
-        self.assertEqual(len(handlers), 12)
-        self.assertTrue(all(handler.__name__ == "handle" for handler in handlers))
-
-    async def test_results_convert_mappingproxy_values_for_json(self) -> None:
-        handlers = []
-
-        class ConfigLifecycle(Lifecycle):
-            async def dispatch(self, name: str, **kwargs: object) -> object:
-                return MappingProxyType(
-                    {
-                        "alerts": MappingProxyType(
-                            {"confirmation": MappingProxyType({"enabled": True})}
-                        )
-                    }
+    with (
+        patch.object(websocket_api, "websocket_command", capture_decorator),
+        patch.object(websocket_api, "async_response", lambda fn: fn),
+    ):
+        module = importlib.reload(websocket)
+        module.register(
+            Lifecycle(
+                (
+                    WebsocketRoute(
+                        "history.list",
+                        "history",
+                        (WebsocketArgument("alert_id", str, False, None),),
+                    ),
                 )
-
-        with (
-            patch.object(websocket_api, "websocket_command", _passthrough_decorator),
-            patch.object(websocket_api, "async_response", lambda fn: fn),
-        ):
-            module = importlib.reload(websocket)
-            module.register(
-                ConfigLifecycle(
-                    (WebsocketRoute("configuration.get", "get_config"),)
-                ),
-                handlers.append,
-            )
-
-        connection = Connection()
-        await handlers[0](None, connection, {"id": 4})
-
-        self.assertEqual(
-            connection.results,
-            [
-                (4, {"alerts": {"confirmation": {"enabled": True}}}),
-            ],
+            ),
+            handlers.append,
         )
 
+    validated = vol.Schema(schemas[0])({"type": "ha_notifications/history"})
+    assert validated["alert_id"] is None
 
-if __name__ == "__main__":
-    unittest.main()
+def test_registers_all_public_commands() -> None:
+    handlers = []
+
+    with (
+        patch.object(websocket_api, "websocket_command", _passthrough_decorator),
+        patch.object(websocket_api, "async_response", lambda fn: fn),
+    ):
+        module = importlib.reload(websocket)
+        module.register(
+            Lifecycle(
+                tuple(
+                    WebsocketRoute(f"route.{index}", f"command_{index}")
+                    for index in range(12)
+                )
+            ),
+            handlers.append,
+        )
+
+    assert len(handlers) == 12
+    assert all(handler.__name__ == "handle" for handler in handlers)
+
+async def test_results_convert_mappingproxy_values_for_json() -> None:
+    handlers = []
+
+    class ConfigLifecycle(Lifecycle):
+        async def dispatch(self, name: str, **kwargs: object) -> object:
+            return MappingProxyType(
+                {
+                    "alerts": MappingProxyType(
+                        {"confirmation": MappingProxyType({"enabled": True})}
+                    )
+                }
+            )
+
+    with (
+        patch.object(websocket_api, "websocket_command", _passthrough_decorator),
+        patch.object(websocket_api, "async_response", lambda fn: fn),
+    ):
+        module = importlib.reload(websocket)
+        module.register(
+            ConfigLifecycle(
+                (WebsocketRoute("configuration.get", "get_config"),)
+            ),
+            handlers.append,
+        )
+
+    connection = Connection()
+    await handlers[0](None, connection, {"id": 4})
+
+    assert connection.results == [
+        (4, {"alerts": {"confirmation": {"enabled": True}}}),
+    ]

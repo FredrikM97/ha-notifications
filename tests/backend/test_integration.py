@@ -7,17 +7,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from pydantic import ValidationError
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.ha_notifications.bridge import websocket
 from custom_components.ha_notifications.const import (
     DOMAIN,
+    EVENT_NOTIFICATION_ACTION,
     SERVICE_RELOAD,
     SERVICE_TEST,
 )
 from custom_components.ha_notifications.support.storage import Storage
-from tests.backend.conftest import make_alert, make_notification_alert
 
 
 class RecordingConnection:
@@ -126,14 +127,207 @@ async def test_entry_option_updates_reload_live_configuration(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sensor_state_change_runs_real_notification_workflow(
+    hass: HomeAssistant,
+    loaded_config_entry,
+    snapshot,
+) -> None:
+    """A real Home Assistant state change reaches notification delivery."""
+
+    service_calls = async_mock_service(hass, "notify", "send_message")
+    hass.states.async_set("sensor.trigger_sensor", "off")
+    await hass.async_block_till_done()
+
+    alert = {
+        "id": "sensor_alert",
+        "name": "Sensor alert",
+        "conditions": [
+            {
+                "type": "state",
+                "entity_id": ["sensor.trigger_sensor"],
+                "state": ["on"],
+            }
+        ],
+        "monitor": {"on_change": True, "startup": False},
+        "notification": {
+            "target": {"entity_id": ["notify.test"]},
+            "title": "Sensor changed",
+            "message": "The sensor is on",
+        },
+    }
+    controller = loaded_config_entry.runtime_data
+    await controller.dispatch(
+        "configuration.save_config", {"version": 1, "alerts": [alert]}
+    )
+    await controller.reload()
+    await hass.async_block_till_done()
+    history = await controller.dispatch(
+        "history.list", alert_id="sensor_alert"
+    )
+    assert {
+        "service_calls": [call.data for call in service_calls],
+        "history": [
+            {
+                "type": entry["event"]["type"],
+                "source": entry["event"]["details"].get("source"),
+            }
+            for entry in history
+        ],
+    } == snapshot
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_notification_action_event_runs_real_confirmation_workflow(
+    hass: HomeAssistant,
+    loaded_config_entry,
+) -> None:
+    """A real Home Assistant notification action confirms an active alert."""
+
+    service_calls = async_mock_service(hass, "notify", "send_message")
+    user = await hass.auth.async_create_user("Alice")
+    hass.states.async_set(
+        "person.alice",
+        "home",
+        {"user_id": user.id, "friendly_name": "Alice"},
+    )
+    hass.states.async_set("sensor.confirmation_sensor", "off")
+    await hass.async_block_till_done()
+
+    alert = {
+        "id": "confirmation_sensor_alert",
+        "name": "Confirmation sensor alert",
+        "conditions": [
+            {
+                "type": "state",
+                "entity_id": ["sensor.confirmation_sensor"],
+                "state": ["on"],
+            }
+        ],
+        "monitor": {"on_change": True, "startup": False},
+        "notification": {
+            "target": {"entity_id": ["notify.test"]},
+            "title": "Confirm sensor",
+            "message": "Please confirm",
+        },
+        "confirmation": {
+            "enabled": True,
+            "buttons": [{"id": "confirm", "label": "Confirm"}],
+        },
+    }
+    controller = loaded_config_entry.runtime_data
+    await controller.dispatch(
+        "configuration.save_config", {"version": 1, "alerts": [alert]}
+    )
+    await controller.reload()
+    await hass.async_block_till_done()
+
+    hass.states.async_set("sensor.confirmation_sensor", "on")
+    await hass.async_block_till_done()
+
+    assert len(service_calls) == 1
+    runtime = await controller.dispatch(
+        "alerts.runtime", "confirmation_sensor_alert"
+    )
+    pending = next(
+        item for item in runtime["trace"] if item.get("action_ids")
+    )
+    action_id = next(iter(pending["action_ids"]))
+
+    hass.bus.async_fire(
+        EVENT_NOTIFICATION_ACTION,
+        {"action": action_id},
+        context=Context(user_id=user.id),
+    )
+    await hass.async_block_till_done()
+
+    updated = await controller.dispatch(
+        "alerts.runtime", "confirmation_sensor_alert"
+    )
+    assert updated["state"]["acknowledged"] is True
+    assert updated["state"]["confirmed_by"] == "Alice"
+    history = await controller.dispatch(
+        "history.list", alert_id="confirmation_sensor_alert"
+    )
+    assert any(
+        entry["event"]["type"] == "confirmed"
+        and entry["event"]["details"]["confirmed_by"] == "Alice"
+        for entry in history
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_unloading_entry_removes_sensor_condition_watcher(
+    hass: HomeAssistant,
+    loaded_config_entry,
+) -> None:
+    """Unloading the entry removes real Home Assistant condition listeners."""
+
+    service_calls = async_mock_service(hass, "notify", "send_message")
+    hass.states.async_set("sensor.unload_sensor", "off")
+    await hass.async_block_till_done()
+    alert = {
+        "id": "unload_sensor_alert",
+        "name": "Unload sensor alert",
+        "conditions": [
+            {
+                "type": "state",
+                "entity_id": ["sensor.unload_sensor"],
+                "state": ["on"],
+            }
+        ],
+        "monitor": {"on_change": True, "startup": False},
+        "notification": {
+            "target": {"entity_id": ["notify.test"]},
+            "title": "Unload",
+            "message": "Should not be sent after unload",
+        },
+    }
+    controller = loaded_config_entry.runtime_data
+    await controller.dispatch(
+        "configuration.save_config", {"version": 1, "alerts": [alert]}
+    )
+    await controller.reload()
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_unload(loaded_config_entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.unload_sensor", "on")
+    await hass.async_block_till_done()
+
+    assert service_calls == []
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_history_round_trips_through_real_home_assistant_store(
+    hass: HomeAssistant,
+    loaded_config_entry,
+) -> None:
+    """History persists through Home Assistant's real Store implementation."""
+
+    storage = Storage(hass, loaded_config_entry)
+    event = {
+        "config": {"id": "stored_alert"},
+        "event": {"type": "notification_sent"},
+    }
+    await storage.store_event(event)
+    await storage.save_history()
+
+    reloaded = Storage(hass, loaded_config_entry)
+    await reloaded.load_history()
+
+    assert reloaded.history == [event]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_invalid_configuration_save_preserves_existing_runtime(
     hass: HomeAssistant,
     loaded_config_entry,
+    notification_alert_factory,
 ) -> None:
     """Invalid route input cannot overwrite valid persisted configuration."""
 
     controller = loaded_config_entry.runtime_data
-    valid = {"version": 1, "alerts": [make_notification_alert()]}
+    valid = {"version": 1, "alerts": [notification_alert_factory()]}
     await controller.dispatch("configuration.save_config", valid)
     await controller.reload()
     before = loaded_config_entry.options
@@ -169,11 +363,12 @@ async def test_frontend_command_contract_matches_registered_backend_routes(
 async def test_all_websocket_routes_return_real_adapter_responses(
     hass: HomeAssistant,
     loaded_config_entry,
+    alert_factory,
 ) -> None:
     """Exercise every public websocket command through the HA adapter."""
 
     controller = loaded_config_entry.runtime_data
-    alert = make_alert("websocket_alert")
+    alert = alert_factory("websocket_alert")
     config = {"version": 1, "alerts": [alert]}
     messages = [
         {"type": "ha_notifications/save_config", "config": config},
@@ -215,11 +410,12 @@ async def test_all_websocket_routes_return_real_adapter_responses(
 async def test_alert_routes_preserve_the_save_reload_edit_delete_flow(
     hass: HomeAssistant,
     loaded_config_entry,
+    alert_factory,
 ) -> None:
     """Exercise the core alert lifecycle through the application routes."""
 
     controller = loaded_config_entry.runtime_data
-    alert = make_alert("flow_alert")
+    alert = alert_factory("flow_alert")
 
     await controller.dispatch(
         "configuration.save_config", {"version": 1, "alerts": [alert]}
@@ -248,6 +444,7 @@ async def test_alert_routes_preserve_the_save_reload_edit_delete_flow(
 async def test_frontend_runtime_request_reaches_real_backend_route(
     hass: HomeAssistant,
     loaded_config_entry,
+    notification_alert_factory,
 ) -> None:
     """The frontend runtime message reaches the real HA integration route."""
 
@@ -259,7 +456,7 @@ async def test_frontend_runtime_request_reaches_real_backend_route(
     controller = loaded_config_entry.runtime_data
     await controller.dispatch(
         "configuration.save_config",
-        {"version": 1, "alerts": [make_notification_alert()]},
+        {"version": 1, "alerts": [notification_alert_factory()]},
     )
     await controller.reload()
     route = next(

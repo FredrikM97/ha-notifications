@@ -37,6 +37,33 @@
     ]),
   })
 # ---
+# name: test_publish_event_contains_complete_runtime_snapshot
+  dict({
+    'config': dict({
+      'id': 'alert_1',
+      'name': 'Alert',
+    }),
+    'event': dict({
+      'details': dict({
+        'attempt': 1,
+      }),
+      'event_id': '<event_id>',
+      'message': 'Notification sent.',
+      'timestamp': '<timestamp>',
+      'type': 'notification_sent',
+    }),
+    'state': dict({
+      'flow_id': 'flow_1',
+    }),
+    'trace': list([
+      dict({
+        'error': None,
+        'now': '2026-09-23T12:00:00',
+        'success': True,
+      }),
+    ]),
+  })
+# ---
 # name: test_save_update_preserves_created_at_and_delete_cleans_owned_state
   dict({
     'conditions': list([

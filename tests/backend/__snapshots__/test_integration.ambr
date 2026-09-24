@@ -1,0 +1,9 @@
+# serializer version: 1
+# name: test_sensor_state_change_runs_real_notification_workflow
+  dict({
+    'history': list([
+    ]),
+    'service_calls': list([
+    ]),
+  })
+# ---

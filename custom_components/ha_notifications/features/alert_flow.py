@@ -130,6 +130,8 @@ class AlertFlow(FeatureBase):
             return False
         if runtime.acknowledged:
             return False
+        if not runtime.last_notified:
+            return True
         return bool(
             self.feature(FeatureName.CONFIRMATIONS).reminder_due(
                 runtime, now

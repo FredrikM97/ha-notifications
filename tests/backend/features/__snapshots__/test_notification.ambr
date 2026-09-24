@@ -1,4 +1,87 @@
 # serializer version: 1
+# name: TestNotificationWorkflow.test_device_registry_target_uses_mobile_service_with_data
+  list([
+    dict({
+      'data': dict({
+        'data': dict({
+          'image': 'https://example.test/image',
+          'tag': 'ha_notifications_alert_1',
+        }),
+        'message': 'Message',
+        'title': 'Title',
+      }),
+      'domain': 'notify',
+      'service': 'mobile_app_phone',
+      'target': None,
+    }),
+  ])
+# ---
+# name: TestNotificationWorkflow.test_mobile_notify_preserves_confirmation_action
+  list([
+    dict({
+      'data': dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'confirm_1',
+              'title': 'Acknowledge',
+            }),
+          ]),
+          'tag': 'ha_notifications_alert_1',
+          'timeout': 900,
+        }),
+        'message': 'Message',
+        'title': 'Title',
+      }),
+      'domain': 'notify',
+      'service': 'mobile_app_phone',
+      'target': None,
+    }),
+  ])
+# ---
+# name: test_confirmation_completion_planner_renders_message_and_clear_policy
+  dict({
+    'clear_notification': False,
+    'completion_alert': dict({
+      'confirmation': dict({
+        'enabled': False,
+      }),
+      'id': 'alert_1',
+      'name': 'Alert',
+      'notification': dict({
+        'action': 'notify.send_message',
+        'message': 'Alice finished (Alice)',
+        'target': dict({
+          'entity_id': list([
+            'notify.phone',
+          ]),
+        }),
+        'title': 'Title',
+      }),
+    }),
+    'render_context': dict({
+      'confirmed_by': 'Alice',
+      'request_confirmed_by': 'Alice',
+    }),
+  })
+# ---
+# name: test_confirmation_completion_uses_generic_notify_target
+  list([
+    dict({
+      'data': dict({
+        'message': 'Confirmed',
+        'title': 'Title',
+      }),
+      'domain': 'notify',
+      'service': 'send_message',
+      'target': dict({
+        'entity_id': list([
+          'notify.external',
+        ]),
+      }),
+    }),
+  ])
+# ---
 # name: test_confirmation_reminder_replacement_contract_snapshot
   list([
     dict({
@@ -9,7 +92,7 @@
         'message': 'clear_notification',
       }),
       'domain': 'notify',
-      'service': 'mobile_app_somebody',
+      'service': 'mobile_app_phone',
       'target': None,
     }),
     dict({
@@ -28,7 +111,7 @@
         'title': 'Testing (2/5)',
       }),
       'domain': 'notify',
-      'service': 'mobile_app_somebody',
+      'service': 'mobile_app_phone',
       'target': None,
     }),
   ])
@@ -43,7 +126,7 @@
         'message': 'clear_notification',
       }),
       'domain': 'notify',
-      'service': 'mobile_app_somebody',
+      'service': 'mobile_app_phone',
       'target': None,
     }),
     dict({
@@ -55,7 +138,7 @@
         'title': 'Title',
       }),
       'domain': 'notify',
-      'service': 'mobile_app_somebody',
+      'service': 'mobile_app_phone',
       'target': None,
     }),
   ])

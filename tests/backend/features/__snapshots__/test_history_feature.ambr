@@ -1,0 +1,23 @@
+# serializer version: 1
+# name: test_history_listener_persists_published_event
+  dict({
+    'condition': dict({
+      'flow_id': 'flow_1',
+    }),
+    'config': dict({
+      'id': 'alert_1',
+      'name': 'Alert',
+    }),
+    'event': dict({
+      'details': dict({
+        'attempt': 2,
+        'error': 'boom',
+      }),
+      'event_id': 'event_1',
+      'message': 'Notification failed.',
+      'timestamp': '2026-01-01T00:00:00+00:00',
+      'type': 'notification_failed',
+    }),
+    'id': 'event_1',
+  })
+# ---
