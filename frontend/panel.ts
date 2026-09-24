@@ -605,6 +605,7 @@ class HaNotificationsPanel extends LitElement {
       ["device_id", "devices"],
       ["area_id", "areas"],
       ["floor_id", "floors"],
+      ["label_id", "labels"],
       ["entity_id", "entities"],
     ]) {
       const count = target[key]?.length || 0;
