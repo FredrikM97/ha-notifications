@@ -53,7 +53,7 @@ const panelTabs: PanelTabDefinition[] = [
   { key: "alerts", label: "Alerts" },
   { key: "history", label: "History" },
   { key: "yaml", label: "YAML" },
-  { key: "debug", label: "Debug" },
+  { key: "debug", label: "Active" },
 ];
 
 function alertStatus(alert: Alert): AlertCardStatus {

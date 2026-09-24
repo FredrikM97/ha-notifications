@@ -200,13 +200,13 @@ describe("panel view", () => {
     expect(panel.shadowRoot.querySelector("ha-notifications-yaml-view")).not.toBeNull();
   });
 
-  it("shows active alerts before their live runtime in Debug", async () => {
+  it("shows active alerts before their live runtime in Active", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await settleElement(panel);
 
     await testUser().click(
-      within(panel.shadowRoot).getByRole("button", { name: "Debug" }),
+      within(panel.shadowRoot).getByRole("button", { name: "Active" }),
     );
     await settleElement(panel);
 
@@ -219,7 +219,7 @@ describe("panel view", () => {
     expect(debugAlert?.textContent).toContain('"flow_id": "flow_door"');
   });
 
-  it("omits inactive alerts and runtime from Debug", async () => {
+  it("omits inactive alerts and runtime from Active", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     getAlerts.mockResolvedValueOnce([
@@ -238,7 +238,7 @@ describe("panel view", () => {
     await settleElement(panel);
 
     await testUser().click(
-      within(panel.shadowRoot).getByRole("button", { name: "Debug" }),
+      within(panel.shadowRoot).getByRole("button", { name: "Active" }),
     );
     await settleElement(panel);
 
