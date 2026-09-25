@@ -1,12 +1,15 @@
 import { html, LitElement, render } from "lit";
 import type { NotificationTarget, Registries } from "./types.js";
+import type { Hass } from "./types.js";
+import { localize } from "./localize.js";
 
 type RecipientType = keyof NotificationTarget;
 type FilterType = "all" | RecipientType;
 interface RecipientItem { type: RecipientType; id: string; label: string; }
 
 class RecipientPickerElement extends LitElement {
-  private readonly labels: Record<FilterType, string> = { all: "All", device_id: "Devices", area_id: "Areas", floor_id: "Floors", label_id: "Labels", entity_id: "Notification entities", user_id: "Users" };
+  private hass: Hass | null = null;
+  private labels: Record<FilterType, string> = {} as Record<FilterType, string>;
   private items: RecipientItem[] = [];
   private selected = new Set<string>();
   private filter: FilterType = "all";
@@ -16,7 +19,9 @@ class RecipientPickerElement extends LitElement {
 
   protected createRenderRoot(): HTMLElement { return this; }
 
-  initialize(registries: Registries, target: NotificationTarget, markDirty: () => void): void {
+  initialize(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): void {
+    this.hass = hass;
+    this.labels = { all: localize(hass, "common.all"), device_id: localize(hass, "common.devices"), area_id: localize(hass, "common.areas"), floor_id: localize(hass, "common.floors"), label_id: localize(hass, "common.labels"), entity_id: localize(hass, "common.notification_entities"), user_id: localize(hass, "common.users") };
     this.items = [
       ...registries.devices.map((item) => ({ type: "device_id" as const, id: item.id, label: item.name_by_user || item.name || item.id })),
       ...registries.areas.map((item) => ({ type: "area_id" as const, id: item.area_id || item.id || "", label: item.name || item.id || "" })),
@@ -61,10 +66,10 @@ class RecipientPickerElement extends LitElement {
       return { key, type: type as RecipientType, id, item: this.items.find((candidate) => candidate.type === type && candidate.id === id) };
     });
     return html`<div class="nc-target-picker">
-      <div class="nc-target-selection-label">Selected recipients</div>
-      <div class="nc-target-chips">${selectedItems.map(({ key, type, id, item }) => html`<span class="nc-target-chip" title=${this.labels[type]}>${item?.label || id}<button class="nc-chip-remove" @click=${() => this.removeRecipient(key)}>Remove</button></span>`)}</div>
+      <div class="nc-target-selection-label">${localize(this.hass, "editor.recipients.selected")}</div>
+      <div class="nc-target-chips">${selectedItems.map(({ key, type, id, item }) => html`<span class="nc-target-chip" title=${this.labels[type]}>${item?.label || id}<button class="nc-chip-remove" @click=${() => this.removeRecipient(key)}>${localize(this.hass, "common.remove")}</button></span>`)}</div>
       <div class="nc-recipient-input"><div class="nc-recipient-toolbar">
-        <ha-input type="search" class="nc-recipient-search" autocomplete="off" name="ha-notifications-recipient-search" placeholder="Search recipients" .value=${this.search} @input=${this.handleSearchInput} @focus=${this.openResults}></ha-input>
+        <ha-input type="search" class="nc-recipient-search" autocomplete="off" name="ha-notifications-recipient-search" placeholder=${localize(this.hass, "editor.recipients.search")} .value=${this.search} @input=${this.handleSearchInput} @focus=${this.openResults}></ha-input>
         <div class="nc-recipient-filters">${(Object.keys(this.labels) as FilterType[]).map((key) => html`<button class=${this.recipientFilterClass(this.filter === key)} @click=${() => this.selectFilter(key)}>${this.labels[key]}</button>`)}</div>
       </div>
       <div class="nc-recipient-results" ?hidden=${!this.open} @focusout=${this.handleResultsFocusOut}>${this.recipientMatchesTemplate(matches, query)}</div></div>
@@ -101,7 +106,7 @@ class RecipientPickerElement extends LitElement {
   private notifyChange(): void { this.markDirty(); this.rerender(); }
   private recipientFilterClass(active: boolean): string { return active ? "nc-recipient-filter active" : "nc-recipient-filter"; }
   private recipientMatchesTemplate(matches: RecipientItem[], query: string) {
-    if (!matches.length) return html`<div class="nc-recipient-empty">${query ? "No matching recipients" : "No recipients available"}</div>`;
+    if (!matches.length) return html`<div class="nc-recipient-empty">${query ? localize(this.hass, "editor.recipients.no_matching") : localize(this.hass, "editor.recipients.empty")}</div>`;
     return matches.map((item) => html`<button class="nc-recipient-option" title=${this.labels[item.type]} @mousedown=${(event: Event) => event.preventDefault()} @click=${() => this.selectRecipient(item)}>${item.label}</button>`);
   }
 
@@ -114,9 +119,9 @@ class RecipientPickerElement extends LitElement {
 
 customElements.define("ha-notifications-recipient-picker", RecipientPickerElement);
 
-export function createRecipientPicker(registries: Registries, target: NotificationTarget, markDirty: () => void): { element: HTMLElement; target: () => NotificationTarget } {
+export function createRecipientPicker(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): { element: HTMLElement; target: () => NotificationTarget } {
   const element = new RecipientPickerElement();
-  element.initialize(registries, target, markDirty);
+  element.initialize(registries, target, markDirty, hass);
   element.renderImmediately();
   return { element, target: () => element.currentTarget() };
 }

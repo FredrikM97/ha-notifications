@@ -1,4 +1,5 @@
 import type { Alert, Hass } from "../types.js";
+import type { Localize } from "../localize.js";
 
 export type FormControl = EventTarget & { value: string };
 
@@ -53,6 +54,7 @@ export interface EditorElements {
 
 export interface EditorContext {
   hass: Hass;
+  localize: Localize;
   value: Alert;
   mode: EditorMode;
   activeSection: string;

@@ -10,6 +10,7 @@ import { html, LitElement, render } from "lit";
 import { ref } from "lit/directives/ref.js";
 import type { Hass } from "./types.js";
 import { constrainCodeEditor } from "./editor/helpers.js";
+import { localize } from "./localize.js";
 type Toast = (message: string, error?: boolean) => void;
 
 type CodeEditor = HTMLElement & {
@@ -69,8 +70,7 @@ class YamlViewElement extends LitElement {
     return html`<div class="nc-card nc-yaml">
       <div class="nc-toolbar">
         <div>
-          Advanced editor. Copy this YAML to another system or import a
-          validated configuration into Home Assistant.
+          ${localize(this.hass, "yaml.description")}
         </div>
         <div class="nc-actions">
           <button
@@ -78,28 +78,28 @@ class YamlViewElement extends LitElement {
             ?disabled=${this.busyAction !== null}
             @click=${this.copyYaml}
           >
-            Copy
+            ${localize(this.hass, "yaml.copy")}
           </button>
           <button
             class="nc-button secondary"
             ?disabled=${this.busyAction !== null}
             @click=${this.validateYamlText}
           >
-            Validate
+            ${localize(this.hass, "yaml.validate")}
           </button>
           <button
             class="nc-button secondary"
             ?disabled=${this.busyAction !== null}
             @click=${this.reloadYaml}
           >
-            Reload
+            ${localize(this.hass, "yaml.reload")}
           </button>
           <button
             class="nc-button"
             ?disabled=${this.busyAction !== null}
             @click=${this.saveYamlText}
           >
-            Save YAML
+            ${localize(this.hass, "yaml.save")}
           </button>
         </div>
       </div>
@@ -108,7 +108,7 @@ class YamlViewElement extends LitElement {
         class="nc-code-editor nc-yaml-editor"
         mode="yaml"
         language="yaml"
-        aria-label="HA Notifications YAML"
+        aria-label=${localize(this.hass, "yaml.aria")}
         .value=${this.yaml}
         @input=${this.updateYaml}
         @value-changed=${this.updateYaml}
@@ -134,7 +134,7 @@ class YamlViewElement extends LitElement {
   private copyYaml = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(this.yaml);
-      this.showToast("YAML copied to clipboard.");
+      this.showToast(localize(this.hass, "yaml.copied"));
     } catch (err) {
       this.showToast(errorMessage(err), true);
     }
@@ -146,7 +146,7 @@ class YamlViewElement extends LitElement {
     try {
       await reload(this.hass);
       await this.load();
-      this.showToast("YAML configuration reloaded.");
+      this.showToast(localize(this.hass, "yaml.reloaded"));
     } catch (err) {
       this.showToast(errorMessage(err), true);
     } finally {
@@ -160,7 +160,7 @@ class YamlViewElement extends LitElement {
     this.renderImmediately();
     try {
       await validateConfig(this.hass, this.parseEditor());
-      this.showToast("YAML is valid.");
+      this.showToast(localize(this.hass, "yaml.valid"));
     } catch (err) {
       this.showToast(errorMessage(err), true);
     } finally {
@@ -175,9 +175,9 @@ class YamlViewElement extends LitElement {
     try {
       const result = await saveConfig(this.hass, this.parseEditor());
       if (!result.saved) {
-        throw new Error("The YAML was not saved.");
+        throw new Error(localize(this.hass, "yaml.not_saved"));
       }
-      this.showToast("YAML saved and configuration reloaded.");
+      this.showToast(localize(this.hass, "yaml.saved"));
       await this.refreshPanel();
     } catch (err) {
       this.showToast(errorMessage(err), true);

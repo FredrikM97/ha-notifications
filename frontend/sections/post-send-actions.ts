@@ -9,8 +9,8 @@ export function renderPostSendActionsSection(
   const postSendActions = context.value.post_send_actions;
   return actionSection({
     context,
-    title: "Post-send actions",
-    help: "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
+    title: context.localize("editor.notification.post_send_actions"),
+    help: context.localize("editor.notification.post_send_help"),
     role: "post-send-actions",
     actions: postSendActions?.actions,
   });

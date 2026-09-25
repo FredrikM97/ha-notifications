@@ -8,8 +8,8 @@ export function renderPostConfirmationActionsSection(
 ): TemplateResult {
   return actionSection({
     context,
-    title: "Post-confirmation actions",
-    help: "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
+    title: context.localize("editor.confirmation.actions.section"),
+    help: context.localize("editor.confirmation.actions.help"),
     role: "post-confirmation-actions",
     actions: context.value.confirmation?.actions.items,
   });

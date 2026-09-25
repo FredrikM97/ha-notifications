@@ -12,7 +12,7 @@ import {
 export function renderMonitorSection(context: EditorContext): TemplateResult {
   const monitor = context.value.monitor;
   return section(
-    "When to check",
+    context.localize("editor.monitor.section"),
     html`<div class="nc-monitor-settings">
       <div class="nc-monitor-toggles">
         <label class="nc-monitor-toggle">
@@ -24,7 +24,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.refreshStatuses();
             }}
           ></ha-switch>
-          <span>When condition changes</span>
+          <span>${context.localize("editor.monitor.when_condition_changes")}</span>
         </label>
         <label class="nc-monitor-toggle">
           <ha-switch
@@ -35,7 +35,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.refreshStatuses();
             }}
           ></ha-switch>
-          <span>Clear notification when inactive</span>
+          <span>${context.localize("editor.monitor.clear_when_inactive")}</span>
         </label>
         <label class="nc-monitor-toggle">
           <ha-switch
@@ -46,7 +46,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.refreshStatuses();
             }}
           ></ha-switch>
-          <span>Check at startup</span>
+          <span>${context.localize("editor.monitor.check_startup")}</span>
         </label>
       </div>
       ${field(
@@ -64,11 +64,10 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.refreshStatuses();
             }}
           ></ha-switch>
-          Re-evaluate condition every
+          ${context.localize("editor.monitor.re_evaluate_every")}
         </span>`,
         html`<div class="nc-help nc-monitor-help">
-            Re-checks the condition at this interval, even when no relevant
-            entity-change event occurs.
+            ${context.localize("editor.monitor.interval_help")}
           </div>
           ${durationInput(
             durationInputValue(monitor.interval, "12:00:00"),
@@ -83,7 +82,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
         html`<span class="nc-field-heading">
           <ha-switch
             .checked=${monitor.retention?.enabled !== false}
-            aria-label="Enable history retention"
+            aria-label=${context.localize("editor.monitor.enable_history_retention")}
             @change=${(event: Event) => {
               monitor.retention = {
                 ...monitor.retention,
@@ -92,7 +91,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
               context.markDirty();
             }}
           ></ha-switch>
-          History retention
+          ${context.localize("editor.monitor.history_retention")}
         </span>`,
         retentionTemplate(monitor, context),
       )}
@@ -108,14 +107,14 @@ function retentionTemplate(
 ): TemplateResult {
   if (monitor.retention?.enabled === false) return html``;
   return html`<div class="nc-help">
-      Completed alert history is removed after this period.
+      ${context.localize("editor.monitor.retention_help")}
     </div>
     <ha-input
       class="nc-number-field"
       type="number"
       min="1"
       step="1"
-      aria-label="History retention days"
+      aria-label=${context.localize("editor.monitor.retention_days")}
       .value=${String(monitor.retention?.days || 30)}
       @input=${(event: Event) => {
         monitor.retention = {

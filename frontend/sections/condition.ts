@@ -7,57 +7,56 @@ import { codeEditor, conditionTemplate, conditionsYaml, field, section } from ".
 export function renderConditionSection(context: EditorContext): TemplateResult {
   const condition = conditionTemplate(context.value);
   return section(
-    "Condition",
+    context.localize("editor.condition.section"),
     html`<div class="nc-condition-mode">
         <button
           class="nc-button secondary nc-condition-mode-button"
           @click=${() => context.setMode("visual")}
         >
-          Visual conditions
+          ${context.localize("editor.condition.mode_visual")}
         </button>
         <button
           class="nc-button secondary nc-condition-mode-button"
           @click=${() => context.setMode("yaml")}
         >
-          Conditions YAML
+          ${context.localize("editor.condition.mode_yaml")}
         </button>
         <button
           class="nc-button secondary nc-condition-mode-button"
           @click=${() => context.setMode("jinja")}
         >
-          Advanced Jinja
+          ${context.localize("editor.condition.mode_jinja")}
         </button>
       </div>
       <div ?hidden=${context.mode !== "visual"} ${ref((element) => element && context.setEditorElement("visual", element as HTMLElement))} data-role="visual" class="nc-condition-visual"></div>
       <div ?hidden=${context.mode !== "yaml"} ${ref((element) => element && context.setEditorElement("conditions-yaml", element as HTMLElement))} data-role="conditions-yaml">
         ${field(
-          "Conditions YAML",
+          context.localize("editor.condition.conditions_yaml"),
           codeEditor({
             role: "conditions-yaml-editor",
             value: conditionsYaml(context.value.conditions),
             mode: "yaml",
             language: "yaml",
-            label: "Conditions YAML",
+            label: context.localize("editor.condition.conditions_yaml"),
             onInput: () => context.markDirty(),
             onReady: (editor) => context.setEditorControl("conditions-yaml", editor),
           }),
           true,
         )}
         <div class="nc-help">
-          Edit the raw <code>conditions:</code> list. This is the YAML behind
-          the visual editor.
+          ${context.localize("editor.condition.conditions_help")}
         </div>
       </div>
       <div ?hidden=${context.mode !== "jinja"} ${ref((element) => element && context.setEditorElement("jinja", element as HTMLElement))} data-role="jinja">
         ${field(
-          "Jinja condition",
+          context.localize("editor.condition.jinja_condition"),
           codeEditor({
             role: "condition",
             value: condition,
             placeholder: "{{ is_state('binary_sensor.example', 'on') }}",
             mode: "jinja2",
             language: "jinja",
-            label: "Jinja condition",
+            label: context.localize("editor.condition.jinja_condition"),
             onInput: (event: Event) => {
               context.value.conditions = [
                 {
@@ -72,8 +71,7 @@ export function renderConditionSection(context: EditorContext): TemplateResult {
           true,
         )}
         <div class="nc-help">
-          The condition should evaluate to true or false. Home Assistant
-          automatically tracks entities referenced by the template.
+          ${context.localize("editor.condition.jinja_help")}
         </div>
       </div>
       `,

@@ -8,13 +8,13 @@ export function renderConfirmationNotificationSection(
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
   return section(
-    "Notify recipients when confirmed",
+    context.localize("editor.confirmation.notification.section"),
     html`${codeEditor({
         value: confirmation.notification.message || "",
         placeholder: "",
         mode: "jinja2",
         language: "jinja",
-        label: "Confirmation message",
+        label: context.localize("editor.confirmation.message"),
         onInput: (event: Event) => {
           confirmation.notification.message = (
             event.currentTarget as CodeEditorElement
@@ -23,22 +23,22 @@ export function renderConfirmationNotificationSection(
         },
       })}
       <div class="nc-help">
-        Optionally send a follow-up message after acknowledgement.
+        ${context.localize("editor.confirmation.notification.follow_up_help")}
       </div>
       <div class="nc-help">
-        Example: <code>Confirmed by {{confirmed_by}}</code>
+        ${context.localize("editor.confirmation.notification.example")} <code>Confirmed by {{confirmed_by}}</code>
       </div>
       <div class="nc-template-help-trigger">
-        <span>Template variables and sensor helpers</span>
+        <span>${context.localize("editor.notification.template_help")}</span>
         <button
           class="nc-icon-button"
           type="button"
-          aria-label="Show template variables and sensor helpers"
-          title="Show template variables and sensor helpers"
+          aria-label=${context.localize("editor.notification.show_template_help")}
+          title=${context.localize("editor.notification.show_template_help")}
           @click=${(event: Event) =>
             showTemplateHelp(
               event,
-              "Template variables and sensor helpers",
+              context.localize("editor.notification.template_help"),
               html`<div class="nc-help">
           <code>confirmed_by</code>, <code>confirmation_response_id</code>,
           <code>confirmation_response</code>, <code>alert_id</code>,

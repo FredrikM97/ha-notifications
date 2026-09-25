@@ -1,7 +1,9 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
+import type { Localize } from "../localize.js";
 
 export interface EditorFooterOptions {
+  localize: Localize;
   onYamlView(): void;
   onClose(): void;
   validationLabel: string;
@@ -17,21 +19,22 @@ export function renderEditorFooter({
   onValidate,
   onTest,
   onSave,
+  localize,
 }: EditorFooterOptions): TemplateResult {
   return html`<footer class="nc-modal-footer">
     <span class="nc-editor-state" aria-live="polite"></span>
     <button
       class="nc-icon-button"
       type="button"
-      aria-label="View alert YAML"
-      title="View alert YAML"
+      aria-label=${localize("editor.common.view_yaml")}
+      title=${localize("editor.common.view_yaml")}
       aria-expanded="false"
       @click=${onYamlView}
     >
       <ha-icon icon="mdi:code-braces"></ha-icon>
     </button>
     <button class="nc-button secondary" @click=${onClose}>
-      Cancel
+      ${localize("editor.common.cancel")}
     </button>
     <button
       class="nc-button secondary"
@@ -41,8 +44,8 @@ export function renderEditorFooter({
       aria-label=${validationLabel}
     >${validationLabel}</button>
     <button class="nc-button secondary" @click=${onTest}>
-      Test alert
+      ${localize("alert.test")}
     </button>
-    <button class="nc-button" @click=${onSave}>Save alert</button>
+    <button class="nc-button" @click=${onSave}>${localize("editor.common.save_alert")}</button>
   </footer>`;
 }

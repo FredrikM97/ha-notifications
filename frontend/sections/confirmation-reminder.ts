@@ -15,10 +15,10 @@ export function renderConfirmationReminderSection(
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
   return section(
-    "Reminder policy",
+    context.localize("editor.confirmation.reminder.section"),
     html`<div class="nc-grid">
         ${field(
-          "Remind every",
+          context.localize("editor.confirmation.reminder.remind_every"),
           durationInput(
             durationInputValue(confirmation.reminders.interval, "00:30:00"),
             (next) => {
@@ -29,7 +29,7 @@ export function renderConfirmationReminderSection(
           ),
         )}
         ${field(
-          "Maximum reminders",
+          context.localize("editor.confirmation.reminder.maximum"),
           html`<ha-input
             class="nc-number-field"
             type="number"
@@ -46,7 +46,7 @@ export function renderConfirmationReminderSection(
           ></ha-input>`,
         )}
         ${field(
-          "Forget after",
+          context.localize("editor.confirmation.reminder.forget_after"),
           durationInput(
             durationInputValue(confirmation.reminders.timeout, "00:15:00"),
             (next) => {
@@ -57,7 +57,7 @@ export function renderConfirmationReminderSection(
           ),
         )}
       </div>
-      <div class="nc-help">Set to 00:00:00 to keep the notification until confirmation.</div>
+      <div class="nc-help">${context.localize("editor.confirmation.reminder.keep_until")}</div>
       <div class="nc-reminder-options">
         <label class="nc-switch-label">
           <ha-switch
@@ -67,7 +67,7 @@ export function renderConfirmationReminderSection(
               context.markDirty();
             }}
           ></ha-switch>
-          <span>Show attempt count in notification title</span>
+          <span>${context.localize("editor.confirmation.reminder.show_attempt_count")}</span>
         </label>
       </div>
       </div>`,

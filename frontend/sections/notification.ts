@@ -17,14 +17,14 @@ export function renderNotificationSection(
 ): TemplateResult {
   const notification = context.value.notification;
   return section(
-    "Notification",
+    context.localize("editor.notification.section"),
     html`<div class="nc-grid">
         ${field(
-          "Title",
+          context.localize("editor.notification.title"),
           html`<ha-input
             type="text"
             .value=${notification.title}
-            placeholder="Notification title"
+            placeholder=${context.localize("editor.notification.title_placeholder")}
             @input=${(event: Event) => {
               notification.title = valueOf(event);
               context.markDirty();
@@ -33,13 +33,13 @@ export function renderNotificationSection(
           ></ha-input>`,
         )}
         ${field(
-          "Message",
+          context.localize("editor.notification.message"),
           codeEditor({
             value: notification.message || "",
-            placeholder: "Notification message",
+            placeholder: context.localize("editor.notification.message_placeholder"),
             mode: "jinja2",
             language: "jinja",
-            label: "Notification message",
+            label: context.localize("editor.notification.message_placeholder"),
             onInput: (event: Event) => {
               notification.message = (
                 event.currentTarget as CodeEditorElement
@@ -52,16 +52,16 @@ export function renderNotificationSection(
         )}
       </div>
       <div class="nc-template-help-trigger">
-        <span>Template variables and sensor helpers</span>
+        <span>${context.localize("editor.notification.template_help")}</span>
         <button
           class="nc-icon-button"
           type="button"
-          aria-label="Show template variables and sensor helpers"
-          title="Show template variables and sensor helpers"
+          aria-label=${context.localize("editor.notification.show_template_help")}
+          title=${context.localize("editor.notification.show_template_help")}
           @click=${(event: Event) =>
             showTemplateHelp(
               event,
-              "Notification templates and helpers",
+              context.localize("editor.notification.templates_help"),
               html`<div class="nc-help">
           Recipients on selected devices, areas, floors, and labels receive
           direct notifications through Home Assistant's standard Notify

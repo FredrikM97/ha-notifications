@@ -1,6 +1,7 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
 import { formatLocalDateTime } from "../date-time.js";
+import { localize } from "../localize.js";
 import type { Alert, Hass } from "../types.js";
 
 interface AlertStatus {
@@ -22,43 +23,45 @@ export interface AlertCardActions {
   onDelete(alert: Alert): void;
 }
 
-function alertStatus(alert: Alert): AlertCardStatus {
+function alertStatus(alert: Alert, hass: Hass | null): AlertCardStatus {
   let enabledStatus = {
     className: "nc-status disabled",
     icon: "mdi:pause-circle-outline",
-    label: "Disabled",
+    label: localize(hass, "alert.disabled"),
   };
   if (alert.enabled) {
     enabledStatus = {
       className: "nc-status ok",
       icon: "mdi:check-circle",
-      label: "Enabled",
+      label: localize(hass, "alert.enabled"),
     };
   }
 
   let conditionStatus = {
     className: "nc-status idle",
     icon: "mdi:circle-outline",
-    label: "Idle",
+    label: localize(hass, "alert.idle"),
   };
   if (alert.runtime?.state?.active) {
     conditionStatus = {
       className: "nc-status active",
       icon: "mdi:alert-circle",
-      label: "Triggered",
+      label: localize(hass, "alert.triggered"),
     };
   }
 
   return { enabled: enabledStatus, condition: conditionStatus };
 }
 
-function toggleAlertLabel(alert: Alert): string {
-  return alert.enabled ? "Disable" : "Enable";
+function toggleAlertLabel(alert: Alert, hass: Hass | null): string {
+  return alert.enabled
+    ? localize(hass, "alert.disable")
+    : localize(hass, "alert.enable");
 }
 
-function monitorSummary(alert: Alert): string {
+function monitorSummary(alert: Alert, hass: Hass | null): string {
   if (alert.monitor?.interval) {
-    return `every ${alert.monitor.interval}`;
+    return localize(hass, "alert.every", { interval: alert.monitor.interval });
   }
 
   return "";
@@ -69,14 +72,16 @@ export function renderAlertCard(
   hass: Hass | null,
   actions: AlertCardActions,
 ): TemplateResult {
-  const status = alertStatus(alert);
-  const monitor = monitorSummary(alert);
+  const status = alertStatus(alert, hass);
+  const monitor = monitorSummary(alert, hass);
   const lastNotified = alert.runtime?.state?.last_notified
-    ? `Last notified: ${formatLocalDateTime(
-        alert.runtime.state.last_notified,
-        false,
-        hass?.locale,
-      )}`
+    ? localize(hass, "alert.last_notified", {
+        time: formatLocalDateTime(
+          alert.runtime.state.last_notified,
+          false,
+          hass?.locale,
+        ),
+      })
     : "";
   const metadata = [lastNotified, monitor].filter(Boolean).join(" · ");
 
@@ -117,16 +122,16 @@ export function renderAlertCard(
     <div class="nc-alert-actions">
       <button
         class="nc-button"
-        title="Test alert"
-        aria-label="Test alert"
+        title=${localize(hass, "alert.test")}
+        aria-label=${localize(hass, "alert.test")}
         ?disabled=${!alert.enabled}
         @click=${() => actions.onTest(alert)}
       >
         <ha-icon icon="mdi:send-check-outline"></ha-icon></button
       ><button
         class="nc-button"
-        title=${toggleAlertLabel(alert)}
-        aria-label=${toggleAlertLabel(alert)}
+        title=${toggleAlertLabel(alert, hass)}
+        aria-label=${toggleAlertLabel(alert, hass)}
         @click=${() => actions.onToggle(alert)}
       >
         <ha-icon
@@ -136,22 +141,22 @@ export function renderAlertCard(
         ></ha-icon></button
       ><button
         class="nc-button"
-        title="Edit alert"
-        aria-label="Edit alert"
+        title=${localize(hass, "alert.edit")}
+        aria-label=${localize(hass, "alert.edit")}
         @click=${() => actions.onEdit(alert)}
       >
         <ha-icon icon="mdi:pencil-outline"></ha-icon></button
       ><button
         class="nc-button"
-        title="View history"
-        aria-label="View history"
+        title=${localize(hass, "alert.history")}
+        aria-label=${localize(hass, "alert.history")}
         @click=${() => actions.onShowHistory(alert)}
       >
         <ha-icon icon="mdi:history"></ha-icon></button
       ><button
         class="nc-button danger"
-        title="Delete alert"
-        aria-label="Delete alert"
+        title=${localize(hass, "alert.delete")}
+        aria-label=${localize(hass, "alert.delete")}
         @click=${() => actions.onDelete(alert)}
       >
         <ha-icon icon="mdi:delete-outline"></ha-icon>

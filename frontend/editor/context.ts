@@ -1,4 +1,5 @@
 import type { Alert, Hass } from "../types.js";
+import { createLocalizer } from "../localize.js";
 import { editorModeFor } from "./helpers.js";
 import type {
   ActionEditorRole,
@@ -32,6 +33,7 @@ export function createEditorContext({
 }: EditorContextOptions): EditorContext {
   return {
     hass,
+    localize: createLocalizer(hass),
     value,
     mode: editorModeFor(value),
     activeSection: editorSections[0].title,

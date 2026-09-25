@@ -1,6 +1,7 @@
 import { errorMessage } from "../api.js";
 import { visualConditionBuilder } from "../condition-builder.js";
 import { createRecipientPicker } from "../recipient-picker.js";
+import { localize } from "../localize.js";
 import { html, render } from "lit";
 import type { TemplateResult } from "lit";
 import * as YAML from "yaml";
@@ -151,6 +152,7 @@ class AlertEditorController {
       this.registries,
       this.value.notification.target,
       this.context.markDirty,
+      this.context.hass,
     );
     render(html`${this.recipients.element}`, this.elements.recipientMount);
 
@@ -177,21 +179,21 @@ class AlertEditorController {
       modalClass?: string;
       closeLabel?: string;
     }>).detail;
-    if (detail.kind === "yaml" && detail.alert) {
+      if (detail.kind === "yaml" && detail.alert) {
       this.state.modal = {
-        title: "Alert YAML",
+        title: localize(this.context.hass, "editor.common.alert_yaml"),
         content: html`<ha-code-editor
           class="nc-code-editor nc-alert-yaml-editor"
           mode="yaml"
           language="yaml"
-          aria-label="Alert YAML"
+            aria-label=${localize(this.context.hass, "editor.common.alert_yaml")}
           .value=${""}
           ${ref((element) => {
             if (element) this.elements.yamlModalEditor = element as CodeEditor;
           })}
         ></ha-code-editor>`,
         modalClass: "nc-alert-yaml-modal",
-        closeLabel: "Close YAML",
+          closeLabel: localize(this.context.hass, "editor.common.close_yaml"),
         yaml: detail.alert,
       };
     } else if (detail.title && detail.content) {
@@ -199,7 +201,7 @@ class AlertEditorController {
         title: detail.title,
         content: detail.content,
         modalClass: detail.modalClass || "",
-        closeLabel: detail.closeLabel || "Close",
+          closeLabel: detail.closeLabel || localize(this.context.hass, "editor.common.close"),
       };
     }
     this.renderEditor();
@@ -252,6 +254,7 @@ class AlertEditorController {
             </div>
           </main>
           ${renderEditorFooter({
+            localize: this.context.localize,
             onYamlView: this.yamlView,
             onClose: this.close,
             validationLabel: this.validationLabel(),
@@ -262,6 +265,7 @@ class AlertEditorController {
         </section>
         ${renderDiscardDialog(
           this.state.discardDialogOpen,
+          this.context.localize,
           this.closeDiscardDialog,
           this.discardChanges,
         )}${renderEditorModal(this.state.modal, this.closeModal)}${toastListTemplate(
@@ -331,6 +335,7 @@ class AlertEditorController {
 
   private renderNavigation = (className = "nc-section-header") =>
     renderEditorNavigation({
+      localize: this.context.localize,
       alert: this.value,
       className,
       optionalSettings: this.optionalSettings,

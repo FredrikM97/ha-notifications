@@ -1,11 +1,12 @@
 import { html, LitElement, render } from "lit";
 import type { AlertCondition, Hass, Registries } from "./types.js";
 import { durationInput, durationInputValue } from "./editor/helpers.js";
+import { localize } from "./localize.js";
 
 const conditionTypes = [
-  ["state", "State"],
-  ["numeric", "Numeric state"],
-  ["attribute", "Attribute"],
+  ["state", "editor.condition.state"],
+  ["numeric", "editor.condition.numeric_state"],
+  ["attribute", "editor.condition.attribute"],
 ] as const;
 
 function firstValue(value: string | string[] | Record<string, number> | undefined): string {
@@ -45,8 +46,8 @@ class ConditionBuilderElement extends LitElement {
 
   protected render() {
     return html`<div class="nc-condition-rows">${this.conditionRowsTemplate()}</div>
-      <div class="nc-help">IDs are optional. Set one such as <code>front_door</code> to use its result in a notification with <code>condition.front_door</code>.</div>
-      <button class="nc-button secondary" @click=${this.addCondition}>Add condition</button>`;
+      <div class="nc-help">${localize(this.hass, "editor.condition.help", { id: "front_door", condition: "condition.front_door" })}</div>
+      <button class="nc-button secondary" @click=${this.addCondition}>${localize(this.hass, "editor.condition.add")}</button>`;
   }
 
   private updateField(condition: AlertCondition, key: keyof AlertCondition, event: Event): void {
@@ -68,29 +69,29 @@ class ConditionBuilderElement extends LitElement {
   };
 
   private conditionRowsTemplate() {
-    if (!this.conditions.length) return html`<div class="nc-help">No visual conditions configured.</div>`;
+    if (!this.conditions.length) return html`<div class="nc-help">${localize(this.hass, "editor.condition.empty")}</div>`;
     return this.conditions.map((condition, index) => this.conditionRowTemplate(condition, index));
   }
 
   private conditionRowTemplate = (condition: AlertCondition, index: number) => html`<div class="nc-condition-row">
     ${this.conditionIdTemplate(condition)}
-    <label class="nc-field">Type<ha-selector .hass=${this.hass} .selector=${{ select: { mode: "dropdown", options: conditionTypes.map(([value, label]) => ({ value, label })) } }} .value=${condition.type} @value-changed=${(event: CustomEvent<{ value?: string }>) => this.updateType(condition, event)}></ha-selector></label>
-    <label class="nc-field">Entity<ha-selector .hass=${this.hass} .selector=${{ entity: { include_entities: this.entities.map((item) => item.entity_id) } }} .value=${firstValue(condition.entity_id)} @value-changed=${(event: CustomEvent<{ value?: string | string[] }>) => this.updateEntity(condition, event)}></ha-selector></label>
+      <label class="nc-field">${localize(this.hass, "editor.condition.type")}<ha-selector .hass=${this.hass} .selector=${{ select: { mode: "dropdown", options: conditionTypes.map(([value, label]) => ({ value, label: localize(this.hass, label) })) } }} .value=${condition.type} @value-changed=${(event: CustomEvent<{ value?: string }>) => this.updateType(condition, event)}></ha-selector></label>
+    <label class="nc-field">${localize(this.hass, "editor.condition.entity")}<ha-selector .hass=${this.hass} .selector=${{ entity: { include_entities: this.entities.map((item) => item.entity_id) } }} .value=${firstValue(condition.entity_id)} @value-changed=${(event: CustomEvent<{ value?: string | string[] }>) => this.updateEntity(condition, event)}></ha-selector></label>
     ${this.conditionTypeTemplate(condition)}
-    <label class="nc-field nc-condition-duration">For${durationInput(durationInputValue(condition.for, "00:00:00"), (next) => { condition.for = next; this.markDirty(); }, this.hass)}</label>
+    <label class="nc-field nc-condition-duration">${localize(this.hass, "editor.condition.for")}${durationInput(durationInputValue(condition.for, "00:00:00"), (next) => { condition.for = next; this.markDirty(); }, this.hass)}</label>
     <div class="nc-condition-actions">${this.addIdButtonTemplate(condition)}
-      <button class="nc-button danger" @click=${() => this.removeCondition(index)}>Remove condition</button>
+      <button class="nc-button danger" @click=${() => this.removeCondition(index)}>${localize(this.hass, "editor.condition.remove")}</button>
     </div>
   </div>`;
 
   private conditionIdTemplate(condition: AlertCondition) {
     if (!condition.id && !this.expandedIds.has(condition)) return "";
-    return html`<label class="nc-field">ID (optional)<ha-input type="text" .value=${condition.id || ""} placeholder="front_door" @input=${(event: Event) => this.updateField(condition, "id", event)}></ha-input></label>`;
+    return html`<label class="nc-field">${localize(this.hass, "editor.condition.id_optional")}<ha-input type="text" .value=${condition.id || ""} placeholder="front_door" @input=${(event: Event) => this.updateField(condition, "id", event)}></ha-input></label>`;
   }
 
   private addIdButtonTemplate(condition: AlertCondition) {
     if (condition.id || this.expandedIds.has(condition)) return "";
-    return html`<button class="nc-button secondary nc-condition-id-toggle" type="button" @click=${() => this.expandId(condition)}><ha-icon icon="mdi:tag-plus-outline"></ha-icon>Add ID</button>`;
+    return html`<button class="nc-button secondary nc-condition-id-toggle" type="button" @click=${() => this.expandId(condition)}><ha-icon icon="mdi:tag-plus-outline"></ha-icon>${localize(this.hass, "editor.condition.add_id")}</button>`;
   }
 
   private updateType(
@@ -115,13 +116,13 @@ class ConditionBuilderElement extends LitElement {
 
   private conditionTypeTemplate(condition: AlertCondition) {
     if (condition.type === "state") {
-      return html`<label class="nc-field">State<ha-input type="text" .value=${firstValue(condition.state)} @input=${(event: Event) => this.updateField(condition, "state", event)}></ha-input></label>`;
+      return html`<label class="nc-field">${localize(this.hass, "editor.condition.state")}<ha-input type="text" .value=${firstValue(condition.state)} @input=${(event: Event) => this.updateField(condition, "state", event)}></ha-input></label>`;
     }
     if (condition.type === "numeric") {
-      return html`<label class="nc-field">Above<ha-input type="number" .value=${String(condition.above ?? "")} @input=${(event: Event) => this.updateField(condition, "above", event)}></ha-input></label><label class="nc-field">Below<ha-input type="number" .value=${String(condition.below ?? "")} @input=${(event: Event) => this.updateField(condition, "below", event)}></ha-input></label>`;
+      return html`<label class="nc-field">${localize(this.hass, "editor.condition.above")}<ha-input type="number" .value=${String(condition.above ?? "")} @input=${(event: Event) => this.updateField(condition, "above", event)}></ha-input></label><label class="nc-field">${localize(this.hass, "editor.condition.below")}<ha-input type="number" .value=${String(condition.below ?? "")} @input=${(event: Event) => this.updateField(condition, "below", event)}></ha-input></label>`;
     }
     if (condition.type === "attribute") {
-      return html`<label class="nc-field">Attribute<ha-input type="text" .value=${condition.attribute || ""} @input=${(event: Event) => this.updateField(condition, "attribute", event)}></ha-input></label><label class="nc-field">Expected value<ha-input type="text" .value=${condition.value || ""} @input=${(event: Event) => this.updateField(condition, "value", event)}></ha-input></label>`;
+      return html`<label class="nc-field">${localize(this.hass, "editor.condition.attribute")}<ha-input type="text" .value=${condition.attribute || ""} @input=${(event: Event) => this.updateField(condition, "attribute", event)}></ha-input></label><label class="nc-field">${localize(this.hass, "editor.condition.expected_value")}<ha-input type="text" .value=${condition.value || ""} @input=${(event: Event) => this.updateField(condition, "value", event)}></ha-input></label>`;
     }
     return "";
   }

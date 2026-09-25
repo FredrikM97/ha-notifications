@@ -1,6 +1,7 @@
 import { html, LitElement, render } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { formatLocalDateTime } from "./date-time.js";
+import { localize } from "./localize.js";
 import type {
   Hass,
   HassLocale,
@@ -110,7 +111,7 @@ function historyTemplate(
   return html`<div class="nc-card nc-history">
     ${historyFilterTemplate(options)}
     ${historyItemsTemplate(history, options, expandedDetails, toggleDetails)}
-    ${historyCountTemplate(history.length, totalCount)}
+    ${historyCountTemplate(history.length, totalCount, options)}
   </div>`;
 }
 
@@ -122,7 +123,7 @@ function historyItemsTemplate(
 ) {
   if (!history.length) {
     return html`<div class="nc-history-no-results">
-      No history entries match these filters.
+      ${localize(options.hass, "history.no_matches")}
     </div>`;
   }
 
@@ -136,10 +137,14 @@ function historyItemsTemplate(
   );
 }
 
-function historyCountTemplate(count: number, totalCount: number) {
+function historyCountTemplate(
+  count: number,
+  totalCount: number,
+  options: HistoryRenderOptions,
+) {
   if (!count || count === totalCount) return "";
   return html`<div class="nc-history-count">
-    Showing ${count} of ${totalCount} events
+    ${localize(options.hass, "history.showing", { count, total: totalCount })}
   </div>`;
 }
 
@@ -154,8 +159,8 @@ function historyFilterTemplate(options: HistoryRenderOptions) {
       <ha-input
         class="nc-history-search"
         type="search"
-        label="Search history"
-        aria-label="Search history"
+        label=${localize(options.hass, "history.search")}
+        aria-label=${localize(options.hass, "history.search")}
         .value=${filters.search}
         @input=${(event: InputEvent) =>
           updateHistoryFilter(
@@ -175,24 +180,24 @@ function historyHeadingTemplate(
 ) {
   if (options.alertName) {
     return html`<div>
-        <div class="nc-history-filter-title">History for ${options.alertName}</div>
+        <div class="nc-history-filter-title">${localize(options.hass, "history.for_alert", { name: options.alertName })}</div>
         <div class="nc-history-filter-subtitle">
-          Showing events for this alert only.
+          ${localize(options.hass, "history.alert_only")}
         </div>
       </div>
-      ${showAllButton(options.onShowAll, "Show all")}`;
+      ${showAllButton(options.onShowAll, localize(options.hass, "panel.show_all"))}`;
   }
 
   return html`<div class="nc-history-filter-main">
       <div class="nc-history-filter-row">
         <div class="nc-history-filter-label">
           <ha-icon icon="mdi:filter-variant"></ha-icon>
-          <span>Filter history</span>
+          <span>${localize(options.hass, "history.filter")}</span>
         </div>
         <details class="nc-history-filter-details" ?open=${activeFilterCount > 0}>
           <summary>
             <ha-icon icon="mdi:filter-variant"></ha-icon>
-            <span>More filters</span>
+            <span>${localize(options.hass, "history.more_filters")}</span>
             ${historyFilterCountTemplate(activeFilterCount)}
             <ha-icon
               class="nc-history-filter-chevron"
@@ -220,7 +225,7 @@ function historyClearButtonTemplate(
     class="nc-button secondary nc-history-clear"
     @click=${() => options.onFiltersChanged?.(defaultHistoryFilters())}
   >
-    Clear
+    ${localize(options.hass, "history.clear")}
   </button>`;
 }
 
@@ -236,17 +241,17 @@ function historySecondaryFiltersTemplate(
         select: {
           mode: "dropdown",
           options: [
-            { value: "", label: "All event types" },
+            { value: "", label: localize(options.hass, "history.all_event_types") },
             ...(options.types || []).map((type) => ({
               value: type,
-              label: formatType(type),
+              label: localize(options.hass, `event.${type}`, {}, formatType(type)),
             })),
           ],
         },
       }}
       .value=${filters.type}
-      label="Event type"
-      aria-label="Filter by event type"
+      label=${localize(options.hass, "history.event_type")}
+      aria-label=${localize(options.hass, "history.filter_event_type")}
       @value-changed=${(event: CustomEvent<{ value?: string }>) =>
         updateHistoryFilter(options, "type", event.detail.value || "")}
     ></ha-selector>
@@ -256,17 +261,17 @@ function historySecondaryFiltersTemplate(
         select: {
           mode: "dropdown",
           options: [
-            { value: "", label: "All severities" },
-            { value: "error", label: "Error" },
-            { value: "success", label: "Success" },
-            { value: "info", label: "Info" },
-            { value: "muted", label: "Muted" },
+            { value: "", label: localize(options.hass, "history.all_severities") },
+            { value: "error", label: localize(options.hass, "history.error") },
+            { value: "success", label: localize(options.hass, "history.success") },
+            { value: "info", label: localize(options.hass, "history.info") },
+            { value: "muted", label: localize(options.hass, "history.muted") },
           ],
         },
       }}
       .value=${filters.severity}
-      label="Severity"
-      aria-label="Filter by severity"
+      label=${localize(options.hass, "history.severity")}
+      aria-label=${localize(options.hass, "history.filter_severity")}
       @value-changed=${(event: CustomEvent<{ value?: string }>) =>
         updateHistoryFilter(options, "severity", event.detail.value || "")}
     ></ha-selector>
@@ -284,7 +289,7 @@ function alertFilterTemplate(
       select: {
         mode: "dropdown",
         options: [
-          { value: "", label: "All alerts" },
+          { value: "", label: localize(options.hass, "history.all_alerts") },
           ...options.alerts.map((alert) => ({
             value: alert.id,
             label: alert.name,
@@ -293,8 +298,8 @@ function alertFilterTemplate(
       },
     }}
     .value=${filters.alertId}
-    label="Alert"
-    aria-label="Filter by alert"
+    label=${localize(options.hass, "history.alert")}
+    aria-label=${localize(options.hass, "history.filter_alert")}
     @value-changed=${(event: CustomEvent<{ value?: string }>) =>
       updateHistoryFilter(options, "alertId", event.detail.value || "")}
   ></ha-selector>`;
@@ -362,7 +367,7 @@ function historyItemTemplate(
         >
             ${item.state?.flow_id
             ? html`<span class="nc-history-flow"
-              >Flow ${shortFlowId(item.state.flow_id)}</span
+              >${localize(options.hass, "history.flow")} ${shortFlowId(item.state.flow_id)}</span
             >`
           : ""}
       </div>
@@ -382,7 +387,7 @@ function historyDetailsTemplate(
     ?open=${detailsOpen}
     @click=${(event: Event) => event.stopPropagation()}
   >
-    <summary>Details</summary>
+    <summary>${localize(undefined, "history.details")}</summary>
     <pre>${JSON.stringify(details, null, 2)}</pre>
   </details>`;
 }
@@ -391,7 +396,7 @@ function historyAlertTemplate(
   item: RuntimeAlertHistoryEntry,
   options: HistoryRenderOptions,
 ) {
-  const alertName = item.config?.name || "Unknown alert";
+  const alertName = item.config?.name || localize(options.hass, "history.unknown_alert");
   if (!item.config?.id) {
     return html`<span>${alertName}</span>`;
   }
@@ -408,16 +413,16 @@ function historyAlertTemplate(
 }
 
 function emptyHistoryTemplate(options: HistoryRenderOptions) {
-  let title = "No activity yet";
+  let title = localize(options.hass, "history.no_activity");
   if (options.alertName) {
-    title = `No activity for ${options.alertName}`;
+    title = localize(options.hass, "history.no_activity_for", { name: options.alertName });
   }
 
   return html`<div class="nc-card nc-empty">
     <h2>${title}</h2>
-    <p>Notification activity and debug traces will appear here.</p>
+    <p>${localize(options.hass, "history.activity_help")}</p>
     ${options.alertName
-      ? showAllButton(options.onShowAll, "Show all history")
+      ? showAllButton(options.onShowAll, localize(options.hass, "history.show_all"))
       : ""}
   </div>`;
 }

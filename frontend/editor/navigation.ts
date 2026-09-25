@@ -9,8 +9,10 @@ import {
   type SectionStatus,
 } from "./types.js";
 import { enabledLabel, isSectionVisible } from "./helpers.js";
+import { localizeEditorTitle } from "../localize.js";
 
 export interface EditorNavigationOptions {
+  localize: import("../localize.js").Localize;
   alert: Alert;
   className: string;
   optionalSettings: OptionalSettings;
@@ -105,6 +107,7 @@ function collapseButton(
 }
 
 export function renderEditorNavigation({
+  localize,
   alert,
   className,
   optionalSettings,
@@ -123,7 +126,7 @@ export function renderEditorNavigation({
         })
       : nothing}
     class=${`${className}${mobileOpen ? " mobile-open" : ""}`}
-    aria-label="Alert sections"
+    aria-label=${localize("editor.common.alert_sections")}
   >
     ${editorSections.map((section: EditorSection, index) => {
       const { title, setting, parent, status } = section;
@@ -143,7 +146,7 @@ export function renderEditorNavigation({
           @click=${() => onSelect(index)}
         >
           ${statusTemplate(alert, status)}
-          <span>${title}</span>
+          <span>${localizeEditorTitle(localize, title)}</span>
         </button>
         ${collapseButton(
           hasChildren,

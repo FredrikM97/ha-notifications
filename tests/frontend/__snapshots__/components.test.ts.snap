@@ -362,17 +362,7 @@ exports[`alert editor interactions > shows validation feedback instead of saving
 
 exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `"<h2 data-role="editor-section-title">When to check</h2>"`;
 
-exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 1`] = `
-<button
-  class="nc-button secondary nc-condition-id-toggle"
-  type="button"
->
-  <ha-icon
-    icon="mdi:tag-plus-outline"
-  />
-  Add ID
-</button>
-`;
+exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 1`] = `"<button class="nc-button secondary nc-condition-id-toggle" type="button"><ha-icon icon="mdi:tag-plus-outline"></ha-icon>Add ID</button>"`;
 
 exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 2`] = `
 "<div class="nc-condition-actions">
@@ -390,13 +380,7 @@ exports[`condition builder interactions > omits visual conditions without an ent
 ]
 `;
 
-exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `
-<div
-  class="nc-help"
->
-  No visual conditions configured.
-</div>
-`;
+exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `"<div class="nc-help">No visual conditions configured.</div>"`;
 
 exports[`recipient picker interactions > filters recipients and removes a selected target 1`] = `
 {

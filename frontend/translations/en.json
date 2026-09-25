@@ -1,0 +1,92 @@
+{
+  "panel": {
+    "tabs": { "alerts": "Alerts", "history": "History", "yaml": "YAML", "debug": "Active" },
+    "admin_required": "Administrator access required",
+    "back_home": "Back to Home Assistant",
+    "title": "HA Notifications",
+    "subtitle": "Manage alerts, notifications and debug history.",
+    "add_alert": "Add alert",
+    "no_active_alerts": "No active alerts",
+    "no_alerts": "No alerts yet",
+    "create_first": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
+    "create_alert": "Create alert",
+    "admin_help": "HA Notifications alerts can only be viewed and edited by Home Assistant administrators.",
+    "draft_test_sent": "Draft test notification sent.", "condition_valid": "Condition is valid.", "alert_created": "Alert created.",
+    "alert_saved": "Alert saved.", "test_sent": "Test notification sent.", "alert_deleted": "Alert deleted.",
+    "state": "State",
+    "trace": "Trace ({{count}})",
+    "show_all": "Show all",
+    "alert_added": "Alert added.",
+    "alert_enabled": "Alert enabled.",
+    "alert_disabled": "Alert disabled.",
+    "confirm_delete": "Delete alert {{name}}?"
+  },
+  "alert": {
+    "disabled": "Disabled", "enabled": "Enabled", "idle": "Idle", "triggered": "Triggered",
+    "enable": "Enable", "disable": "Disable", "test": "Test alert", "edit": "Edit alert",
+    "history": "View history", "delete": "Delete alert", "every": "every {{interval}}",
+    "last_notified": "Last notified: {{time}}"
+  },
+  "editor": {
+    "common": {
+      "new_alert": "New alert", "close_sections": "Close section menu", "manage_sections": "Manage sections",
+      "view_yaml": "View alert YAML", "close": "Close", "cancel": "Cancel", "save_alert": "Save alert", "test": "Test",
+      "alert_sections": "Alert sections", "discard_title": "Unsaved changes", "discard_message": "You have unsaved changes. Leave without saving?", "stay": "Stay", "discard": "Discard changes",
+      "alert_yaml": "Alert YAML", "close_yaml": "Close YAML", "duration": "Duration", "duration_format": "Duration (HH:MM:SS)"
+    },
+    "basic": {
+      "section": "Basic", "name": "Name", "alert_name": "Alert name", "description": "Description", "icon": "Icon"
+    },
+    "monitor": {
+      "section": "When to check", "when_condition_changes": "When condition changes", "clear_when_inactive": "Clear notification when inactive", "check_startup": "Check at startup",
+      "re_evaluate_every": "Re-evaluate condition every", "interval_help": "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
+      "enable_history_retention": "Enable history retention", "history_retention": "History retention", "retention_days": "History retention days", "retention_help": "Completed alert history is removed after this period."
+    },
+    "condition": {
+      "section": "Condition", "mode_visual": "Visual conditions", "mode_yaml": "Conditions YAML", "mode_jinja": "Advanced Jinja",
+      "conditions_yaml": "Conditions YAML", "conditions_help": "Edit the raw conditions: list. This is the YAML behind the visual editor.",
+      "jinja_condition": "Jinja condition", "jinja_help": "The condition should evaluate to true or false. Home Assistant automatically tracks entities referenced by the template.",
+      "help": "IDs are optional. Set one such as {{id}} to use its result in a notification with {{condition}}.", "add": "Add condition", "remove": "Remove condition", "add_id": "Add ID", "empty": "No visual conditions configured.",
+      "type": "Type", "entity": "Entity", "for": "For", "id_optional": "ID (optional)", "state": "State", "numeric_state": "Numeric state", "attribute": "Attribute", "above": "Above", "below": "Below", "expected_value": "Expected value"
+    },
+    "recipients": {
+      "section": "Recipients", "selected": "Selected recipients", "search": "Search recipients", "remove": "Remove", "no_matching": "No matching recipients", "empty": "No recipients available",
+      "help": "Search for a recipient, choose a type when needed, then select it. You can mix devices, areas, labels, floors, and notification entities.",
+      "service_help": "Selected devices, areas, labels, floors, and notification entities are passed to Home Assistant's standard Notify service."
+    },
+    "notification": {
+      "section": "Notification", "title": "Title", "message": "Message", "title_placeholder": "Notification title", "message_placeholder": "Notification message",
+      "template_help": "Template variables and sensor helpers", "templates_help": "Notification templates and helpers", "show_template_help": "Show template variables and sensor helpers",
+      "post_send_actions": "Post-send actions", "post_send_help": "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML."
+    },
+    "confirmation": {
+      "section": "Confirmation", "toggle": "confirmation", "message": "Confirmation message", "add_response": "Add response button", "remove_button": "Remove button",
+      "button_id": "Button ID", "button_id_optional": "Button ID (optional)", "button_label": "Button text", "button_label_optional": "Button text (optional)", "clear_on_acknowledge": "Clear notifications when acknowledged",
+      "reminder": {
+        "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "forget_after": "Forget after", "show_attempt_count": "Show attempt count in notification title", "keep_until": "Set to 00:00:00 to keep the notification until confirmation."
+      },
+      "notification": {
+        "section": "Notify recipients when confirmed", "follow_up_help": "Optionally send a follow-up message after acknowledgement.", "example": "Example:"
+      },
+      "actions": {
+        "section": "Post-confirmation actions", "help": "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML."
+      }
+    }
+  },
+  "history": {
+    "search": "Search history", "for_alert": "History for {{name}}", "alert_only": "Showing events for this alert only.",
+    "filter": "Filter history", "more_filters": "More filters", "clear": "Clear", "showing": "Showing {{count}} of {{total}} events",
+    "no_matches": "No history entries match these filters.", "all_alerts": "All alerts", "all_event_types": "All event types",
+    "event_type": "Event type", "filter_event_type": "Filter by event type", "all_severities": "All severities",
+    "severity": "Severity", "filter_severity": "Filter by severity", "error": "Error", "success": "Success", "info": "Info", "muted": "Muted",
+    "details": "Details", "flow": "Flow", "alert": "Alert", "filter_alert": "Filter by alert", "unknown_alert": "Unknown alert",
+    "no_activity": "No activity yet", "no_activity_for": "No activity for {{name}}", "activity_help": "Notification activity and debug traces will appear here.", "show_all": "Show all history"
+  },
+  "yaml": {
+    "description": "Advanced editor. Copy this YAML to another system or import a validated configuration into Home Assistant.",
+    "copy": "Copy", "validate": "Validate", "reload": "Reload", "save": "Save YAML", "aria": "HA Notifications YAML",
+    "copied": "YAML copied to clipboard.", "valid": "YAML is valid.", "reloaded": "YAML configuration reloaded.", "not_saved": "The YAML was not saved.",
+    "saved": "YAML saved and configuration reloaded."
+  },
+  "common": { "close": "Close", "remove": "Remove", "all": "All", "devices": "Devices", "areas": "Areas", "floors": "Floors", "labels": "Labels", "notification_entities": "Notification entities", "users": "Users" }
+}

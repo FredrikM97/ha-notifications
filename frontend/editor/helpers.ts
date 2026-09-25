@@ -3,6 +3,7 @@ import type { TemplateResult } from "lit";
 import { ref } from "lit/directives/ref.js";
 import * as YAML from "yaml";
 import type { Alert, Hass } from "../types.js";
+import { localize } from "../localize.js";
 import {
   ACTIONS_PLACEHOLDER,
   type CodeEditor,
@@ -186,7 +187,7 @@ export function durationInput(
       .selector=${{ duration: { enable_day: true, enable_second: true } }}
       .value=${value}
       .label=${label || undefined}
-      aria-label="Duration"
+      aria-label=${localize(hass, "editor.common.duration")}
       @value-changed=${(event: CustomEvent<{ value?: unknown }>) => {
         onChange(
           durationInputValue(
@@ -225,7 +226,7 @@ export function durationInput(
     type="text"
     inputmode="numeric"
     placeholder="HH:MM:SS"
-    aria-label="Duration (HH:MM:SS)"
+    aria-label=${localize(hass, "editor.common.duration_format")}
     .value=${value}
     @input=${update}
     @blur=${commit}
@@ -355,7 +356,9 @@ export function optionalControls(
   onToggle: (enabled: boolean) => void,
   disabled = false,
 ): TemplateResult {
-  const title = toggleTitle(enabled, label);
+  const title = enabled
+    ? `${context.localize("alert.disable")} ${label}`
+    : `${context.localize("alert.enable")} ${label}`;
 
   return html`<div class="nc-setting-controls">
     <ha-switch

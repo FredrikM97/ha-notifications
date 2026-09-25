@@ -118,8 +118,9 @@ flowchart LR
 - Follow-up action rendering validates each action as a feature-owned object;
     malformed actions remain isolated as typed `ActionResult` errors.
 - `support/storage.py` stores configuration and history objects without interpreting feature behavior; runtime is discarded on restart, validated loading is used for runtime setup, and a separate raw read keeps the YAML recovery editor available for malformed saved documents.
-- `frontend/panel.ts` owns dashboard data loading and workflows, while `frontend/panel/alert-card.ts` owns alert-card rendering and action wiring. `frontend/editor/index.ts` owns editor lifecycle and event wiring; `frontend/editor/state.ts` owns transient editor UI state, `frontend/editor/context.ts` owns section binding registration, and the remaining editor modules own focused editor rendering and translation boundaries.
+- `frontend/panel.ts` owns dashboard data loading and workflows, while `frontend/panel/alert-card.ts` owns alert-card rendering and action wiring. `frontend/editor/index.ts` owns editor lifecycle and event wiring; `frontend/editor/state.ts` owns transient editor UI state, `frontend/editor/context.ts` owns section binding registration and creates one editor-bound localizer, and the remaining editor modules own focused editor rendering without repeated Hass translation parameters.
 - `frontend/history.ts` owns the history custom element and templates; `frontend/history/logic.ts` owns pure history filtering, severity classification, and formatting.
+- `frontend/localize.ts` owns frontend localization lookup and interpolation; `frontend/translations/en.json` is the bundled English catalog used by all panel/editor views.
 
 ## Dependencies and validation
 

@@ -14,12 +14,12 @@ export function renderConfirmationSection(
     context.refreshStatuses();
   };
   return section(
-    "Confirmation",
+    context.localize("editor.confirmation.section"),
     html`<div class="nc-grid">
         ${buttons.map(
           (button, index) => html`<div class="nc-confirmation-button-row">
             ${field(
-              index === 0 ? "Button ID" : "Button ID (optional)",
+              index === 0 ? context.localize("editor.confirmation.button_id") : context.localize("editor.confirmation.button_id_optional"),
               html`<ha-input
                 type="text"
                 .value=${button.id}
@@ -31,7 +31,7 @@ export function renderConfirmationSection(
               ></ha-input>`,
             )}
             ${field(
-              index === 0 ? "Button text" : "Button text (optional)",
+              index === 0 ? context.localize("editor.confirmation.button_label") : context.localize("editor.confirmation.button_label_optional"),
               html`<ha-input
                 type="text"
                 .value=${button.label}
@@ -47,7 +47,7 @@ export function renderConfirmationSection(
                   class="nc-button danger"
                   type="button"
                   @click=${() => updateButtons(buttons.filter((_, itemIndex) => itemIndex !== index))}
-                >Remove button</button>`
+                >${context.localize("editor.confirmation.remove_button")}</button>`
               : ""}
           </div>`,
         )}
@@ -59,7 +59,7 @@ export function renderConfirmationSection(
               ...buttons,
               { id: `response_${buttons.length + 1}`, label: "" },
             ])}
-        >Add response button</button>
+        >${context.localize("editor.confirmation.add_response")}</button>
       </div>
       <label class="nc-switch-label nc-confirmation-clear">
         <ha-switch
@@ -69,7 +69,7 @@ export function renderConfirmationSection(
             context.markDirty();
           }}
         ></ha-switch>
-        <span>Clear notifications when acknowledged</span>
+        <span>${context.localize("editor.confirmation.clear_on_acknowledge")}</span>
       </label>`,
     "",
     context.activeSection === "Confirmation",

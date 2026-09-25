@@ -72,7 +72,7 @@ describe("condition builder interactions", () => {
       markDirty,
     );
 
-    expect(container.querySelector(".nc-condition-id-toggle")).toMatchSnapshot();
+    expect(stableMarkup(container.querySelector(".nc-condition-id-toggle"))).toMatchSnapshot();
     await user.click(queries.getByRole("button", { name: "Add ID" }));
 
     expect(
@@ -100,7 +100,7 @@ describe("condition builder interactions", () => {
     await user.click(queries.getByRole("button", { name: "Remove condition" }));
 
     expect(container.querySelector(".nc-condition-row")).toBeNull();
-    expect(container.querySelector(".nc-help")).toMatchSnapshot();
+    expect(stableMarkup(container.querySelector(".nc-help"))).toMatchSnapshot();
     expect(markDirty).toHaveBeenCalledOnce();
   });
 

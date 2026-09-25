@@ -11,6 +11,7 @@ import {
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
+import { localize } from "./localize.js";
 import { renderAlertCard } from "./panel/alert-card.js";
 import "./history.js";
 import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
@@ -40,10 +41,10 @@ interface HaNotificationsCardConfig {
 }
 
 const panelTabs: PanelTabDefinition[] = [
-  { key: "alerts", label: "Alerts" },
-  { key: "history", label: "History" },
-  { key: "yaml", label: "YAML" },
-  { key: "debug", label: "Active" },
+  { key: "alerts", label: "panel.tabs.alerts" },
+  { key: "history", label: "panel.tabs.history" },
+  { key: "yaml", label: "panel.tabs.yaml" },
+  { key: "debug", label: "panel.tabs.debug" },
 ];
 
 function activeTabClass(active: boolean): string {
@@ -258,10 +259,9 @@ class HaNotificationsPanel extends LitElement {
   private adminRequiredTemplate(): TemplateResult {
     return html`<div class="nc-page">
       <div class="nc-card nc-empty">
-        <h2>Administrator access required</h2>
+        <h2>${localize(this._hass, "panel.admin_required")}</h2>
         <p>
-          HA Notifications alerts can only be viewed and edited by Home
-          Assistant administrators.
+          ${localize(this._hass, "panel.admin_help")}
         </p>
       </div>
     </div>`;
@@ -272,8 +272,8 @@ class HaNotificationsPanel extends LitElement {
       <a
         class="nc-back-button"
         href="/"
-        aria-label="Back to Home Assistant"
-        title="Back to Home Assistant"
+        aria-label=${localize(this._hass, "panel.back_home")}
+        title=${localize(this._hass, "panel.back_home")}
         @click=${this.navigateHome}
       >
         <ha-icon icon="mdi:arrow-left"></ha-icon>
@@ -287,13 +287,13 @@ class HaNotificationsPanel extends LitElement {
           />
         </div>
         <div>
-          <h1>HA Notifications</h1>
-          <p>Manage alerts, notifications and debug history.</p>
+          <h1>${localize(this._hass, "panel.title")}</h1>
+          <p>${localize(this._hass, "panel.subtitle")}</p>
         </div>
       </div>
       <div class="nc-actions">
         <button class="nc-button" @click=${() => this.addAlert()}>
-          + Add alert
+          + ${localize(this._hass, "panel.add_alert")}
         </button>
       </div>
     </div>`;
@@ -316,7 +316,7 @@ class HaNotificationsPanel extends LitElement {
             class=${activeTabClass(this.tab === key)}
             @click=${() => this.selectTab(key)}
           >
-            ${label}
+            ${localize(this._hass, label)}
           </button>`,
       )}
     </div>`;
@@ -350,7 +350,7 @@ class HaNotificationsPanel extends LitElement {
     const entries = debugPayload(this.alerts, this.runtime);
     if (!entries.length) {
       return html`<div class="nc-card nc-empty">
-        <h2>No active alerts</h2>
+        <h2>${localize(this._hass, "panel.no_active_alerts")}</h2>
       </div>`;
     }
 
@@ -364,11 +364,11 @@ class HaNotificationsPanel extends LitElement {
             </summary>
             <div class="nc-debug-sections">
               <details class="nc-debug-section" open>
-                <summary>State</summary>
+                <summary>${localize(this._hass, "panel.state")}</summary>
                 <pre>${JSON.stringify(runtime.state ?? {}, null, 2)}</pre>
               </details>
               <details class="nc-debug-section">
-                <summary>Trace (${runtime.trace?.length ?? 0})</summary>
+                <summary>${localize(this._hass, "panel.trace", { count: runtime.trace?.length ?? 0 })}</summary>
                 <pre>${JSON.stringify(runtime.trace ?? [], null, 2)}</pre>
               </details>
             </div>
@@ -394,13 +394,12 @@ class HaNotificationsPanel extends LitElement {
     }
 
     return html`<div class="nc-card nc-empty">
-      <h2>No alerts yet</h2>
+      <h2>${localize(this._hass, "panel.no_alerts")}</h2>
       <p>
-        Create your first alert. You can trigger it from condition changes, an
-        interval, or both.
+        ${localize(this._hass, "panel.create_first")}
       </p>
       <button class="nc-button" @click=${() => this.addAlert()}>
-        Create alert
+        ${localize(this._hass, "panel.create_alert")}
       </button>
     </div>`;
   }
@@ -462,16 +461,16 @@ class HaNotificationsPanel extends LitElement {
       registries,
       onTest: async (draft) => {
         const result = await previewAlertPayload(this._hass, draft);
-        this.showToast("Draft test notification sent.");
+        this.showToast(localize(this._hass, "panel.draft_test_sent"));
         return result;
       },
       onValidateCondition: async (draft) => {
         await validateConditions(this._hass, draft);
-        this.showToast("Condition is valid.");
+        this.showToast(localize(this._hass, "panel.condition_valid"));
       },
       onSave: async (alert) => {
         const saved = await saveAlert(this._hass, alert);
-        this.showToast("Alert created.");
+        this.showToast(localize(this._hass, "panel.alert_created"));
         return saved;
       },
       onSaved: async () => {
@@ -502,17 +501,17 @@ class HaNotificationsPanel extends LitElement {
       registries,
       onTest: async (draft) => {
         const result = await previewAlertPayload(this._hass, draft);
-        this.showToast("Draft test notification sent.");
+        this.showToast(localize(this._hass, "panel.draft_test_sent"));
         return result;
       },
       onValidateCondition: async (draft) => {
         await validateConditions(this._hass, draft);
-        this.showToast("Condition is valid.");
+        this.showToast(localize(this._hass, "panel.condition_valid"));
       },
       onSave: async (updated) => {
         const saved = await saveAlert(this._hass, updated);
         this.replaceSavedAlert(saved);
-        this.showToast("Alert saved.");
+        this.showToast(localize(this._hass, "panel.alert_saved"));
         return saved;
       },
       onSaved: async () => {
@@ -543,7 +542,7 @@ class HaNotificationsPanel extends LitElement {
   private async testAlertFromCard(alert: Alert): Promise<void> {
     try {
       await previewAlertPayload(this._hass, alert);
-      this.showToast("Test notification sent.");
+      this.showToast(localize(this._hass, "panel.test_sent"));
     } catch (err) {
       this.showToast(errorMessage(err), true);
     }
@@ -627,7 +626,7 @@ class HaNotificationsPanel extends LitElement {
 
     try {
       await deleteAlert(this._hass, alert.id);
-      this.showToast("Alert deleted.");
+      this.showToast(localize(this._hass, "panel.alert_deleted"));
       await this.refresh();
     } catch (err) {
       this.showToast(errorMessage(err), true);

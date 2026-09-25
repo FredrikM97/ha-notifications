@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert } from "../types.js";
+import type { Localize } from "../localize.js";
 
 export interface EditorModal {
   title: string;
@@ -36,6 +37,7 @@ export function renderEditorModal(
 
 export function renderDiscardDialog(
   open: boolean,
+  localize: Localize,
   onClose: () => void,
   onDiscard: () => void,
 ): TemplateResult | typeof nothing {
@@ -55,17 +57,17 @@ export function renderDiscardDialog(
         aria-labelledby="nc-discard-title"
       >
         <header class="nc-modal-header">
-          <h2 id="nc-discard-title">Unsaved changes</h2>
+          <h2 id="nc-discard-title">${localize("editor.common.discard_title")}</h2>
         </header>
         <main class="nc-modal-body">
-          <p>You have unsaved changes. Leave without saving?</p>
+          <p>${localize("editor.common.discard_message")}</p>
         </main>
         <footer class="nc-modal-footer">
           <button class="nc-button secondary" @click=${onClose}>
-            Stay
+            ${localize("editor.common.stay")}
           </button>
           <button class="nc-button" @click=${onDiscard}>
-            Discard changes
+            ${localize("editor.common.discard")}
           </button>
         </footer>
       </section>
