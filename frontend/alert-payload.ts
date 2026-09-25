@@ -106,7 +106,6 @@ export interface AlertNotificationFormValues {
   target: NotificationTarget;
   title: string;
   message: string;
-  clearOnInactive?: boolean;
 }
 
 export interface AlertConfirmationFormValues {
@@ -162,22 +161,13 @@ export function buildAlertPayload(
     );
   }
 
-  if (
-    validate &&
-    values.confirmation.enabled &&
-    !hasRecipients(values.notification.target)
-  ) {
-    throw new Error(
-      "Confirmation requires at least one notification recipient.",
-    );
-  }
-
   result.name = values.identity.name.trim();
   result.description = values.identity.description;
   result.icon =
     values.identity.icon?.trim() || result.icon || "mdi:bell-outline";
   result.conditions = values.monitor.conditions;
   result.monitor = {
+    ...result.monitor,
     on_change: values.monitor.onChange,
     startup: values.monitor.startup,
   };

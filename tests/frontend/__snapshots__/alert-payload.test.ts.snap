@@ -32,7 +32,12 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
   "icon": "mdi:bell-outline",
   "id": "test_alert",
   "monitor": {
+    "clear_on_inactive": false,
     "on_change": true,
+    "retention": {
+      "days": 30,
+      "enabled": true,
+    },
     "startup": true,
   },
   "name": "Front door open",
@@ -80,7 +85,12 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
   "icon": "mdi:door-open",
   "id": "custom_icon_alert",
   "monitor": {
+    "clear_on_inactive": false,
     "on_change": true,
+    "retention": {
+      "days": 30,
+      "enabled": true,
+    },
     "startup": true,
   },
   "name": "Front door open",
@@ -128,7 +138,12 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
   "icon": "mdi:bell-outline",
   "id": "preview_alert",
   "monitor": {
+    "clear_on_inactive": false,
     "on_change": true,
+    "retention": {
+      "days": 30,
+      "enabled": true,
+    },
     "startup": true,
   },
   "name": "Front door open",

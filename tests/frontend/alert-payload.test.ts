@@ -53,6 +53,22 @@ describe("buildAlertPayload", () => {
     expect(payload.runtime).toBeUndefined();
   });
 
+  it("preserves monitor settings that are not edited", () => {
+    const original = defaultAlert();
+    original.monitor.retention = { enabled: true, days: 14 };
+    const payload = buildAlertPayload(
+      original,
+      alertFormValues({
+        notification: {
+          ...alertFormValues().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+      }),
+    );
+
+    expect(payload.monitor.retention).toEqual({ enabled: true, days: 14 });
+  });
+
   it("persists a custom alert icon", () => {
     const original = defaultAlert();
     original.id = "custom_icon_alert";
