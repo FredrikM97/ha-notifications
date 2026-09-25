@@ -4,7 +4,9 @@ import { ref } from "lit/directives/ref.js";
 import * as YAML from "yaml";
 import type { Alert, Hass } from "../types.js";
 import {
+  ACTIONS_PLACEHOLDER,
   type CodeEditor,
+  type ActionEditorRole,
   type CodeEditorOptions,
   type EditorContext,
   type EditorMode,
@@ -299,6 +301,37 @@ export function codeEditor({
       if (element) onReady?.(element as CodeEditor);
     })}
   ></ha-code-editor>`;
+}
+
+export function actionSection({
+  context,
+  title,
+  help,
+  role,
+  actions,
+}: {
+  context: EditorContext;
+  title: string;
+  help: string;
+  role: ActionEditorRole;
+  actions: Record<string, unknown>[] | undefined;
+}): TemplateResult {
+  return section(
+    title,
+    html`<div class="nc-help">${help}</div>
+      ${codeEditor({
+        role,
+        value: actionsYaml(actions),
+        placeholder: ACTIONS_PLACEHOLDER,
+        mode: "yaml",
+        language: "yaml",
+        label: title,
+        onInput: () => context.markDirty(),
+        onReady: (editor) => context.setEditorControl(role, editor),
+      })}`,
+    "",
+    context.activeSection === title,
+  );
 }
 
 export function section(

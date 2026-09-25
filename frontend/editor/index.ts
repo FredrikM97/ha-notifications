@@ -10,8 +10,10 @@ import type { Alert, Hass, Registries } from "../types.js";
 import {
   clone,
   editorSections,
+  type ActionEditorRole,
   type CodeEditor,
   type EditorContext,
+  type EditorControlRole,
   type EditorMode,
   type OptionalSetting,
   type OptionalSettings,
@@ -94,8 +96,8 @@ class AlertEditorController {
   } | null = null;
   private yamlModalEditor?: CodeEditor;
   private conditionsYamlEditor?: CodeEditor;
-  private actionsEditor?: CodeEditor;
-  private notificationActionsEditor?: CodeEditor;
+  private postConfirmationActionsEditor?: CodeEditor;
+  private postSendActionsEditor?: CodeEditor;
   private mobileMenu?: HTMLElement;
   private sectionManageButton?: HTMLElement;
   private handleOutsideSectionPointer = (event: PointerEvent): void => {
@@ -152,11 +154,13 @@ class AlertEditorController {
         if (role === "jinja") this.jinja = element;
         if (role === "recipients") this.recipientMount = element;
       },
-      setEditorControl: (role, element) => {
+      setEditorControl: (role: EditorControlRole, element) => {
         if (role === "conditions-yaml") this.conditionsYamlEditor = element;
-        if (role === "actions") this.actionsEditor = element;
-        if (role === "notification-actions") {
-          this.notificationActionsEditor = element;
+        if (role === "post-confirmation-actions") {
+          this.postConfirmationActionsEditor = element;
+        }
+        if (role === "post-send-actions") {
+          this.postSendActionsEditor = element;
         }
       },
       markDirty: this.markDirty,
@@ -748,14 +752,14 @@ class AlertEditorController {
     let confirmationActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postConfirmationActions) {
       confirmationActions = actionArrayValue(
-        this.actionsEditor || null,
+        this.postConfirmationActionsEditor || null,
         "Post-confirmation actions",
       );
     }
     let notificationActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postSendActions) {
       notificationActions = actionArrayValue(
-        this.notificationActionsEditor || null,
+        this.postSendActionsEditor || null,
         "Post-send actions",
       );
     }
@@ -901,21 +905,24 @@ class AlertEditorController {
     }
 
     if (sectionTitle === "Post-send actions") {
-      this.validateActions("notification-actions", "Post-send actions");
+      this.validateActions("post-send-actions", "Post-send actions");
       return;
     }
 
     if (sectionTitle === "Post-confirmation actions") {
-      this.validateActions("actions", "Post-confirmation actions");
+      this.validateActions(
+        "post-confirmation-actions",
+        "Post-confirmation actions",
+      );
     }
   };
 
-  private validateActions = (role: string, label: string): void => {
+  private validateActions = (role: ActionEditorRole, label: string): void => {
     try {
       actionArrayValue(
-        role === "actions"
-          ? this.actionsEditor || null
-          : this.notificationActionsEditor || null,
+        role === "post-confirmation-actions"
+          ? this.postConfirmationActionsEditor || null
+          : this.postSendActionsEditor || null,
         label,
       );
       showEditorToast(this.root, `${label} are valid.`, 4000);

@@ -23,18 +23,27 @@ export interface CodeEditorOptions {
 
 export type EditorMode = "visual" | "yaml" | "jinja";
 
+export type EditorControlRole =
+  | "conditions-yaml"
+  | "post-confirmation-actions"
+  | "post-send-actions";
+
+export type ActionEditorRole =
+  | "post-confirmation-actions"
+  | "post-send-actions";
+
 export interface EditorContext {
   hass: Hass;
   value: Alert;
   mode: EditorMode;
   activeSection: string;
   setEditorElement(role: string, element: HTMLElement): void;
-  setEditorControl(role: string, element: CodeEditor): void;
+  setEditorControl(role: EditorControlRole, element: CodeEditor): void;
   markDirty(): void;
   refreshStatuses(): void;
   setMode(mode: EditorMode): void;
   validateCondition(): void;
-  validateActions(role: string, label: string): void;
+  validateActions(role: ActionEditorRole, label: string): void;
 }
 
 export type OptionalSetting =

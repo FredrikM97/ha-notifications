@@ -19,14 +19,14 @@ exports[`alert editor interactions > loads populated alert and registry fixture 
       "value": "",
     },
     {
-      "role": "notification-actions",
+      "role": "post-send-actions",
       "value": "- action: logbook.log
   data:
     name: Front door alert
 ",
     },
     {
-      "role": "actions",
+      "role": "post-confirmation-actions",
       "value": "- action: light.turn_on
   target:
     entity_id:
@@ -198,7 +198,7 @@ exports[`alert editor interactions > renders the Post-confirmation actions edito
 {
   "buttons": [],
   "controls": [
-    "ha-code-editor:Post-confirmation actions:yaml:actions",
+    "ha-code-editor:Post-confirmation actions:yaml:post-confirmation-actions",
   ],
   "help": [
     "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
@@ -211,7 +211,7 @@ exports[`alert editor interactions > renders the Post-send actions editor sectio
 {
   "buttons": [],
   "controls": [
-    "ha-code-editor:Post-send actions:yaml:notification-actions",
+    "ha-code-editor:Post-send actions:yaml:post-send-actions",
   ],
   "help": [
     "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
