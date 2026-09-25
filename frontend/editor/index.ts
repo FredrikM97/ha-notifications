@@ -771,7 +771,7 @@ class AlertEditorController {
         onChange: value.monitor.on_change,
         startup: value.monitor.startup,
         interval: this.monitorIntervalPayload(),
-        clearOnInactive: value.monitor.clear_on_inactive !== false,
+        clearOnInactive: value.monitor.clear_on_inactive === true,
       },
       notification: {
         target: this.recipients.target(),

@@ -153,11 +153,7 @@ class NotificationFeature(FeatureBase):
     ) -> bool:
         """Decide whether an inactive condition clears its notification."""
 
-        configured = monitor_config(alert).clear_on_inactive
-        if configured is not None:
-            return bool(configured)
-        confirmation = ConfirmationConfig.from_alert(alert)
-        return confirmation is None or not bool(confirmation.enabled)
+        return bool(monitor_config(alert).clear_on_inactive)
 
     def capabilities(self) -> NotificationCapabilitySet:
         """Build the Home Assistant values required for one delivery plan."""

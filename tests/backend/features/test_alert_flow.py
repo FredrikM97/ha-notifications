@@ -86,7 +86,7 @@ async def test_exhausted_confirmation_clears_notification(
 async def test_condition_error_and_inactive_clear_notification(
     hass, real_target_registry, alert_factory, alert_flow_context
 ):
-    alert = alert_factory("inactive")
+    alert = alert_factory("inactive", monitor={"clear_on_inactive": True})
     alert["notification"]["target"] = {
         "entity_id": [real_target_registry.notify_entity_id]
     }

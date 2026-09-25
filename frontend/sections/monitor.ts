@@ -28,7 +28,7 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
         </label>
         <label class="nc-monitor-toggle">
           <ha-switch
-            .checked=${monitor.clear_on_inactive !== false}
+            .checked=${monitor.clear_on_inactive === true}
             @change=${(event: Event) => {
               monitor.clear_on_inactive = checkedOf(event);
               context.markDirty();

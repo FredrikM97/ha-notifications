@@ -46,7 +46,7 @@ export function defaultAlert(): Alert {
     monitor: {
       on_change: true,
       startup: true,
-      clear_on_inactive: true,
+      clear_on_inactive: false,
       retention: {
         enabled: true,
         days: 30,

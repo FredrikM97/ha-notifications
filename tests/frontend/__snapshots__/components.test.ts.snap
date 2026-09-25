@@ -85,7 +85,7 @@ conditions: []
 monitor:
   on_change: true
   startup: true
-  clear_on_inactive: true
+  clear_on_inactive: false
 notification:
   target: {}
   title: ""
@@ -311,7 +311,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "icon": "mdi:bell-outline",
   "id": "editable_alert",
   "monitor": {
-    "clear_on_inactive": true,
+    "clear_on_inactive": false,
     "on_change": true,
     "startup": true,
   },
