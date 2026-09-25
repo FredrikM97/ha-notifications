@@ -11,6 +11,7 @@ import {
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
+import { renderAlertCard } from "./panel/alert-card.js";
 import "./history.js";
 import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
 import { styles } from "./styles.js";
@@ -34,17 +35,6 @@ interface PanelTabDefinition {
   label: string;
 }
 
-interface AlertStatus {
-  className: string;
-  icon: string;
-  label: string;
-}
-
-interface AlertCardStatus {
-  enabled: AlertStatus;
-  condition: AlertStatus;
-}
-
 interface HaNotificationsCardConfig {
   type: "custom:ha-notifications-card";
 }
@@ -56,39 +46,6 @@ const panelTabs: PanelTabDefinition[] = [
   { key: "debug", label: "Active" },
 ];
 
-function alertStatus(alert: Alert): AlertCardStatus {
-  let enabledStatus = {
-    className: "nc-status disabled",
-    icon: "mdi:pause-circle-outline",
-    label: "Disabled",
-  };
-  if (alert.enabled) {
-    enabledStatus = {
-      className: "nc-status ok",
-      icon: "mdi:check-circle",
-      label: "Enabled",
-    };
-  }
-
-  let conditionStatus = {
-    className: "nc-status idle",
-    icon: "mdi:circle-outline",
-    label: "Idle",
-  };
-  if (alert.runtime?.state?.active) {
-    conditionStatus = {
-      className: "nc-status active",
-      icon: "mdi:alert-circle",
-      label: "Triggered",
-    };
-  }
-
-  return {
-    enabled: enabledStatus,
-    condition: conditionStatus,
-  };
-}
-
 function activeTabClass(active: boolean): string {
   const classes = ["nc-tab"];
   if (active) {
@@ -96,14 +53,6 @@ function activeTabClass(active: boolean): string {
   }
 
   return classes.join(" ");
-}
-
-function toggleAlertLabel(alert: Alert): string {
-  if (alert.enabled) {
-    return "Disable";
-  }
-
-  return "Enable";
 }
 
 function toggleAlertToast(alert: Alert): string {
@@ -432,7 +381,15 @@ class HaNotificationsPanel extends LitElement {
   private alertsTemplate(): TemplateResult {
     if (this.alerts.length) {
       return html`<div class="nc-alerts">
-        ${this.alerts.map((alert) => this.alertCardTemplate(alert))}
+        ${this.alerts.map((alert) =>
+          renderAlertCard(alert, this._hass, {
+            onTest: (item) => this.testAlertFromCard(item),
+            onToggle: (item) => this.toggleAlert(item),
+            onEdit: (item) => this.editAlert(item),
+            onShowHistory: (item) => this.showAlertHistory(item),
+            onDelete: (item) => this.removeAlert(item),
+          }),
+        )}
       </div>`;
     }
 
@@ -485,116 +442,6 @@ class HaNotificationsPanel extends LitElement {
     if (alert) {
       this.historyAlertName = alert.name;
     }
-  }
-
-  private alertCardTemplate(alert: Alert): TemplateResult {
-    const status = alertStatus(alert);
-    const monitor = this.monitorSummary(alert);
-    const lastNotified = alert.runtime?.state?.last_notified
-      ? `Last notified: ${formatLocalDateTime(
-          alert.runtime.state.last_notified,
-          false,
-          this._hass?.locale,
-        )}`
-      : "";
-    const metadata = [lastNotified, monitor]
-      .filter(Boolean)
-      .join(" · ");
-
-    return html`<div class="nc-card nc-alert">
-      <div class="nc-alert-icon">
-        <ha-icon icon=${alert.icon || "mdi:bell-outline"}></ha-icon>
-      </div>
-      <div class="nc-alert-main">
-        <div class="nc-alert-heading">
-          <div class="nc-alert-name">${alert.name}</div>
-          <div class="nc-alert-statuses">
-            <span
-              class=${status.enabled.className}
-              role="img"
-              title=${status.enabled.label}
-              aria-label=${status.enabled.label}
-              ><ha-icon
-                icon=${status.enabled.icon}
-                aria-hidden="true"
-              ></ha-icon
-              >${status.enabled.label}
-            </span>
-            <span
-              class=${status.condition.className}
-              role="img"
-              title=${status.condition.label}
-              aria-label=${status.condition.label}
-              ><ha-icon
-                icon=${status.condition.icon}
-                aria-hidden="true"
-              ></ha-icon
-              >${status.condition.label}
-            </span>
-          </div>
-        </div>
-        <div class="nc-alert-meta">
-          ${metadata}
-        </div>
-      </div>
-      <div class="nc-alert-actions">
-        <button
-          class="nc-button"
-          title="Test alert"
-          aria-label="Test alert"
-          ?disabled=${!alert.enabled}
-          @click=${() => this.testAlertFromCard(alert)}
-        >
-          <ha-icon icon="mdi:send-check-outline"></ha-icon></button
-        ><button
-          class="nc-button"
-          title=${toggleAlertLabel(alert)}
-          aria-label=${toggleAlertLabel(alert)}
-          @click=${() => this.toggleAlert(alert)}
-        >
-          <ha-icon
-            icon=${alert.enabled
-              ? "mdi:pause-circle-outline"
-              : "mdi:play-circle-outline"}
-          ></ha-icon></button
-        ><button
-          class="nc-button"
-          title="Edit alert"
-          aria-label="Edit alert"
-          @click=${() => this.editAlert(alert)}
-        >
-          <ha-icon icon="mdi:pencil-outline"></ha-icon></button
-        ><button
-          class="nc-button"
-          title="View history"
-          aria-label="View history"
-          @click=${() => this.showAlertHistory(alert)}
-        >
-          <ha-icon icon="mdi:history"></ha-icon></button
-        ><button
-          class="nc-button danger"
-          title="Delete alert"
-          aria-label="Delete alert"
-          @click=${() => this.removeAlert(alert)}
-        >
-          <ha-icon icon="mdi:delete-outline"></ha-icon>
-        </button>
-      </div>
-    </div>`;
-  }
-
-  private monitorSummary(alert: Alert): string {
-    const parts: string[] = [];
-    if (alert.monitor?.interval) {
-      parts.push(`every ${alert.monitor.interval}`);
-    }
-
-    const summary = parts.join(" + ");
-    if (summary) {
-      return summary;
-    }
-
-    return "";
   }
 
   addAlert = async (): Promise<void> => {

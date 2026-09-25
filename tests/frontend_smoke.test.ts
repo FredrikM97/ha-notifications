@@ -38,6 +38,11 @@ describe("frontend build contract", () => {
     expect(readFileSync(runtimePanelPath, "utf8")).toBe(panel);
 
     const editor = readWorkspaceFile("frontend", "editor", "index.ts");
+    const editorHeader = readWorkspaceFile(
+      "frontend",
+      "editor",
+      "header.ts",
+    );
     const api = readWorkspaceFile("frontend", "api.ts");
     const yamlView = readWorkspaceFile("frontend", "yaml-view.ts");
     const editorHelpers = readWorkspaceFile("frontend", "editor", "helpers.ts");
@@ -73,7 +78,10 @@ describe("frontend build contract", () => {
           'class="nc-code-editor nc-yaml-editor"',
         ),
         editorSectionLabels: includes(editor, "postConfirmationActions: true"),
-        editorTitleMarkup: includes(editor, "<span>${title}</span>"),
+        editorTitleMarkup: includes(
+          editorHeader,
+          '<h1 data-role="editor-alert-name">',
+        ),
         defaultConfirmationDisabled: matches(
           editorHelpers,
           /function defaultAlert\(\)[\s\S]*?confirmation:\s*\{\s*enabled: false,/,

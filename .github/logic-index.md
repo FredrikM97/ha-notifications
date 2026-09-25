@@ -12,7 +12,8 @@ This is the compact routing map for the direct-workflow architecture.
 
 - `custom_components/ha_notifications/bridge/websocket.py`: Home Assistant handler generation from lifecycle websocket-route declarations and HA response serialization.
 - `frontend/api.ts`: the only frontend/backend transport module.
-- `frontend/panel.ts` and `frontend/editor/*`: Lit UI shell and editor workflows.
+- `frontend/panel.ts` and `frontend/panel/*`: Lit dashboard shell and focused dashboard views; `panel/alert-card.ts` owns alert-card rendering and action wiring. `frontend/editor/*` owns editor workflows: `editor/index.ts` owns editor lifecycle and workflows, `editor/state.ts` owns transient editor UI state, `editor/context.ts` owns section binding registration, and the remaining editor modules own focused rendering and translation boundaries.
+- `frontend/history.ts` owns the history custom element and templates; `frontend/history/logic.ts` owns pure history filtering, severity classification, and formatting.
 
 ## Features
 

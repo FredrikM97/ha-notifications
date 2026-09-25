@@ -1,8 +1,7 @@
 import { errorMessage } from "../api.js";
-import { buildAlertPayload, type AlertFormValues } from "../alert-payload.js";
 import { visualConditionBuilder } from "../condition-builder.js";
 import { createRecipientPicker } from "../recipient-picker.js";
-import { html, nothing, render } from "lit";
+import { html, render } from "lit";
 import type { TemplateResult } from "lit";
 import * as YAML from "yaml";
 import { ref } from "lit/directives/ref.js";
@@ -13,11 +12,10 @@ import {
   type ActionEditorRole,
   type CodeEditor,
   type EditorContext,
-  type EditorControlRole,
+  type EditorElements,
   type EditorMode,
   type OptionalSetting,
   type OptionalSettings,
-  type SectionStatus,
 } from "./types.js";
 import {
   actionArrayValue,
@@ -27,28 +25,24 @@ import {
   conditionsYaml,
   defaultAlert,
   durationInputValue,
-  editorSectionControl,
-  editorModeFor,
-  enabledLabel,
   fillActionEditors,
-  isSectionVisible,
-  optionalControls,
   parseConditionsYaml,
   showEditorToast,
   showYaml,
   valueOf,
 } from "./helpers.js";
 import { toastListTemplate, type Toast } from "../toast.js";
-import { renderBasicSection } from "../sections/basic.js";
-import { renderConditionSection } from "../sections/condition.js";
-import { renderConfirmationSection } from "../sections/confirmation.js";
-import { renderConfirmationNotificationSection } from "../sections/confirmation-notification.js";
-import { renderConfirmationReminderSection } from "../sections/confirmation-reminder.js";
-import { renderMonitorSection } from "../sections/monitor.js";
-import { renderNotificationSection } from "../sections/notification.js";
-import { renderPostConfirmationActionsSection } from "../sections/post-confirmation-actions.js";
-import { renderPostSendActionsSection } from "../sections/post-send-actions.js";
-import { renderRecipientSection } from "../sections/recipients.js";
+import { buildEditorPayload } from "./payload.js";
+import { renderEditorNavigation } from "./navigation.js";
+import { renderEditorSections } from "./sections.js";
+import { renderEditorFooter } from "./footer.js";
+import { renderEditorHeader } from "./header.js";
+import {
+  renderDiscardDialog,
+  renderEditorModal,
+} from "./modals.js";
+import { createEditorState } from "./state.js";
+import { createEditorContext } from "./context.js";
 
 interface OpenEditorOptions {
   root: ShadowRoot;
@@ -64,9 +58,7 @@ interface OpenEditorOptions {
 
 // The dialog's DOM, dirty-tracking, and section wiring are all tightly
 // coupled, so this is a class rather than a bag of closures: every piece of
-// state is one `this.` away instead of hidden in a captured variable, which
-// makes it possible to extract pieces (e.g. the nav sidebar) into their own
-// controller later without re-threading a dozen closure variables.
+// state is one `this.` away instead of hidden in a captured variable.
 class AlertEditorController {
   private readonly root: ShadowRoot;
   private readonly registries: Registries;
@@ -81,38 +73,20 @@ class AlertEditorController {
   private readonly context: EditorContext;
   private readonly optionalSettings: OptionalSettings;
   private readonly collapsedParents = new Set<string>();
-
-  private dirty = false;
-  private discardDialogOpen = false;
-  private activeSectionIndex = 0;
-  private mobileSectionsOpen = false;
-  private toasts: Toast[] = [];
-  private modal: {
-    title: string;
-    content: TemplateResult;
-    modalClass: string;
-    closeLabel: string;
-    yaml?: Alert;
-  } | null = null;
-  private yamlModalEditor?: CodeEditor;
-  private conditionsYamlEditor?: CodeEditor;
-  private postConfirmationActionsEditor?: CodeEditor;
-  private postSendActionsEditor?: CodeEditor;
-  private mobileMenu?: HTMLElement;
-  private sectionManageButton?: HTMLElement;
+  private readonly elements: EditorElements = {};
+  private readonly state = createEditorState();
   private handleOutsideSectionPointer = (event: PointerEvent): void => {
-    if (!this.mobileSectionsOpen) return;
+    if (!this.state.mobileSectionsOpen) return;
 
     const path = event.composedPath();
-    if (this.mobileMenu && path.includes(this.mobileMenu)) return;
-    if (this.sectionManageButton && path.includes(this.sectionManageButton)) return;
+    if (this.elements.mobileMenu && path.includes(this.elements.mobileMenu)) return;
+    if (
+      this.elements.sectionManageButton &&
+      path.includes(this.elements.sectionManageButton)
+    ) return;
     this.closeMobileSections();
   };
 
-  private visual!: HTMLElement;
-  private conditionsYamlView!: HTMLElement;
-  private jinja!: HTMLElement;
-  private recipientMount!: HTMLElement;
   private visualConditions!: () => Alert["conditions"];
   private recipients!: ReturnType<typeof createRecipientPicker>;
 
@@ -143,32 +117,16 @@ class AlertEditorController {
     this.root.addEventListener("nc-editor-toast", this.handleToastEvent);
     this.root.addEventListener("nc-editor-modal", this.handleModalEvent);
 
-    this.context = {
+    this.context = createEditorContext({
       hass: options.hass,
       value: this.value,
-      mode: editorModeFor(this.value),
-      activeSection: editorSections[0].title,
-      setEditorElement: (role, element) => {
-        if (role === "visual") this.visual = element;
-        if (role === "conditions-yaml") this.conditionsYamlView = element;
-        if (role === "jinja") this.jinja = element;
-        if (role === "recipients") this.recipientMount = element;
-      },
-      setEditorControl: (role: EditorControlRole, element) => {
-        if (role === "conditions-yaml") this.conditionsYamlEditor = element;
-        if (role === "post-confirmation-actions") {
-          this.postConfirmationActionsEditor = element;
-        }
-        if (role === "post-send-actions") {
-          this.postSendActionsEditor = element;
-        }
-      },
+      elements: this.elements,
       markDirty: this.markDirty,
       refreshStatuses: this.refreshStatuses,
       setMode: this.setMode,
       validateCondition: this.validateCondition,
       validateActions: this.validateActions,
-    };
+    });
     this.optionalSettings = {
       confirmation: true,
       confirmationReminder: true,
@@ -183,7 +141,7 @@ class AlertEditorController {
     void fillActionEditors(this.host);
 
     this.visualConditions = visualConditionBuilder(
-      this.visual,
+      this.elements.visual!,
       this.context.hass,
       this.registries,
       this.value.conditions,
@@ -194,7 +152,7 @@ class AlertEditorController {
       this.value.notification.target,
       this.context.markDirty,
     );
-    render(html`${this.recipients.element}`, this.recipientMount);
+    render(html`${this.recipients.element}`, this.elements.recipientMount);
 
     this.showSection(0);
   }
@@ -202,10 +160,10 @@ class AlertEditorController {
   private handleToastEvent = (event: Event): void => {
     const detail = (event as CustomEvent<{ message: string; duration: number }>).detail;
     const toast: Toast = { id: Date.now(), message: detail.message, error: false };
-    this.toasts = [...this.toasts, toast];
+    this.state.toasts = [...this.state.toasts, toast];
     this.renderEditor();
     window.setTimeout(() => {
-      this.toasts = this.toasts.filter((item) => item.id !== toast.id);
+      this.state.toasts = this.state.toasts.filter((item) => item.id !== toast.id);
       this.renderEditor();
     }, detail.duration);
   };
@@ -220,7 +178,7 @@ class AlertEditorController {
       closeLabel?: string;
     }>).detail;
     if (detail.kind === "yaml" && detail.alert) {
-      this.modal = {
+      this.state.modal = {
         title: "Alert YAML",
         content: html`<ha-code-editor
           class="nc-code-editor nc-alert-yaml-editor"
@@ -229,7 +187,7 @@ class AlertEditorController {
           aria-label="Alert YAML"
           .value=${""}
           ${ref((element) => {
-            if (element) this.yamlModalEditor = element as CodeEditor;
+            if (element) this.elements.yamlModalEditor = element as CodeEditor;
           })}
         ></ha-code-editor>`,
         modalClass: "nc-alert-yaml-modal",
@@ -237,7 +195,7 @@ class AlertEditorController {
         yaml: detail.alert,
       };
     } else if (detail.title && detail.content) {
-      this.modal = {
+      this.state.modal = {
         title: detail.title,
         content: detail.content,
         modalClass: detail.modalClass || "",
@@ -245,42 +203,22 @@ class AlertEditorController {
       };
     }
     this.renderEditor();
-    if (this.modal?.yaml) void this.prepareYamlModal(this.modal.yaml);
+    if (this.state.modal?.yaml) void this.prepareYamlModal(this.state.modal.yaml);
   };
 
   private async prepareYamlModal(alert: Alert): Promise<void> {
     await customElements.whenDefined("ha-code-editor");
-    await this.yamlModalEditor?.updateComplete;
-    if (!this.yamlModalEditor) return;
-    constrainCodeEditor(this.yamlModalEditor);
-    this.yamlModalEditor.value = YAML.stringify(alert);
+    await this.elements.yamlModalEditor?.updateComplete;
+    if (!this.elements.yamlModalEditor) return;
+    constrainCodeEditor(this.elements.yamlModalEditor);
+    this.elements.yamlModalEditor.value = YAML.stringify(alert);
   }
 
   private closeModal = (): void => {
-    this.modal = null;
-    this.yamlModalEditor = undefined;
+    this.state.modal = null;
+    this.elements.yamlModalEditor = undefined;
     this.renderEditor();
   };
-
-  private modalTemplate(): TemplateResult | typeof nothing {
-    if (!this.modal) return nothing;
-    return html`<div
-      class="nc-modal-backdrop"
-      @click=${(event: MouseEvent) => {
-        if (event.target === event.currentTarget) this.closeModal();
-      }}
-    >
-      <section class=${`nc-modal ${this.modal.modalClass}`} role="dialog" aria-modal="true">
-        <header class="nc-modal-header">
-          <h2>${this.modal.title}</h2>
-          <button class="nc-icon-button" @click=${this.closeModal} aria-label=${this.modal.closeLabel} title=${this.modal.closeLabel}>
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
-        </header>
-        <main class="nc-modal-body">${this.modal.content}</main>
-      </section>
-    </div>`;
-  }
 
   private renderEditor = (): void => {
     const optionalSettings = this.optionalSettings;
@@ -288,257 +226,132 @@ class AlertEditorController {
     render(
       html`<div class="nc-editor-view">
         <section class="nc-editor-shell">
-          <header class="nc-editor-header">
-            <div class="nc-editor-identity">
-              <div class="nc-editor-title-row">
-                <h1 data-role="editor-alert-name">${this.value.name.trim() || "New alert"}</h1>
-                <span class="nc-editor-title-separator" aria-hidden="true"
-                  >/</span
-                >
-                <h2 data-role="editor-section-title">${this.sectionLabel(
-                  editorSections[this.activeSectionIndex]?.parent,
-                  editorSections[this.activeSectionIndex]?.title || "",
-                )}</h2>
-              </div>
-            </div>
-            <div class="nc-editor-section-controls">
-              ${editorSectionControl(
-                "postSendActions",
-                optionalControls(
-                  context,
-                  Boolean(this.value.post_send_actions?.enabled),
-                  "post-send actions",
-                  (enabled) => {
-                    this.value.post_send_actions = {
-                      enabled,
-                      actions: this.value.post_send_actions?.actions,
-                    };
-                    this.markDirty();
-                  },
-                ),
-                this.activeSectionIndex === 5,
-              )}
-              ${editorSectionControl(
-                "confirmation",
-                optionalControls(
-                  context,
-                  Boolean(this.value.confirmation?.enabled),
-                  "confirmation",
-                  (enabled) => {
-                    this.value.confirmation!.enabled = enabled;
-                    this.markDirty();
-                  },
-                ),
-                this.activeSectionIndex === 6,
-              )}
-              ${editorSectionControl(
-                "confirmationReminder",
-                optionalControls(
-                  context,
-                  this.value.confirmation?.reminders.enabled !== false,
-                  "reminder policy",
-                  (enabled) => {
-                    this.value.confirmation!.reminders.enabled = enabled;
-                    this.markDirty();
-                  },
-                ),
-                this.activeSectionIndex === 7,
-              )}
-              ${editorSectionControl(
-                "confirmationNotification",
-                optionalControls(
-                  context,
-                  this.value.confirmation?.notification.enabled === true,
-                  "confirmation notification",
-                  (enabled) => {
-                    this.value.confirmation!.notification.enabled = enabled;
-                    this.markDirty();
-                  },
-                ),
-                this.activeSectionIndex === 8,
-              )}
-              ${editorSectionControl(
-                "postConfirmationActions",
-                optionalControls(
-                  context,
-                  Boolean(this.value.confirmation?.actions.enabled),
-                  "post-confirmation actions",
-                  (enabled) => {
-                    this.value.confirmation!.actions.enabled = enabled;
-                    this.markDirty();
-                  },
-                ),
-                this.activeSectionIndex === 9,
-              )}
-            </div>
-            <button ${ref((element) => {
-              if (element) this.sectionManageButton = element as HTMLElement;
-            })}
-              class="nc-button secondary nc-section-manage-button"
-              data-role="section-manage"
-              type="button"
-              aria-expanded=${String(this.mobileSectionsOpen)}
-              aria-label=${this.mobileSectionsOpen ? "Close section menu" : "Manage sections"}
-              title=${this.mobileSectionsOpen ? "Close section menu" : "Manage sections"}
-              @click=${this.toggleMobileSections}
-            >
-              <ha-icon icon="mdi:menu"></ha-icon>
-            </button>
-            ${this.renderSectionNavigation(
-              "nc-section-header nc-mobile-section-menu",
-            )}
-          </header>
+          ${renderEditorHeader({
+            alert: this.value,
+            context,
+            optionalSettings,
+            activeSectionIndex: this.state.activeSectionIndex,
+            sectionTitle: this.sectionLabel(
+              editorSections[this.state.activeSectionIndex]?.parent,
+              editorSections[this.state.activeSectionIndex]?.title || "",
+            ),
+            mobileSectionsOpen: this.state.mobileSectionsOpen,
+            onToggleSetting: this.toggleOptionalSetting,
+            onToggleMobileSections: this.toggleMobileSections,
+            onSectionManageButton: (element) => {
+              this.elements.sectionManageButton = element;
+            },
+            renderNavigation: this.renderNavigation,
+          })}
           <main class="nc-modal-body">
             <div class="nc-editor-layout">
-              ${this.renderSectionNavigation()}
+              ${this.renderNavigation()}
               <div class="nc-editor-sections">
-                ${renderBasicSection(context)}${renderMonitorSection(
-                  context,
-                )}${renderConditionSection(
-                  context,
-                )}${renderRecipientSection(context)}${renderNotificationSection(
-                  context,
-                )}
-                <div
-                  class="nc-optional-setting"
-                  data-setting="postSendActions"
-                  ?hidden=${!optionalSettings.postSendActions}
-                >
-                  ${renderPostSendActionsSection(context)}
-                </div>
-                <div
-                  class="nc-optional-setting"
-                  data-setting="confirmation"
-                  ?hidden=${!optionalSettings.confirmation}
-                >
-                  ${renderConfirmationSection(context)}
-                </div>
-                <div
-                  class="nc-optional-setting"
-                  data-setting="confirmationReminder"
-                  ?hidden=${!optionalSettings.confirmationReminder ||
-                  !optionalSettings.confirmation}
-                >
-                  ${renderConfirmationReminderSection(context)}
-                </div>
-                <div
-                  class="nc-optional-setting"
-                  data-setting="confirmationNotification"
-                  ?hidden=${!optionalSettings.confirmationNotification ||
-                  !optionalSettings.confirmation}
-                >
-                  ${renderConfirmationNotificationSection(context)}
-                </div>
-                <div
-                  class="nc-optional-setting"
-                  data-setting="postConfirmationActions"
-                  ?hidden=${!optionalSettings.postConfirmationActions}
-                >
-                  ${renderPostConfirmationActionsSection(context)}
-                </div>
+                ${renderEditorSections(context, optionalSettings)}
               </div>
             </div>
           </main>
-          <footer class="nc-modal-footer">
-            <span class="nc-editor-state" aria-live="polite"
-              >${this.dirty ? "Unsaved changes" : "All changes saved"}</span
-            >
-            <button
-              class="nc-icon-button"
-              type="button"
-              aria-label="View alert YAML"
-              title="View alert YAML"
-              aria-expanded="false"
-              @click=${this.yamlView}
-            >
-              <ha-icon icon="mdi:code-braces"></ha-icon>
-            </button>
-            <button class="nc-button secondary" @click=${() => this.close()}>
-              Cancel</button
-            ><button
-              class="nc-button secondary"
-              data-role="editor-validate"
-              @click=${this.validateCurrentSection}
-              ?hidden=${!this.validationLabel()}
-              aria-label=${this.validationLabel() || nothing}
-            >${this.validationLabel()}</button
-            ><button class="nc-button secondary" @click=${this.test}>
-              Test alert</button
-            ><button class="nc-button" @click=${this.save}>Save alert</button>
-          </footer>
+          ${renderEditorFooter({
+            onYamlView: this.yamlView,
+            onClose: this.close,
+            validationLabel: this.validationLabel(),
+            onValidate: this.validateCurrentSection,
+            onTest: this.test,
+            onSave: this.save,
+          })}
         </section>
-        ${this.discardDialog()}${this.modalTemplate()}${toastListTemplate(
-          this.toasts,
+        ${renderDiscardDialog(
+          this.state.discardDialogOpen,
+          this.closeDiscardDialog,
+          this.discardChanges,
+        )}${renderEditorModal(this.state.modal, this.closeModal)}${toastListTemplate(
+          this.state.toasts,
         )}
       </div>`,
       this.host,
     );
+    this.updateDirtyIndicator();
   };
 
   private markDirty = (): void => {
-    this.dirty = true;
-    this.renderEditor();
+    if (this.state.dirty) return;
+
+    this.state.dirty = true;
+    this.updateDirtyIndicator();
+  };
+
+  private updateDirtyIndicator = (): void => {
+    const state = this.host.querySelector<HTMLElement>(".nc-editor-state");
+    if (state) {
+      state.textContent = this.state.dirty ? "Unsaved changes" : "All changes saved";
+    }
   };
 
   private setMode = (mode: EditorMode): void => {
+    if (this.context.mode === mode) return;
+
     if (mode === "yaml" && this.context.mode === "visual") {
-      if (this.conditionsYamlEditor) {
-        this.conditionsYamlEditor.value = conditionsYaml(this.visualConditions());
+      if (this.elements.conditionsYamlEditor) {
+        this.elements.conditionsYamlEditor.value = conditionsYaml(
+          this.visualConditions(),
+        );
       }
     }
 
     this.context.mode = mode;
-    this.markDirty();
+    this.state.dirty = true;
+    this.renderEditor();
   };
 
   private refreshStatuses = (): void => {
     this.renderEditor();
   };
 
-  private renderSectionNavigation = (className = "nc-section-header") =>
-    html`<nav
-      ${className.includes("mobile")
-        ? ref((element) => {
-            if (element) this.mobileMenu = element as HTMLElement;
-          })
-        : nothing}
-      class=${`${className}${
-        this.mobileSectionsOpen ? " mobile-open" : ""
-      }`}
-      aria-label="Alert sections"
-    >
-      ${editorSections.map(({ title, setting, parent, status }, index) => {
-        const hasChildren = editorSections.some(
-          (section) => section.parent === title,
-        );
-        return html`<div
-          class="nc-section-nav-row"
-          data-setting=${setting || nothing}
-          data-parent=${parent || nothing}
-          ?hidden=${!isSectionVisible(setting, this.optionalSettings) ||
-          (parent === "Confirmation" && !this.optionalSettings.confirmation)}
-        >
-          <button
-            class=${this.sectionNavButtonClass(setting, parent, index)}
-            aria-current=${index === this.activeSectionIndex ? "step" : nothing}
-            @click=${() => this.showSection(index)}
-          >
-            ${this.sectionStatus(status)}
-            <span>${title}</span>
-          </button>
-          ${this.sectionCollapseButton(hasChildren, title)}
-        </div>`;
-      })}
-    </nav>`;
+  private toggleOptionalSetting = (
+    setting: OptionalSetting,
+    enabled: boolean,
+  ): void => {
+    if (setting === "postSendActions") {
+      this.value.post_send_actions = {
+        enabled,
+        actions: this.value.post_send_actions?.actions,
+      };
+    } else if (setting === "confirmation") {
+      this.value.confirmation!.enabled = enabled;
+    } else if (setting === "confirmationReminder") {
+      this.value.confirmation!.reminders.enabled = enabled;
+    } else if (setting === "confirmationNotification") {
+      this.value.confirmation!.notification.enabled = enabled;
+    } else {
+      this.value.confirmation!.actions.enabled = enabled;
+    }
+    this.markDirty();
+    this.refreshStatuses();
+  };
+
+  private renderNavigation = (className = "nc-section-header") =>
+    renderEditorNavigation({
+      alert: this.value,
+      className,
+      optionalSettings: this.optionalSettings,
+      activeIndex: this.state.activeSectionIndex,
+      mobileOpen: this.state.mobileSectionsOpen,
+      collapsedParents: this.collapsedParents,
+      onMobileMenuReady: (element) => {
+        this.elements.mobileMenu = element;
+      },
+      onSelect: this.showSection,
+      onToggleChildren: this.toggleSidebarChildren,
+    });
 
   private showSection = (index: number): void => {
-    this.activeSectionIndex = index;
+    this.state.activeSectionIndex = index;
     this.context.activeSection = editorSections[index]?.title || "Basic";
     this.closeMobileSections();
     this.renderEditor();
   };
   private validationLabel = (): string => {
-    const sectionTitle = editorSections[this.activeSectionIndex]?.title;
+    const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
     if (sectionTitle === "Condition") {
       return "Validate condition";
     }
@@ -561,7 +374,7 @@ class AlertEditorController {
   };
 
   private toggleMobileSections = (): void => {
-    this.setMobileSectionsOpen(!this.mobileSectionsOpen);
+    this.setMobileSectionsOpen(!this.state.mobileSectionsOpen);
   };
 
   private closeMobileSections = (): void => {
@@ -569,88 +382,11 @@ class AlertEditorController {
   };
 
   private setMobileSectionsOpen = (open: boolean): void => {
-    if (this.mobileSectionsOpen === open) return;
+    if (this.state.mobileSectionsOpen === open) return;
 
-    this.mobileSectionsOpen = open;
+    this.state.mobileSectionsOpen = open;
     this.renderEditor();
   };
-
-  private sectionStatus(status: SectionStatus | undefined) {
-    if (!status) {
-      return nothing;
-    }
-
-    const enabled = this.sectionStatusEnabled(status);
-    return html`<span
-      class=${`nc-section-status${enabled ? " active" : ""}`}
-      data-status=${status}
-      aria-label=${enabledLabel(enabled)}
-      >${this.sectionStatusSymbol(enabled)}</span
-    >`;
-  }
-
-  private sectionStatusEnabled(status: SectionStatus): boolean {
-    if (status === "postSendActions") {
-      return Boolean(this.value.post_send_actions?.enabled);
-    }
-    if (status === "confirmation") {
-      return Boolean(this.value.confirmation?.enabled);
-    }
-    if (status === "postConfirmationActions") {
-      return Boolean(
-        this.value.confirmation?.enabled &&
-          this.value.confirmation.actions.enabled,
-      );
-    }
-    if (status === "confirmationReminder") {
-      return Boolean(
-        this.value.confirmation?.enabled &&
-          this.value.confirmation.reminders.enabled,
-      );
-    }
-    return Boolean(
-      this.value.confirmation?.enabled &&
-        this.value.confirmation.notification.enabled,
-    );
-  }
-
-  private sectionNavButtonClass(
-    setting: OptionalSetting | undefined,
-    parent: string | undefined,
-    index: number,
-  ): string {
-    const classes = ["nc-section-nav-button"];
-    if (setting) {
-      classes.push("nc-optional-setting");
-    }
-    if (parent) {
-      classes.push("nc-section-nav-child");
-    }
-    if (index === this.activeSectionIndex) {
-      classes.push("active");
-    }
-
-    return classes.join(" ");
-  }
-
-  private sectionCollapseButton(hasChildren: boolean, title: string) {
-    if (!hasChildren) {
-      return nothing;
-    }
-
-    const collapsed = this.collapsedParents.has(title);
-    return html`<button
-      class="nc-section-collapse-button"
-      type="button"
-      aria-label=${this.sidebarToggleLabel(collapsed, title)}
-      title=${this.sidebarToggleLabel(collapsed, title)}
-      aria-expanded=${String(!collapsed)}
-      data-collapse-parent=${title}
-      @click=${() => this.toggleSidebarChildren(title)}
-    >
-      <ha-icon icon=${this.sidebarToggleIcon(collapsed)}></ha-icon>
-    </button>`;
-  }
 
   private sectionLabel(parent: string | undefined, title: string): string {
     if (parent) {
@@ -660,84 +396,28 @@ class AlertEditorController {
     return title;
   }
 
-  private sectionStatusSymbol(isEnabled: boolean): string {
-    if (isEnabled) {
-      return "✓";
-    }
-
-    return "×";
-  }
-
-  private sidebarToggleLabel(collapsed: boolean, parent: string): string {
-    let action = "Collapse";
-    if (collapsed) {
-      action = "Expand";
-    }
-
-    return `${action} ${parent} subpanels`;
-  }
-
-  private sidebarToggleIcon(collapsed: boolean): string {
-    if (collapsed) {
-      return "mdi:chevron-right";
-    }
-
-    return "mdi:chevron-down";
-  }
-
   private showDiscardDialog = (): void => {
-    if (this.discardDialogOpen) return;
-    this.discardDialogOpen = true;
+    if (this.state.discardDialogOpen) return;
+    this.state.discardDialogOpen = true;
     this.renderEditor();
   };
 
-  private discardDialog = (): TemplateResult | typeof nothing => {
-    if (!this.discardDialogOpen) return nothing;
-    const closeDialog = (): void => {
-      this.discardDialogOpen = false;
-      this.renderEditor();
-    };
-    const discard = (): void => {
-      this.discardDialogOpen = false;
-      this.close({ force: true });
-    };
-    return html`<div
-        class="nc-modal-backdrop"
-        role="presentation"
-        @click=${(event: MouseEvent) => {
-          if (event.target === event.currentTarget) closeDialog();
-        }}
-      >
-        <section
-          class="nc-modal nc-discard-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="nc-discard-title"
-        >
-          <header class="nc-modal-header">
-            <h2 id="nc-discard-title">Unsaved changes</h2>
-          </header>
-          <main class="nc-modal-body">
-            <p>You have unsaved changes. Leave without saving?</p>
-          </main>
-          <footer class="nc-modal-footer">
-            <button class="nc-button secondary" @click=${closeDialog}>
-              Stay
-            </button>
-            <button class="nc-button" @click=${discard}>
-              Discard changes
-            </button>
-          </footer>
-        </section>
-      </div>`;
+  private closeDiscardDialog = (): void => {
+    this.state.discardDialogOpen = false;
+    this.renderEditor();
+  };
+
+  private discardChanges = (): void => {
+    this.state.discardDialogOpen = false;
+    this.close({ force: true });
   };
 
   private close = ({ force = false }: { force?: boolean } = {}): boolean => {
-    if (!force && this.dirty) {
+    if (!force && this.state.dirty) {
       this.showDiscardDialog();
       return false;
     }
-    this.discardDialogOpen = false;
+    this.state.discardDialogOpen = false;
     document.removeEventListener("pointerdown", this.handleOutsideSectionPointer);
     this.host.remove();
     this.onClosed?.();
@@ -748,79 +428,34 @@ class AlertEditorController {
 
   private formPayload = (validate = true): Alert => {
     const value = this.value;
-    const conditions = this.conditionsForCurrentMode();
     let confirmationActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postConfirmationActions) {
       confirmationActions = actionArrayValue(
-        this.postConfirmationActionsEditor || null,
+        this.elements.postConfirmationActionsEditor || null,
         "Post-confirmation actions",
       );
     }
-    let notificationActions: Record<string, unknown>[] = [];
+    let postSendActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postSendActions) {
-      notificationActions = actionArrayValue(
-        this.postSendActionsEditor || null,
+      postSendActions = actionArrayValue(
+        this.elements.postSendActionsEditor || null,
         "Post-send actions",
       );
     }
-    const confirmation = value.confirmation!;
-    const postSendActionsEnabled = Boolean(value.post_send_actions?.enabled);
-    const postConfirmationActionsEnabled = Boolean(confirmation.actions.enabled);
-    const payload: AlertFormValues = {
-      identity: {
-        name: value.name,
-        description: value.description,
-        icon: value.icon || "mdi:bell-outline",
-      },
-      monitor: {
-        conditions,
-        onChange: value.monitor.on_change,
-        startup: value.monitor.startup,
-        interval: this.monitorIntervalPayload(),
-        clearOnInactive: value.monitor.clear_on_inactive === true,
-      },
-      notification: {
-        target: this.recipients.target(),
-        title: value.notification.title,
-        message: value.notification.message,
-      },
-      confirmation: {
-        enabled: Boolean(confirmation.enabled),
-        buttons: confirmation.buttons,
-        notification: {
-          enabled: Boolean(confirmation.notification.enabled),
-          message: confirmation.notification.message,
-          clear: confirmation.notification.clear !== false,
-        },
-        reminders: {
-          enabled: confirmation.reminders.enabled,
-          interval: durationInputValue(
-            confirmation.reminders.interval,
-            "00:30:00",
-          ),
-          max_attempts: confirmation.reminders.max_attempts,
-          show_attempts: confirmation.reminders.show_attempts === true,
-          timeout: durationInputValue(
-            confirmation.reminders.timeout,
-            "00:15:00",
-          ),
-        },
-        actions: {
-          enabled: Boolean(confirmation.actions.enabled),
-        },
-      },
-      post_send_actions: {
-        postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
-      },
-    };
-    if (notificationActions.length || postSendActionsEnabled) {
-      payload.post_send_actions.actions = notificationActions;
-    }
-    if (confirmationActions.length || postConfirmationActionsEnabled) {
-      payload.confirmation.actions.items = confirmationActions;
-    }
 
-    return buildAlertPayload(value, payload, validate);
+    return buildEditorPayload({
+      alert: value,
+      conditions: this.conditionsForCurrentMode(),
+      recipients: this.recipients.target(),
+      monitorInterval: this.monitorIntervalPayload(),
+      confirmationActions,
+      postSendActions,
+      postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
+      postConfirmationActionsEnabled: Boolean(
+        value.confirmation?.actions.enabled,
+      ),
+      validate,
+    });
   };
 
   private yamlView = (): void => {
@@ -855,7 +490,7 @@ class AlertEditorController {
 
   private conditionsYamlValue(): string {
     return (
-      this.conditionsYamlEditor?.value || "[]"
+      this.elements.conditionsYamlEditor?.value || "[]"
     );
   }
 
@@ -876,7 +511,7 @@ class AlertEditorController {
       try {
         return (
           parseConditionsYaml(
-            this.conditionsYamlEditor?.value || "[]",
+            this.elements.conditionsYamlEditor?.value || "[]",
           ).length > 0
         );
       } catch {
@@ -898,7 +533,7 @@ class AlertEditorController {
   };
 
   private validateCurrentSection = async (): Promise<void> => {
-    const sectionTitle = editorSections[this.activeSectionIndex]?.title;
+    const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
     if (sectionTitle === "Condition") {
       await this.validateCondition();
       return;
@@ -921,8 +556,8 @@ class AlertEditorController {
     try {
       actionArrayValue(
         role === "post-confirmation-actions"
-          ? this.postConfirmationActionsEditor || null
-          : this.postSendActionsEditor || null,
+          ? this.elements.postConfirmationActionsEditor || null
+          : this.elements.postSendActionsEditor || null,
         label,
       );
       showEditorToast(this.root, `${label} are valid.`, 4000);
@@ -956,7 +591,7 @@ class AlertEditorController {
       const saved = await this.onSave(result);
       const savedAlert = saved || result;
       Object.assign(this.value, savedAlert);
-      this.dirty = false;
+      this.state.dirty = false;
       this.close({ force: true });
       await this.onSaved?.(savedAlert);
     } catch (error) {

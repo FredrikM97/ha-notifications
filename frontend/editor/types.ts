@@ -32,12 +32,31 @@ export type ActionEditorRole =
   | "post-confirmation-actions"
   | "post-send-actions";
 
+export type EditorElementRole =
+  | "visual"
+  | "conditions-yaml"
+  | "jinja"
+  | "recipients";
+
+export interface EditorElements {
+  visual?: HTMLElement;
+  conditionsYamlView?: HTMLElement;
+  jinja?: HTMLElement;
+  recipientMount?: HTMLElement;
+  yamlModalEditor?: CodeEditor;
+  conditionsYamlEditor?: CodeEditor;
+  postConfirmationActionsEditor?: CodeEditor;
+  postSendActionsEditor?: CodeEditor;
+  mobileMenu?: HTMLElement;
+  sectionManageButton?: HTMLElement;
+}
+
 export interface EditorContext {
   hass: Hass;
   value: Alert;
   mode: EditorMode;
   activeSection: string;
-  setEditorElement(role: string, element: HTMLElement): void;
+  setEditorElement(role: EditorElementRole, element: HTMLElement): void;
   setEditorControl(role: EditorControlRole, element: CodeEditor): void;
   markDirty(): void;
   refreshStatuses(): void;
