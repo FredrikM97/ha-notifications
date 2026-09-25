@@ -44,7 +44,7 @@ export interface MonitorConfig {
   on_change: boolean;
   startup: boolean;
   interval?: string | number | Record<string, number>;
-  clear_on_condition_change?: boolean;
+  clear_on_inactive?: boolean;
   retention?: HistoryRetentionConfig;
 }
 

@@ -99,14 +99,14 @@ export interface AlertMonitorFormValues {
   onChange: boolean;
   startup: boolean;
   interval?: string;
-  clearOnConditionChange?: boolean;
+  clearOnInactive?: boolean;
 }
 
 export interface AlertNotificationFormValues {
   target: NotificationTarget;
   title: string;
   message: string;
-  clearOnConditionChange?: boolean;
+  clearOnInactive?: boolean;
 }
 
 export interface AlertConfirmationFormValues {
@@ -181,9 +181,8 @@ export function buildAlertPayload(
     on_change: values.monitor.onChange,
     startup: values.monitor.startup,
   };
-  if (values.monitor.clearOnConditionChange !== undefined) {
-    result.monitor.clear_on_condition_change =
-      values.monitor.clearOnConditionChange;
+  if (values.monitor.clearOnInactive !== undefined) {
+    result.monitor.clear_on_inactive = values.monitor.clearOnInactive;
   }
   if (values.monitor.interval) {
     result.monitor.interval = values.monitor.interval;

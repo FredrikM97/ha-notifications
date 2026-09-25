@@ -148,12 +148,12 @@ class NotificationFeature(FeatureBase):
         self._jinja = JinjaEvaluator.for_hass(hass)
 
     @staticmethod
-    def should_clear_on_condition_change(
+    def should_clear_on_inactive(
         alert: Mapping[str, Any],
     ) -> bool:
-        """Decide whether a false condition clears its notification."""
+        """Decide whether an inactive condition clears its notification."""
 
-        configured = monitor_config(alert).clear_on_condition_change
+        configured = monitor_config(alert).clear_on_inactive
         if configured is not None:
             return bool(configured)
         confirmation = ConfirmationConfig.from_alert(alert)

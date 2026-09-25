@@ -44,6 +44,7 @@ class AlertEventType(StrEnum):
     CONDITION_ERROR = "condition_error"
     NOTIFICATION_SENT = "notification_sent"
     NOTIFICATION_FAILED = "notification_failed"
+    NOTIFICATION_CLEARED = "notification_cleared"
     CONFIRMED = "confirmed"
     CONFIRMATION_ATTEMPTS_EXHAUSTED = "confirmation_attempts_exhausted"
     COMPLETION_SENT = "completion_sent"

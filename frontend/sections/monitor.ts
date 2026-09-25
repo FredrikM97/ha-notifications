@@ -28,14 +28,14 @@ export function renderMonitorSection(context: EditorContext): TemplateResult {
         </label>
         <label class="nc-monitor-toggle">
           <ha-switch
-            .checked=${monitor.clear_on_condition_change !== false}
+            .checked=${monitor.clear_on_inactive !== false}
             @change=${(event: Event) => {
-              monitor.clear_on_condition_change = checkedOf(event);
+              monitor.clear_on_inactive = checkedOf(event);
               context.markDirty();
               context.refreshStatuses();
             }}
           ></ha-switch>
-          <span>Clear notification when condition changes</span>
+          <span>Clear notification when inactive</span>
         </label>
         <label class="nc-monitor-toggle">
           <ha-switch

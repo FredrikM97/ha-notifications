@@ -21,7 +21,7 @@ class MonitorConfig(BaseModel):
     on_change: bool | None = None
     startup: bool | None = None
     interval: int | float | None = None
-    clear_on_condition_change: bool | None = None
+    clear_on_inactive: bool | None = None
 
 
 class Alert(BaseModel, Mapping[str, Any]):

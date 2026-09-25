@@ -97,8 +97,14 @@ class AlertFeature(FeatureBase):
         alert = runtime.config
         runtime.deactivate(now)
         notification = self.feature(FeatureName.NOTIFICATION)
-        if notification.should_clear_on_condition_change(alert):
+        if notification.should_clear_on_inactive(alert):
             await notification.clear(runtime)
+            self.publish_event(
+                runtime,
+                AlertEventType.NOTIFICATION_CLEARED,
+                "Notification cleared automatically.",
+                {"reason": "condition_inactive", "source": source},
+            )
         self.publish_event(
             runtime,
             AlertEventType.CONDITION_INACTIVE,

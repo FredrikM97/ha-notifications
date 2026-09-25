@@ -74,6 +74,12 @@ async def test_exhausted_confirmation_clears_notification(
         entry["event"]["type"] == AlertEventType.CONFIRMATION_ATTEMPTS_EXHAUSTED.value
         for entry in history
     )
+    assert any(
+        entry["event"]["type"] == AlertEventType.NOTIFICATION_CLEARED.value
+        and entry["event"]["details"]["reason"]
+        == "confirmation_attempts_exhausted"
+        for entry in history
+    )
 
 
 @pytest.mark.asyncio
@@ -92,13 +98,19 @@ async def test_condition_error_and_inactive_clear_notification(
     await alert_flow_context.condition_result(alert["id"], True)
     await alert_flow_context.condition_result(alert["id"], False)
     assert any(call.data["message"] == "clear_notification" for call in calls)
+    history = await alert_flow_context.history_for(alert["id"])
+    assert any(
+        entry["event"]["type"] == AlertEventType.NOTIFICATION_CLEARED.value
+        and entry["event"]["details"]["reason"] == "condition_inactive"
+        for entry in history
+    )
 
 
 @pytest.mark.asyncio
 async def test_condition_change_clear_can_be_disabled(
     hass, real_target_registry, alert_factory, alert_flow_context
 ):
-    alert = alert_factory("no_clear", monitor={"clear_on_condition_change": False})
+    alert = alert_factory("no_clear", monitor={"clear_on_inactive": False})
     alert["notification"]["target"] = {
         "entity_id": [real_target_registry.notify_entity_id]
     }

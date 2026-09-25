@@ -78,6 +78,12 @@ class AlertFlow(FeatureBase):
             },
         )
         await self.feature(FeatureName.NOTIFICATION).clear(runtime)
+        self.feature(FeatureName.ALERTS).publish_event(
+            runtime,
+            AlertEventType.NOTIFICATION_CLEARED,
+            "Notification cleared automatically.",
+            {"reason": "confirmation_attempts_exhausted"},
+        )
 
     def _handle_condition_error(self, event: ConditionWorkflowEvent) -> None:
         """Publish a condition evaluation error."""
