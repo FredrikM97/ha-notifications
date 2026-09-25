@@ -745,9 +745,9 @@ class AlertEditorController {
   private formPayload = (validate = true): Alert => {
     const value = this.value;
     const conditions = this.conditionsForCurrentMode();
-    let actions: Record<string, unknown>[] = [];
+    let confirmationActions: Record<string, unknown>[] = [];
     if (this.optionalSettings.postConfirmationActions) {
-      actions = actionArrayValue(
+      confirmationActions = actionArrayValue(
         this.actionsEditor || null,
         "Post-confirmation actions",
       );
@@ -760,6 +760,8 @@ class AlertEditorController {
       );
     }
     const confirmation = value.confirmation!;
+    const postSendActionsEnabled = Boolean(value.post_send_actions?.enabled);
+    const postConfirmationActionsEnabled = Boolean(confirmation.actions.enabled);
     const payload: AlertFormValues = {
       identity: {
         name: value.name,
@@ -807,11 +809,11 @@ class AlertEditorController {
         postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
       },
     };
-    if (notificationActions.length) {
+    if (notificationActions.length || postSendActionsEnabled) {
       payload.post_send_actions.actions = notificationActions;
     }
-    if (actions.length) {
-      payload.confirmation.actions.items = actions;
+    if (confirmationActions.length || postConfirmationActionsEnabled) {
+      payload.confirmation.actions.items = confirmationActions;
     }
 
     return buildAlertPayload(value, payload, validate);

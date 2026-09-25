@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionArrayValue,
   durationInputValue,
   enabledLabel,
   toggleTitle,
@@ -46,5 +47,40 @@ describe("toggleTitle", () => {
       toggleTitle(true, "confirmation"),
       toggleTitle(false, "confirmation"),
     ]).toMatchSnapshot();
+  });
+});
+
+describe("actionArrayValue", () => {
+  it("parses YAML action lists", () => {
+    expect(
+      actionArrayValue(
+        { value: "- action: light.turn_on\n  target:\n    entity_id: light.kitchen" },
+        "Post-send actions",
+      ),
+    ).toEqual([
+      {
+        action: "light.turn_on",
+        target: { entity_id: "light.kitchen" },
+      },
+    ]);
+  });
+
+  it("accepts JSON arrays because JSON is valid YAML", () => {
+    expect(
+      actionArrayValue(
+        { value: '[{"action":"switch.turn_on"}]' },
+        "Post-send actions",
+      ),
+    ).toEqual([{ action: "switch.turn_on" }]);
+  });
+
+  it.each([
+    ["not: [valid", "valid YAML list of action objects"],
+    ["action: light.turn_on", "YAML list of action objects"],
+    ["- invalid", "YAML list of action objects"],
+  ])("rejects %s", (value, message) => {
+    expect(() => actionArrayValue({ value }, "Post-send actions")).toThrow(
+      message,
+    );
   });
 });

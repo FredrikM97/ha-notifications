@@ -81,6 +81,20 @@ export function alertFormValues(
   };
 }
 
+export function alertFormValuesWithRecipients(
+  overrides: Partial<AlertFormValues> = {},
+  entityIds = ["notify.mobile_app_phone"],
+): AlertFormValues {
+  const values = alertFormValues(overrides);
+  return {
+    ...values,
+    notification: {
+      ...values.notification,
+      target: { entity_id: entityIds },
+    },
+  };
+}
+
 export function emptyRegistries(): Registries {
   return {
     entities: [],

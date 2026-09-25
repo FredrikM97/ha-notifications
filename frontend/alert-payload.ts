@@ -183,7 +183,16 @@ export function buildAlertPayload(
     title: values.notification.title,
     message: values.notification.message,
   };
-  result.confirmation = values.confirmation;
+  result.confirmation = {
+    ...values.confirmation,
+    actions: {
+      ...result.confirmation?.actions,
+      ...values.confirmation.actions,
+      ...(values.confirmation.actions.items === undefined
+        ? { items: result.confirmation?.actions?.items }
+        : { items: values.confirmation.actions.items }),
+    },
+  };
 
   if (original.notification?.data) {
     result.notification.data = original.notification.data;
@@ -196,7 +205,8 @@ export function buildAlertPayload(
     result.post_send_actions = {
       ...result.post_send_actions,
       enabled: values.post_send_actions.postSendActionsEnabled,
-      ...(values.post_send_actions.actions?.length
+      ...(values.post_send_actions.postSendActionsEnabled ||
+      values.post_send_actions.actions?.length
         ? { actions: values.post_send_actions.actions }
         : {}),
     };

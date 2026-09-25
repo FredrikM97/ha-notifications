@@ -110,6 +110,7 @@ confirmation:
     timeout: 900
   actions:
     enabled: false
+    items: []
 "
 `;
 
@@ -288,6 +289,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "confirmation": {
     "actions": {
       "enabled": false,
+      "items": [],
     },
     "buttons": [
       {
