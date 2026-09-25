@@ -497,8 +497,7 @@ class HaNotificationsPanel extends LitElement {
           this._hass?.locale,
         )}`
       : "";
-    const target = this.targetSummary(alert.notification?.target);
-    const metadata = [lastNotified, monitor, target]
+    const metadata = [lastNotified, monitor]
       .filter(Boolean)
       .join(" · ");
 
@@ -596,26 +595,6 @@ class HaNotificationsPanel extends LitElement {
     }
 
     return "";
-  }
-
-  targetSummary(target: Alert["notification"]["target"] = {}): string {
-    const parts: string[] = [];
-
-    for (const [key, label] of [
-      ["device_id", "devices"],
-      ["area_id", "areas"],
-      ["floor_id", "floors"],
-      ["label_id", "labels"],
-      ["entity_id", "entities"],
-    ]) {
-      const count = target[key]?.length || 0;
-
-      if (count) {
-        parts.push(`${count} ${label}`);
-      }
-    }
-
-    return parts.join(", ") || "No target";
   }
 
   addAlert = async (): Promise<void> => {
