@@ -474,6 +474,17 @@ describe("alert editor interactions", () => {
 });
 
 describe("recipient picker interactions", () => {
+  it("preserves selected recipients missing from the registry", () => {
+    const picker = createRecipientPicker(
+      emptyRegistries(),
+      { entity_id: ["notify.missing"] },
+      vi.fn(),
+    );
+
+    expect(picker.target()).toEqual({ entity_id: ["notify.missing"] });
+    expect(picker.element.textContent).toContain("notify.missing");
+  });
+
   it("serializes a selected notification entity and marks the editor dirty", async () => {
     const markDirty = vi.fn();
     const picker = createRecipientPicker(

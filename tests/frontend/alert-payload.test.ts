@@ -69,6 +69,32 @@ describe("buildAlertPayload", () => {
     expect(payload.monitor.retention).toEqual({ enabled: true, days: 14 });
   });
 
+  it("persists disabling existing post-send actions", () => {
+    const original = defaultAlert();
+    original.post_send_actions = {
+      enabled: true,
+      actions: [{ action: "light.turn_on" }],
+    };
+    const payload = buildAlertPayload(
+      original,
+      alertFormValues({
+        notification: {
+          ...alertFormValues().notification,
+          target: { entity_id: ["notify.mobile_app_phone"] },
+        },
+        post_send_actions: {
+          postSendActionsEnabled: false,
+          actions: [],
+        },
+      }),
+    );
+
+    expect(payload.post_send_actions).toEqual({
+      enabled: false,
+      actions: [{ action: "light.turn_on" }],
+    });
+  });
+
   it("persists a custom alert icon", () => {
     const original = defaultAlert();
     original.id = "custom_icon_alert";

@@ -25,7 +25,11 @@ class RecipientPickerElement extends LitElement {
       ...registries.entities.filter((item) => item.entity_id.startsWith("notify.")).map((item) => ({ type: "entity_id" as const, id: item.entity_id, label: item.name || item.entity_id })),
       ...registries.users.filter((item) => item.is_active !== false).map((item) => ({ type: "user_id" as const, id: item.id, label: item.name })),
     ];
-    this.selected = new Set(this.items.filter((item) => (target[item.type] || []).some((value) => String(value) === item.id)).map((item) => `${item.type}:${item.id}`));
+    this.selected = new Set(
+      (Object.keys(this.labels) as RecipientType[]).flatMap((type) =>
+        (target[type] || []).map((value) => `${type}:${String(value)}`),
+      ),
+    );
     this.markDirty = markDirty;
   }
 

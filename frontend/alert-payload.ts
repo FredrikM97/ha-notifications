@@ -188,13 +188,18 @@ export function buildAlertPayload(
   if (original.notification?.data) {
     result.notification.data = original.notification.data;
   }
-  if (values.post_send_actions.actions?.length) {
+  if (
+    values.post_send_actions.actions?.length ||
+    values.post_send_actions.postSendActionsEnabled ||
+    result.post_send_actions
+  ) {
     result.post_send_actions = {
+      ...result.post_send_actions,
       enabled: values.post_send_actions.postSendActionsEnabled,
-      actions: values.post_send_actions.actions,
+      ...(values.post_send_actions.actions?.length
+        ? { actions: values.post_send_actions.actions }
+        : {}),
     };
-  } else if (values.post_send_actions.postSendActionsEnabled) {
-    result.post_send_actions = { enabled: true };
   }
 
   return serializeAlertDurations(result);

@@ -86,6 +86,9 @@ monitor:
   on_change: true
   startup: true
   clear_on_inactive: false
+  retention:
+    enabled: true
+    days: 30
 notification:
   target: {}
   title: ""
@@ -313,6 +316,10 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "monitor": {
     "clear_on_inactive": false,
     "on_change": true,
+    "retention": {
+      "days": 30,
+      "enabled": true,
+    },
     "startup": true,
   },
   "name": "Updated name",
