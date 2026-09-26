@@ -21,9 +21,6 @@ if [ ! -f "$package_dir/manifest.json" ] || [ ! -f "$package_dir/__init__.py" ];
 fi
 mkdir -p "$package_dir/dist"
 cp "$panel_file" "$package_dir/dist/panel.js"
-mkdir -p "$package_dir/brand" "$package_dir/dist/brand"
-cp "$root_dir/brand/icon.png" "$package_dir/brand/icon.png"
-cp "$root_dir/brand/icon.png" "$package_dir/dist/brand/icon.png"
 find "$output_dir/custom_components" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$output_dir/custom_components" -type f -name '*.pyc' -delete
 if [ ! -f "$package_dir/dist/panel.js" ]; then

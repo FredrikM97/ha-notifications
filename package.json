@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && mkdir -p dist/brand custom_components/ha_notifications/dist/brand && esbuild frontend/panel.ts --bundle --format=esm --outfile=dist/panel.js && cp brand/icon.png dist/brand/icon.png && cp dist/panel.js custom_components/ha_notifications/dist/panel.js && cp dist/brand/icon.png custom_components/ha_notifications/dist/brand/icon.png",
+    "build": "tsc -p tsconfig.json --noEmit && esbuild frontend/panel.ts --bundle --format=esm --outfile=dist/panel.js && cp dist/panel.js custom_components/ha_notifications/dist/panel.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write frontend/**/*.ts tests/frontend_smoke.test.ts",
     "test:frontend": "vitest run tests/frontend_smoke.test.ts",
