@@ -51,7 +51,7 @@ jobs:
 
           {
             echo "## Changes"
-            while IFS=$'\x1f' read -r hash subject; do
+            while IxFS=$'\x1f' read -r hash subject; do
               [ -z "$hash" ] && continue
               login=$(gh api "repos/${{ github.repository }}/commits/$hash" --jq '.author.login // empty' 2>/dev/null || true)
               author="@${login:-$(git log -1 --format='%an' "$hash")}"

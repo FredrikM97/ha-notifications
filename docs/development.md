@@ -44,8 +44,8 @@ sh scripts/install_local.sh /path/to/home-assistant-config
 ```
 
 The integration source is authored under `custom_components/ha_notifications/`.
-The build writes the frontend bundle to `dist/panel.js` and copies it to
-`custom_components/ha_notifications/dist/panel.js` for Home Assistant.
+The build writes the frontend bundle to `build/frontend/panel.js` and copies it to
+`custom_components/ha_notifications/frontend/panel.js` for Home Assistant.
 
 ## HACS package
 

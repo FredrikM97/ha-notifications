@@ -17,8 +17,6 @@ from homeassistant.util import dt as dt_util
 from ..bridge import websocket as frontend_websocket
 from ..const import (
     DOMAIN,
-    FRONTEND_BUILD_DIR,
-    FRONTEND_STATIC_URL,
     PANEL_MODULE,
     PANEL_TITLE,
     VERSION,
@@ -148,21 +146,26 @@ class HaNotificationsController:
             raise
 
     async def _register_frontend(self, *, show_in_sidebar: bool) -> None:
-        frontend_directory = Path(__file__).parent.parent / FRONTEND_BUILD_DIR
-        panel_file = frontend_directory / "panel.js"
-        if not panel_file.is_file():
-            raise RuntimeError(f"HA Notifications frontend is missing: {panel_file}")
+        frontend_path = Path(__file__).resolve().parent.parent / PANEL_MODULE
+
+        if not frontend_path.is_file():
+            raise RuntimeError(
+                f"HA Notifications frontend is missing: {frontend_path}"
+            )
+
+        module_url = f"/{PANEL_MODULE}?v={VERSION}"
 
         await self._hass.http.async_register_static_paths(
-            [StaticPathConfig(FRONTEND_STATIC_URL, str(frontend_directory), False)]
+            [StaticPathConfig(f"/{PANEL_MODULE}", str(frontend_path), False)]
         )
-        module_url = f"{PANEL_MODULE}?v={VERSION}"
+
         frontend.add_extra_js_url(self._hass, module_url)
 
         if DOMAIN in self._hass.data.get(frontend.DATA_PANELS, {}):
             frontend.async_remove_panel(
                 self._hass, DOMAIN, warn_if_unknown=False
             )
+
         await panel_custom.async_register_panel(
             hass=self._hass,
             frontend_url_path=DOMAIN,

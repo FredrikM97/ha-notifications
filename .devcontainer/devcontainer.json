@@ -39,5 +39,5 @@
     "type=bind,source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,readonly"
   ],
 
-  "postCreateCommand": "pip install -e '.[all]' && npm ci && npm run build && git config core.hooksPath .githooks"
+  "postCreateCommand": "pip install -e '.[all]' && npm ci && git config core.hooksPath .githooks"
 }

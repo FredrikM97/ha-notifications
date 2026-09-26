@@ -298,3 +298,21 @@ async def loaded_config_entry(
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
     return mock_config_entry
+
+@pytest.fixture(scope="session", autouse=True)
+def frontend_file():
+    """Auto load frontend to always have a dummy panel.js available"""
+    FRONTEND_FILE = (
+        Path.cwd()
+        / "custom_components"
+        / "ha_notifications"
+        / "frontend"
+        / "panel.js"
+    )
+    print(f"Creating frontend file at {FRONTEND_FILE}")
+    FRONTEND_FILE.parent.mkdir(parents=True, exist_ok=True)
+    FRONTEND_FILE.write_text("// Test frontend\n")
+
+    yield
+
+    FRONTEND_FILE.unlink(missing_ok=True)

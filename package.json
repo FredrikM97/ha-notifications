@@ -3,17 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && esbuild frontend/panel.ts --bundle --format=esm --outfile=dist/panel.js && cp dist/panel.js custom_components/ha_notifications/dist/panel.js",
+    "build": "rm -rf build && cp -R custom_components/ha_notifications/. build/ && esbuild frontend/panel.ts --bundle --format=esm --outfile=build/frontend/panel.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "format": "prettier --write frontend/**/*.ts tests/frontend_smoke.test.ts",
-    "test:frontend": "vitest run tests/frontend_smoke.test.ts",
-    "test:unit": "vitest run",
-    "test:ui": "vitest run tests/frontend",
+    "format": "prettier --write 'frontend/**/*.ts' 'tests/frontend_smoke.test.ts'",
+    "lint:backend": "ruff check custom_components/ha_notifications tests/backend",
+    "test": "npm run typecheck && npm run build &&  vitest run",
     "ui:preview": "npm run build && node scripts/ui_preview.mjs",
     "clean": "rm -rf dist",
-    "export:hacs": "sh scripts/export_hacs.sh",
-    "package:hacs": "sh scripts/package_hacs.sh",
-    "install:ha": "sh scripts/install_local.sh"
+    "package:hacs": "npm run build && sh scripts/package_hacs.sh"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",

@@ -2,6 +2,7 @@
 __pycache__/
 node_modules/
 dist/
+build/
 frontend/panel.js
 custom_components/ha_notifications/dist/panel.js
 .ha-config/

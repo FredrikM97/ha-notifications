@@ -3,7 +3,7 @@
 HA Notifications uses a small controller composition root and direct feature workflows. Home Assistant's own event bus remains an external integration boundary for startup, notification actions, template changes, and timers. The private application EventBus has been removed.
 
 The authored integration source lives under `custom_components/ha_notifications/`.
-The frontend build adds the generated `dist/panel.js` bundle to that source tree
+The frontend build adds the generated `build/panel.js` bundle to that source tree
 for local Home Assistant runs and HACS export.
 
 ## Layer map

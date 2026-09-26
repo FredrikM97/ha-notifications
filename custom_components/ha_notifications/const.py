@@ -22,11 +22,8 @@ HISTORY_STORAGE_KEY = "ha_notifications_history"
 MAX_HISTORY = 500
 PANEL_TITLE = "HA Notifications"
 CONF_SHOW_SIDEBAR = "show_sidebar"
-FRONTEND_STATIC_URL = f"/{DOMAIN}_static"
-FRONTEND_BUILD_DIR = "dist"
-PANEL_MODULE = f"{FRONTEND_STATIC_URL}/panel.js"
-FRONTEND_REGISTERED_KEY = f"{DOMAIN}_frontend_static_registered"
-FRONTEND_MODULE_REGISTERED_KEY = f"{DOMAIN}_frontend_module_registered"
+FRONTEND_BUILD_DIR= "frontend"
+PANEL_MODULE = f"{FRONTEND_BUILD_DIR}/panel.js"
 
 DEFAULT_HISTORY_RETENTION_DAYS = 30
 
