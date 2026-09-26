@@ -52,7 +52,7 @@ export function renderConfirmationSection(
           </div>`,
         )}
         <button
-          class="nc-button secondary"
+          class="nc-button secondary nc-confirmation-add-button"
           type="button"
           @click=${() =>
             updateButtons([

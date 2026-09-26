@@ -127,7 +127,8 @@ export function renderAlertCard(
         ?disabled=${!alert.enabled}
         @click=${() => actions.onTest(alert)}
       >
-        <ha-icon icon="mdi:send-check-outline"></ha-icon></button
+        <ha-icon icon="mdi:send-check-outline"></ha-icon
+        ><span class="nc-button-label">${localize(hass, "alert.test")}</span></button
       ><button
         class="nc-button"
         title=${toggleAlertLabel(alert, hass)}
@@ -138,28 +139,32 @@ export function renderAlertCard(
           icon=${alert.enabled
             ? "mdi:pause-circle-outline"
             : "mdi:play-circle-outline"}
-        ></ha-icon></button
+        ></ha-icon
+        ><span class="nc-button-label">${toggleAlertLabel(alert, hass)}</span></button
       ><button
         class="nc-button"
         title=${localize(hass, "alert.edit")}
         aria-label=${localize(hass, "alert.edit")}
         @click=${() => actions.onEdit(alert)}
       >
-        <ha-icon icon="mdi:pencil-outline"></ha-icon></button
+        <ha-icon icon="mdi:pencil-outline"></ha-icon
+        ><span class="nc-button-label">${localize(hass, "alert.edit")}</span></button
       ><button
         class="nc-button"
         title=${localize(hass, "alert.history")}
         aria-label=${localize(hass, "alert.history")}
         @click=${() => actions.onShowHistory(alert)}
       >
-        <ha-icon icon="mdi:history"></ha-icon></button
+        <ha-icon icon="mdi:history"></ha-icon
+        ><span class="nc-button-label">${localize(hass, "alert.history")}</span></button
       ><button
         class="nc-button danger"
         title=${localize(hass, "alert.delete")}
         aria-label=${localize(hass, "alert.delete")}
         @click=${() => actions.onDelete(alert)}
       >
-        <ha-icon icon="mdi:delete-outline"></ha-icon>
+        <ha-icon icon="mdi:delete-outline"></ha-icon
+        ><span class="nc-button-label">${localize(hass, "alert.delete")}</span>
       </button>
     </div>
   </div>`;

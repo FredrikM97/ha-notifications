@@ -104,7 +104,7 @@ describe("panel view", () => {
     await settleElement(panel);
 
     expect(panel.shadowRoot.textContent).not.toContain("Attempt 2/3");
-    expect(panel.shadowRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(0);
+    expect(panel.shadowRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(5);
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
   });
 

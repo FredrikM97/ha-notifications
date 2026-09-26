@@ -118,6 +118,20 @@ select {
   color: var(--primary-text-color);
 }
 
+.nc-confirmation-add-button {
+  justify-self: start;
+  border: 1px solid var(--divider-color);
+}
+
+.nc-confirmation-add-button:hover {
+  border-color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color) 10%,
+    var(--secondary-background-color)
+  );
+}
+
 .nc-button.danger {
   background: var(--error-color);
   color: white;
