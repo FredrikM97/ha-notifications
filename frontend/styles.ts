@@ -1546,17 +1546,26 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-alert {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .nc-alert-actions {
-    grid-column: 1 / -1;
-    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .nc-alert-actions .nc-button {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
+  }
+}
+
+@container (min-width: 801px) and (max-width: 1100px) {
+  .nc-alert {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .nc-alert-actions .nc-button {
+    flex: 0 0 auto;
     justify-content: center;
   }
 
@@ -1829,17 +1838,11 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-alert {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .nc-alert-actions {
-    grid-column: 1 / -1;
-    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .nc-alert-actions .nc-button {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
     justify-content: center;
   }
 
