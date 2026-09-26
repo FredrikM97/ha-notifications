@@ -16,6 +16,7 @@ import {
 
 const getAlerts = vi.fn();
 const getAlertRuntime = vi.fn();
+const getPreviewAlertRuntime = vi.fn();
 const getHistory = vi.fn();
 const loadRegistries = vi.fn();
 const getConfig = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("../../frontend/api.js", () => ({
   errorMessage: (error: unknown) => String(error),
   getAlerts,
   getAlertRuntime,
+  getPreviewAlertRuntime,
   getConfig,
   getHistory,
   loadRegistries,
@@ -50,6 +52,7 @@ const alert: Alert = configuredAlertFixture();
 function setupApi(): void {
   getAlerts.mockResolvedValue([alert]);
   getAlertRuntime.mockResolvedValue(alertRuntimeFixture);
+  getPreviewAlertRuntime.mockResolvedValue([]);
   getHistory.mockResolvedValue([]);
   loadRegistries.mockResolvedValue(emptyRegistries());
   getConfig.mockResolvedValue(configFixture);
@@ -219,9 +222,40 @@ describe("panel view", () => {
     expect(debugAlert?.textContent).toContain('"flow_id": "flow_door"');
   });
 
+  it("shows a recent test alert in Active without adding it to Alerts", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+    getPreviewAlertRuntime.mockResolvedValueOnce([
+      {
+        alert: { ...alert, id: "NC_PREVIEW_test", name: "Test alert" },
+        runtime: {
+          ...alertRuntimeFixture.door,
+          config: { ...alertRuntimeFixture.door.config, id: "NC_PREVIEW_test" },
+          state: { ...alertRuntimeFixture.door.state, active: true },
+        },
+      },
+    ]);
+    await panel.refresh();
+    await settleElement(panel);
+
+    expect(panel.shadowRoot.querySelectorAll(".nc-alert")).toHaveLength(1);
+    await testUser().click(
+      within(panel.shadowRoot).getByRole("button", { name: "Active" }),
+    );
+    await settleElement(panel);
+
+    expect(
+      [...panel.shadowRoot.querySelectorAll(".nc-debug-alert")].some((entry) =>
+        entry.textContent?.includes("Test alert"),
+      ),
+    ).toBe(true);
+  });
+
   it("omits inactive alerts and runtime from Active", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
     getAlerts.mockResolvedValueOnce([
       alert,
       { ...alert, id: "inactive", name: "Inactive alert" },

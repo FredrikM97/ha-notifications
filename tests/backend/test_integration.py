@@ -377,6 +377,7 @@ async def test_all_websocket_routes_return_real_adapter_responses(
         {"type": "ha_notifications/list"},
         {"type": "ha_notifications/runtime"},
         {"type": "ha_notifications/preview_payload", "alert": alert},
+        {"type": "ha_notifications/preview_runtime"},
         {"type": "ha_notifications/validate_conditions", "alert": alert},
         {
             "type": "ha_notifications/history",

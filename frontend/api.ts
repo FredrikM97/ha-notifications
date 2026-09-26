@@ -106,6 +106,18 @@ export async function getAlertRuntime(
   return runtime as Record<string, RuntimeAlertState>;
 }
 
+export interface PreviewAlertRuntime {
+  alert: Alert;
+  runtime: RuntimeAlertState;
+}
+
+export async function getPreviewAlertRuntime(
+  hass: Hass,
+): Promise<PreviewAlertRuntime[]> {
+  const result = await call<unknown>(hass, "preview_runtime");
+  return Array.isArray(result) ? (result as PreviewAlertRuntime[]) : [];
+}
+
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {
   if (!alert.id || typeof alert.id !== "string") {
     throw new Error("ha_notifications/save: alert.id is required.");

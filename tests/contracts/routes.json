@@ -5,6 +5,7 @@
     "save",
     "delete",
     "preview_payload",
+    "preview_runtime",
     "validate_conditions",
     "history",
     "get_config",

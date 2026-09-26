@@ -3,6 +3,7 @@ import {
   errorMessage,
   getAlerts,
   getAlertRuntime,
+  getPreviewAlertRuntime,
   getHistory,
   loadRegistries,
   saveAlert,
@@ -86,6 +87,7 @@ class HaNotificationsPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private runtime: Record<string, RuntimeAlertState> = {};
+  private previewAlerts: Alert[] = [];
   private history: RuntimeAlertHistoryEntry[] = [];
   private historyAlertId: string | null = null;
   private historyAlertName: string | null = null;
@@ -197,10 +199,11 @@ class HaNotificationsPanel extends LitElement {
     this.requestUpdate();
 
     try {
-      const [alertsResult, runtimeResult, historyResult] =
+      const [alertsResult, runtimeResult, previewResult, historyResult] =
         await Promise.allSettled([
           getAlerts(this._hass),
           getAlertRuntime(this._hass),
+          getPreviewAlertRuntime(this._hass),
           getHistory(this._hass, this.historyAlertId, 150),
         ]);
 
@@ -220,6 +223,15 @@ class HaNotificationsPanel extends LitElement {
         this.runtime = runtimeResult.value;
       } else if (!silent) {
         this.showToast(errorMessage(runtimeResult.reason), true);
+      }
+
+      if (previewResult.status === "fulfilled") {
+        this.previewAlerts = previewResult.value.map(({ alert, runtime }) => {
+          this.runtime[alert.id] = runtime;
+          return { ...alert, runtime };
+        });
+      } else if (!silent) {
+        this.showToast(errorMessage(previewResult.reason), true);
       }
 
       if (historyResult.status === "fulfilled") {
@@ -347,7 +359,10 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private debugTemplate(): TemplateResult {
-    const entries = debugPayload(this.alerts, this.runtime);
+    const entries = debugPayload(
+      [...this.alerts, ...this.previewAlerts],
+      this.runtime,
+    );
     if (!entries.length) {
       return html`<div class="nc-card nc-empty">
         <h2>${localize(this._hass, "panel.no_active_alerts")}</h2>
@@ -478,6 +493,7 @@ class HaNotificationsPanel extends LitElement {
       },
       onClosed: () => {
         this.editorActive = false;
+        void this.refresh();
         this.requestUpdate();
       },
     });
@@ -519,6 +535,7 @@ class HaNotificationsPanel extends LitElement {
       },
       onClosed: () => {
         this.editorActive = false;
+        void this.refresh();
         this.requestUpdate();
       },
     });
