@@ -42,7 +42,7 @@ jobs:
         if: steps.changes.outputs.create == 'true'
         run: |
           npm ci
-          npm run package:hacs -- dev
+          npm run package:hacs -- 0.0.0-dev
 
       - name: Update dev tag and release
         if: steps.changes.outputs.create == 'true'
