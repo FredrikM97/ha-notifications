@@ -1540,9 +1540,28 @@ ha-code-editor.nc-action-editor {
   color: white;
 }
 
-@container (min-width: 701px) and (max-width: 980px) {
+@container (min-width: 701px) and (max-width: 800px) {
   .nc-condition-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nc-alert {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .nc-alert-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .nc-alert-actions .nc-button {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
   }
 }
 
@@ -1587,21 +1606,22 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-alert {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .nc-alert-actions {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 4px;
     width: 100%;
   }
 
   .nc-alert-actions .nc-button {
+    flex: 0 0 auto;
     justify-content: center;
-    min-width: 0;
     padding: 8px 4px;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
   }
 
   .nc-grid,
@@ -1781,6 +1801,20 @@ ha-code-editor.nc-action-editor {
   .nc-condition-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .nc-alert {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .nc-alert-actions .nc-button {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
+  }
 }
 
 @container (min-width: 701px) and (max-width: 800px) {
@@ -1792,6 +1826,25 @@ ha-code-editor.nc-action-editor {
 @media (min-width: 701px) and (max-width: 800px) {
   .nc-condition-row {
     grid-template-columns: 1fr;
+  }
+
+  .nc-alert {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .nc-alert-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .nc-alert-actions .nc-button {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
   }
 }
 
@@ -1832,21 +1885,23 @@ ha-code-editor.nc-action-editor {
   }
 
   .nc-alert {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .nc-alert-actions {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 4px;
     width: 100%;
   }
 
   .nc-alert-actions .nc-button {
-    justify-content: center;
+    flex: 1 1 0;
     min-width: 0;
+    justify-content: center;
     padding: 8px 4px;
+  }
+
+  .nc-alert-actions .nc-button-label {
+    display: none;
   }
 
   .nc-grid {
