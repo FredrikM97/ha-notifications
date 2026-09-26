@@ -146,17 +146,36 @@ class HaNotificationsController:
             raise
 
     async def _register_frontend(self, *, show_in_sidebar: bool) -> None:
-        frontend_path = Path(__file__).resolve().parent.parent / PANEL_MODULE
+       
+        integration_dir = Path(__file__).resolve().parent.parent
+        frontend_path = integration_dir / PANEL_MODULE
+        brand_path = integration_dir / "brand"
 
         if not frontend_path.is_file():
             raise RuntimeError(
                 f"HA Notifications frontend is missing: {frontend_path}"
             )
 
+        if not (brand_path / "icon.png").is_file():
+            raise RuntimeError(
+                f"HA Notifications icon is missing: {brand_path / 'icon.png'}"
+            )
+
         module_url = f"/{PANEL_MODULE}?v={VERSION}"
 
         await self._hass.http.async_register_static_paths(
-            [StaticPathConfig(f"/{PANEL_MODULE}", str(frontend_path), False)]
+            [
+                StaticPathConfig(
+                    f"/{PANEL_MODULE}",
+                    str(frontend_path),
+                    False,
+                ),
+                StaticPathConfig(
+                    f"/{DOMAIN}/brand",
+                    str(brand_path),
+                    False,
+                ),
+            ]
         )
 
         frontend.add_extra_js_url(self._hass, module_url)

@@ -281,7 +281,7 @@ class HaNotificationsPanel extends LitElement {
       <div class="nc-title">
         <div class="nc-title-icon">
           <img
-            src="../brand/icon.png"
+            src="/ha_notifications/brand/icon.png"
             alt=""
             aria-hidden="true"
           />
