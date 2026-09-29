@@ -11,6 +11,6 @@ export function renderPostConfirmationActionsSection(
     title: context.localize("editor.confirmation.actions.section"),
     help: context.localize("editor.confirmation.actions.help"),
     role: "post-confirmation-actions",
-    actions: context.value.confirmation?.actions.items,
+    actions: context.value.confirmation?.actions,
   });
 }

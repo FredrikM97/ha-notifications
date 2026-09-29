@@ -10,17 +10,17 @@
     "id": "door",
     "name": "Front door",
     "enabled": true,
-    "conditions": [],
+    "conditions": [{"condition": "template", "value_template": "{{ true }}"}],
     "monitor": {
       "on_change": true,
       "startup": false
     },
     "notification": {
+      "action": "notify.mobile_app_phone",
       "target": {
         "entity_id": ["notify.phone"]
       },
-      "title": "",
-      "message": ""
+      "data": {"title": "", "message": ""}
     }
   },
   "runtime": {
@@ -44,39 +44,31 @@
     "description": "Notify when the front door stays open.",
     "icon": "mdi:door-open",
     "enabled": true,
-    "conditions": [
-      {
-        "type": "state",
-        "id": "front_door",
-        "entity_id": "binary_sensor.front_door",
-        "state": "on",
-        "for": "00:05:00"
-      }
-    ],
+    "conditions": [{
+      "condition": "state",
+      "entity_id": "binary_sensor.front_door",
+      "state": "on",
+      "for": "00:05:00"
+    }],
     "monitor": {
       "on_change": true,
       "startup": true,
-      "interval": "01:00:00",
-      "retention": {
-        "enabled": true,
-        "days": 14
-      }
+      "interval": "01:00:00"
     },
     "notification": {
+      "action": "notify.mobile_app_phone",
       "target": {
         "entity_id": ["notify.phone"],
         "device_id": ["device_phone"]
       },
-      "title": "Front door",
-      "message": "The front door is still open."
+      "data": {"title": "Front door", "message": "The front door is still open."}
     },
     "confirmation": {
       "enabled": true,
-      "button": "Close door",
+      "buttons": [{"id": "confirm", "label": "Close door"}],
       "notification": {
-        "enabled": true,
-        "message": "Front door closed by {{confirmed_by}}.",
-        "clear": false
+        "action": "notify.mobile_app_phone",
+        "data": {"message": "Front door closed by {{confirmed_by}}."}
       },
       "reminders": {
         "enabled": true,
@@ -84,10 +76,7 @@
         "max_attempts": 3,
         "show_attempts": true
       },
-      "actions": {
-        "enabled": true,
-        "items": [{"action": "light.turn_on", "target": {"entity_id": ["light.hall"]}}]
-      }
+      "actions": [{"action": "light.turn_on", "target": {"entity_id": ["light.hall"]}}]
     },
     "post_send_actions": {
       "enabled": true,

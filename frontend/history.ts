@@ -10,14 +10,19 @@ import type {
 import {
   filterHistoryEntries,
   formatType,
+  groupHistoryEntries,
   historyDetailSummary,
   historySeverity,
   shortFlowId,
 } from "./history/logic.js";
-export { filterHistoryEntries, historyDetailSummary } from "./history/logic.js";
+export {
+  filterHistoryEntries,
+  groupHistoryEntries,
+  historyDetailSummary,
+} from "./history/logic.js";
 
 export type { HistoryFilters } from "./history/logic.js";
-import type { HistoryFilters } from "./history/logic.js";
+import type { HistoryFilters, HistoryFlowGroup } from "./history/logic.js";
 
 export interface HistoryAlertOption {
   id: string;
@@ -28,10 +33,12 @@ export interface HistoryRenderOptions {
   alertName?: string | null;
   alerts?: HistoryAlertOption[];
   filters?: HistoryFilters;
+  groupByFlow?: boolean;
   hass?: Hass;
   locale?: HassLocale;
   types?: string[];
   onFiltersChanged?: (filters: HistoryFilters) => void;
+  onGroupByFlowChanged?: (groupByFlow: boolean) => void;
   onAlertSelected?: (alertId: string, alertName: string) => void;
   onShowAll?: () => void;
 }
@@ -127,14 +134,67 @@ function historyItemsTemplate(
     </div>`;
   }
 
-  return history.map((item, index) =>
-    historyItemTemplate(
-      item,
+  if (!options.groupByFlow) {
+    return history.map((item, index) =>
+      historyItemTemplate(
+        item,
+        options,
+        expandedDetails.has(index),
+        () => toggleDetails(index),
+      ),
+    );
+  }
+
+  let index = 0;
+  return groupHistoryEntries(history).map((group) => {
+    const startIndex = index;
+    index += group.entries.length;
+    return historyFlowGroupTemplate(
+      group,
       options,
-      expandedDetails.has(index),
-      () => toggleDetails(index),
-    ),
-  );
+      expandedDetails,
+      startIndex,
+      toggleDetails,
+    );
+  });
+}
+
+function historyFlowGroupTemplate(
+  group: HistoryFlowGroup,
+  options: HistoryRenderOptions,
+  expandedDetails: Set<number>,
+  startIndex: number,
+  toggleDetails: (index: number) => void,
+) {
+  if (!group.flowId) {
+    return historyItemTemplate(
+      group.entries[0],
+      options,
+      expandedDetails.has(startIndex),
+      () => toggleDetails(startIndex),
+    );
+  }
+
+  return html`<details class="nc-history-flow-group" open>
+    <summary class="nc-history-flow-heading">
+      <span class="nc-history-flow-name">
+        <ha-icon icon="mdi:chevron-down"></ha-icon>
+        <span>${localize(options.hass, "history.flow")} ${shortFlowId(group.flowId)}</span>
+      </span>
+      <span class="nc-history-flow-count">${localize(options.hass, "history.flow_events", { count: group.entries.length })}</span>
+    </summary>
+    <div class="nc-history-flow-events">
+      ${group.entries.map((item, offset) =>
+        historyItemTemplate(
+          item,
+          options,
+          expandedDetails.has(startIndex + offset),
+          () => toggleDetails(startIndex + offset),
+          false,
+        ),
+      )}
+    </div>
+  </details>`;
 }
 
 function historyCountTemplate(
@@ -205,10 +265,22 @@ function historyHeadingTemplate(
             ></ha-icon>
           </summary>
         </details>
+        ${historyGroupToggleTemplate(options)}
       </div>
       ${historySecondaryFiltersTemplate(options, filters)}
     </div>
     ${historyClearButtonTemplate(options, filters)}`;
+}
+
+function historyGroupToggleTemplate(options: HistoryRenderOptions) {
+  return html`<label class="nc-history-group-toggle">
+    <ha-switch
+      .checked=${options.groupByFlow === true}
+      @change=${(event: Event) =>
+        options.onGroupByFlowChanged?.((event.currentTarget as HTMLElement & { checked: boolean }).checked)}
+    ></ha-switch>
+    <span>${localize(options.hass, "history.group_by_flow")}</span>
+  </label>`;
 }
 
 function historyFilterCountTemplate(count: number) {
@@ -337,6 +409,7 @@ function historyItemTemplate(
   options: HistoryRenderOptions,
   detailsOpen: boolean,
   toggleDetails: () => void,
+  showFlow = true,
 ) {
   const details = item.event?.details;
   const hasDetails = Boolean(details && Object.keys(details).length);
@@ -365,9 +438,9 @@ function historyItemTemplate(
         <span class=${`nc-history-badge ${historySeverity(item.event?.type)}`}
           >${formatType(item.event?.type)}</span
         >
-            ${item.state?.flow_id
+            ${showFlow && item.event?.flow_id
             ? html`<span class="nc-history-flow"
-              >${localize(options.hass, "history.flow")} ${shortFlowId(item.state.flow_id)}</span
+              >${localize(options.hass, "history.flow")} ${shortFlowId(item.event.flow_id)}</span
             >`
           : ""}
       </div>

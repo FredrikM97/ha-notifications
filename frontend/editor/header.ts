@@ -17,6 +17,7 @@ export interface EditorHeaderOptions {
   alert: Alert;
   context: EditorContext;
   optionalSettings: OptionalSettings;
+  postConfirmationActionsEnabled: boolean;
   activeSectionIndex: number;
   sectionTitle: string;
   mobileSectionsOpen: boolean;
@@ -30,6 +31,7 @@ export function renderEditorHeader({
   alert,
   context,
   optionalSettings,
+  postConfirmationActionsEnabled,
   activeSectionIndex,
   sectionTitle,
   mobileSectionsOpen,
@@ -81,7 +83,7 @@ export function renderEditorHeader({
         "confirmationNotification",
         optionalControls(
           context,
-          alert.confirmation?.notification.enabled === true,
+          Boolean(alert.confirmation?.notification),
           context.localize("editor.confirmation.notification.section"),
           (enabled) => onToggleSetting("confirmationNotification", enabled),
         ),
@@ -91,7 +93,7 @@ export function renderEditorHeader({
         "postConfirmationActions",
         optionalControls(
           context,
-          Boolean(alert.confirmation?.actions.enabled),
+          postConfirmationActionsEnabled,
           context.localize("editor.confirmation.actions.section"),
           (enabled) => onToggleSetting("postConfirmationActions", enabled),
         ),

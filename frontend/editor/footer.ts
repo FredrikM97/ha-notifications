@@ -8,7 +8,6 @@ export interface EditorFooterOptions {
   onClose(): void;
   validationLabel: string;
   onValidate(): void;
-  onTest(event: Event): void;
   onSave(event: Event): void;
 }
 
@@ -17,7 +16,6 @@ export function renderEditorFooter({
   onClose,
   validationLabel,
   onValidate,
-  onTest,
   onSave,
   localize,
 }: EditorFooterOptions): TemplateResult {
@@ -43,9 +41,6 @@ export function renderEditorFooter({
       ?hidden=${!validationLabel}
       aria-label=${validationLabel}
     >${validationLabel}</button>
-    <button class="nc-button secondary" @click=${onTest}>
-      ${localize("alert.test")}
-    </button>
     <button class="nc-button" @click=${onSave}>${localize("editor.common.save_alert")}</button>
   </footer>`;
 }

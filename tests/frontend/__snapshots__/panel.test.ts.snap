@@ -18,11 +18,11 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
         "View history",
         "Delete alert",
       ],
-      "meta": "",
+      "meta": undefined,
       "name": "Front door",
       "statuses": [
         "Enabled",
-        "Triggered",
+        "Idle",
       ],
     },
   ],
@@ -33,15 +33,15 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
     },
     {
       "active": false,
+      "label": "Active",
+    },
+    {
+      "active": false,
       "label": "History",
     },
     {
       "active": false,
       "label": "YAML",
-    },
-    {
-      "active": false,
-      "label": "Active",
     },
   ],
 }

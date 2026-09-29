@@ -16,20 +16,41 @@ export interface HassLocale {
   time_format: string;
 }
 
-export type AlertConditionType = "template" | "state" | "numeric" | "attribute";
-
-export interface AlertCondition {
-  id?: string;
-  type: AlertConditionType;
-  template?: string;
-  entity_id?: string | string[];
-  attribute?: string;
-  above?: string | number;
-  below?: string | number;
-  state?: string | string[];
-  value?: string;
-  for?: string | number | Record<string, number>;
+export interface CanonicalCondition {
+  condition: string;
   [key: string]: unknown;
+}
+
+export type AlertCondition = CanonicalCondition[];
+
+export interface AlertRecovery {
+  notification?: NotificationConfig;
+  [key: string]: unknown;
+}
+
+export interface AutomationStatus {
+  id?: string;
+  ownership?: "managed" | "manual";
+  status?: string;
+  [key: string]: unknown;
+}
+
+export type AutomationStatusValue =
+  | "managed"
+  | "manual"
+  | "missing"
+  | "disabled"
+  | "conflict";
+
+export interface AutomationRuntimeStatus {
+  status: AutomationStatusValue;
+  enabled: boolean;
+  last_triggered?: string | null;
+}
+
+export interface AlertsConfig {
+  version: number;
+  alerts: CanonicalAlert[];
 }
 
 export interface NotificationTarget {
@@ -41,7 +62,7 @@ export interface NotificationTarget {
   user_id?: string[];
 }
 
-export interface MonitorConfig {
+export interface EvaluateConfig {
   on_change: boolean;
   startup: boolean;
   interval?: string | number | Record<string, number>;
@@ -49,25 +70,26 @@ export interface MonitorConfig {
   retention?: HistoryRetentionConfig;
 }
 
+export interface MonitorConfig {
+  on_change?: boolean;
+  startup?: boolean;
+  interval?: number | string;
+  clear_on_inactive?: boolean;
+}
+
 export interface ConfirmationConfig {
   enabled: boolean;
-  buttons: { id: string; label: string }[];
-  notification: {
-    enabled: boolean;
-    message: string;
-    clear: boolean;
-  };
+  buttons: { id?: string; label: string }[];
+  notification: CanonicalNotification;
   reminders: {
     enabled: boolean;
     interval: string | number | Record<string, number>;
     max_attempts: number;
     show_attempts: boolean;
+    forget_after_enabled: boolean;
     timeout: string | number | Record<string, number>;
   };
-  actions: {
-    enabled: boolean;
-    items?: Record<string, unknown>[];
-  };
+  actions: Record<string, unknown>[];
 }
 
 export interface NotificationConfig {
@@ -75,6 +97,38 @@ export interface NotificationConfig {
   title: string;
   message: string;
   data?: Record<string, unknown>;
+}
+
+export interface CanonicalNotification {
+  action?: string;
+  target?: NotificationTarget;
+  data: Record<string, unknown>;
+}
+
+export interface CanonicalRecovery {
+  clear?: boolean;
+  notification?: CanonicalNotification;
+}
+
+export interface CanonicalEvaluateConfig {
+  on_change?: boolean;
+  startup?: boolean;
+  interval?: string | number | Record<string, unknown>;
+}
+
+export interface CanonicalAlert {
+  id: string;
+  name?: string | null;
+  enabled?: boolean;
+  conditions: CanonicalCondition[];
+  monitor?: MonitorConfig | null;
+  notification: CanonicalNotification;
+  repeat?: Record<string, unknown> | null;
+  recovery?: CanonicalRecovery | null;
+  confirmation?: ConfirmationConfig | null;
+  snooze?: Record<string, unknown> | null;
+  escalation?: Record<string, unknown> | null;
+  automation?: AutomationStatus;
 }
 
 export interface PostSendActionsConfig {
@@ -88,6 +142,7 @@ export interface RuntimeEvent {
   type: string;
   message: string;
   details: Record<string, unknown>;
+  flow_id?: string;
 }
 
 export interface RuntimeState {
@@ -100,6 +155,15 @@ export interface RuntimeState {
   acknowledged?: boolean;
   confirmed_at?: string;
   confirmed_by?: string;
+}
+
+export interface AutomationRuntimeStatus {
+  status: AutomationStatusValue;
+  enabled: boolean;
+  last_triggered?: string | null;
+  mode: "single" | "restart" | "queued" | "parallel" | string;
+  active_runs: number;
+  active_runs_uncertain: boolean;
 }
 
 export interface RuntimeAlertState {
@@ -123,13 +187,12 @@ export interface Alert {
   description?: string;
   icon?: string;
   enabled: boolean;
-  conditions: AlertCondition[];
-  monitor: MonitorConfig;
-  notification: NotificationConfig;
+  conditions: AlertCondition;
+  monitor?: MonitorConfig | null;
+  notification: CanonicalNotification;
   confirmation?: ConfirmationConfig;
   post_send_actions?: PostSendActionsConfig;
   runtime?: RuntimeAlertState;
-  [key: string]: unknown;
 }
 
 export interface Registries {

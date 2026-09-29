@@ -597,6 +597,21 @@ ha-code-editor.nc-code-editor .cm-scroller {
   box-sizing: border-box;
 }
 
+.nc-history-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-left: auto;
+  color: var(--secondary-text-color);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.nc-history-group-toggle ha-switch {
+  --mdc-switch-scale: 0.8;
+}
+
 .nc-history-secondary-controls ha-selector {
   min-width: 0;
 }
@@ -604,6 +619,57 @@ ha-code-editor.nc-code-editor .cm-scroller {
 .nc-history-search {
   flex: 1 1 220px;
   min-width: 180px;
+}
+
+.nc-history-flow-group {
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.nc-history-flow-group:last-child {
+  border-bottom: 0;
+}
+
+.nc-history-flow-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 6px;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nc-history-flow-heading::-webkit-details-marker {
+  display: none;
+}
+
+.nc-history-flow-name,
+.nc-history-flow-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nc-history-flow-name ha-icon {
+  --mdc-icon-size: 18px;
+  transition: transform 160ms ease;
+}
+
+.nc-history-flow-group:not([open]) .nc-history-flow-name ha-icon {
+  transform: rotate(-90deg);
+}
+
+.nc-history-flow-heading:hover {
+  color: var(--primary-text-color);
+}
+
+.nc-history-flow-events .nc-history-item {
+  padding-left: 8px;
 }
 
 .nc-history-no-results,
@@ -1154,18 +1220,18 @@ ha-code-editor.nc-alert-yaml-editor {
   font-size: 15px;
 }
 
-.nc-monitor-settings {
+.nc-evaluate-settings {
   display: grid;
   gap: 26px;
 }
 
-.nc-monitor-toggles {
+.nc-evaluate-toggles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 28px;
 }
 
-.nc-monitor-toggle {
+.nc-evaluate-toggle {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -1175,7 +1241,7 @@ ha-code-editor.nc-alert-yaml-editor {
   font-weight: 600;
 }
 
-.nc-monitor-toggle ha-switch,
+.nc-evaluate-toggle ha-switch,
 .nc-field-heading ha-switch {
   flex: 0 0 auto;
 }
@@ -1639,7 +1705,7 @@ ha-code-editor.nc-action-editor {
     grid-template-columns: 1fr;
   }
 
-  .nc-monitor-toggles {
+  .nc-evaluate-toggles {
     grid-template-columns: 1fr;
   }
 

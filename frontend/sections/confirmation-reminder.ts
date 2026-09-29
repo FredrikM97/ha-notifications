@@ -61,6 +61,16 @@ export function renderConfirmationReminderSection(
       <div class="nc-reminder-options">
         <label class="nc-switch-label">
           <ha-switch
+            .checked=${confirmation.reminders.forget_after_enabled === true}
+            @change=${(event: Event) => {
+              confirmation.reminders.forget_after_enabled = checkedOf(event);
+              context.markDirty();
+            }}
+          ></ha-switch>
+          <span>${context.localize("editor.confirmation.reminder.enable_forget_after")}</span>
+        </label>
+        <label class="nc-switch-label">
+          <ha-switch
             .checked=${confirmation.reminders.show_attempts === true}
             @change=${(event: Event) => {
               confirmation.reminders.show_attempts = checkedOf(event);

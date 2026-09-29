@@ -12,12 +12,10 @@ exports[`filterHistoryEntries > combines alert, event type, and severity filters
         "source": "sensor",
       },
       "event_id": "event_garage",
+      "flow_id": "flow_garage",
       "message": "The garage is open",
       "timestamp": "2026-01-01T00:00:00+00:00",
       "type": "notification_sent",
-    },
-    "state": {
-      "flow_id": "flow_garage",
     },
   },
 ]
@@ -55,12 +53,10 @@ exports[`filterHistoryEntries > returns all entries when no filters are active 1
         "source": "sensor",
       },
       "event_id": "event_garage",
+      "flow_id": "flow_garage",
       "message": "The garage is open",
       "timestamp": "2026-01-01T00:00:00+00:00",
       "type": "notification_sent",
-    },
-    "state": {
-      "flow_id": "flow_garage",
     },
   },
   {
@@ -87,11 +83,13 @@ exports[`history view element > renders the registered history view 1`] = `
   "entries": [
     {
       "badge": "notification sent",
+      "flow": "Flow flow_garage",
       "hasDetails": true,
       "title": "Garage door",
     },
     {
       "badge": "delivery failed",
+      "flow": undefined,
       "hasDetails": true,
       "title": "Water leak",
     },

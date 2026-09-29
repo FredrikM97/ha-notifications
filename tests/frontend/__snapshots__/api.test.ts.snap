@@ -1,46 +1,19 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`frontend API transport > namespaces alert list and save commands 1`] = `
+exports[`frontend API transport > snapshots delete and reload commands 1`] = `
 [
   [
     {
-      "type": "ha_notifications/list",
+      "type": "ha_notifications/get_config",
     },
   ],
   [
     {
-      "alert": {
-        "id": "door",
-        "name": "Door",
+      "config": {
+        "alerts": [],
+        "version": 1,
       },
-      "type": "ha_notifications/save",
-    },
-  ],
-]
-`;
-
-exports[`frontend API transport > snapshots history, delete, draft test, and reload commands 1`] = `
-[
-  [
-    {
-      "alert_id": "door",
-      "limit": 150,
-      "type": "ha_notifications/history",
-    },
-  ],
-  [
-    {
-      "alert_id": "door",
-      "type": "ha_notifications/delete",
-    },
-  ],
-  [
-    {
-      "alert": {
-        "id": "door",
-        "name": "Door",
-      },
-      "type": "ha_notifications/preview_payload",
+      "type": "ha_notifications/save_config",
     },
   ],
   [
@@ -77,24 +50,4 @@ exports[`frontend API transport > uses structured config for configuration route
     },
   ],
 ]
-`;
-
-exports[`frontend API transport > uses the runtime command for alert runtime state 1`] = `
-{
-  "calls": [
-    [
-      {
-        "type": "ha_notifications/runtime",
-      },
-    ],
-  ],
-  "request": {
-    "type": "ha_notifications/runtime",
-  },
-  "result": {
-    "door": {
-      "active": true,
-    },
-  },
-}
 `;

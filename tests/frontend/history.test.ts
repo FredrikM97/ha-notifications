@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterHistoryEntries,
+  groupHistoryEntries,
   historyDetailSummary,
   renderHistory,
 } from "../../frontend/history.js";
@@ -26,6 +27,7 @@ function historyContract(root: Element | null) {
     entries: [...root.querySelectorAll(".nc-history-item")].map((entry) => ({
       title: entry.querySelector(".nc-history-alert-link")?.textContent?.trim(),
       badge: entry.querySelector(".nc-history-badge")?.textContent?.trim(),
+      flow: entry.querySelector(".nc-history-flow")?.textContent?.trim(),
       hasDetails: Boolean(entry.querySelector(".nc-history-details")),
     })),
     count: root.querySelector(".nc-history-count")?.textContent?.trim(),
@@ -57,6 +59,21 @@ describe("filterHistoryEntries", () => {
     expect(
       filterHistoryEntries(historyFixture, emptyHistoryFilters),
     ).toMatchSnapshot();
+  });
+});
+
+describe("groupHistoryEntries", () => {
+  it("groups flow events while keeping standalone events separate", () => {
+    const grouped = groupHistoryEntries([
+      historyFixture[0],
+      { ...historyFixture[0], event: { ...historyFixture[0].event, event_id: "event_garage_2" } },
+      historyFixture[1],
+    ]);
+
+    expect(grouped).toEqual([
+      { flowId: "flow_garage", entries: [historyFixture[0], expect.anything()] },
+      { entries: [historyFixture[1]] },
+    ]);
   });
 });
 
@@ -147,5 +164,34 @@ describe("history view element", () => {
     await settleElement(element);
 
     expect(element.querySelectorAll(".nc-history-item")).toHaveLength(1);
+  });
+
+  it("renders grouped flow events only when enabled", async () => {
+    const element = mountCustomElement<HTMLElement>(
+      "ha-notifications-history-view",
+      {
+        history: [
+          historyFixture[0],
+          {
+            ...historyFixture[0],
+            event: { ...historyFixture[0].event, event_id: "event_garage_2" },
+          },
+        ],
+        options: { filters: emptyHistoryFilters, groupByFlow: true },
+      },
+    );
+    await settleElement(element);
+
+    expect(element.querySelectorAll(".nc-history-flow-group")).toHaveLength(1);
+    expect(element.querySelectorAll(".nc-history-item")).toHaveLength(2);
+    const group = element.querySelector<HTMLDetailsElement>(
+      ".nc-history-flow-group",
+    );
+    expect(group?.open).toBe(true);
+    expect(group?.querySelector(".nc-history-flow-heading")?.textContent).toContain(
+      "Flow flow_garage",
+    );
+    group!.open = false;
+    expect(group?.open).toBe(false);
   });
 });

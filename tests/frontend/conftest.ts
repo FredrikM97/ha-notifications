@@ -18,15 +18,7 @@ import registriesFixtureData from "./fixtures/registries.json";
 
 export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const emptyHistoryFilters = fixtureData.emptyFilters;
-export const alertRuntimeFixture = alertFixtureData.runtime as Record<
-  string,
-  RuntimeAlertState
->;
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
-export const previewSessionResultFixture = alertFixtureData.draftTestResult as {
-  session_id: string;
-};
-
 export function createHassClient() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});
   return {
@@ -183,7 +175,6 @@ export function editorOptions(
     alert,
     registries,
     onSave: vi.fn().mockResolvedValue(alert),
-    onTest: vi.fn().mockResolvedValue({ session_id: "session" }),
     onValidateCondition: vi.fn().mockResolvedValue({}),
     onSaved: vi.fn().mockResolvedValue(undefined),
     onClosed: vi.fn(),

@@ -8,7 +8,7 @@ export function renderConfirmationSection(
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
   const buttons = confirmation.buttons;
-  const updateButtons = (next: { id: string; label: string }[]): void => {
+  const updateButtons = (next: { id?: string; label: string }[]): void => {
     confirmation.buttons = next;
     context.markDirty();
     context.refreshStatuses();
@@ -19,19 +19,20 @@ export function renderConfirmationSection(
         ${buttons.map(
           (button, index) => html`<div class="nc-confirmation-button-row">
             ${field(
-              index === 0 ? context.localize("editor.confirmation.button_id") : context.localize("editor.confirmation.button_id_optional"),
+              context.localize("editor.confirmation.button_id_optional"),
               html`<ha-input
                 type="text"
-                .value=${button.id}
+                .value=${button.id || ""}
                 placeholder="acknowledge"
                 @input=${(event: Event) => {
-                  button.id = valueOf(event);
+                  const value = valueOf(event).trim();
+                  button.id = value || undefined;
                   context.markDirty();
                 }}
               ></ha-input>`,
             )}
             ${field(
-              index === 0 ? context.localize("editor.confirmation.button_label") : context.localize("editor.confirmation.button_label_optional"),
+              context.localize("editor.confirmation.button_label"),
               html`<ha-input
                 type="text"
                 .value=${button.label}
@@ -57,15 +58,15 @@ export function renderConfirmationSection(
           @click=${() =>
             updateButtons([
               ...buttons,
-              { id: `response_${buttons.length + 1}`, label: "" },
+              { label: "" },
             ])}
         >${context.localize("editor.confirmation.add_response")}</button>
       </div>
       <label class="nc-switch-label nc-confirmation-clear">
         <ha-switch
-          .checked=${confirmation.notification.clear !== false}
+          .checked=${true}
           @change=${(event: Event) => {
-            confirmation.notification.clear = checkedOf(event);
+            confirmation.notification.data.clear = checkedOf(event);
             context.markDirty();
           }}
         ></ha-switch>

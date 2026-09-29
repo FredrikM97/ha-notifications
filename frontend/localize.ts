@@ -52,7 +52,7 @@ export function localize(
 
 const editorTitleKeys: Record<string, string> = {
   Basic: "editor.basic.section",
-  "When to check": "editor.monitor.section",
+  "When to check": "editor.evaluate.section",
   Condition: "editor.condition.section",
   Recipients: "editor.recipients.section",
   Notification: "editor.notification.section",

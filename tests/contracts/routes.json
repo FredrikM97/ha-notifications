@@ -1,16 +1,11 @@
 {
   "commands": [
-    "list",
-    "runtime",
-    "save",
-    "delete",
-    "preview_payload",
-    "preview_runtime",
-    "validate_conditions",
-    "history",
     "get_config",
+    "automation_status",
+    "get_history",
     "validate_config",
     "save_config",
+    "delete",
     "reload"
   ]
 }

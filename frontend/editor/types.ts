@@ -22,7 +22,7 @@ export interface CodeEditorOptions {
   onReady?: (editor: CodeEditor) => void;
 }
 
-export type EditorMode = "visual" | "yaml" | "jinja";
+export type EditorMode = "yaml";
 
 export type EditorControlRole =
   | "conditions-yaml"
@@ -34,9 +34,7 @@ export type ActionEditorRole =
   | "post-send-actions";
 
 export type EditorElementRole =
-  | "visual"
   | "conditions-yaml"
-  | "jinja"
   | "recipients";
 
 export interface EditorElements {

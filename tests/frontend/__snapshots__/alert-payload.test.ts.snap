@@ -4,21 +4,28 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
 {
   "conditions": [
     {
-      "template": "{{ true }}",
-      "type": "template",
+      "condition": "template",
+      "value_template": "{{ true }}",
     },
   ],
   "confirmation": {
-    "actions": {
-      "enabled": false,
-      "items": [],
-    },
-    "button": "",
+    "actions": [],
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "",
+      },
+    ],
     "enabled": false,
     "notification": {
-      "clear": true,
-      "enabled": false,
-      "message": "",
+      "data": {
+        "message": "",
+      },
+      "target": {
+        "entity_id": [
+          "notify.mobile_app_phone",
+        ],
+      },
     },
     "reminders": {
       "enabled": true,
@@ -34,21 +41,19 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
   "monitor": {
     "clear_on_inactive": false,
     "on_change": true,
-    "retention": {
-      "days": 30,
-      "enabled": true,
-    },
     "startup": true,
   },
   "name": "Front door open",
   "notification": {
-    "message": "The front door is open.",
+    "data": {
+      "message": "The front door is open.",
+      "title": "Alert",
+    },
     "target": {
       "entity_id": [
         "notify.mobile_app_phone",
       ],
     },
-    "title": "Alert",
   },
 }
 `;
@@ -57,21 +62,28 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
 {
   "conditions": [
     {
-      "template": "{{ true }}",
-      "type": "template",
+      "condition": "template",
+      "value_template": "{{ true }}",
     },
   ],
   "confirmation": {
-    "actions": {
-      "enabled": false,
-      "items": [],
-    },
-    "button": "",
+    "actions": [],
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "",
+      },
+    ],
     "enabled": false,
     "notification": {
-      "clear": true,
-      "enabled": false,
-      "message": "",
+      "data": {
+        "message": "",
+      },
+      "target": {
+        "entity_id": [
+          "notify.mobile_app_phone",
+        ],
+      },
     },
     "reminders": {
       "enabled": true,
@@ -87,21 +99,19 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
   "monitor": {
     "clear_on_inactive": false,
     "on_change": true,
-    "retention": {
-      "days": 30,
-      "enabled": true,
-    },
     "startup": true,
   },
   "name": "Front door open",
   "notification": {
-    "message": "The front door is open.",
+    "data": {
+      "message": "The front door is open.",
+      "title": "Alert",
+    },
     "target": {
       "entity_id": [
         "notify.mobile_app_phone",
       ],
     },
-    "title": "Alert",
   },
 }
 `;
@@ -110,21 +120,24 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
 {
   "conditions": [
     {
-      "template": "{{ true }}",
-      "type": "template",
+      "condition": "template",
+      "value_template": "{{ true }}",
     },
   ],
   "confirmation": {
-    "actions": {
-      "enabled": false,
-      "items": [],
-    },
-    "button": "",
+    "actions": [],
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "",
+      },
+    ],
     "enabled": false,
     "notification": {
-      "clear": true,
-      "enabled": false,
-      "message": "",
+      "data": {
+        "message": "",
+      },
+      "target": {},
     },
     "reminders": {
       "enabled": true,
@@ -140,17 +153,15 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
   "monitor": {
     "clear_on_inactive": false,
     "on_change": true,
-    "retention": {
-      "days": 30,
-      "enabled": true,
-    },
     "startup": true,
   },
   "name": "Front door open",
   "notification": {
-    "message": "The front door is open.",
+    "data": {
+      "message": "The front door is open.",
+      "title": "Alert",
+    },
     "target": {},
-    "title": "Alert",
   },
 }
 `;

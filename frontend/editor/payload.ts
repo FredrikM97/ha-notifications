@@ -11,9 +11,9 @@ import { durationInputValue } from "./helpers.js";
 
 export interface EditorPayloadInput {
   alert: Alert;
-  conditions: AlertCondition[];
+  condition: AlertCondition;
   recipients: NotificationTarget;
-  monitorInterval?: string;
+  evaluateInterval?: string;
   confirmationActions: Record<string, unknown>[];
   postSendActions: Record<string, unknown>[];
   postSendActionsEnabled: boolean;
@@ -24,9 +24,9 @@ export interface EditorPayloadInput {
 export function buildEditorPayload(input: EditorPayloadInput): Alert {
   const {
     alert,
-    conditions,
+    condition,
     recipients,
-    monitorInterval,
+    evaluateInterval,
     confirmationActions,
     postSendActions,
     postSendActionsEnabled,
@@ -40,25 +40,25 @@ export function buildEditorPayload(input: EditorPayloadInput): Alert {
       description: alert.description || "",
       icon: alert.icon,
     },
-    monitor: {
-      conditions,
-      onChange: alert.monitor.on_change,
-      startup: alert.monitor.startup,
-      interval: monitorInterval,
-      clearOnInactive: alert.monitor.clear_on_inactive === true,
+    evaluate: {
+      condition,
+      onChange: alert.monitor?.on_change !== false,
+      startup: alert.monitor?.startup !== false,
+      interval: evaluateInterval,
+      clearOnInactive: alert.monitor?.clear_on_inactive === true,
     },
     notification: {
       target: recipients,
-      title: alert.notification.title,
-      message: alert.notification.message,
+      title: String(alert.notification.data.title || ""),
+      message: String(alert.notification.data.message || ""),
     },
     confirmation: {
       enabled: Boolean(confirmation.enabled),
       buttons: confirmation.buttons,
       notification: {
-        enabled: Boolean(confirmation.notification.enabled),
-        message: confirmation.notification.message,
-        clear: confirmation.notification.clear !== false,
+        enabled: Boolean(confirmation.notification),
+        message: String(confirmation.notification.data.message || ""),
+        clear: true,
       },
       reminders: {
         enabled: confirmation.reminders.enabled,
@@ -68,6 +68,8 @@ export function buildEditorPayload(input: EditorPayloadInput): Alert {
         ),
         max_attempts: confirmation.reminders.max_attempts,
         show_attempts: confirmation.reminders.show_attempts === true,
+        forget_after_enabled:
+          confirmation.reminders.forget_after_enabled === true,
         timeout: durationInputValue(confirmation.reminders.timeout, "00:15:00"),
       },
       actions: {

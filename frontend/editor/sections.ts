@@ -5,7 +5,7 @@ import { renderConditionSection } from "../sections/condition.js";
 import { renderConfirmationSection } from "../sections/confirmation.js";
 import { renderConfirmationNotificationSection } from "../sections/confirmation-notification.js";
 import { renderConfirmationReminderSection } from "../sections/confirmation-reminder.js";
-import { renderMonitorSection } from "../sections/monitor.js";
+import { renderEvaluateSection } from "../sections/evaluate.js";
 import { renderNotificationSection } from "../sections/notification.js";
 import { renderPostConfirmationActionsSection } from "../sections/post-confirmation-actions.js";
 import { renderPostSendActionsSection } from "../sections/post-send-actions.js";
@@ -16,7 +16,7 @@ export function renderEditorSections(
   context: EditorContext,
   optionalSettings: OptionalSettings,
 ): TemplateResult {
-  return html`${renderBasicSection(context)}${renderMonitorSection(
+  return html`${renderBasicSection(context)}${renderEvaluateSection(
     context,
   )}${renderConditionSection(context)}${renderRecipientSection(
     context,

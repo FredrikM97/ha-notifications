@@ -1,20 +1,18 @@
 {
   "panel": {
-    "tabs": { "alerts": "Alerts", "history": "History", "yaml": "YAML", "debug": "Active" },
+    "tabs": { "alerts": "Alerts", "active": "Active", "history": "History", "yaml": "YAML" },
     "admin_required": "Administrator access required",
     "back_home": "Back to Home Assistant",
     "title": "HA Notifications",
-    "subtitle": "Manage alerts, notifications and debug history.",
+    "subtitle": "Manage alerts, notifications and history.",
     "add_alert": "Add alert",
-    "no_active_alerts": "No active alerts",
     "no_alerts": "No alerts yet",
+    "no_active_alerts": "No active alerts",
     "create_first": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
     "create_alert": "Create alert",
     "admin_help": "HA Notifications alerts can only be viewed and edited by Home Assistant administrators.",
     "draft_test_sent": "Draft test notification sent.", "condition_valid": "Condition is valid.", "alert_created": "Alert created.",
-    "alert_saved": "Alert saved.", "test_sent": "Test notification sent.", "alert_deleted": "Alert deleted.",
-    "state": "State",
-    "trace": "Trace ({{count}})",
+    "alert_saved": "Alert saved.", "test_sent": "Test notification sent.", "test_triggered": "Test automation triggered; conditions were evaluated.", "alert_deleted": "Alert deleted.",
     "show_all": "Show all",
     "alert_added": "Alert added.",
     "alert_enabled": "Alert enabled.",
@@ -22,10 +20,11 @@
     "confirm_delete": "Delete alert {{name}}?"
   },
   "alert": {
-    "disabled": "Disabled", "enabled": "Enabled", "idle": "Idle", "triggered": "Triggered",
+    "disabled": "Disabled", "enabled": "Enabled",
+    "automation_managed": "Automation managed", "automation_manual": "Manual automation",
+    "automation_active": "Active", "automation_triggered": "Triggered", "automation_idle": "Idle",
     "enable": "Enable", "disable": "Disable", "test": "Test alert", "edit": "Edit alert",
-    "history": "View history", "delete": "Delete alert", "every": "every {{interval}}",
-    "last_notified": "Last notified: {{time}}"
+    "history": "View history", "delete": "Delete alert", "every": "every {{interval}}"
   },
   "editor": {
     "common": {
@@ -37,16 +36,14 @@
     "basic": {
       "section": "Basic", "name": "Name", "alert_name": "Alert name", "description": "Description", "icon": "Icon"
     },
-    "monitor": {
+    "evaluate": {
       "section": "When to check", "when_condition_changes": "When condition changes", "clear_when_inactive": "Clear notification when inactive", "check_startup": "Check at startup",
+        "condition_change_help": "Condition changes are detected for referenced entities. Use a condition that references an entity, or use Test and interval checks for static templates.",
       "re_evaluate_every": "Re-evaluate condition every", "interval_help": "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
       "enable_history_retention": "Enable history retention", "history_retention": "History retention", "retention_days": "History retention days", "retention_help": "Completed alert history is removed after this period."
     },
     "condition": {
-      "section": "Condition", "mode_visual": "Visual conditions", "mode_yaml": "Conditions YAML", "mode_jinja": "Advanced Jinja",
-      "conditions_yaml": "Conditions YAML", "conditions_help": "Edit the raw conditions: list. This is the YAML behind the visual editor.",
-      "jinja_condition": "Jinja condition", "jinja_help": "The condition should evaluate to true or false. Home Assistant automatically tracks entities referenced by the template.",
-      "help": "IDs are optional. Set one such as {{id}} to use its result in a notification with {{condition}}.", "add": "Add condition", "remove": "Remove condition", "add_id": "Add ID", "empty": "No visual conditions configured.",
+      "section": "Condition", "conditions_yaml": "Native Home Assistant condition", "conditions_help": "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.",
       "type": "Type", "entity": "Entity", "for": "For", "id_optional": "ID (optional)", "state": "State", "numeric_state": "Numeric state", "attribute": "Attribute", "above": "Above", "below": "Below", "expected_value": "Expected value"
     },
     "recipients": {
@@ -63,7 +60,7 @@
       "section": "Confirmation", "toggle": "confirmation", "message": "Confirmation message", "add_response": "Add response button", "remove_button": "Remove button",
       "button_id": "Button ID", "button_id_optional": "Button ID (optional)", "button_label": "Button text", "button_label_optional": "Button text (optional)", "clear_on_acknowledge": "Clear notifications when acknowledged",
       "reminder": {
-        "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "forget_after": "Forget after", "show_attempt_count": "Show attempt count in notification title", "keep_until": "Set to 00:00:00 to keep the notification until confirmation."
+        "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "forget_after": "Forget after", "enable_forget_after": "Enable forget after", "show_attempt_count": "Show attempt count in notification title", "keep_until": "Set to 00:00:00 to keep the notification until confirmation."
       },
       "notification": {
         "section": "Notify recipients when confirmed", "follow_up_help": "Optionally send a follow-up message after acknowledgement.", "example": "Example:"
@@ -79,7 +76,7 @@
     "no_matches": "No history entries match these filters.", "all_alerts": "All alerts", "all_event_types": "All event types",
     "event_type": "Event type", "filter_event_type": "Filter by event type", "all_severities": "All severities",
     "severity": "Severity", "filter_severity": "Filter by severity", "error": "Error", "success": "Success", "info": "Info", "muted": "Muted",
-    "details": "Details", "flow": "Flow", "alert": "Alert", "filter_alert": "Filter by alert", "unknown_alert": "Unknown alert",
+    "details": "Details", "flow": "Flow", "group_by_flow": "Group by flow", "flow_events": "{{count}} events", "alert": "Alert", "filter_alert": "Filter by alert", "unknown_alert": "Unknown alert",
     "no_activity": "No activity yet", "no_activity_for": "No activity for {{name}}", "activity_help": "Notification activity and debug traces will appear here.", "show_all": "Show all history"
   },
   "yaml": {

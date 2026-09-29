@@ -2,13 +2,13 @@
   "history": [
     {
       "config": { "id": "garage", "name": "Garage door" },
-      "state": { "flow_id": "flow_garage" },
       "event": {
         "event_id": "event_garage",
         "type": "notification_sent",
         "message": "The garage is open",
         "timestamp": "2026-01-01T00:00:00+00:00",
-        "details": { "source": "sensor" }
+        "details": { "source": "sensor" },
+        "flow_id": "flow_garage"
       }
     },
     {

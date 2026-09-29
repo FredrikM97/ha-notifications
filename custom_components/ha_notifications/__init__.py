@@ -2,52 +2,56 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-import voluptuous as vol
-from homeassistant.config_entries import (
-    ConfigEntry,
-)
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-)
-from homeassistant.exceptions import (
-    HomeAssistantError,
-)
-from homeassistant.helpers import config_validation as cv
+from homeassistant.core import HomeAssistant
+from pydantic import ValidationError
 
-from .const import (
-    CONF_SHOW_SIDEBAR,
-    DOMAIN,
-    SERVICE_RELOAD,
-    SERVICE_TEST,
-)
-from .controller.core import HaNotificationsController
+from .automation import async_reconcile_automations
+from .bridge import async_register_panel
+from .configuration import validate_config
+from .const import DOMAIN
+from .domain import AutomationRunTracker, RuntimeData
+from .history import HistoryStore
+from .notification import async_setup_services, async_unload_services
 
-_LOGGER = logging.getLogger(__name__)
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
-SERVICE_TEST_SCHEMA = vol.Schema(
-    {
-        vol.Required("alert_id"): str,
+def _affected_alert_ids(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> set[str]:
+    """Return alert IDs whose canonical configuration changed."""
+    previous_alerts = {alert["id"]: alert for alert in previous["alerts"]}
+    current_alerts = {alert["id"]: alert for alert in current["alerts"]}
+    return {
+        alert_id
+        for alert_id in previous_alerts.keys() | current_alerts.keys()
+        if previous_alerts.get(alert_id) != current_alerts.get(alert_id)
     }
-)
 
 
-def _get_controller(
-    hass: HomeAssistant,
-) -> HaNotificationsController:
-    """Get the running controller."""
-
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        controller = entry.runtime_data
-        if isinstance(controller, HaNotificationsController):
-            return controller
-
-    raise HomeAssistantError("HA Notifications is not configured.")
+async def _async_update_listener(hass: HomeAssistant, entry: Any) -> None:
+    """Reconcile persisted options whenever Home Assistant updates the entry."""
+    previous = (
+        entry.runtime_data.config
+        if isinstance(entry.runtime_data, RuntimeData)
+        else validate_config(dict(entry.data))
+    )
+    validated = validate_config(dict(entry.options or entry.data))
+    try:
+        if not isinstance(entry.runtime_data, RuntimeData):
+            entry.runtime_data = RuntimeData(config=validated)
+        else:
+            entry.runtime_data.config = validated
+        await async_setup_services(hass)
+        entry.runtime_data.automations = await async_reconcile_automations(
+            hass,
+            validated["alerts"],
+        )
+    except Exception:
+        if isinstance(entry.runtime_data, RuntimeData):
+            entry.runtime_data.config = previous
+        raise
 
 
 async def async_setup(
@@ -55,115 +59,102 @@ async def async_setup(
     config: dict[str, Any],
 ) -> bool:
     """Set up HA Notifications."""
+    from .bridge.websocket import register
 
-    async def handle_reload(
-        _call: ServiceCall,
-    ) -> None:
-        """Reload HA Notifications."""
+    register(hass)
+    await async_register_panel(hass)
+    integration_config = config.get(DOMAIN)
 
-        await _get_controller(hass).reload()
+    if integration_config is None:
+        return True
 
-    async def handle_test(
-        call: ServiceCall,
-    ) -> None:
-        """Test an alert."""
+    validated = validate_config(integration_config)
 
-        await _get_controller(hass).dispatch(
-            "notification_preview.saved", call.data["alert_id"]
-        )
-
-    if not hass.services.has_service(
-        DOMAIN,
-        SERVICE_RELOAD,
-    ):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_RELOAD,
-            handle_reload,
-        )
-
-    if not hass.services.has_service(
-        DOMAIN,
-        SERVICE_TEST,
-    ):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_TEST,
-            handle_test,
-            schema=SERVICE_TEST_SCHEMA,
-        )
+    await async_setup_services(hass)
+    await async_reconcile_automations(hass, validated["alerts"])
 
     return True
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
     """Set up HA Notifications from a config entry."""
+    from .bridge.websocket import register
 
-    controller = HaNotificationsController(hass, entry)
-    controller.attach_feature_lifecycle(
-        await controller.create_feature_lifecycle()
-    )
-
+    register(hass)
+    await async_register_panel(hass)
+    config = dict(entry.options or entry.data)
     try:
-        await controller.async_setup(
-            show_in_sidebar=entry.data.get(
-                CONF_SHOW_SIDEBAR,
-                True,
-            ),
-        )
-
-    except Exception:
-        _LOGGER.exception("Failed to set up HA Notifications")
-        raise
-
-    entry.runtime_data = controller
-
-    _LOGGER.info("HA Notifications started")
-
+        validated = validate_config(config)
+    except ValidationError:
+        return True
+    history = HistoryStore(hass)
+    await history.async_load()
+    entry.runtime_data = RuntimeData(
+        config=validated,
+        history=history,
+        automation_runs=AutomationRunTracker.create(),
+        remove_update_listener=entry.add_update_listener(_async_update_listener),
+    )
+    await async_setup_services(hass)
+    entry.runtime_data.automations = await async_reconcile_automations(
+        hass,
+        validated["alerts"],
+    )
     return True
 
 
-async def async_unload_entry(
+async def async_save_config(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> bool:
-    """Unload HA Notifications."""
+    entry: Any,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate and persist a config-entry document atomically."""
+    raw_previous = dict(entry.options or entry.data)
+    try:
+        previous = validate_config(raw_previous)
+    except ValidationError:
+        previous = raw_previous
+    validated = validate_config(config)
+    hass.config_entries.async_update_entry(entry, options=validated)
+    if not isinstance(entry.runtime_data, RuntimeData):
+        if hasattr(entry, "add_update_listener"):
+            history = HistoryStore(hass)
+            await history.async_load()
+            entry.runtime_data = RuntimeData(
+                config=validated,
+                automation_runs=AutomationRunTracker.create(),
+                history=history,
+                remove_update_listener=entry.add_update_listener(
+                    _async_update_listener
+                ),
+            )
+            await async_setup_services(hass)
+        else:
+            entry.runtime_data = RuntimeData(
+                config=validated,
+                automation_runs=AutomationRunTracker.create(),
+            )
+    else:
+        entry.runtime_data.config = validated
+    try:
+        automations = await async_reconcile_automations(hass, validated["alerts"])
+        if isinstance(entry.runtime_data, RuntimeData):
+            entry.runtime_data.automations = automations
+    except Exception:
+        hass.config_entries.async_update_entry(entry, options=previous)
+        if isinstance(entry.runtime_data, RuntimeData):
+            entry.runtime_data.config = previous
+        raise
+    return validated
 
-    controller = getattr(entry, "runtime_data", None)
 
-    if not isinstance(
-        controller,
-        HaNotificationsController,
-    ):
-        controller = None
-
-    unload_ok = True
-
-    if controller is not None:
-        try:
-            unload_ok = await controller.async_unload()
-        except Exception:
-            _LOGGER.exception("Failed to unload HA Notifications")
-            unload_ok = False
-
-    return unload_ok
-
-
-async def async_remove_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> None:
-    """Clean up integration-owned runtime state after entry removal."""
-
-    controller = getattr(entry, "runtime_data", None)
-
-    if isinstance(controller, HaNotificationsController):
-        await controller.async_remove()
-
-    if hass.services.has_service(DOMAIN, SERVICE_RELOAD):
-        hass.services.async_remove(DOMAIN, SERVICE_RELOAD)
-    if hass.services.has_service(DOMAIN, SERVICE_TEST):
-        hass.services.async_remove(DOMAIN, SERVICE_TEST)
+async def async_unload_entry(hass: HomeAssistant, entry: Any) -> bool:
+    """Unload a HA Notifications config entry."""
+    runtime_data = getattr(entry, "runtime_data", None)
+    if isinstance(runtime_data, RuntimeData):
+        if runtime_data.remove_update_listener is not None:
+            runtime_data.remove_update_listener()
+        await async_reconcile_automations(hass, [])
+        await async_unload_services(hass)
+    entry.runtime_data = None
+    return True

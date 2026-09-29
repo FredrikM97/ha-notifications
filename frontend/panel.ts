@@ -2,13 +2,12 @@ import {
   deleteAlert,
   errorMessage,
   getAlerts,
-  getAlertRuntime,
-  getPreviewAlertRuntime,
+  getAutomationStatus,
   getHistory,
   loadRegistries,
   saveAlert,
-  previewAlertPayload,
-  validateConditions,
+  triggerAlert,
+  validateAlert,
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
@@ -23,14 +22,14 @@ import { LitElement, html } from "lit";
 import type { TemplateResult } from "lit";
 import type {
   Alert,
+  AutomationRuntimeStatus,
   Hass,
   Registries,
   RuntimeAlertHistoryEntry,
-  RuntimeAlertState,
 } from "./types.js";
 import "./yaml-view.js";
 
-type PanelTab = "alerts" | "history" | "yaml" | "debug";
+type PanelTab = "alerts" | "active" | "history" | "yaml";
 
 interface PanelTabDefinition {
   key: PanelTab;
@@ -43,9 +42,9 @@ interface HaNotificationsCardConfig {
 
 const panelTabs: PanelTabDefinition[] = [
   { key: "alerts", label: "panel.tabs.alerts" },
+  { key: "active", label: "panel.tabs.active" },
   { key: "history", label: "panel.tabs.history" },
   { key: "yaml", label: "panel.tabs.yaml" },
-  { key: "debug", label: "panel.tabs.debug" },
 ];
 
 function activeTabClass(active: boolean): string {
@@ -65,29 +64,10 @@ function toggleAlertToast(alert: Alert): string {
   return "Alert enabled.";
 }
 
-interface DebugAlertEntry {
-  alert: Alert;
-  runtime: RuntimeAlertState;
-}
-
-function debugPayload(
-  alerts: Alert[],
-  runtime: Record<string, RuntimeAlertState>,
-): DebugAlertEntry[] {
-  return alerts.flatMap((alert) => {
-    const runtimeState = runtime[alert.id];
-    if (!alert.runtime?.state?.active || !runtimeState?.state?.active) {
-      return [];
-    }
-    return [{ alert, runtime: runtimeState }];
-  });
-}
-
 class HaNotificationsPanel extends LitElement {
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
-  private runtime: Record<string, RuntimeAlertState> = {};
-  private previewAlerts: Alert[] = [];
+  private automationStatus: Record<string, AutomationRuntimeStatus> = {};
   private history: RuntimeAlertHistoryEntry[] = [];
   private historyAlertId: string | null = null;
   private historyAlertName: string | null = null;
@@ -97,6 +77,7 @@ class HaNotificationsPanel extends LitElement {
     type: "",
     severity: "",
   };
+  private historyGroupByFlow = false;
   private tab: PanelTab = "alerts";
   private loading = false;
   private refreshing = false;
@@ -108,12 +89,15 @@ class HaNotificationsPanel extends LitElement {
   toasts: Toast[] = [];
 
   set hass(value: Hass) {
+    const changed = this._hass !== null && this._hass !== value;
     this._hass = value;
     this.requestUpdate();
 
     if (this.isConnected && !this._initialized) {
       this._initialized = true;
       void this.refresh();
+    } else if (this.isConnected && changed) {
+      void this.refresh({ silent: true });
     }
   }
 
@@ -199,45 +183,29 @@ class HaNotificationsPanel extends LitElement {
     this.requestUpdate();
 
     try {
-      const [alertsResult, runtimeResult, previewResult, historyResult] =
+      const [alertsResult, automationStatusResult, historyResult] =
         await Promise.allSettled([
           getAlerts(this._hass),
-          getAlertRuntime(this._hass),
-          getPreviewAlertRuntime(this._hass),
-          getHistory(this._hass, this.historyAlertId, 150),
+          getAutomationStatus(this._hass),
+          getHistory(this._hass, this.historyAlertId || undefined),
         ]);
 
       if (alertsResult.status === "fulfilled") {
-        const runtimeByAlert =
-          runtimeResult.status === "fulfilled" ? runtimeResult.value : {};
-        this.alerts = alertsResult.value.map((alert) => ({
-          ...alert,
-          runtime: runtimeByAlert[alert.id],
-        }));
+        this.alerts = alertsResult.value;
         this.refreshHistoryAlertName();
       } else if (!silent) {
         this.showToast(errorMessage(alertsResult.reason), true);
-      }
-
-      if (runtimeResult.status === "fulfilled") {
-        this.runtime = runtimeResult.value;
-      } else if (!silent) {
-        this.showToast(errorMessage(runtimeResult.reason), true);
-      }
-
-      if (previewResult.status === "fulfilled") {
-        this.previewAlerts = previewResult.value.map(({ alert, runtime }) => {
-          this.runtime[alert.id] = runtime;
-          return { ...alert, runtime };
-        });
-      } else if (!silent) {
-        this.showToast(errorMessage(previewResult.reason), true);
       }
 
       if (historyResult.status === "fulfilled") {
         this.history = historyResult.value;
       } else if (!silent) {
         this.showToast(errorMessage(historyResult.reason), true);
+      }
+      if (automationStatusResult.status === "fulfilled") {
+        this.automationStatus = automationStatusResult.value;
+      } else if (!silent) {
+        this.showToast(errorMessage(automationStatusResult.reason), true);
       }
     } finally {
       this.refreshing = false;
@@ -339,15 +307,15 @@ class HaNotificationsPanel extends LitElement {
       return this.alertsTemplate();
     }
 
+    if (this.tab === "active") {
+      return this.activeTemplate();
+    }
+
     if (this.tab === "history") {
       return html`<ha-notifications-history-view
         .history=${this.history}
         .options=${this.historyViewOptions()}
       ></ha-notifications-history-view>`;
-    }
-
-    if (this.tab === "debug") {
-      return this.debugTemplate();
     }
 
     return html`<ha-notifications-yaml-view
@@ -358,64 +326,45 @@ class HaNotificationsPanel extends LitElement {
     ></ha-notifications-yaml-view>`;
   }
 
-  private debugTemplate(): TemplateResult {
-    const entries = debugPayload(
-      [...this.alerts, ...this.previewAlerts],
-      this.runtime,
-    );
-    if (!entries.length) {
-      return html`<div class="nc-card nc-empty">
-        <h2>${localize(this._hass, "panel.no_active_alerts")}</h2>
-      </div>`;
-    }
-
-    return html`<div class="nc-debug-list">
-      ${entries.map(
-        ({ alert, runtime }) => html`
-          <details class="nc-debug-alert" open>
-            <summary>
-              <span>${alert.name}</span>
-              <code>${alert.id}</code>
-            </summary>
-            <div class="nc-debug-sections">
-              <details class="nc-debug-section" open>
-                <summary>${localize(this._hass, "panel.state")}</summary>
-                <pre>${JSON.stringify(runtime.state ?? {}, null, 2)}</pre>
-              </details>
-              <details class="nc-debug-section">
-                <summary>${localize(this._hass, "panel.trace", { count: runtime.trace?.length ?? 0 })}</summary>
-                <pre>${JSON.stringify(runtime.trace ?? [], null, 2)}</pre>
-              </details>
-            </div>
-          </details>
-        `,
-      )}
-    </div>`;
+  private alertsTemplate(): TemplateResult {
+    return this.alertListTemplate(this.alerts, "panel.no_alerts", true);
   }
 
-  private alertsTemplate(): TemplateResult {
-    if (this.alerts.length) {
+  private activeTemplate(): TemplateResult {
+    const activeAlerts = this.alerts.filter((alert) => {
+      const status = this.automationStatus[alert.id];
+      return Boolean(status?.active_runs || status?.active_runs_uncertain);
+    });
+    return this.alertListTemplate(activeAlerts, "panel.no_active_alerts");
+  }
+
+  private alertListTemplate(
+    alerts: Alert[],
+    emptyTitle: string,
+    showCreate = false,
+  ): TemplateResult {
+    if (alerts.length) {
       return html`<div class="nc-alerts">
-        ${this.alerts.map((alert) =>
+        ${alerts.map((alert) =>
           renderAlertCard(alert, this._hass, {
-            onTest: (item) => this.testAlertFromCard(item),
+            onTest: (item) => this.testAlert(item),
             onToggle: (item) => this.toggleAlert(item),
             onEdit: (item) => this.editAlert(item),
             onShowHistory: (item) => this.showAlertHistory(item),
             onDelete: (item) => this.removeAlert(item),
-          }),
+          }, this.automationStatus[alert.id]),
         )}
       </div>`;
     }
 
     return html`<div class="nc-card nc-empty">
-      <h2>${localize(this._hass, "panel.no_alerts")}</h2>
-      <p>
-        ${localize(this._hass, "panel.create_first")}
-      </p>
-      <button class="nc-button" @click=${() => this.addAlert()}>
-        ${localize(this._hass, "panel.create_alert")}
-      </button>
+      <h2>${localize(this._hass, emptyTitle)}</h2>
+      ${showCreate
+        ? html`<p>${localize(this._hass, "panel.create_first")}</p>
+            <button class="nc-button" @click=${() => this.addAlert()}>
+              ${localize(this._hass, "panel.create_alert")}
+            </button>`
+        : ""}
     </div>`;
   }
 
@@ -429,11 +378,16 @@ class HaNotificationsPanel extends LitElement {
         name: alert.name,
       })),
       filters: this.historyFilters,
+      groupByFlow: this.historyGroupByFlow,
       types: [
         ...new Set(this.history.map((item) => item.event?.type).filter(Boolean)),
       ] as string[],
       onFiltersChanged: (filters) => {
         this.historyFilters = filters;
+        this.requestUpdate();
+      },
+      onGroupByFlowChanged: (groupByFlow) => {
+        this.historyGroupByFlow = groupByFlow;
         this.requestUpdate();
       },
       onAlertSelected: (alertId, alertName) =>
@@ -445,6 +399,17 @@ class HaNotificationsPanel extends LitElement {
   private selectTab(tab: PanelTab): void {
     this.tab = tab;
     this.requestUpdate();
+  }
+
+  private async testAlert(alert: Alert): Promise<void> {
+    if (!this._hass) return;
+    try {
+      await triggerAlert(this._hass, alert.id);
+      this.showToast(localize(this._hass, "panel.test_triggered"));
+      await this.refresh({ silent: true });
+    } catch (error) {
+      this.showToast(errorMessage(error), true);
+    }
   }
 
   private refreshHistoryAlertName(): void {
@@ -474,13 +439,8 @@ class HaNotificationsPanel extends LitElement {
       hass: this._hass!,
       alert: null,
       registries,
-      onTest: async (draft) => {
-        const result = await previewAlertPayload(this._hass, draft);
-        this.showToast(localize(this._hass, "panel.draft_test_sent"));
-        return result;
-      },
       onValidateCondition: async (draft) => {
-        await validateConditions(this._hass, draft);
+        await validateAlert(this._hass, draft);
         this.showToast(localize(this._hass, "panel.condition_valid"));
       },
       onSave: async (alert) => {
@@ -515,13 +475,8 @@ class HaNotificationsPanel extends LitElement {
       hass: this._hass!,
       alert,
       registries,
-      onTest: async (draft) => {
-        const result = await previewAlertPayload(this._hass, draft);
-        this.showToast(localize(this._hass, "panel.draft_test_sent"));
-        return result;
-      },
       onValidateCondition: async (draft) => {
-        await validateConditions(this._hass, draft);
+        await validateAlert(this._hass, draft);
         this.showToast(localize(this._hass, "panel.condition_valid"));
       },
       onSave: async (updated) => {
@@ -547,22 +502,12 @@ class HaNotificationsPanel extends LitElement {
         return {
           ...item,
           ...saved,
-          runtime: item.runtime,
         };
       }
 
       return item;
     });
     this.requestUpdate();
-  }
-
-  private async testAlertFromCard(alert: Alert): Promise<void> {
-    try {
-      await previewAlertPayload(this._hass, alert);
-      this.showToast(localize(this._hass, "panel.test_sent"));
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    }
   }
 
   private async showAlertHistory(alert: Alert): Promise<void> {
@@ -586,17 +531,9 @@ class HaNotificationsPanel extends LitElement {
       severity: "",
     };
     this.tab = "history";
-    this.loading = true;
+    this.history = [];
+    await this.refresh();
     this.requestUpdate();
-
-    try {
-      this.history = await getHistory(this._hass, alertId, 150);
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    } finally {
-      this.loading = false;
-      this.requestUpdate();
-    }
   }
 
   private async showAllHistory(): Promise<void> {
@@ -613,17 +550,9 @@ class HaNotificationsPanel extends LitElement {
       severity: "",
     };
     this.tab = "history";
-    this.loading = true;
+    this.history = [];
+    await this.refresh();
     this.requestUpdate();
-
-    try {
-      this.history = await getHistory(this._hass, null, 150);
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    } finally {
-      this.loading = false;
-      this.requestUpdate();
-    }
   }
 
   private async toggleAlert(alert: Alert): Promise<void> {

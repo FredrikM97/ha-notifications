@@ -33,7 +33,7 @@ function statusEnabled(alert: Alert, status: SectionStatus): boolean {
   }
   if (status === "postConfirmationActions") {
     return Boolean(
-      alert.confirmation?.enabled && alert.confirmation.actions.enabled,
+      alert.confirmation?.enabled && alert.confirmation.actions.length > 0,
     );
   }
   if (status === "confirmationReminder") {
@@ -42,7 +42,7 @@ function statusEnabled(alert: Alert, status: SectionStatus): boolean {
     );
   }
   return Boolean(
-    alert.confirmation?.enabled && alert.confirmation.notification.enabled,
+    alert.confirmation?.enabled && Boolean(alert.confirmation.notification),
   );
 }
 

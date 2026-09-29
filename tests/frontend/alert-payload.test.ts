@@ -7,6 +7,19 @@ import {
 } from "./conftest.js";
 
 describe("buildAlertPayload", () => {
+  it("preserves native condition mappings", () => {
+    const condition = [
+      { condition: "state", entity_id: "binary_sensor.front_door", state: "on" },
+      { condition: "template", value_template: "{{ true }}" },
+    ];
+    const payload = buildAlertPayload(
+      draftAlertFixture({ conditions: condition }),
+      alertFormValuesWithRecipients({ evaluate: { ...alertFormValues().evaluate, condition } }),
+    );
+    expect(payload.conditions).toEqual(condition);
+    expect(payload).not.toHaveProperty("condition");
+  });
+
   it("omits the delivery action when recipients are selected", () => {
     const original = draftAlertFixture({ id: "test_alert" });
     const payload = buildAlertPayload(
@@ -46,7 +59,7 @@ describe("buildAlertPayload", () => {
     const original = draftAlertFixture({
       monitor: {
         ...draftAlertFixture().monitor,
-        retention: { enabled: true, days: 14 },
+        clear_on_inactive: true,
       },
     });
     const payload = buildAlertPayload(
@@ -54,7 +67,23 @@ describe("buildAlertPayload", () => {
       alertFormValuesWithRecipients(),
     );
 
-    expect(payload.monitor.retention).toEqual({ enabled: true, days: 14 });
+    expect(payload.monitor?.clear_on_inactive).toBe(true);
+  });
+
+  it("emits canonical monitor fields without legacy evaluate fields", () => {
+    const original = draftAlertFixture();
+
+    const payload = buildAlertPayload(
+      original,
+      alertFormValuesWithRecipients(),
+    );
+
+    expect(payload).not.toHaveProperty("evaluate");
+    expect(payload).not.toHaveProperty("condition");
+    expect(payload.monitor).toMatchObject({
+      on_change: true,
+      startup: true,
+    });
   });
 
   it("persists disabling existing post-send actions", () => {
@@ -104,10 +133,7 @@ describe("buildAlertPayload", () => {
     const original = draftAlertFixture({
       confirmation: {
         ...draftAlertFixture().confirmation!,
-        actions: {
-          enabled: true,
-          items: [{ action: "light.turn_on" }],
-        },
+        actions: [{ action: "light.turn_on" }],
       },
     });
     const retained = buildAlertPayload(
@@ -115,14 +141,11 @@ describe("buildAlertPayload", () => {
       alertFormValuesWithRecipients({
         confirmation: {
           ...alertFormValues().confirmation,
-          actions: { enabled: false },
+          actions: { enabled: false, items: [] },
         },
       }),
     );
-    expect(retained.confirmation?.actions).toEqual({
-      enabled: false,
-      items: [{ action: "light.turn_on" }],
-    });
+    expect(retained.confirmation?.actions).toEqual([{ action: "light.turn_on" }]);
 
     const cleared = buildAlertPayload(
       original,
@@ -133,10 +156,7 @@ describe("buildAlertPayload", () => {
         },
       }),
     );
-    expect(cleared.confirmation?.actions).toEqual({
-      enabled: true,
-      items: [],
-    });
+    expect(cleared.confirmation?.actions).toEqual([]);
   });
 
   it("persists a custom alert icon", () => {
@@ -178,8 +198,8 @@ describe("buildAlertPayload", () => {
       buildAlertPayload(
         original,
         alertFormValues({
-          monitor: {
-            ...alertFormValues().monitor,
+          evaluate: {
+            ...alertFormValues().evaluate,
             interval: "not-a-duration",
           },
         }),

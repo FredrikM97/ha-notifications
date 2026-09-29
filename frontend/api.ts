@@ -1,5 +1,8 @@
 import type {
   Alert,
+  AlertsConfig,
+  AutomationRuntimeStatus,
+  AutomationStatusValue,
   Hass,
   Registries,
   RegistryArea,
@@ -10,11 +13,19 @@ import type {
   RegistryState,
   RegistryUser,
   RuntimeAlertHistoryEntry,
-  RuntimeAlertState,
 } from "./types.js";
 import { serializeAlertDurations } from "./alert-payload.js";
 
 const DOMAIN = "ha_notifications";
+type Command =
+  | "get_config"
+  | "automation_status"
+  | "get_history"
+  | "validate_config"
+  | "save_config"
+  | "delete"
+  | "reload"
+  | "trigger";
 
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -35,7 +46,7 @@ export function errorMessage(error: unknown): string {
 
 export async function call<T>(
   hass: Hass,
-  command: string,
+  command: Command,
   data: Record<string, unknown> = {},
 ): Promise<T> {
   try {
@@ -55,6 +66,12 @@ async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
   }
 
   return [];
+}
+
+function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
+  const serialized = serializeAlertDurations(alert);
+  const { runtime: _runtime, ...canonical } = serialized;
+  return canonical as AlertsConfig["alerts"][number];
 }
 
 export async function loadRegistries(hass: Hass): Promise<Registries> {
@@ -87,90 +104,85 @@ export async function loadRegistries(hass: Hass): Promise<Registries> {
 }
 
 export async function getAlerts(hass: Hass): Promise<Alert[]> {
-  const alerts = await call<unknown>(hass, "list");
+  const config = await call<unknown>(hass, "get_config");
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    throw new Error(
+      "ha_notifications/get_config: expected canonical configuration with an alerts array.",
+    );
+  }
+
+  const alerts = (config as { alerts?: unknown }).alerts;
   if (!Array.isArray(alerts)) {
-    throw new Error("ha_notifications/list: expected an alert list.");
+    throw new Error(
+      "ha_notifications/get_config: expected canonical configuration with an alerts array.",
+    );
   }
 
   return alerts as Alert[];
 }
 
-export async function getAlertRuntime(
+export function getAutomationStatus(
   hass: Hass,
-): Promise<Record<string, RuntimeAlertState>> {
-  const runtime = await call<unknown>(hass, "runtime");
-  if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
-    throw new Error("ha_notifications/runtime: expected a runtime mapping.");
-  }
-
-  return runtime as Record<string, RuntimeAlertState>;
+): Promise<Record<string, AutomationRuntimeStatus>> {
+  return call<Record<string, AutomationRuntimeStatus>>(hass, "automation_status");
 }
 
-export interface PreviewAlertRuntime {
-  alert: Alert;
-  runtime: RuntimeAlertState;
+export function triggerAlert(
+  hass: Hass,
+  alertId: string,
+): Promise<{ triggered: boolean; alert_id: string }> {
+  return call(hass, "trigger", { alert_id: alertId });
 }
 
-export async function getPreviewAlertRuntime(
+export function getHistory(
   hass: Hass,
-): Promise<PreviewAlertRuntime[]> {
-  const result = await call<unknown>(hass, "preview_runtime");
-  return Array.isArray(result) ? (result as PreviewAlertRuntime[]) : [];
+  alertId?: string,
+): Promise<RuntimeAlertHistoryEntry[]> {
+  return call<RuntimeAlertHistoryEntry[]>(hass, "get_history", {
+    ...(alertId ? { alert_id: alertId } : {}),
+  });
 }
 
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {
   if (!alert.id || typeof alert.id !== "string") {
-    throw new Error("ha_notifications/save: alert.id is required.");
+    throw new Error("ha_notifications/save_config: alert.id is required.");
   }
-  return call<Alert>(hass, "save", {
-    alert: serializeAlertDurations(alert),
-  });
+
+  const config = await getConfig(hass);
+  const canonicalAlert = toCanonicalAlert(alert);
+  const alerts = config.alerts.some(({ id }) => id === alert.id)
+    ? config.alerts.map((existingAlert) =>
+        existingAlert.id === alert.id ? canonicalAlert : existingAlert,
+      )
+    : [...config.alerts, canonicalAlert];
+  const result = await saveConfig(hass, { ...config, alerts });
+  const savedAlert = result.config.alerts.find(({ id }) => id === alert.id);
+  if (!savedAlert) {
+    throw new Error(`ha_notifications/save_config: saved alert ${alert.id} was not returned.`);
+  }
+
+  return savedAlert as unknown as Alert;
 }
 
 export async function deleteAlert(
   hass: Hass,
   alertId: string,
 ): Promise<unknown> {
-  return call(hass, "delete", {
-    alert_id: alertId,
-  });
-}
-
-export async function previewAlertPayload(
-  hass: Hass,
-  alert: Alert,
-): Promise<unknown> {
-  return call(hass, "preview_payload", {
-    alert: serializeAlertDurations(alert),
-  });
-}
-
-export async function validateConditions(
-  hass: Hass,
-  alert: Alert,
-): Promise<unknown> {
-  return call(hass, "validate_conditions", {
-    alert: serializeAlertDurations(alert),
-  });
-}
-
-export async function getHistory(
-  hass: Hass,
-  alertId: string | null = null,
-  limit = 100,
-) {
-  const data: Record<string, unknown> = { limit };
-  if (alertId) {
-    data.alert_id = alertId;
+  const config = await getConfig(hass);
+  if (!config.alerts.some(({ id }) => id === alertId)) {
+    throw new Error(`ha_notifications/save_config: alert ${alertId} was not found.`);
   }
 
-  return call<RuntimeAlertHistoryEntry[]>(hass, "history", data);
+  return saveConfig(hass, {
+    ...config,
+    alerts: config.alerts.filter(({ id }) => id !== alertId),
+  });
 }
 
 export async function getConfig(
   hass: Hass,
-): Promise<Record<string, unknown>> {
-  return call<Record<string, unknown>>(hass, "get_config");
+): Promise<AlertsConfig> {
+  return call<AlertsConfig>(hass, "get_config");
 }
 
 export async function validateConfig(
@@ -182,11 +194,37 @@ export async function validateConfig(
   });
 }
 
-export async function saveConfig(
+export async function validateAlert(
+  hass: Hass,
+  alert: Alert,
+): Promise<unknown> {
+  const config = await getConfig(hass);
+  const canonicalAlert = toCanonicalAlert(alert);
+  const alerts = config.alerts.some(({ id }) => id === alert.id)
+    ? config.alerts.map((existingAlert) =>
+        existingAlert.id === alert.id ? canonicalAlert : existingAlert,
+      )
+    : [...config.alerts, canonicalAlert];
+
+  return validateConfig(hass, { ...config, alerts });
+}
+
+export function saveConfig(
+  hass: Hass,
+  config: AlertsConfig,
+): Promise<{ saved: boolean; config: AlertsConfig }>;
+export function saveConfig(
   hass: Hass,
   config: Record<string, unknown>,
-): Promise<{ saved: boolean; config: Record<string, unknown> }> {
-  return call<{ saved: boolean; config: Record<string, unknown> }>(
+): Promise<{ saved: boolean; config: Record<string, unknown> }>;
+export async function saveConfig(
+  hass: Hass,
+  config: AlertsConfig | Record<string, unknown>,
+): Promise<{
+  saved: boolean;
+  config: AlertsConfig | Record<string, unknown>;
+}> {
+  return call<{ saved: boolean; config: AlertsConfig | Record<string, unknown> }>(
     hass,
     "save_config",
     {

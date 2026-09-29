@@ -16,19 +16,7 @@ import {
 } from "./types.js";
 
 export function editorModeFor(value: Alert): EditorMode {
-  if (!value.conditions.length) {
-    return "visual";
-  }
-
-  if (
-    value.conditions.some((item) =>
-      ["state", "numeric", "attribute"].includes(item.type),
-    )
-  ) {
-    return "visual";
-  }
-
-  return "jinja";
+  return "yaml";
 }
 
 export function isSectionVisible(
@@ -45,50 +33,37 @@ export function defaultAlert(): Alert {
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
-    conditions: [],
+    conditions: [{ condition: "template", value_template: "{{ true }}" }],
     monitor: {
       on_change: true,
       startup: true,
       clear_on_inactive: false,
-      retention: {
-        enabled: true,
-        days: 30,
-      },
     },
     notification: {
       target: {},
-      title: "",
-      message: "",
+      data: { title: "", message: "" },
     },
     confirmation: {
       enabled: false,
       buttons: [{ id: "confirm", label: "Done" }],
-      notification: { enabled: false, message: "", clear: true },
+      notification: {
+        data: { message: "" },
+      },
       reminders: {
         enabled: false,
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
+        forget_after_enabled: false,
         timeout: "00:15:00",
       },
-      actions: { enabled: false, items: [] },
+      actions: [],
     },
   };
 }
 
-export function conditionTemplate(alert: Alert): string {
-  return (
-    alert.conditions.find((condition) => condition.type === "template")
-      ?.template || ""
-  );
-}
-
-export function conditionsYaml(conditions: Alert["conditions"]): string {
-  if (conditions.length) {
-    return YAML.stringify(conditions);
-  }
-
-  return YAML.stringify([]);
+export function conditionYaml(condition: Alert["conditions"]): string {
+  return YAML.stringify(condition);
 }
 
 export function actionsYaml(
@@ -101,15 +76,12 @@ export function actionsYaml(
   return "";
 }
 
-export function parseConditionsYaml(value: string): Alert["conditions"] {
-  const parsed = YAML.parse(value || "[]");
-  if (!Array.isArray(parsed)) {
-    throw new Error("Conditions YAML must be a list.");
+export function parseConditionYaml(value: string): Alert["conditions"] {
+  const parsed = YAML.parse(value);
+  if (Array.isArray(parsed) && parsed.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+    return parsed as Alert["conditions"];
   }
-  if (!parsed.every((item) => item && typeof item === "object")) {
-    throw new Error("Conditions YAML must contain condition objects.");
-  }
-  return parsed as Alert["conditions"];
+  throw new Error("Conditions YAML must be a list of mappings.");
 }
 
 export function valueOf(event: Event): string {

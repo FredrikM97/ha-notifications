@@ -1,94 +1,14 @@
 """Constants for HA Notifications."""
 
-from __future__ import annotations
-
-from enum import StrEnum
-
 DOMAIN = "ha_notifications"
-
-VERSION = "0.4.1"
 CONFIG_VERSION = 1
+AUTOMATION_FILE = "ha_notifications_automations.yaml"
+AUTOMATION_LABEL = "HA Notifications"
 
-SERVICE_RELOAD = "reload"
-SERVICE_TEST = "test"
+SERVICE_SEND = "send"
+SERVICE_CLEAR = "clear"
+SERVICE_RECORD = "record"
+SERVICE_REPORT = "report"
 
-EVENT_NOTIFICATION_ACTION = "mobile_app_notification_action"
-EVENT_ALERT_EVENT = "ha_notifications_alert_event"
-STATE_HISTORY_RETENTION_BY_ALERT = "history_retention_by_alert"
-
-STORAGE_VERSION = 1
-HISTORY_STORAGE_KEY = "ha_notifications_history"
-
-MAX_HISTORY = 500
-PANEL_TITLE = "HA Notifications"
-CONF_SHOW_SIDEBAR = "show_sidebar"
-FRONTEND_BUILD_DIR= "frontend"
-PANEL_MODULE = f"{FRONTEND_BUILD_DIR}/panel.js"
-
-DEFAULT_HISTORY_RETENTION_DAYS = 30
-
-
-class AlertEventType(StrEnum):
-    """Event types published for one alert workflow fact.
-
-    A `StrEnum` so existing string comparisons, JSON/YAML serialization, and
-    frontend payloads keep working unchanged while call sites get typo-safe
-    autocomplete instead of hand-typed string literals.
-    """
-
-    CONDITION_ACTIVE = "condition_active"
-    CONDITION_INACTIVE = "condition_inactive"
-    CONDITION_ERROR = "condition_error"
-    NOTIFICATION_SENT = "notification_sent"
-    NOTIFICATION_FAILED = "notification_failed"
-    NOTIFICATION_CLEARED = "notification_cleared"
-    CONFIRMED = "confirmed"
-    CONFIRMATION_ATTEMPTS_EXHAUSTED = "confirmation_attempts_exhausted"
-    COMPLETION_SENT = "completion_sent"
-    COMPLETION_FAILED = "completion_failed"
-    NOTIFICATION_ACTION = "notification_action"
-    NOTIFICATION_ACTION_FAILED = "notification_action_failed"
-    CONFIRMATION_ACTION = "confirmation_action"
-    CONFIRMATION_ACTION_FAILED = "confirmation_action_failed"
-    TEST = "test"
-
-
-class FeatureName(StrEnum):
-    """Stable keys used to resolve feature dependencies."""
-
-    ALERTS = "alerts"
-    ALERT_COORDINATOR = "alert_coordinator"
-    ALERT_FLOW = "alert_flow"
-    CONDITIONS = "conditions"
-    CONFIGURATION = "configuration"
-    CONFIRMATIONS = "confirmations"
-    FOLLOW_UP_ACTIONS = "follow_up_actions"
-    HISTORY = "history"
-    NOTIFICATION = "notification"
-    NOTIFICATION_PREVIEW = "notification_preview"
-
-
-class ConditionType(StrEnum):
-    """Visual/template condition discriminator.
-
-    See `custom_components/ha_notifications/features/conditions.py`.
-    """
-
-    TEMPLATE = "template"
-    STATE = "state"
-    NUMERIC = "numeric"
-    ATTRIBUTE = "attribute"
-
-
-class WorkflowSource(StrEnum):
-    """Origin of a condition or notification workflow evaluation."""
-
-    CHANGE = "change"
-    STARTUP = "startup"
-    RELOAD = "reload"
-    INTERVAL = "interval"
-    CONFIRMATION = "confirmation"
-    ENABLED = "enabled"
-    TEST = "test"
-
-DEFAULT_MAX_ATTEMPTS = 5
+CONF_ALERTS = "alerts"
+CONF_NOTIFICATION = "notification"

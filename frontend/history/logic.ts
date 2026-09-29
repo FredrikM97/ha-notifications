@@ -7,6 +7,11 @@ export interface HistoryFilters {
   severity: string;
 }
 
+export interface HistoryFlowGroup {
+  flowId?: string;
+  entries: RuntimeAlertHistoryEntry[];
+}
+
 export function historySeverity(type: string | undefined): string {
   if (!type) return "info";
   if (type.includes("failed") || type.includes("error")) return "error";
@@ -56,7 +61,7 @@ export function filterHistoryEntries(
       item.config?.name,
       item.event?.message,
       item.event?.type,
-      item.state?.flow_id,
+      item.event?.flow_id,
       historyDetailSummary(item.event?.details),
     ]
       .filter(Boolean)
@@ -64,4 +69,29 @@ export function filterHistoryEntries(
       .toLowerCase();
     return searchable.includes(search);
   });
+}
+
+export function groupHistoryEntries(
+  history: RuntimeAlertHistoryEntry[],
+): HistoryFlowGroup[] {
+  const groups: HistoryFlowGroup[] = [];
+  const byFlow = new Map<string, HistoryFlowGroup>();
+
+  for (const entry of history) {
+    const flowId = entry.event?.flow_id;
+    if (!flowId) {
+      groups.push({ entries: [entry] });
+      continue;
+    }
+
+    let group = byFlow.get(flowId);
+    if (!group) {
+      group = { flowId, entries: [] };
+      byFlow.set(flowId, group);
+      groups.push(group);
+    }
+    group.entries.push(entry);
+  }
+
+  return groups;
 }

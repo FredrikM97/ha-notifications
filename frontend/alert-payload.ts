@@ -44,27 +44,16 @@ function requiredDurationSeconds(
 export function serializeAlertDurations(alert: Alert): Alert {
   const result = clone(alert);
   if (result.monitor) {
-    const monitorInterval = requiredDurationSeconds(
+    const evaluateInterval = requiredDurationSeconds(
       result.monitor.interval,
       "Monitor interval",
     );
-    if (monitorInterval !== undefined) {
-      result.monitor.interval = monitorInterval;
+    if (evaluateInterval !== undefined) {
+      result.monitor.interval = evaluateInterval;
     }
   }
 
-  if (Array.isArray(result.conditions)) {
-    result.conditions = result.conditions.map((condition, index) => {
-      const conditionFor = requiredDurationSeconds(
-        condition.for,
-        `Condition ${index + 1} duration`,
-      );
-      if (conditionFor === undefined) {
-        return condition;
-      }
-      return { ...condition, for: conditionFor };
-    });
-  }
+  result.conditions = serializeConditionDurations(result.conditions);
 
   if (result.confirmation?.reminders) {
     const interval = requiredDurationSeconds(
@@ -88,14 +77,49 @@ export function serializeAlertDurations(alert: Alert): Alert {
   return result;
 }
 
+function serializeConditionDurations(condition: AlertCondition): AlertCondition {
+  return condition.map((item) =>
+    Object.fromEntries(
+      Object.entries(item).map(([key, value]) => {
+      if (key === "for") {
+        return [
+          key,
+          requiredDurationSeconds(
+            value as string | number | Record<string, number>,
+            "Condition duration",
+          ),
+        ];
+      }
+      if (Array.isArray(value)) {
+        return [
+          key,
+          value.map((item) =>
+            item && typeof item === "object"
+              ? serializeConditionDurations([item as AlertCondition[number]])[0]
+              : item,
+          ),
+        ];
+      }
+      if (value && typeof value === "object") {
+        return [
+          key,
+          serializeConditionDurations([value as AlertCondition[number]])[0],
+        ];
+      }
+      return [key, value];
+      }),
+    ),
+  ) as AlertCondition;
+}
+
 export interface AlertIdentityFormValues {
   name: string;
   description: string;
   icon?: string;
 }
 
-export interface AlertMonitorFormValues {
-  conditions: AlertCondition[];
+export interface AlertEvaluateFormValues {
+  condition: AlertCondition;
   onChange: boolean;
   startup: boolean;
   interval?: string;
@@ -110,7 +134,7 @@ export interface AlertNotificationFormValues {
 
 export interface AlertConfirmationFormValues {
   enabled: boolean;
-  buttons: { id: string; label: string }[];
+  buttons: { id?: string; label: string }[];
   notification: {
     enabled: boolean;
     message: string;
@@ -121,6 +145,7 @@ export interface AlertConfirmationFormValues {
     interval: string;
     max_attempts: number;
     show_attempts: boolean;
+    forget_after_enabled: boolean;
     timeout: string;
   };
   actions: {
@@ -136,7 +161,7 @@ export interface AlertPostSendActionsFormValues {
 
 export interface AlertFormValues {
   identity: AlertIdentityFormValues;
-  monitor: AlertMonitorFormValues;
+  evaluate: AlertEvaluateFormValues;
   notification: AlertNotificationFormValues;
   confirmation: AlertConfirmationFormValues;
   post_send_actions: AlertPostSendActionsFormValues;
@@ -165,38 +190,43 @@ export function buildAlertPayload(
   result.description = values.identity.description;
   result.icon =
     values.identity.icon?.trim() || result.icon || "mdi:bell-outline";
-  result.conditions = values.monitor.conditions;
+  result.conditions = values.evaluate.condition;
   result.monitor = {
     ...result.monitor,
-    on_change: values.monitor.onChange,
-    startup: values.monitor.startup,
+    on_change: values.evaluate.onChange,
+    startup: values.evaluate.startup,
   };
-  if (values.monitor.clearOnInactive !== undefined) {
-    result.monitor.clear_on_inactive = values.monitor.clearOnInactive;
+  if (values.evaluate.clearOnInactive !== undefined) {
+    result.monitor.clear_on_inactive = values.evaluate.clearOnInactive;
   }
-  if (values.monitor.interval) {
-    result.monitor.interval = values.monitor.interval;
+  if (values.evaluate.interval) {
+    result.monitor.interval = values.evaluate.interval;
   }
 
   result.notification = {
+    ...result.notification,
     target: values.notification.target,
-    title: values.notification.title,
-    message: values.notification.message,
+    data: {
+      ...result.notification.data,
+      title: values.notification.title,
+      message: values.notification.message,
+    },
   };
   result.confirmation = {
     ...values.confirmation,
-    actions: {
-      ...result.confirmation?.actions,
-      ...values.confirmation.actions,
-      ...(values.confirmation.actions.items === undefined
-        ? { items: result.confirmation?.actions?.items }
-        : { items: values.confirmation.actions.items }),
+    notification: {
+      ...result.confirmation?.notification,
+      target: result.confirmation?.notification.target || values.notification.target,
+      data: {
+        ...result.confirmation?.notification.data,
+        message: values.confirmation.notification.message,
+      },
     },
+    actions: values.confirmation.actions.enabled
+      ? values.confirmation.actions.items ?? []
+      : result.confirmation?.actions ?? [],
   };
 
-  if (original.notification?.data) {
-    result.notification.data = original.notification.data;
-  }
   if (
     values.post_send_actions.actions?.length ||
     values.post_send_actions.postSendActionsEnabled ||

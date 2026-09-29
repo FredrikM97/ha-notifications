@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it, vi } from "vitest";
-import { visualConditionBuilder } from "../../frontend/condition-builder.js";
 import { defaultAlert } from "../../frontend/editor/helpers.js";
 import { openEditor } from "../../frontend/editor/index.js";
 import { editorSections } from "../../frontend/editor/types.js";
@@ -54,72 +53,6 @@ function sectionContract(section: Element | null) {
   };
 }
 
-describe("condition builder interactions", () => {
-  it("moves Add ID into the action row and reveals the ID field", async () => {
-    const container = document.createElement("div");
-    const queries = domQueries(container);
-    const user = testUser();
-    const markDirty = vi.fn();
-    const conditions = [
-      { type: "state" as const, entity_id: "sensor.front_door", state: "on" },
-    ];
-
-    visualConditionBuilder(
-      container,
-      {} as Hass,
-      emptyRegistries(),
-      conditions,
-      markDirty,
-    );
-
-    expect(stableMarkup(container.querySelector(".nc-condition-id-toggle"))).toMatchSnapshot();
-    await user.click(queries.getByRole("button", { name: "Add ID" }));
-
-    expect(
-      stableMarkup(container.querySelector(".nc-condition-actions")),
-    ).toMatchSnapshot();
-    expect(
-      container.querySelector('ha-input[placeholder="front_door"]'),
-    ).not.toBeNull();
-    expect(markDirty).not.toHaveBeenCalled();
-  });
-
-  it("removes a condition and marks the editor dirty", async () => {
-    const container = document.createElement("div");
-    const queries = domQueries(container);
-    const user = testUser();
-    const markDirty = vi.fn();
-
-    visualConditionBuilder(
-      container,
-      {} as Hass,
-      emptyRegistries(),
-      [{ type: "state", entity_id: "sensor.front_door", state: "on" }],
-      markDirty,
-    );
-    await user.click(queries.getByRole("button", { name: "Remove condition" }));
-
-    expect(container.querySelector(".nc-condition-row")).toBeNull();
-    expect(stableMarkup(container.querySelector(".nc-help"))).toMatchSnapshot();
-    expect(markDirty).toHaveBeenCalledOnce();
-  });
-
-  it("omits visual conditions without an entity", () => {
-    const currentConditions = visualConditionBuilder(
-      document.createElement("div"),
-      {} as Hass,
-      emptyRegistries(),
-      [
-        { type: "state", entity_id: "sensor.front_door", state: "on" },
-        { type: "state", entity_id: "", state: "off" },
-      ],
-      vi.fn(),
-    );
-
-    expect(currentConditions()).toMatchSnapshot();
-  });
-});
-
 describe("alert editor interactions", () => {
   it("loads populated alert and registry fixture data", async () => {
     const root = editorRoot();
@@ -139,9 +72,6 @@ describe("alert editor interactions", () => {
           checked: boolean;
         }
       )?.checked,
-      retentionDays: (
-        root.querySelector('[aria-label="History retention days"]') as HTMLInputElement
-      )?.value,
       confirmationEnabled: (
         root.querySelector(
           '[data-role="editor-section-control"][data-setting="confirmation"] ha-switch',
@@ -198,7 +128,7 @@ describe("alert editor interactions", () => {
     expect(sectionButtons[0].classList.contains("active")).toBe(true);
   });
 
-  it("switches condition editor modes", async () => {
+  it("renders the native condition YAML editor", async () => {
     const root = editorRoot();
     const queries = editorQueries(root);
     const user = testUser();
@@ -207,17 +137,8 @@ describe("alert editor interactions", () => {
       queries.getAllByRole("button", { name: /Condition/ })[0],
     );
 
-    await user.click(queries.getByRole("button", { name: "Conditions YAML" }));
-    expect(root.querySelector('[data-role="conditions-yaml"]')?.hidden).toBe(
-      false,
-    );
-    expect(root.querySelector('[data-role="visual"]')?.hidden).toBe(true);
-
-    await user.click(queries.getByRole("button", { name: "Advanced Jinja" }));
-    expect(root.querySelector('[data-role="jinja"]')?.hidden).toBe(false);
-    expect(root.querySelector('[data-role="conditions-yaml"]')?.hidden).toBe(
-      true,
-    );
+    expect(root.querySelector('[data-role="conditions-yaml"]')?.hidden).toBe(false);
+    expect(root.querySelector('[data-role="conditions-yaml-editor"]')).not.toBeNull();
   });
 
   it("updates confirmation state and status indicators when toggled", () => {
@@ -288,17 +209,15 @@ describe("alert editor interactions", () => {
     const options = editorOptions(root);
     openEditor(options);
     await user.click(queries.getAllByRole("button", { name: /Condition/ })[0]);
-    await user.click(queries.getByRole("button", { name: "Conditions YAML" }));
-
     const yamlEditor = root.querySelector<HTMLElement & { value: string }>(
       '[data-role="conditions-yaml-editor"]',
     );
-    yamlEditor.value = "condition: true";
+    yamlEditor.value = "- true";
     await user.click(queries.getByRole("button", { name: "Validate condition" }));
 
     await vi.waitFor(() => {
       expect(root.querySelector(".nc-toast")?.textContent).toContain(
-        "Conditions YAML must be a list.",
+        "Conditions YAML must be a list of mappings.",
       );
     });
     expect(options.onValidateCondition).not.toHaveBeenCalled();
@@ -377,33 +296,6 @@ describe("alert editor interactions", () => {
     expect(options.onSave).not.toHaveBeenCalled();
   });
 
-  it("sends a valid draft through the Test alert action", async () => {
-    const root = editorRoot();
-    const queries = editorQueries(root);
-    const user = testUser();
-    const alert = draftAlertFixture({
-      id: "testable_alert",
-      name: "Testable alert",
-      conditions: [{ type: "template", template: "{{ true }}" }],
-      notification: { target: { entity_id: ["notify.phone"] } },
-    });
-    const options = editorOptions(root, alert, {
-      ...emptyRegistries(),
-      entities: [{ entity_id: "notify.phone", name: "Phone" }],
-    });
-    openEditor(options);
-
-    await user.click(queries.getByRole("button", { name: "Test alert" }));
-    await vi.waitFor(() => expect(options.onTest).toHaveBeenCalledOnce());
-
-    const testedAlert = options.onTest.mock.calls[0][0];
-    expect({
-      name: testedAlert.name,
-      conditions: testedAlert.conditions,
-      target: testedAlert.notification.target,
-    }).toMatchSnapshot();
-  });
-
   it("saves an edited alert and closes the editor", async () => {
     const root = editorRoot();
     const queries = editorQueries(root);
@@ -411,8 +303,12 @@ describe("alert editor interactions", () => {
     const alert = draftAlertFixture({
       id: "editable_alert",
       name: "Original name",
-      conditions: [{ type: "template", template: "{{ true }}" }],
-      notification: { target: { entity_id: ["notify.phone"] } },
+      conditions: [{ condition: "template", value_template: "{{ true }}" }],
+      notification: {
+        action: "notify.phone",
+        target: { entity_id: ["notify.phone"] },
+        data: {},
+      },
     });
     const registries = {
       ...emptyRegistries(),

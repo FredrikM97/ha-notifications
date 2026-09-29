@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import runtimeContract from "../contracts/runtime.json";
 import {
   getAlerts,
-  getAlertRuntime,
+  getAutomationStatus,
   getConfig,
   getHistory,
   deleteAlert,
@@ -10,73 +9,217 @@ import {
   reload,
   saveAlert,
   saveConfig,
-  previewAlertPayload,
-  validateConditions,
+  validateAlert,
   validateConfig,
 } from "../../frontend/api.js";
-import type { Alert } from "../../frontend/types.js";
+import type { Alert, AlertsConfig } from "../../frontend/types.js";
 import {
   alertFixture,
   configFixture,
   createHassClient,
   editorAlertFixture,
-  previewSessionResultFixture,
 } from "./conftest.js";
 
 describe("frontend API transport", () => {
-  it("uses the runtime command for alert runtime state", async () => {
+  it("loads history through the namespaced history command", async () => {
     const client = createHassClient();
-    const runtime = { door: { active: true } };
-    client.sendMessagePromise.mockResolvedValueOnce(runtime);
+    const history = [{
+      config: { id: "door", name: "Door" },
+      event: {
+        event_id: "event-1",
+        timestamp: "2026-09-29T12:00:00+00:00",
+        type: "notification_sent",
+        message: "Notification sent",
+        details: {},
+      },
+    }];
+    client.sendMessagePromise.mockResolvedValueOnce(history);
 
-    const result = await getAlertRuntime(client.hass);
-
-    expect({
-      result,
-      request: client.sendMessagePromise.mock.calls[0][0],
-      calls: client.sendMessagePromise.mock.calls,
-    }).toMatchSnapshot();
+    await expect(getHistory(client.hass, "door")).resolves.toEqual(history);
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "ha_notifications/get_history",
+      alert_id: "door",
+    });
   });
 
-  it("namespaces alert list and save commands", async () => {
+  it("gets automation status by alert id", async () => {
     const client = createHassClient();
-    const alert = alertFixture();
-    client.sendMessagePromise.mockResolvedValueOnce([]);
+    const status = {
+      door: "managed",
+      window: "manual",
+      missing_alert: "missing",
+      disabled_alert: "disabled",
+    } as const;
+    client.sendMessagePromise.mockResolvedValueOnce(status);
 
-    await getAlerts(client.hass);
-    await saveAlert(client.hass, alert);
+    await expect(getAutomationStatus(client.hass)).resolves.toEqual(status);
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "ha_notifications/automation_status",
+    });
+  });
 
-    expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
+  it("gets alerts from canonical config and namespaces save commands", async () => {
+    const client = createHassClient();
+    const alert = alertFixture({
+      conditions: [{ condition: "template", value_template: "{{ true }}" }],
+      monitor: { on_change: true, startup: false },
+      notification: {
+        action: "notify.phone",
+        target: { entity_id: ["notify.phone"] },
+        data: {},
+      },
+    });
+    client.sendMessagePromise
+      .mockResolvedValueOnce({ version: 1, alerts: [alert] })
+      .mockResolvedValueOnce({ version: 1, alerts: [alert] })
+      .mockResolvedValueOnce({ saved: true, config: { version: 1, alerts: [alert] } });
+
+    await expect(getAlerts(client.hass)).resolves.toEqual([alert]);
+    await expect(saveAlert(client.hass, alert)).resolves.toEqual(alert);
+
+    expect(client.sendMessagePromise).toHaveBeenNthCalledWith(1, {
+      type: "ha_notifications/get_config",
+    });
+    expect(client.sendMessagePromise).toHaveBeenNthCalledWith(2, {
+      type: "ha_notifications/get_config",
+    });
+    expect(client.sendMessagePromise).toHaveBeenNthCalledWith(3, {
+      type: "ha_notifications/save_config",
+      config: { version: 1, alerts: [alert] },
+    });
+    expect(client.sendMessagePromise.mock.calls.map(([request]) => request.type)).not.toContain(
+      "ha_notifications/save",
+    );
   });
 
   it("serializes durations for every alert transport endpoint", async () => {
     const client = createHassClient();
     const alert = editorAlertFixture();
     alert.confirmation!.reminders.timeout = "00:15:00";
+    client.sendMessagePromise
+      .mockResolvedValueOnce({ version: 1, alerts: [] })
+      .mockResolvedValueOnce({ saved: true, config: { version: 1, alerts: [alert] } })
+      .mockResolvedValueOnce({ version: 1, alerts: [] });
 
     await saveAlert(client.hass, alert);
-    await previewAlertPayload(client.hass, alert);
-    await validateConditions(client.hass, alert);
+    await validateAlert(client.hass, alert);
 
-    expect(
-      client.sendMessagePromise.mock.calls.map(([request]) => request.type),
-    ).toEqual([
-      "ha_notifications/save",
-      "ha_notifications/preview_payload",
-      "ha_notifications/validate_conditions",
+    expect(client.sendMessagePromise.mock.calls.map(([request]) => request.type)).toEqual([
+      "ha_notifications/get_config",
+      "ha_notifications/save_config",
+      "ha_notifications/get_config",
+      "ha_notifications/validate_config",
     ]);
-    for (const [request] of client.sendMessagePromise.mock.calls) {
-      const payload = request as { alert: Alert };
-      expect(payload.alert.monitor.interval).toBe(3600);
-      expect(payload.alert.conditions[0].for).toBe(300);
-      expect(payload.alert.confirmation?.reminders.interval).toBe(1800);
-      expect(payload.alert.confirmation?.reminders.timeout).toBe(900);
-    }
+    const saveRequest = client.sendMessagePromise.mock.calls[1][0] as {
+      config: { alerts: Alert[] };
+    };
+    const savedAlert = saveRequest.config.alerts[0];
+    expect(savedAlert.monitor?.interval).toBe(3600);
+    expect(savedAlert.conditions).toEqual([{
+      condition: "state",
+      entity_id: "binary_sensor.front_door",
+      state: "on",
+      for: 300,
+    }]);
+    expect(savedAlert.notification).toEqual({
+      action: "notify.mobile_app_phone",
+      target: {
+        entity_id: ["notify.phone"],
+        device_id: ["device_phone"],
+      },
+      data: {
+        title: "Front door",
+        message: "The front door is still open.",
+      },
+    });
+    expect(savedAlert.confirmation?.reminders.interval).toBe(1800);
+    expect(savedAlert.confirmation?.reminders.timeout).toBe(900);
+
+    const validationRequest = client.sendMessagePromise.mock.calls[3][0] as {
+      config: { alerts: Record<string, unknown>[] };
+    };
+    expect(validationRequest.config.alerts[0]).toMatchObject({
+      conditions: [{
+        condition: "state",
+        entity_id: "binary_sensor.front_door",
+        state: "on",
+        for: 300,
+      }],
+      notification: {
+        action: "notify.mobile_app_phone",
+        target: {
+          entity_id: ["notify.phone"],
+          device_id: ["device_phone"],
+        },
+      },
+    });
+    expect(validationRequest.config.alerts).toHaveLength(1);
+    expect(client.sendMessagePromise.mock.calls.map(([request]) => request.type)).not.toContain(
+      "ha_notifications/validate_conditions",
+    );
+  });
+
+  it("saves canonical confirmation and notification payloads unchanged", async () => {
+    const client = createHassClient();
+    const alert = editorAlertFixture();
+    client.sendMessagePromise
+      .mockResolvedValueOnce({ version: 1, alerts: [] })
+      .mockResolvedValueOnce({
+        saved: true,
+        config: { version: 1, alerts: [{ id: alert.id }] },
+      });
+
+    await saveAlert(client.hass, alert);
+
+    const request = client.sendMessagePromise.mock.calls[1][0] as {
+      config: { alerts: Record<string, unknown>[] };
+    };
+    const savedAlert = request.config.alerts[0];
+    expect(savedAlert).toMatchObject({
+      conditions: [{
+        condition: "state",
+        entity_id: "binary_sensor.front_door",
+        state: "on",
+        for: 300,
+      }],
+      notification: {
+        action: "notify.mobile_app_phone",
+        data: {
+          title: "Front door",
+          message: "The front door is still open.",
+        },
+      },
+      confirmation: {
+        enabled: true,
+        buttons: [{ id: "confirm", label: "Close door" }],
+        notification: { action: "notify.mobile_app_phone", data: { message: "Front door closed by {{confirmed_by}}." } },
+        actions: [{ action: "light.turn_on", target: { entity_id: ["light.hall"] } }],
+      },
+    });
+    expect(savedAlert).toHaveProperty("conditions");
+    expect(savedAlert).not.toHaveProperty("runtime");
+    expect(savedAlert).toHaveProperty("post_send_actions", {
+      enabled: true,
+      actions: [{
+        action: "logbook.log",
+        data: { name: "Front door alert" },
+      }],
+    });
+  });
+
+  it("rejects alerts without an id before transport", async () => {
+    const client = createHassClient();
+    client.sendMessagePromise.mockResolvedValueOnce({ version: 1, alerts: [] });
+
+    await expect(saveAlert(client.hass, editorAlertFixture({ id: "" }))).rejects.toThrow(
+      "ha_notifications/save_config: alert.id is required.",
+    );
+    expect(client.sendMessagePromise).not.toHaveBeenCalled();
   });
 
   it("uses structured config for configuration routes", async () => {
     const client = createHassClient();
-    const config = configFixture;
+    const config = configFixture as AlertsConfig;
 
     await getConfig(client.hass);
     await validateConfig(client.hass, config);
@@ -85,26 +228,42 @@ describe("frontend API transport", () => {
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
   });
 
-  it("rejects a malformed alert list instead of clearing the dashboard", async () => {
+  it("rejects malformed canonical config instead of clearing the dashboard", async () => {
     const client = createHassClient();
-    client.sendMessagePromise.mockResolvedValueOnce({ alerts: [] });
+    client.sendMessagePromise.mockResolvedValueOnce({});
 
     await expect(getAlerts(client.hass)).rejects.toThrow(
-      "ha_notifications/list: expected an alert list.",
+      "ha_notifications/get_config: expected canonical configuration with an alerts array.",
     );
   });
 
-  it("snapshots history, delete, draft test, and reload commands", async () => {
+  it("reports missing alert deletion through the save config route", async () => {
+    const client = createHassClient();
+    client.sendMessagePromise.mockResolvedValueOnce({ version: 1, alerts: [] });
+
+    await expect(deleteAlert(client.hass, "missing")).rejects.toThrow(
+      "ha_notifications/save_config: alert missing was not found.",
+    );
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "ha_notifications/get_config",
+    });
+    expect(client.sendMessagePromise).toHaveBeenCalledTimes(1);
+  });
+
+  it("snapshots delete and reload commands", async () => {
     const client = createHassClient();
     const alert = alertFixture();
+    client.sendMessagePromise
+      .mockResolvedValueOnce({ version: 1, alerts: [alert] })
+      .mockResolvedValueOnce({ saved: true, config: { version: 1, alerts: [] } });
 
-    await getHistory(client.hass, "door", 150);
     await deleteAlert(client.hass, "door");
-    client.sendMessagePromise.mockResolvedValueOnce(previewSessionResultFixture);
-    await previewAlertPayload(client.hass, alert);
     await reload(client.hass);
 
     expect(client.sendMessagePromise.mock.calls).toMatchSnapshot();
+    expect(client.sendMessagePromise.mock.calls.map(([request]) => request.type)).not.toContain(
+      "ha_notifications/delete",
+    );
   });
 
   it("enriches registry entities with friendly state names", async () => {

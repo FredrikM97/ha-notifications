@@ -4,75 +4,46 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 
-from .const import CONF_SHOW_SIDEBAR, DOMAIN
+from .const import CONFIG_VERSION, DOMAIN
 
 
-class HaNotificationsConfigFlow(
-    config_entries.ConfigFlow,
-    domain=DOMAIN,
-):
-    """Handle HA Notifications config flow."""
+class HaNotificationsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Create the canonical config-entry source of truth."""
 
-    VERSION = 1
-    MINOR_VERSION = 0
+    VERSION = CONFIG_VERSION
 
     async def async_step_user(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Handle installation from the UI."""
-
-        if self.hass.config_entries.async_entries(DOMAIN):
-            return self.async_abort(
-                reason="already_configured"
-            )
-
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Create an empty alert configuration."""
         if user_input is not None:
             return self.async_create_entry(
                 title="HA Notifications",
-                data={
-                    CONF_SHOW_SIDEBAR: user_input[CONF_SHOW_SIDEBAR],
-                },
+                data={"version": CONFIG_VERSION, "alerts": []},
             )
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_SHOW_SIDEBAR,
-                        default=False,
-                    ): bool,
-                }
-            ),
-        )
+        return self.async_show_form(step_id="user")
 
-    async def async_step_reconfigure(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Handle updating the integration settings from Home Assistant."""
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the options flow used by Home Assistant."""
+        return HaNotificationsOptionsFlow()
 
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        if entry is None:
-            return self.async_abort(reason="entry_not_found")
 
+class HaNotificationsOptionsFlow(config_entries.OptionsFlow):
+    """Persist configuration updates in config-entry options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Keep options changes available to the frontend/API boundary."""
         if user_input is not None:
-            self.hass.config_entries.async_update_entry(entry, data=user_input)
-            await self.hass.config_entries.async_reload(entry.entry_id)
-            return self.async_abort(reason="reconfigure_successful")
+            return self.async_create_entry(title="", data=user_input)
 
-        return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_SHOW_SIDEBAR,
-                        default=entry.data.get(CONF_SHOW_SIDEBAR, False),
-                    ): bool,
-                }
-            ),
-        )
+        return self.async_show_form(step_id="init")

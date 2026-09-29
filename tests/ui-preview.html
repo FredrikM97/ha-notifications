@@ -46,7 +46,7 @@
             for: "00:05:00",
           },
         ],
-        monitor: {
+        evaluate: {
           on_change: true,
           startup: true,
           interval: "01:00:00",
@@ -58,27 +58,6 @@
           message: "The front door is still open.",
         },
       };
-
-      const history = [
-        {
-          id: "event-1",
-          timestamp: "2026-09-21T08:42:00Z",
-          alert_id: alert.id,
-          alert_name: alert.name,
-          type: "notification_sent",
-          message: "Notification sent.",
-          details: { action: "notify.mobile_app_phone" },
-        },
-        {
-          id: "event-2",
-          timestamp: "2026-09-21T08:37:00Z",
-          alert_id: alert.id,
-          alert_name: alert.name,
-          type: "condition_active",
-          message: "Condition became true.",
-          details: { source: "state" },
-        },
-      ];
 
       const registries = {
         entities: [
@@ -112,7 +91,6 @@
         "ha_notifications/runtime": {
           [alert.id]: { active: true, confirmation_attempts: 2 },
         },
-        "ha_notifications/history": history,
       };
 
       const hass = {

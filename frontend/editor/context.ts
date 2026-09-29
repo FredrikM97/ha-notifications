@@ -38,9 +38,7 @@ export function createEditorContext({
     mode: editorModeFor(value),
     activeSection: editorSections[0].title,
     setEditorElement: (role, element) => {
-      if (role === "visual") elements.visual = element;
       if (role === "conditions-yaml") elements.conditionsYamlView = element;
-      if (role === "jinja") elements.jinja = element;
       if (role === "recipients") elements.recipientMount = element;
     },
     setEditorControl: (role: EditorControlRole, element) => {

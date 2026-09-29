@@ -7,16 +7,11 @@ exports[`alert editor interactions > loads populated alert and registry fixture 
   "actionEditors": [
     {
       "role": "conditions-yaml-editor",
-      "value": "- type: state
-  id: front_door
+      "value": "- condition: state
   entity_id: binary_sensor.front_door
   state: on
   for: 00:05:00
 ",
-    },
-    {
-      "role": "condition",
-      "value": "",
     },
     {
       "role": "post-send-actions",
@@ -34,11 +29,10 @@ exports[`alert editor interactions > loads populated alert and registry fixture 
 ",
     },
   ],
-  "conditionRows": 1,
+  "conditionRows": 0,
   "confirmationEnabled": true,
   "intervalEnabled": true,
   "name": "Front door open",
-  "retentionDays": "14",
   "selectedRecipients": [
     "Main phoneRemove",
     "PhoneRemove",
@@ -81,36 +75,35 @@ name: Draft alert
 enabled: true
 description: ""
 icon: mdi:bell-outline
-conditions: []
+conditions:
+  - condition: template
+    value_template: "{{ true }}"
 monitor:
   on_change: true
   startup: true
   clear_on_inactive: false
-  retention:
-    enabled: true
-    days: 30
 notification:
   target: {}
-  title: ""
-  message: ""
+  data:
+    title: ""
+    message: ""
 confirmation:
   enabled: false
   buttons:
     - id: confirm
       label: Done
   notification:
-    enabled: false
-    message: ""
-    clear: true
+    data:
+      message: ""
+    target: {}
   reminders:
     enabled: false
     interval: 1800
     max_attempts: 5
     show_attempts: false
+    forget_after_enabled: false
     timeout: 900
-  actions:
-    enabled: false
-    items: []
+  actions: []
 "
 `;
 
@@ -129,21 +122,12 @@ exports[`alert editor interactions > renders the Basic editor section 1`] = `
 
 exports[`alert editor interactions > renders the Condition editor section 1`] = `
 {
-  "buttons": [
-    "Visual conditions",
-    "Conditions YAML",
-    "Advanced Jinja",
-    "Add condition",
-  ],
+  "buttons": [],
   "controls": [
-    "ha-code-editor:Conditions YAML:yaml:conditions-yaml-editor",
-    "ha-code-editor:Jinja condition:jinja2:condition",
+    "ha-code-editor:Native Home Assistant condition:yaml:conditions-yaml-editor",
   ],
   "help": [
-    "No visual conditions configured.",
-    "IDs are optional. Set one such as front_door to use its result in a notification with condition.front_door.",
-    "Edit the raw conditions: list. This is the YAML behind the visual editor.",
-    "The condition should evaluate to true or false. Home Assistant automatically tracks entities referenced by the template.",
+    "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.",
   ],
   "title": "Condition",
 }
@@ -250,6 +234,7 @@ exports[`alert editor interactions > renders the Reminder policy editor section 
     "ha-input",
     "ha-selector:Duration",
     "ha-switch",
+    "ha-switch",
   ],
   "help": [
     "Set to 00:00:00 to keep the notification until confirmation.",
@@ -267,12 +252,10 @@ exports[`alert editor interactions > renders the When to check editor section 1`
     "ha-switch",
     "ha-switch:interval-toggle",
     "ha-selector:Duration",
-    "ha-switch:Enable history retention",
-    "ha-input:History retention days",
   ],
   "help": [
+    "Condition changes are detected for referenced entities. Use a condition that references an entity, or use Test and interval checks for static templates.",
     "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
-    "Completed alert history is removed after this period.",
   ],
   "title": "When to check",
 }
@@ -282,15 +265,12 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
 {
   "conditions": [
     {
-      "template": "{{ true }}",
-      "type": "template",
+      "condition": "template",
+      "value_template": "{{ true }}",
     },
   ],
   "confirmation": {
-    "actions": {
-      "enabled": false,
-      "items": [],
-    },
+    "actions": [],
     "buttons": [
       {
         "id": "confirm",
@@ -299,12 +279,18 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
     ],
     "enabled": false,
     "notification": {
-      "clear": true,
-      "enabled": false,
-      "message": "",
+      "data": {
+        "message": "",
+      },
+      "target": {
+        "entity_id": [
+          "notify.phone",
+        ],
+      },
     },
     "reminders": {
       "enabled": false,
+      "forget_after_enabled": false,
       "interval": 1800,
       "max_attempts": 5,
       "show_attempts": false,
@@ -318,38 +304,20 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "monitor": {
     "clear_on_inactive": false,
     "on_change": true,
-    "retention": {
-      "days": 30,
-      "enabled": true,
-    },
     "startup": true,
   },
   "name": "Updated name",
   "notification": {
-    "message": "",
+    "action": "notify.phone",
+    "data": {
+      "message": "",
+      "title": "",
+    },
     "target": {
       "entity_id": [
         "notify.phone",
       ],
     },
-    "title": "",
-  },
-}
-`;
-
-exports[`alert editor interactions > sends a valid draft through the Test alert action 1`] = `
-{
-  "conditions": [
-    {
-      "template": "{{ true }}",
-      "type": "template",
-    },
-  ],
-  "name": "Testable alert",
-  "target": {
-    "entity_id": [
-      "notify.phone",
-    ],
   },
 }
 `;
@@ -361,26 +329,6 @@ exports[`alert editor interactions > shows validation feedback instead of saving
 `;
 
 exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `"<h2 data-role="editor-section-title">When to check</h2>"`;
-
-exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 1`] = `"<button class="nc-button secondary nc-condition-id-toggle" type="button"><ha-icon icon="mdi:tag-plus-outline"></ha-icon>Add ID</button>"`;
-
-exports[`condition builder interactions > moves Add ID into the action row and reveals the ID field 2`] = `
-"<div class="nc-condition-actions">
-      <button class="nc-button danger">Remove condition</button>
-    </div>"
-`;
-
-exports[`condition builder interactions > omits visual conditions without an entity 1`] = `
-[
-  {
-    "entity_id": "sensor.front_door",
-    "state": "on",
-    "type": "state",
-  },
-]
-`;
-
-exports[`condition builder interactions > removes a condition and marks the editor dirty 1`] = `"<div class="nc-help">No visual conditions configured.</div>"`;
 
 exports[`recipient picker interactions > filters recipients and removes a selected target 1`] = `
 {

@@ -1,5 +1,4 @@
 import { errorMessage } from "../api.js";
-import { visualConditionBuilder } from "../condition-builder.js";
 import { createRecipientPicker } from "../recipient-picker.js";
 import { localize } from "../localize.js";
 import { html, render } from "lit";
@@ -22,12 +21,10 @@ import {
   actionArrayValue,
   checkedOf,
   constrainCodeEditor,
-  conditionTemplate,
-  conditionsYaml,
   defaultAlert,
   durationInputValue,
   fillActionEditors,
-  parseConditionsYaml,
+  parseConditionYaml,
   showEditorToast,
   showYaml,
   valueOf,
@@ -53,7 +50,6 @@ interface OpenEditorOptions {
   onSave: (alert: Alert) => Promise<Alert | void>;
   onSaved?: (alert: Alert) => Promise<void> | void;
   onClosed?: () => void;
-  onTest: (alert: Alert) => Promise<unknown>;
   onValidateCondition: (alert: Alert) => Promise<unknown>;
 }
 
@@ -66,7 +62,6 @@ class AlertEditorController {
   private readonly onSave: (alert: Alert) => Promise<Alert | void>;
   private readonly onSaved?: (alert: Alert) => Promise<void> | void;
   private readonly onClosed?: () => void;
-  private readonly onTest: (alert: Alert) => Promise<unknown>;
   private readonly onValidateCondition: (alert: Alert) => Promise<unknown>;
 
   private readonly value: Alert;
@@ -76,6 +71,7 @@ class AlertEditorController {
   private readonly collapsedParents = new Set<string>();
   private readonly elements: EditorElements = {};
   private readonly state = createEditorState();
+  private postConfirmationActionsEnabled = false;
   private handleOutsideSectionPointer = (event: PointerEvent): void => {
     if (!this.state.mobileSectionsOpen) return;
 
@@ -88,7 +84,6 @@ class AlertEditorController {
     this.closeMobileSections();
   };
 
-  private visualConditions!: () => Alert["conditions"];
   private recipients!: ReturnType<typeof createRecipientPicker>;
 
   constructor(options: OpenEditorOptions) {
@@ -97,7 +92,6 @@ class AlertEditorController {
     this.onSave = options.onSave;
     this.onSaved = options.onSaved;
     this.onClosed = options.onClosed;
-    this.onTest = options.onTest;
     this.onValidateCondition = options.onValidateCondition;
 
     this.value = clone(options.alert || defaultAlert());
@@ -110,10 +104,15 @@ class AlertEditorController {
         interval: "00:30:00",
         max_attempts: 5,
         show_attempts: false,
+        forget_after_enabled: false,
+        timeout: "00:15:00",
       },
       actions: { enabled: false, items: [] },
       ...this.value.confirmation,
     };
+    this.postConfirmationActionsEnabled = Boolean(
+      this.value.confirmation.actions.length,
+    );
 
     this.root.addEventListener("nc-editor-toast", this.handleToastEvent);
     this.root.addEventListener("nc-editor-modal", this.handleModalEvent);
@@ -141,13 +140,6 @@ class AlertEditorController {
     document.addEventListener("pointerdown", this.handleOutsideSectionPointer);
     void fillActionEditors(this.host);
 
-    this.visualConditions = visualConditionBuilder(
-      this.elements.visual!,
-      this.context.hass,
-      this.registries,
-      this.value.conditions,
-      this.context.markDirty,
-    );
     this.recipients = createRecipientPicker(
       this.registries,
       this.value.notification.target,
@@ -232,6 +224,7 @@ class AlertEditorController {
             alert: this.value,
             context,
             optionalSettings,
+            postConfirmationActionsEnabled: this.postConfirmationActionsEnabled,
             activeSectionIndex: this.state.activeSectionIndex,
             sectionTitle: this.sectionLabel(
               editorSections[this.state.activeSectionIndex]?.parent,
@@ -259,7 +252,6 @@ class AlertEditorController {
             onClose: this.close,
             validationLabel: this.validationLabel(),
             onValidate: this.validateCurrentSection,
-            onTest: this.test,
             onSave: this.save,
           })}
         </section>
@@ -294,14 +286,6 @@ class AlertEditorController {
   private setMode = (mode: EditorMode): void => {
     if (this.context.mode === mode) return;
 
-    if (mode === "yaml" && this.context.mode === "visual") {
-      if (this.elements.conditionsYamlEditor) {
-        this.elements.conditionsYamlEditor.value = conditionsYaml(
-          this.visualConditions(),
-        );
-      }
-    }
-
     this.context.mode = mode;
     this.state.dirty = true;
     this.renderEditor();
@@ -325,9 +309,12 @@ class AlertEditorController {
     } else if (setting === "confirmationReminder") {
       this.value.confirmation!.reminders.enabled = enabled;
     } else if (setting === "confirmationNotification") {
-      this.value.confirmation!.notification.enabled = enabled;
+      this.value.confirmation!.enabled = enabled;
     } else {
-      this.value.confirmation!.actions.enabled = enabled;
+      this.postConfirmationActionsEnabled = enabled;
+      this.value.confirmation!.actions = enabled
+        ? this.value.confirmation!.actions
+        : [];
     }
     this.markDirty();
     this.refreshStatuses();
@@ -450,15 +437,13 @@ class AlertEditorController {
 
     return buildEditorPayload({
       alert: value,
-      conditions: this.conditionsForCurrentMode(),
+      condition: this.conditionForCurrentMode(),
       recipients: this.recipients.target(),
-      monitorInterval: this.monitorIntervalPayload(),
+      evaluateInterval: this.evaluateIntervalPayload(),
       confirmationActions,
       postSendActions,
       postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
-      postConfirmationActionsEnabled: Boolean(
-        value.confirmation?.actions.enabled,
-      ),
+      postConfirmationActionsEnabled: this.postConfirmationActionsEnabled,
       validate,
     });
   };
@@ -475,22 +460,12 @@ class AlertEditorController {
     const value = this.value;
     return {
       ...value,
-      conditions: this.conditionsForCurrentMode(),
+      conditions: this.conditionForCurrentMode(),
     };
   };
 
-  private conditionsForCurrentMode(): Alert["conditions"] {
-    if (this.context.mode === "visual") {
-      return this.visualConditions();
-    }
-
-    if (this.context.mode === "yaml") {
-      return parseConditionsYaml(this.conditionsYamlValue());
-    }
-
-    return [
-      { type: "template" as const, template: conditionTemplate(this.value) },
-    ];
+  private conditionForCurrentMode(): Alert["conditions"] {
+    return parseConditionYaml(this.conditionsYamlValue());
   }
 
   private conditionsYamlValue(): string {
@@ -499,8 +474,8 @@ class AlertEditorController {
     );
   }
 
-  private monitorIntervalPayload(): string | undefined {
-    if (!this.value.monitor.interval) {
+  private evaluateIntervalPayload(): string | undefined {
+    if (!this.value.monitor?.interval) {
       return undefined;
     }
 
@@ -508,23 +483,12 @@ class AlertEditorController {
   }
 
   private hasRequiredCondition = (): boolean => {
-    if (this.context.mode === "visual") {
-      return this.visualConditions().length > 0;
+    try {
+      const condition = parseConditionYaml(this.conditionsYamlValue());
+      return condition.length > 0;
+    } catch {
+      return true;
     }
-
-    if (this.context.mode === "yaml") {
-      try {
-        return (
-          parseConditionsYaml(
-            this.elements.conditionsYamlEditor?.value || "[]",
-          ).length > 0
-        );
-      } catch {
-        return true;
-      }
-    }
-
-    return Boolean(conditionTemplate(this.value).trim());
   };
 
   private validateCondition = async (): Promise<void> => {
@@ -571,25 +535,13 @@ class AlertEditorController {
     }
   };
 
-  private test = async (event: Event): Promise<void> => {
-    const button = event.currentTarget as HTMLButtonElement;
-    try {
-      button.disabled = true;
-      const result = await this.onTest(this.formPayload());
-    } catch (error) {
-      showEditorToast(this.root, errorMessage(error));
-    } finally {
-      button.disabled = false;
-    }
-  };
-
   private save = async (event: Event): Promise<void> => {
     const button = event.currentTarget as HTMLButtonElement;
     try {
       if (!this.value.name.trim()) throw new Error("Name is required.");
       if (!this.hasRequiredCondition())
         throw new Error("Condition is required.");
-      if (!this.value.monitor.on_change && !this.value.monitor.interval)
+      if (!this.value.monitor?.on_change && !this.value.monitor?.interval)
         throw new Error("Enable condition changes, an interval, or both.");
       const result = this.formPayload();
       button.disabled = true;

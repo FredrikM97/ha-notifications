@@ -1,8 +1,11 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
-import { formatLocalDateTime } from "../date-time.js";
 import { localize } from "../localize.js";
-import type { Alert, Hass } from "../types.js";
+import type {
+  Alert,
+  AutomationRuntimeStatus,
+  Hass,
+} from "../types.js";
 
 interface AlertStatus {
   className: string;
@@ -12,7 +15,37 @@ interface AlertStatus {
 
 interface AlertCardStatus {
   enabled: AlertStatus;
-  condition: AlertStatus;
+}
+
+function runtimeStatus(
+  automationStatus: AutomationRuntimeStatus | undefined,
+  hass: Hass | null,
+): AlertStatus | undefined {
+  if (!automationStatus) {
+    return undefined;
+  }
+
+  if (automationStatus.active_runs > 0 || automationStatus.active_runs_uncertain) {
+    return {
+      className: "nc-status active",
+      icon: "mdi:progress-clock",
+      label: localize(hass, "alert.automation_active"),
+    };
+  }
+
+  if (automationStatus.last_triggered) {
+    return {
+      className: "nc-status ok",
+      icon: "mdi:play-circle-outline",
+      label: localize(hass, "alert.automation_triggered"),
+    };
+  }
+
+  return {
+    className: "nc-status idle",
+    icon: "mdi:pause-circle-outline",
+    label: localize(hass, "alert.automation_idle"),
+  };
 }
 
 export interface AlertCardActions {
@@ -37,20 +70,7 @@ function alertStatus(alert: Alert, hass: Hass | null): AlertCardStatus {
     };
   }
 
-  let conditionStatus = {
-    className: "nc-status idle",
-    icon: "mdi:circle-outline",
-    label: localize(hass, "alert.idle"),
-  };
-  if (alert.runtime?.state?.active) {
-    conditionStatus = {
-      className: "nc-status active",
-      icon: "mdi:alert-circle",
-      label: localize(hass, "alert.triggered"),
-    };
-  }
-
-  return { enabled: enabledStatus, condition: conditionStatus };
+  return { enabled: enabledStatus };
 }
 
 function toggleAlertLabel(alert: Alert, hass: Hass | null): string {
@@ -59,31 +79,14 @@ function toggleAlertLabel(alert: Alert, hass: Hass | null): string {
     : localize(hass, "alert.enable");
 }
 
-function monitorSummary(alert: Alert, hass: Hass | null): string {
-  if (alert.monitor?.interval) {
-    return localize(hass, "alert.every", { interval: alert.monitor.interval });
-  }
-
-  return "";
-}
-
 export function renderAlertCard(
   alert: Alert,
   hass: Hass | null,
   actions: AlertCardActions,
+  automationStatus?: AutomationRuntimeStatus,
 ): TemplateResult {
   const status = alertStatus(alert, hass);
-  const monitor = monitorSummary(alert, hass);
-  const lastNotified = alert.runtime?.state?.last_notified
-    ? localize(hass, "alert.last_notified", {
-        time: formatLocalDateTime(
-          alert.runtime.state.last_notified,
-          false,
-          hass?.locale,
-        ),
-      })
-    : "";
-  const metadata = [lastNotified, monitor].filter(Boolean).join(" · ");
+  const automation = runtimeStatus(automationStatus, hass);
 
   return html`<div class="nc-card nc-alert">
     <div class="nc-alert-icon">
@@ -104,30 +107,27 @@ export function renderAlertCard(
             ></ha-icon
             >${status.enabled.label}
           </span>
-          <span
-            class=${status.condition.className}
-            role="img"
-            title=${status.condition.label}
-            aria-label=${status.condition.label}
-            ><ha-icon
-              icon=${status.condition.icon}
-              aria-hidden="true"
-            ></ha-icon
-            >${status.condition.label}
-          </span>
+            ${automation
+              ? html`<span
+                  class=${automation.className}
+                  role="img"
+                  title=${localize(hass, automation.label)}
+                  aria-label=${localize(hass, automation.label)}
+                  ><ha-icon icon=${automation.icon} aria-hidden="true"></ha-icon
+                  >${localize(hass, automation.label)}</span
+                >`
+              : ""}
         </div>
       </div>
-      <div class="nc-alert-meta">${metadata}</div>
     </div>
     <div class="nc-alert-actions">
       <button
         class="nc-button"
         title=${localize(hass, "alert.test")}
         aria-label=${localize(hass, "alert.test")}
-        ?disabled=${!alert.enabled}
         @click=${() => actions.onTest(alert)}
       >
-        <ha-icon icon="mdi:send-check-outline"></ha-icon
+        <ha-icon icon="mdi:play-circle-outline"></ha-icon
         ><span class="nc-button-label">${localize(hass, "alert.test")}</span></button
       ><button
         class="nc-button"

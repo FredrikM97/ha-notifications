@@ -10,15 +10,13 @@ export function renderConfirmationNotificationSection(
   return section(
     context.localize("editor.confirmation.notification.section"),
     html`${codeEditor({
-        value: confirmation.notification.message || "",
+        value: String(confirmation.notification.data.message || ""),
         placeholder: "",
         mode: "jinja2",
         language: "jinja",
         label: context.localize("editor.confirmation.message"),
         onInput: (event: Event) => {
-          confirmation.notification.message = (
-            event.currentTarget as CodeEditorElement
-          ).value;
+          confirmation.notification.data.message = (event.currentTarget as CodeEditorElement).value;
           context.markDirty();
         },
       })}

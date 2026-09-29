@@ -3,13 +3,8 @@
     "name": "Front door open",
     "description": ""
   },
-  "monitor": {
-    "conditions": [
-      {
-        "type": "template",
-        "template": "{{ true }}"
-      }
-    ],
+  "evaluate": {
+    "condition": [{"condition": "template", "value_template": "{{ true }}"}],
     "onChange": true,
     "startup": true
   },
@@ -20,9 +15,8 @@
   },
   "confirmation": {
     "enabled": false,
-    "button": "",
+    "buttons": [{"id": "confirm", "label": ""}],
     "notification": {
-      "enabled": false,
       "message": "",
       "clear": true
     },

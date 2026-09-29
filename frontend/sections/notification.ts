@@ -23,10 +23,10 @@ export function renderNotificationSection(
           context.localize("editor.notification.title"),
           html`<ha-input
             type="text"
-            .value=${notification.title}
+            .value=${String(notification.data.title || "")}
             placeholder=${context.localize("editor.notification.title_placeholder")}
             @input=${(event: Event) => {
-              notification.title = valueOf(event);
+              notification.data.title = valueOf(event);
               context.markDirty();
               context.refreshStatuses();
             }}
@@ -35,13 +35,13 @@ export function renderNotificationSection(
         ${field(
           context.localize("editor.notification.message"),
           codeEditor({
-            value: notification.message || "",
+            value: String(notification.data.message || ""),
             placeholder: context.localize("editor.notification.message_placeholder"),
             mode: "jinja2",
             language: "jinja",
             label: context.localize("editor.notification.message_placeholder"),
             onInput: (event: Event) => {
-              notification.message = (
+              notification.data.message = (
                 event.currentTarget as CodeEditorElement
               ).value;
               context.markDirty();
