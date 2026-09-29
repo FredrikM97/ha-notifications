@@ -8,6 +8,8 @@ zip_path=${2:-"$root_dir/ha-notifications.zip"}
 
 build_dir="$root_dir/build"
 package_dir="$build_dir"
+staging_dir=$(mktemp -d)
+trap 'rm -rf "$staging_dir"' EXIT HUP INT TERM
 
 if [ ! -d "$package_dir" ]; then
 	printf '%s\n' "Build directory is missing: $package_dir" >&2
@@ -44,8 +46,11 @@ fi
 
 rm -f "$zip_path"
 
+mkdir -p "$staging_dir/custom_components/ha_notifications"
+cp -R "$package_dir"/. "$staging_dir/custom_components/ha_notifications/"
+
 (
-	cd "$build_dir"
+	cd "$staging_dir"
 	zip -qr "$zip_path" . \
 		-x '*.pyc' \
 		-x '*__pycache__/*'
@@ -56,19 +61,14 @@ unzip -tq "$zip_path"
 archive_entries=$(unzip -Z1 "$zip_path")
 
 for required_entry in \
-	manifest.json \
-	__init__.py \
-	frontend/panel.js
+	custom_components/ha_notifications/manifest.json \
+	custom_components/ha_notifications/__init__.py \
+	custom_components/ha_notifications/frontend/panel.js
 do
 	if ! printf '%s\n' "$archive_entries" | grep -Fxq "$required_entry"; then
 		printf '%s\n' "HACS archive is missing: $required_entry" >&2
 		exit 1
 	fi
 done
-
-if printf '%s\n' "$archive_entries" | grep -q '^custom_components/'; then
-	printf '%s\n' "HACS archive must not contain custom_components/" >&2
-	exit 1
-fi
 
 printf '%s\n' "Created $zip_path"
