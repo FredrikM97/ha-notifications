@@ -97,4 +97,23 @@ describe("YAML view", () => {
 
     expect(editor.value).toBe(pastedYaml);
   });
+
+  it("does not reload YAML when Home Assistant state updates", async () => {
+    const element = mountYamlView();
+
+    await vi.waitFor(() => expect(getConfig).toHaveBeenCalled());
+    const editor = element.querySelector("ha-code-editor") as HTMLElement & {
+      value: string;
+    };
+    const pastedYaml = "version: 1\nalerts: []\n";
+    editor.value = pastedYaml;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+    const loadCount = getConfig.mock.calls.length;
+
+    element.hass = {} as Hass;
+    await element.updateComplete;
+
+    expect(getConfig).toHaveBeenCalledTimes(loadCount);
+    expect(editor.value).toBe(pastedYaml);
+  });
 });

@@ -45,7 +45,7 @@ class YamlViewElement extends LitElement {
   }
 
   protected updated(): void {
-    if (this.hass && this.hass !== this.loadedHass) {
+    if (this.hass && !this.loadedHass) {
       this.loadedHass = this.hass;
       void this.load();
     }
