@@ -46,8 +46,7 @@ fi
 
 rm -f "$zip_path"
 
-mkdir -p "$staging_dir/custom_components/ha_notifications"
-cp -R "$package_dir"/. "$staging_dir/custom_components/ha_notifications/"
+cp -R "$package_dir"/. "$staging_dir/"
 
 (
 	cd "$staging_dir"
@@ -61,14 +60,19 @@ unzip -tq "$zip_path"
 archive_entries=$(unzip -Z1 "$zip_path")
 
 for required_entry in \
-	custom_components/ha_notifications/manifest.json \
-	custom_components/ha_notifications/__init__.py \
-	custom_components/ha_notifications/frontend/panel.js
+	manifest.json \
+	__init__.py \
+	frontend/panel.js
 do
 	if ! printf '%s\n' "$archive_entries" | grep -Fxq "$required_entry"; then
 		printf '%s\n' "HACS archive is missing: $required_entry" >&2
 		exit 1
 	fi
 done
+
+if printf '%s\n' "$archive_entries" | grep -q '^custom_components/'; then
+	printf '%s\n' "HACS archive must not contain custom_components/" >&2
+	exit 1
+fi
 
 printf '%s\n' "Created $zip_path"

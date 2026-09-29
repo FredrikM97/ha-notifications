@@ -62,8 +62,8 @@ npm run package:hacs -- 1.2.3
 ```
 
 The package script builds the frontend, copies the canonical integration into a
-temporary export tree, and creates a ZIP under
-`custom_components/ha_notifications/`, as expected by HACS.
+temporary export tree, and creates a ZIP with the integration files at its root,
+as expected by HACS when `content_in_root` is enabled.
 
 For source layout, feature ownership, and runtime flow, see
 [architecture.md](architecture.md).
