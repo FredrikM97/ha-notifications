@@ -57,8 +57,10 @@ class YamlViewElement extends LitElement {
       this.yaml = stringify(config);
       this.renderImmediately();
       await customElements.whenDefined("ha-code-editor");
+      this.editor = this.querySelector<CodeEditor>("ha-code-editor");
       await this.editor?.updateComplete;
       if (this.editor) {
+        this.editor.value = this.yaml;
         constrainCodeEditor(this.editor);
       }
     } catch (err) {
@@ -109,11 +111,13 @@ class YamlViewElement extends LitElement {
         mode="yaml"
         language="yaml"
         aria-label=${localize(this.hass, "yaml.aria")}
-        .value=${this.yaml}
         @input=${this.updateYaml}
         @value-changed=${this.updateYaml}
-        ${ref((editor: CodeEditor) => {
-          this.editor = editor;
+        ${ref((editor?: CodeEditor) => {
+          this.editor = editor ?? null;
+          if (editor && this.yaml) {
+            editor.value = this.yaml;
+          }
         })}
       ></ha-code-editor>
     </div>`;

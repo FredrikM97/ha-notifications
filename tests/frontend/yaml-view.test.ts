@@ -81,4 +81,20 @@ describe("YAML view", () => {
       alerts: [],
     });
   });
+
+  it("preserves pasted YAML when the view renders again", async () => {
+    const element = mountYamlView();
+
+    await vi.waitFor(() => expect(getConfig).toHaveBeenCalled());
+    const editor = element.querySelector("ha-code-editor") as HTMLElement & {
+      value: string;
+    };
+    const pastedYaml = "version: 1\nalerts: []\n";
+    editor.value = pastedYaml;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+
+    element.renderImmediately();
+
+    expect(editor.value).toBe(pastedYaml);
+  });
 });
