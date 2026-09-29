@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from pydantic import ValidationError
 
 from .automation import async_reconcile_automations
@@ -14,6 +15,8 @@ from .const import DOMAIN
 from .domain import AutomationRunTracker, RuntimeData
 from .history import HistoryStore
 from .notification import async_setup_services, async_unload_services
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _affected_alert_ids(
