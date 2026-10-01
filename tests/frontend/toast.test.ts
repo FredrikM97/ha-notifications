@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { showToast, toastListTemplate, type Toast } from "../../frontend/toast.js";
+import { showToast, toastListTemplate, type Toast } from "../../frontend/components/toast.js";
 import { renderTemplate } from "./conftest.js";
 
 const host = () => ({
@@ -15,14 +15,18 @@ afterEach(() => {
 });
 
 describe("toast notifications", () => {
-  it("renders success and error toast states", () => {
+  it("renders success and error toast states", async () => {
     const owner = host();
     showToast(owner, "Saved.");
     showToast(owner, "Failed.", true);
 
     const rendered = renderTemplate(toastListTemplate(owner.toasts));
+    const toastList = rendered.querySelector("ha-notifications-toast-list") as
+      | (HTMLElement & { updateComplete: Promise<unknown> })
+      | null;
+    await toastList?.updateComplete;
     expect(
-      [...rendered.querySelectorAll(".nc-toast")].map((toast) => ({
+      [...(toastList?.shadowRoot?.querySelectorAll(".nc-toast") || [])].map((toast) => ({
         text: toast.textContent?.trim(),
         error: toast.classList.contains("error"),
       })),

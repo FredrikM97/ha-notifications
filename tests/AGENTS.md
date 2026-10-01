@@ -21,5 +21,8 @@ When snapshotting generated automations, serialize the automation to stable
 YAML first so the `.ambr` output remains readable and reflects the format
 Home Assistant consumes.
 
-Run the narrowest relevant test first. Use `sh scripts/validate.sh` for the
-full repository validation gate.
+Complete related implementation and test edits before running validation.
+Then run the narrowest relevant tests once, followed by any required type,
+lint, or build checks. Use `sh scripts/validate.sh` for the full repository
+validation gate before handoff; do not rerun unchanged checks after every small
+edit.

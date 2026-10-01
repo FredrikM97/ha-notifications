@@ -62,7 +62,7 @@ describe("frontend API transport", () => {
     const client = createHassClient();
     const alert = alertFixture({
       conditions: [{ condition: "template", value_template: "{{ true }}" }],
-      monitor: { on_change: true, startup: false },
+      triggers: [{ trigger: "state", entity_id: "binary_sensor.front_door" }],
       notification: {
         action: "notify.phone",
         target: { entity_id: ["notify.phone"] },
@@ -114,12 +114,12 @@ describe("frontend API transport", () => {
       config: { alerts: Alert[] };
     };
     const savedAlert = saveRequest.config.alerts[0];
-    expect(savedAlert.monitor?.interval).toBe(3600);
+    expect(savedAlert.triggers).toEqual(alert.triggers);
     expect(savedAlert.conditions).toEqual([{
       condition: "state",
       entity_id: "binary_sensor.front_door",
       state: "on",
-      for: 300,
+      for: "00:05:00",
     }]);
     expect(savedAlert.notification).toEqual({
       action: "notify.mobile_app_phone",
@@ -143,7 +143,7 @@ describe("frontend API transport", () => {
         condition: "state",
         entity_id: "binary_sensor.front_door",
         state: "on",
-        for: 300,
+        for: "00:05:00",
       }],
       notification: {
         action: "notify.mobile_app_phone",
@@ -180,7 +180,7 @@ describe("frontend API transport", () => {
         condition: "state",
         entity_id: "binary_sensor.front_door",
         state: "on",
-        for: 300,
+        for: "00:05:00",
       }],
       notification: {
         action: "notify.mobile_app_phone",

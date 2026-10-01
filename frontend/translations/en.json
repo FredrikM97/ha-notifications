@@ -11,8 +11,8 @@
     "create_first": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
     "create_alert": "Create alert",
     "admin_help": "HA Notifications alerts can only be viewed and edited by Home Assistant administrators.",
-    "draft_test_sent": "Draft test notification sent.", "condition_valid": "Condition is valid.", "alert_created": "Alert created.",
-    "alert_saved": "Alert saved.", "test_sent": "Test notification sent.", "test_triggered": "Test automation triggered; conditions were evaluated.", "alert_deleted": "Alert deleted.",
+    "condition_valid": "Condition is valid.", "alert_created": "Alert created.",
+    "alert_saved": "Alert saved.", "alert_deleted": "Alert deleted.",
     "show_all": "Show all",
     "alert_added": "Alert added.",
     "alert_enabled": "Alert enabled.",
@@ -22,14 +22,14 @@
   "alert": {
     "disabled": "Disabled", "enabled": "Enabled",
     "automation_managed": "Automation managed", "automation_manual": "Manual automation",
-    "automation_active": "Active", "automation_triggered": "Triggered", "automation_idle": "Idle",
-    "enable": "Enable", "disable": "Disable", "test": "Test alert", "edit": "Edit alert",
-    "history": "View history", "delete": "Delete alert", "every": "every {{interval}}"
+    "automation_active": "Active", "automation_last_triggered": "Last triggered", "automation_idle": "Idle",
+    "enable": "Enable", "disable": "Disable", "edit": "Edit alert",
+    "history": "View history", "delete": "Delete alert", "open_automation": "Open automation", "every": "every {{interval}}"
   },
   "editor": {
     "common": {
       "new_alert": "New alert", "close_sections": "Close section menu", "manage_sections": "Manage sections",
-      "view_yaml": "View alert YAML", "close": "Close", "cancel": "Cancel", "save_alert": "Save alert", "test": "Test",
+      "view_yaml": "View alert YAML", "close": "Close", "cancel": "Cancel", "save_alert": "Save alert",
       "alert_sections": "Alert sections", "discard_title": "Unsaved changes", "discard_message": "You have unsaved changes. Leave without saving?", "stay": "Stay", "discard": "Discard changes",
       "alert_yaml": "Alert YAML", "close_yaml": "Close YAML", "duration": "Duration", "duration_format": "Duration (HH:MM:SS)"
     },
@@ -42,8 +42,14 @@
       "re_evaluate_every": "Re-evaluate condition every", "interval_help": "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
       "enable_history_retention": "Enable history retention", "history_retention": "History retention", "retention_days": "History retention days", "retention_help": "Completed alert history is removed after this period."
     },
+    "triggers": {
+      "section": "When to run", "custom": "Triggers", "yaml": "Home Assistant triggers", "help": "Enter triggers as a YAML list, with each trigger starting with a dash. For example, state, event, and template triggers. Startup and repeat triggers are controlled above; Conditions are separate and only gate a triggered run.", "built_in_help": "Configure the built-in startup and repeat triggers here. Add other Home Assistant trigger types under Triggers.", "startup": "Startup trigger", "interval": "Repeat trigger", "startup_help": "Run this alert when Home Assistant starts.", "interval_help": "Re-evaluate the conditions on a repeating time pattern (default every 12 hours). Home Assistant aligns time patterns to the clock, so longer values are rounded to whole minutes or hours (up to 23), and 24 hours or more runs daily at midnight."
+    },
+    "conditions": {
+      "section": "Conditions", "yaml": "Conditions checked after a trigger", "help": "Conditions do not start an alert. They are checked after a built-in or additional trigger fires and determine whether the alert continues. YAML and JSON are supported.", "numeric_state_help": "For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration."
+    },
     "condition": {
-      "section": "Condition", "conditions_yaml": "Native Home Assistant condition", "conditions_help": "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.",
+      "section": "Condition", "conditions_yaml": "Native Home Assistant condition", "conditions_help": "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.", "numeric_state_help": "For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration.",
       "type": "Type", "entity": "Entity", "for": "For", "id_optional": "ID (optional)", "state": "State", "numeric_state": "Numeric state", "attribute": "Attribute", "above": "Above", "below": "Below", "expected_value": "Expected value"
     },
     "recipients": {
@@ -58,7 +64,7 @@
     },
     "confirmation": {
       "section": "Confirmation", "toggle": "confirmation", "message": "Confirmation message", "add_response": "Add response button", "remove_button": "Remove button",
-      "button_id": "Button ID", "button_id_optional": "Button ID (optional)", "button_label": "Button text", "button_label_optional": "Button text (optional)", "clear_on_acknowledge": "Clear notifications when acknowledged",
+      "button_ids": "Button IDs (optional)", "button_id_for": "Button {{index}} ID", "button_label": "Button text", "button_label_optional": "Button text (optional)", "clear_on_acknowledge": "Clear notifications when acknowledged",
       "reminder": {
         "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "forget_after": "Forget after", "enable_forget_after": "Enable forget after", "show_attempt_count": "Show attempt count in notification title", "keep_until": "Set to 00:00:00 to keep the notification until confirmation."
       },

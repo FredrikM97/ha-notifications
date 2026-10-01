@@ -10,7 +10,7 @@ import type {
   RuntimeAlertHistoryEntry,
 } from "../../frontend/types.js";
 import type { AlertFormValues } from "../../frontend/alert-payload.js";
-import { defaultAlert } from "../../frontend/editor/helpers.js";
+import { defaultAlert } from "../../frontend/editor/alert-defaults.js";
 import alertFixtureData from "./fixtures/alerts.json";
 import alertFormValuesData from "./fixtures/alert-form-values.json";
 import fixtureData from "./fixtures/history.json";
@@ -122,6 +122,17 @@ export function mountCustomElement<T extends HTMLElement>(
   return element;
 }
 
+export function alertCardRoots(root: ParentNode): ShadowRoot[] {
+  const cardRoots = [...root.querySelectorAll("ha-notifications-alert-card")]
+    .map((card) => card.shadowRoot)
+    .filter((shadowRoot): shadowRoot is ShadowRoot => shadowRoot !== null);
+  const nestedRoots = [...root.querySelectorAll("*")]
+    .map((element) => element.shadowRoot)
+    .filter((shadowRoot): shadowRoot is ShadowRoot => shadowRoot !== null)
+    .flatMap((shadowRoot) => alertCardRoots(shadowRoot));
+  return [...cardRoots, ...nestedRoots];
+}
+
 export function renderTemplate(template: TemplateResult): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -142,6 +153,44 @@ export async function settleElement(element: HTMLElement): Promise<void> {
 export function editorRoot(): ShadowRoot {
   const host = document.createElement("div");
   const root = host.attachShadow({ mode: "open" });
+  const querySelector = root.querySelector.bind(root);
+  const querySelectorAll = root.querySelectorAll.bind(root);
+  const deepQuerySelectorAll = (
+    container: ParentNode,
+    selectors: string,
+  ): Element[] => {
+    const matches = [...container.querySelectorAll(selectors)];
+    for (const element of container.querySelectorAll("*")) {
+      const component = element as HTMLElement & {
+        performUpdate?: () => void;
+        shadowRoot?: ShadowRoot | null;
+      };
+      if (!component.shadowRoot) continue;
+      component.performUpdate?.();
+      matches.push(...deepQuerySelectorAll(component.shadowRoot, selectors));
+    }
+    return matches;
+  };
+  Object.defineProperties(root, {
+    querySelector: {
+      value: (selectors: string) => {
+        const editorContent = querySelector(
+          "ha-notifications-alert-editor",
+        )?.shadowRoot;
+        return (editorContent && deepQuerySelectorAll(editorContent, selectors)[0]) ||
+          querySelector(selectors);
+      },
+    },
+    querySelectorAll: {
+      value: (selectors: string) => {
+        const editorContent = querySelector(
+          "ha-notifications-alert-editor",
+        )?.shadowRoot;
+        if (!editorContent) return querySelectorAll(selectors);
+        return deepQuerySelectorAll(editorContent, selectors);
+      },
+    },
+  });
   root.innerHTML = `
     <div class="nc-page">
       <div class="nc-alerts"></div>
@@ -162,6 +211,15 @@ export function testUser() {
 
 export function editorQueries(root: ShadowRoot) {
   return domQueries(root);
+}
+
+export async function settleEditorNavigation(root: ShadowRoot): Promise<void> {
+  const navigations = root.querySelectorAll(
+    "ha-notifications-editor-navigation",
+  ) as NodeListOf<HTMLElement & { updateComplete?: Promise<unknown> }>;
+  await Promise.all(
+    [...navigations].map((navigation) => navigation.updateComplete),
+  );
 }
 
 export function editorOptions(

@@ -4,10 +4,7 @@
     "name": "Test alert",
     "enabled": true,
     "conditions": [],
-    "monitor": {
-      "on_change": true,
-      "startup": true
-    },
+    "triggers": [{"trigger": "homeassistant", "event": "start"}],
     "notification": {
       "action": "notify.mobile_app_phone",
       "target": {
@@ -39,10 +36,7 @@
         "show_attempts": true
       }
     },
-    "monitor": {
-      "on_change": true,
-      "startup": true
-    }
+    "triggers": [{"trigger": "homeassistant", "event": "start"}]
   },
   "notification": {
     "id": "notification_alert",
@@ -76,10 +70,7 @@
     "id": "demo",
     "name": "Demo",
     "conditions": [],
-    "monitor": {
-      "on_change": true,
-      "startup": true
-    },
+    "triggers": [{"trigger": "homeassistant", "event": "start"}],
     "notification": {
       "action": "notify.mobile_app_phone",
       "data": {
@@ -90,10 +81,12 @@
   "full_feature": {
     "id": "full_feature",
     "name": "Full feature",
-    "monitor": {
-      "on_change": true,
-      "startup": true
-    },
+    "triggers": [
+      {"trigger": "state", "entity_id": "binary_sensor.door"},
+      {"trigger": "state", "entity_id": "binary_sensor.window"},
+      {"trigger": "state", "entity_id": "sensor.temperature"},
+      {"trigger": "homeassistant", "event": "start"}
+    ],
     "conditions": [{
       "condition": "and",
       "conditions": [

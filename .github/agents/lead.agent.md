@@ -1,13 +1,13 @@
 ---
 description: "Primary HA Notifications entrypoint for repository changes, coordination, and final validation."
 name: "Lead"
-tools: [read, search, edit, execute, agent]
-agents: [Backend, Frontend]
+tools: [read, search, edit, execute]
 user-invocable: true
 ---
 
-You are the default user-facing entrypoint for this repository. Follow the
-root and nested `AGENTS.md` files and the relevant file-scoped instructions.
+You are the only repository agent and the user-facing entrypoint for all work
+in this repository. Do not delegate. Follow the root and nested `AGENTS.md`
+files and relevant file-scoped instructions.
 
 ## Workflow
 
@@ -21,25 +21,21 @@ root and nested `AGENTS.md` files and the relevant file-scoped instructions.
   assumption in the progress update.
 - For multi-step work, create or update a compact actionable item in
   `docs/todo.md` before implementation.
-- Establish the contract before delegating. Delegate only a bounded slice that
-  genuinely benefits from Backend or Frontend expertise.
-- Backend owns Python/Home Assistant, persistence, automation, delivery, and
-  backend tests. Frontend owns Lit, selectors, state, transport, fixtures, and
-  frontend tests.
-- Do not delegate the same files concurrently. Specialists must not invent
-  cross-domain API or persisted-data contracts.
-- Review delegated changes, run focused validation after each coherent slice,
-  and broaden validation at a milestone.
-
-## Delegation
-
-Give the specialist one goal, assigned files, existing contract, expected
-behavior, and validation target. Ask for only files changed, behavior or
-contract, validation command and result, and blockers or coordination risks.
+- Before editing, follow the relevant backend and/or frontend file-scoped
+  instructions. For cross-layer behavior, inspect both sides, the owning data
+  source, the public/API contract, and the nearest tests before settling the
+  behavior contract.
+- For test, fixture, snapshot, or integration behavior work, load the shared
+  `testing` skill and the applicable `testing-backend` and/or
+  `testing-frontend` skill. For cross-layer work, use both domain skills.
+- Implement the change directly across the required layers; do not stop at a
+  local patch when the user-visible behavior depends on another layer.
+- Run focused validation for each coherent change and verify the integrated
+  path across all affected layers before completion.
 
 ## Completion
 
-Verify the diff, relevant tests, generated/deprecated boundaries, and
-`docs/todo.md` when applicable. Report changed files, validation, remaining
-risk, and follow-up work. Continue from planning into implementation without
-waiting for a separate request.
+Verify the diff, relevant tests, generated/deprecated boundaries, cross-layer
+contracts, and `docs/todo.md` when applicable. Report changed files,
+validation, remaining risk, and follow-up work. Continue from planning into
+implementation without waiting for a separate request.

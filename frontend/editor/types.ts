@@ -1,30 +1,15 @@
 import type { Alert, Hass } from "../types.js";
 import type { Localize } from "../localize.js";
+import type { CodeEditor } from "../components/code-editor.js";
+
+export type { CodeEditor, CodeEditorOptions } from "../components/code-editor.js";
 
 export type FormControl = EventTarget & { value: string };
-
-export type CodeEditor = HTMLElement & {
-  value: string;
-  updateComplete?: Promise<unknown>;
-  codemirror?: { dom: HTMLElement };
-};
-
-export interface CodeEditorOptions {
-  role?: string;
-  value: string;
-  placeholder?: string;
-  mode: string;
-  language: string;
-  label: string;
-  className?: string;
-  readOnly?: boolean;
-  onInput?: (event: Event) => void;
-  onReady?: (editor: CodeEditor) => void;
-}
 
 export type EditorMode = "yaml";
 
 export type EditorControlRole =
+  | "triggers-yaml"
   | "conditions-yaml"
   | "post-confirmation-actions"
   | "post-send-actions";
@@ -34,20 +19,20 @@ export type ActionEditorRole =
   | "post-send-actions";
 
 export type EditorElementRole =
+  | "triggers-yaml"
   | "conditions-yaml"
   | "recipients";
 
 export interface EditorElements {
+  triggersYamlView?: HTMLElement;
   visual?: HTMLElement;
   conditionsYamlView?: HTMLElement;
   jinja?: HTMLElement;
   recipientMount?: HTMLElement;
-  yamlModalEditor?: CodeEditor;
   conditionsYamlEditor?: CodeEditor;
+  triggersYamlEditor?: CodeEditor;
   postConfirmationActionsEditor?: CodeEditor;
   postSendActionsEditor?: CodeEditor;
-  mobileMenu?: HTMLElement;
-  sectionManageButton?: HTMLElement;
 }
 
 export interface EditorContext {
@@ -58,12 +43,20 @@ export interface EditorContext {
   activeSection: string;
   setEditorElement(role: EditorElementRole, element: HTMLElement): void;
   setEditorControl(role: EditorControlRole, element: CodeEditor): void;
+  syncTriggerEditor(value: string): void;
   markDirty(): void;
   refreshStatuses(): void;
   setMode(mode: EditorMode): void;
   validateCondition(): void;
   validateActions(role: ActionEditorRole, label: string): void;
 }
+
+export type EditorSectionContext<
+  Additional extends keyof EditorContext = never,
+> = Pick<
+  EditorContext,
+  "value" | "localize" | "activeSection" | "markDirty" | Additional
+>;
 
 export type OptionalSetting =
   | "confirmation"
@@ -72,7 +65,6 @@ export type OptionalSetting =
   | "postSendActions"
   | "postConfirmationActions";
 
-export type OptionalSettings = Record<OptionalSetting, boolean>;
 export type SectionStatus =
   | OptionalSetting
   | "confirmationReminder"
@@ -85,14 +77,11 @@ export interface EditorSection {
   status?: SectionStatus;
 }
 
-export interface OptionalSection {
-  index: number;
-}
-
 export const editorSections: EditorSection[] = [
   { title: "Basic" },
-  { title: "When to check" },
-  { title: "Condition" },
+  { title: "When to run" },
+  { title: "Triggers", parent: "When to run" },
+  { title: "Conditions", parent: "When to run" },
   { title: "Recipients" },
   { title: "Notification" },
   {
@@ -121,14 +110,6 @@ export const editorSections: EditorSection[] = [
     status: "postConfirmationActions",
   },
 ];
-
-export const optionalSections: Record<OptionalSetting, OptionalSection> = {
-  postSendActions: { index: 5 },
-  confirmation: { index: 6 },
-  confirmationReminder: { index: 7 },
-  confirmationNotification: { index: 8 },
-  postConfirmationActions: { index: 9 },
-};
 
 export const ACTIONS_PLACEHOLDER = `- action: switch.turn_on
   metadata: {}

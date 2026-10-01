@@ -1,13 +1,19 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
-import type { CodeEditor as CodeEditorElement, EditorContext } from "../editor/types.js";
-import { codeEditor, section, showTemplateHelp } from "../editor/helpers.js";
+import type {
+  CodeEditor as CodeEditorElement,
+  EditorSectionContext,
+} from "../editor/types.js";
+import { codeEditor } from "../components/code-editor.js";
+import { renderEditorSection } from "../editor/section.js";
+import { showTemplateHelp } from "../editor/overlay-events.js";
+import { buttonComponent as button } from "../components/button.js";
 
 export function renderConfirmationNotificationSection(
-  context: EditorContext,
+  context: EditorSectionContext,
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
-  return section(
+  return renderEditorSection(
     context.localize("editor.confirmation.notification.section"),
     html`${codeEditor({
         value: String(confirmation.notification.data.message || ""),
@@ -28,12 +34,12 @@ export function renderConfirmationNotificationSection(
       </div>
       <div class="nc-template-help-trigger">
         <span>${context.localize("editor.notification.template_help")}</span>
-        <button
-          class="nc-icon-button"
-          type="button"
-          aria-label=${context.localize("editor.notification.show_template_help")}
-          title=${context.localize("editor.notification.show_template_help")}
-          @click=${(event: Event) =>
+        ${button({
+          label: context.localize("editor.notification.show_template_help"),
+          icon: "mdi:information-outline",
+          iconOnly: true,
+          className: "nc-icon-button",
+          onClick: (event: MouseEvent) =>
             showTemplateHelp(
               event,
               context.localize("editor.notification.template_help"),
@@ -48,10 +54,8 @@ export function renderConfirmationNotificationSection(
           <code>state_attr('light.kitchen', 'brightness')</code>, and
           <code>is_state('binary_sensor.door', 'on')</code>.
         </div>`,
-            )}
-        >
-          <ha-icon icon="mdi:information-outline"></ha-icon>
-        </button>
+            ),
+        })}
       </div>
       `,
     "",

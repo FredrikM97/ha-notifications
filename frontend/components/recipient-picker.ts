@@ -1,13 +1,177 @@
-import { html, LitElement, render } from "lit";
-import type { NotificationTarget, Registries } from "./types.js";
-import type { Hass } from "./types.js";
-import { localize } from "./localize.js";
+import { css, html, LitElement, render } from "lit";
+import type { NotificationTarget, Registries } from "../types.js";
+import type { Hass } from "../types.js";
+import { localize } from "../localize.js";
 
 type RecipientType = keyof NotificationTarget;
 type FilterType = "all" | RecipientType;
 interface RecipientItem { type: RecipientType; id: string; label: string; }
 
+export const recipientPickerStyles = css`
+  :host {
+    display: block;
+    box-sizing: border-box;
+    color: var(--primary-text-color);
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  .nc-target-picker {
+    display: grid;
+    gap: 8px;
+  }
+
+  .nc-recipient-input {
+    position: relative;
+    z-index: 40;
+  }
+
+  .nc-recipient-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .nc-recipient-toolbar ha-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .nc-recipient-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    grid-column: 1 / -1;
+  }
+
+  .nc-recipient-filter {
+    border: 1px solid var(--divider-color);
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: transparent;
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .nc-recipient-filter.active,
+  .nc-recipient-filter:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: var(--text-primary-color, white);
+  }
+
+  .nc-recipient-results {
+    display: grid;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: 0;
+    z-index: 50;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    max-height: 240px;
+    overflow: auto;
+    padding: 2px;
+    border: 1px solid var(--divider-color);
+    border-radius: 9px;
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
+  }
+
+  .nc-recipient-results[hidden] {
+    display: none;
+  }
+
+  .nc-recipient-option {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--divider-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--primary-background-color);
+    color: var(--primary-text-color);
+    cursor: pointer;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nc-recipient-option:hover {
+    border-color: var(--primary-color);
+  }
+
+  .nc-recipient-empty {
+    grid-column: 1 / -1;
+    padding: 12px;
+    color: var(--secondary-text-color);
+    text-align: center;
+  }
+
+  .nc-target-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 24px;
+  }
+
+  .nc-target-selection-label {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .nc-target-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 5px 7px 5px 10px;
+    border-radius: 999px;
+    background: var(--secondary-background-color);
+    color: var(--primary-text-color);
+    font-size: 13px;
+  }
+
+  .nc-chip-remove {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    font-size: 0;
+  }
+
+  .nc-chip-remove::after {
+    content: "×";
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  @container (max-width: 700px) {
+    .nc-recipient-toolbar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .nc-recipient-toolbar {
+      grid-template-columns: 1fr;
+    }
+  }
+`;
+
 class RecipientPickerElement extends LitElement {
+  static styles = recipientPickerStyles;
+
   private hass: Hass | null = null;
   private labels: Record<FilterType, string> = {} as Record<FilterType, string>;
   private items: RecipientItem[] = [];
@@ -17,7 +181,9 @@ class RecipientPickerElement extends LitElement {
   private open = false;
   private markDirty = (): void => undefined;
 
-  protected createRenderRoot(): HTMLElement { return this; }
+  protected shouldUpdate(): boolean {
+    return false;
+  }
 
   initialize(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): void {
     this.hass = hass;
@@ -54,7 +220,8 @@ class RecipientPickerElement extends LitElement {
   }
 
   private rerender(): void {
-    render(this.render(), this);
+    const root = this.shadowRoot || this.attachShadow({ mode: "open" });
+    render(this.render(), root);
   }
 
   protected render() {

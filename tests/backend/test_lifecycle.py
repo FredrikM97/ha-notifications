@@ -711,12 +711,6 @@ async def test_full_flow_uses_native_automation(
     }
     assert post_send_calls == [{"name": "Full feature sent"}]
     assert confirmation_calls == [{"entity_id": ["light.hall"]}]
-    assert entry.runtime_data.automation_runs.status("full_feature") == {
-        "active_runs": 0,
-        "active_runs_waiting": 0,
-        "active_runs_running": 0,
-        "active_runs_uncertain": False,
-    }
     history_entries = await entry.runtime_data.history.async_entries("full_feature")
     assert any(
         entry.get("event", {}).get("type") == "confirmation_completed"

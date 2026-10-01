@@ -5,11 +5,7 @@ const canonicalAlert = {
   id: "door",
   name: "Front door",
   enabled: true,
-  monitor: {
-    on_change: true,
-    startup: true,
-    interval: "01:00:00",
-  },
+  triggers: [{ trigger: "homeassistant", event: "start" }],
   conditions: [
     { condition: "and", conditions: [{ condition: "state" }] },
     { condition: "template", value_template: "{{ is_state(...) }}" },

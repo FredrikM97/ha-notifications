@@ -1,10 +1,14 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`alert editor interactions > asks before discarding unsaved changes 1`] = `"Unsaved changes You have unsaved changes. Leave without saving? Stay Discard changes"`;
-
 exports[`alert editor interactions > loads populated alert and registry fixture data 1`] = `
 {
   "actionEditors": [
+    {
+      "role": "triggers-yaml-editor",
+      "value": "- trigger: state
+  entity_id: binary_sensor.front_door
+",
+    },
     {
       "role": "conditions-yaml-editor",
       "value": "- condition: state
@@ -31,7 +35,7 @@ exports[`alert editor interactions > loads populated alert and registry fixture 
   ],
   "conditionRows": 0,
   "confirmationEnabled": true,
-  "intervalEnabled": true,
+  "intervalEnabled": undefined,
   "name": "Front door open",
   "selectedRecipients": [
     "Main phoneRemove",
@@ -42,13 +46,11 @@ exports[`alert editor interactions > loads populated alert and registry fixture 
 
 exports[`alert editor interactions > opens template help in a modal from the notification section 1`] = `
 "<section role="dialog" aria-modal="true" class="nc-modal nc-template-help-modal">
-        <header class="nc-modal-header">
-          <h2>Notification templates and helpers</h2>
-          <button class="nc-icon-button" aria-label="Close template help" title="Close template help">
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
-        </header>
-        <main class="nc-modal-body"><div class="nc-help">
+          <header class="nc-modal-header">
+            <h2>Notification templates and helpers</h2>
+            <ha-notifications-button class="nc-icon-button"></ha-notifications-button>
+          </header>
+          <main class="nc-modal-body"><div class="nc-help">
           Recipients on selected devices, areas, floors, and labels receive
           direct notifications through Home Assistant's standard Notify
           service. Give conditions an ID in the Condition view, then use that
@@ -66,7 +68,7 @@ exports[`alert editor interactions > opens template help in a modal from the not
           <code>state_attr('light.kitchen', 'brightness')</code>, and
           <code>is_state('binary_sensor.door', 'on')</code>.
         </div></main>
-      </section>"
+        </section>"
 `;
 
 exports[`alert editor interactions > previews unsaved data without requiring recipients 1`] = `
@@ -75,13 +77,12 @@ name: Draft alert
 enabled: true
 description: ""
 icon: mdi:bell-outline
+triggers:
+  - trigger: homeassistant
+    event: start
 conditions:
   - condition: template
     value_template: "{{ true }}"
-monitor:
-  on_change: true
-  startup: true
-  clear_on_inactive: false
 notification:
   target: {}
   data:
@@ -93,9 +94,9 @@ confirmation:
     - id: confirm
       label: Done
   notification:
+    enabled: false
     data:
       message: ""
-    target: {}
   reminders:
     enabled: false
     interval: 1800
@@ -120,16 +121,16 @@ exports[`alert editor interactions > renders the Basic editor section 1`] = `
 }
 `;
 
-exports[`alert editor interactions > renders the Condition editor section 1`] = `
+exports[`alert editor interactions > renders the Conditions editor section 1`] = `
 {
   "buttons": [],
   "controls": [
-    "ha-code-editor:Native Home Assistant condition:yaml:conditions-yaml-editor",
+    "ha-notifications-code-editor:Conditions checked after a trigger:yaml:conditions-yaml-editor",
   ],
   "help": [
-    "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.",
+    "Conditions do not start an alert. They are checked after a built-in or additional trigger fires and determine whether the alert continues. YAML and JSON are supported. For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration.",
   ],
-  "title": "Condition",
+  "title": "Conditions",
 }
 `;
 
@@ -155,7 +156,7 @@ exports[`alert editor interactions > renders the Notification editor section 1`]
   ],
   "controls": [
     "ha-input",
-    "ha-code-editor:Notification message:jinja2",
+    "ha-notifications-code-editor:Notification message:jinja2",
   ],
   "help": [],
   "title": "Notification",
@@ -168,7 +169,7 @@ exports[`alert editor interactions > renders the Notify recipients when confirme
     "Show template variables and sensor helpers",
   ],
   "controls": [
-    "ha-code-editor:Confirmation message:jinja2",
+    "ha-notifications-code-editor:Confirmation message:jinja2",
   ],
   "help": [
     "Optionally send a follow-up message after acknowledgement.",
@@ -182,7 +183,7 @@ exports[`alert editor interactions > renders the Post-confirmation actions edito
 {
   "buttons": [],
   "controls": [
-    "ha-code-editor:Post-confirmation actions:yaml:post-confirmation-actions",
+    "ha-notifications-code-editor:Post-confirmation actions:yaml:post-confirmation-actions",
   ],
   "help": [
     "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
@@ -195,7 +196,7 @@ exports[`alert editor interactions > renders the Post-send actions editor sectio
 {
   "buttons": [],
   "controls": [
-    "ha-code-editor:Post-send actions:yaml:post-send-actions",
+    "ha-notifications-code-editor:Post-send actions:yaml:post-send-actions",
   ],
   "help": [
     "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
@@ -230,9 +231,9 @@ exports[`alert editor interactions > renders the Reminder policy editor section 
 {
   "buttons": [],
   "controls": [
-    "ha-selector:Duration",
+    "ha-notifications-duration-input:Remind every",
     "ha-input",
-    "ha-selector:Duration",
+    "ha-notifications-duration-input:Forget after",
     "ha-switch",
     "ha-switch",
   ],
@@ -243,21 +244,33 @@ exports[`alert editor interactions > renders the Reminder policy editor section 
 }
 `;
 
-exports[`alert editor interactions > renders the When to check editor section 1`] = `
+exports[`alert editor interactions > renders the Triggers editor section 1`] = `
 {
   "buttons": [],
   "controls": [
-    "ha-switch",
-    "ha-switch",
-    "ha-switch",
-    "ha-switch:interval-toggle",
-    "ha-selector:Duration",
+    "ha-notifications-code-editor:Home Assistant triggers:yaml:triggers-yaml-editor",
   ],
   "help": [
-    "Condition changes are detected for referenced entities. Use a condition that references an entity, or use Test and interval checks for static templates.",
-    "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
+    "Enter triggers as a YAML list, with each trigger starting with a dash. For example, state, event, and template triggers. Startup and repeat triggers are controlled above; Conditions are separate and only gate a triggered run.",
   ],
-  "title": "When to check",
+  "title": "Triggers",
+}
+`;
+
+exports[`alert editor interactions > renders the When to run editor section 1`] = `
+{
+  "buttons": [],
+  "controls": [
+    "ha-switch:Startup trigger",
+    "ha-switch:Repeat trigger",
+    "ha-notifications-duration-input:Duration",
+  ],
+  "help": [
+    "Configure the built-in startup and repeat triggers here. Add other Home Assistant trigger types under Triggers.",
+    "Run this alert when Home Assistant starts.",
+    "Re-evaluate the conditions on a repeating time pattern (default every 12 hours). Home Assistant aligns time patterns to the clock, so longer values are rounded to whole minutes or hours (up to 23), and 24 hours or more runs daily at midnight.",
+  ],
+  "title": "When to run",
 }
 `;
 
@@ -282,11 +295,7 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
       "data": {
         "message": "",
       },
-      "target": {
-        "entity_id": [
-          "notify.phone",
-        ],
-      },
+      "enabled": false,
     },
     "reminders": {
       "enabled": false,
@@ -301,11 +310,6 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
   "enabled": true,
   "icon": "mdi:bell-outline",
   "id": "editable_alert",
-  "monitor": {
-    "clear_on_inactive": false,
-    "on_change": true,
-    "startup": true,
-  },
   "name": "Updated name",
   "notification": {
     "action": "notify.phone",
@@ -319,6 +323,12 @@ exports[`alert editor interactions > saves an edited alert and closes the editor
       ],
     },
   },
+  "triggers": [
+    {
+      "event": "start",
+      "trigger": "homeassistant",
+    },
+  ],
 }
 `;
 
@@ -328,7 +338,7 @@ exports[`alert editor interactions > shows validation feedback instead of saving
         </div>"
 `;
 
-exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `"<h2 data-role="editor-section-title">When to check</h2>"`;
+exports[`alert editor interactions > switches active sections and keeps the contextual title 1`] = `"<h2 data-role="editor-section-title">When to run</h2>"`;
 
 exports[`recipient picker interactions > filters recipients and removes a selected target 1`] = `
 {

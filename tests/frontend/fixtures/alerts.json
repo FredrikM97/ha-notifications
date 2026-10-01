@@ -10,6 +10,7 @@
     "id": "door",
     "name": "Front door",
     "enabled": true,
+    "triggers": [{"trigger": "homeassistant", "event": "start"}],
     "conditions": [{"condition": "template", "value_template": "{{ true }}"}],
     "monitor": {
       "on_change": true,
@@ -44,6 +45,7 @@
     "description": "Notify when the front door stays open.",
     "icon": "mdi:door-open",
     "enabled": true,
+    "triggers": [{"trigger": "state", "entity_id": "binary_sensor.front_door"}],
     "conditions": [{
       "condition": "state",
       "entity_id": "binary_sensor.front_door",

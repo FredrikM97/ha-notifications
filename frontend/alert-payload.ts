@@ -43,18 +43,6 @@ function requiredDurationSeconds(
 
 export function serializeAlertDurations(alert: Alert): Alert {
   const result = clone(alert);
-  if (result.monitor) {
-    const evaluateInterval = requiredDurationSeconds(
-      result.monitor.interval,
-      "Monitor interval",
-    );
-    if (evaluateInterval !== undefined) {
-      result.monitor.interval = evaluateInterval;
-    }
-  }
-
-  result.conditions = serializeConditionDurations(result.conditions);
-
   if (result.confirmation?.reminders) {
     const interval = requiredDurationSeconds(
       result.confirmation.reminders.interval,
@@ -77,41 +65,6 @@ export function serializeAlertDurations(alert: Alert): Alert {
   return result;
 }
 
-function serializeConditionDurations(condition: AlertCondition): AlertCondition {
-  return condition.map((item) =>
-    Object.fromEntries(
-      Object.entries(item).map(([key, value]) => {
-      if (key === "for") {
-        return [
-          key,
-          requiredDurationSeconds(
-            value as string | number | Record<string, number>,
-            "Condition duration",
-          ),
-        ];
-      }
-      if (Array.isArray(value)) {
-        return [
-          key,
-          value.map((item) =>
-            item && typeof item === "object"
-              ? serializeConditionDurations([item as AlertCondition[number]])[0]
-              : item,
-          ),
-        ];
-      }
-      if (value && typeof value === "object") {
-        return [
-          key,
-          serializeConditionDurations([value as AlertCondition[number]])[0],
-        ];
-      }
-      return [key, value];
-      }),
-    ),
-  ) as AlertCondition;
-}
-
 export interface AlertIdentityFormValues {
   name: string;
   description: string;
@@ -119,11 +72,8 @@ export interface AlertIdentityFormValues {
 }
 
 export interface AlertEvaluateFormValues {
+  triggers: Alert["triggers"];
   condition: AlertCondition;
-  onChange: boolean;
-  startup: boolean;
-  interval?: string;
-  clearOnInactive?: boolean;
 }
 
 export interface AlertNotificationFormValues {
@@ -191,17 +141,7 @@ export function buildAlertPayload(
   result.icon =
     values.identity.icon?.trim() || result.icon || "mdi:bell-outline";
   result.conditions = values.evaluate.condition;
-  result.monitor = {
-    ...result.monitor,
-    on_change: values.evaluate.onChange,
-    startup: values.evaluate.startup,
-  };
-  if (values.evaluate.clearOnInactive !== undefined) {
-    result.monitor.clear_on_inactive = values.evaluate.clearOnInactive;
-  }
-  if (values.evaluate.interval) {
-    result.monitor.interval = values.evaluate.interval;
-  }
+  result.triggers = values.evaluate.triggers;
 
   result.notification = {
     ...result.notification,
@@ -216,7 +156,11 @@ export function buildAlertPayload(
     ...values.confirmation,
     notification: {
       ...result.confirmation?.notification,
-      target: result.confirmation?.notification.target || values.notification.target,
+      enabled: values.confirmation.notification.enabled,
+      ...(values.confirmation.notification.enabled &&
+      !result.confirmation?.notification.target
+        ? { target: values.notification.target }
+        : {}),
       data: {
         ...result.confirmation?.notification.data,
         message: values.confirmation.notification.message,

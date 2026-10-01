@@ -1,6 +1,6 @@
 import type { Alert, Hass } from "../types.js";
 import { createLocalizer } from "../localize.js";
-import { editorModeFor } from "./helpers.js";
+import { editorModeFor } from "./alert-defaults.js";
 import type {
   ActionEditorRole,
   EditorContext,
@@ -38,16 +38,23 @@ export function createEditorContext({
     mode: editorModeFor(value),
     activeSection: editorSections[0].title,
     setEditorElement: (role, element) => {
+      if (role === "triggers-yaml") elements.triggersYamlView = element;
       if (role === "conditions-yaml") elements.conditionsYamlView = element;
       if (role === "recipients") elements.recipientMount = element;
     },
     setEditorControl: (role: EditorControlRole, element) => {
+      if (role === "triggers-yaml") elements.triggersYamlEditor = element;
       if (role === "conditions-yaml") elements.conditionsYamlEditor = element;
       if (role === "post-confirmation-actions") {
         elements.postConfirmationActionsEditor = element;
       }
       if (role === "post-send-actions") {
         elements.postSendActionsEditor = element;
+      }
+    },
+    syncTriggerEditor: (editorValue) => {
+      if (elements.triggersYamlEditor) {
+        elements.triggersYamlEditor.value = editorValue;
       }
     },
     markDirty,

@@ -7,6 +7,7 @@ import {
   historyDetailSummary,
   renderHistory,
 } from "../../frontend/history.js";
+import type { HistoryFilters } from "../../frontend/history.js";
 import {
   emptyHistoryFilters,
   historyFixture,
@@ -15,7 +16,7 @@ import {
   testUser,
 } from "./conftest.js";
 
-function historyContract(root: Element | null) {
+function historyContract(root: ParentNode | null) {
   if (!root) {
     return null;
   }
@@ -90,6 +91,31 @@ describe("historyDetailSummary", () => {
 });
 
 describe("history filter controls", () => {
+  it("emits filter changes as a bubbling composed event", () => {
+    const container = document.createElement("div");
+    renderHistory(container, historyFixture, {
+      filters: emptyHistoryFilters,
+    });
+
+    const element = container.querySelector("ha-notifications-history-view")!;
+    let filterDetail: HistoryFilters | undefined;
+    let receivedEvent: Event | undefined;
+    element.addEventListener("history-filters-changed", (event) => {
+      receivedEvent = event;
+      filterDetail = (event as CustomEvent<HistoryFilters>).detail;
+    });
+
+    const search = element.shadowRoot!.querySelector(
+      ".nc-history-search",
+    ) as HTMLElement & { value: string };
+    search.value = "garage";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(filterDetail?.search).toBe("garage");
+    expect(receivedEvent?.bubbles).toBe(true);
+    expect(receivedEvent?.composed).toBe(true);
+  });
+
   it("keeps secondary filters collapsed until one is active", () => {
     const container = document.createElement("div");
     renderHistory(container, historyFixture, {
@@ -98,9 +124,10 @@ describe("history filter controls", () => {
       types: ["notification_sent"],
     });
 
-    const details = container.querySelector(".nc-history-filter-details");
+    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
+    const details = root?.querySelector(".nc-history-filter-details");
     expect(details?.hasAttribute("open")).toBe(false);
-    expect(container.querySelectorAll("ha-selector")).toHaveLength(3);
+    expect(root?.querySelectorAll("ha-selector")).toHaveLength(3);
   });
 
   it("opens secondary filters when one is active", () => {
@@ -110,11 +137,8 @@ describe("history filter controls", () => {
       types: ["notification_sent"],
     });
 
-    expect(
-      container
-        .querySelector(".nc-history-filter-details")
-        ?.hasAttribute("open"),
-    ).toBe(true);
+    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
+    expect(root?.querySelector(".nc-history-filter-details")?.hasAttribute("open")).toBe(true);
   });
 });
 
@@ -124,8 +148,9 @@ describe("history detail controls", () => {
     renderHistory(container, historyFixture, {
       filters: emptyHistoryFilters,
     });
+    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
     const user = testUser();
-    const item = container.querySelector(".nc-history-item.clickable");
+    const item = root?.querySelector(".nc-history-item.clickable");
     const details = item?.querySelector("details");
 
     expect(details?.hasAttribute("open")).toBe(false);
@@ -145,7 +170,7 @@ describe("history view element", () => {
     );
     await settleElement(element);
 
-    expect(historyContract(element.querySelector(".nc-history"))).toMatchSnapshot();
+    expect(historyContract(element.shadowRoot?.querySelector(".nc-history") || null)).toMatchSnapshot();
   });
 
   it("updates when its filters change", async () => {
@@ -163,7 +188,7 @@ describe("history view element", () => {
     };
     await settleElement(element);
 
-    expect(element.querySelectorAll(".nc-history-item")).toHaveLength(1);
+    expect(element.shadowRoot?.querySelectorAll(".nc-history-item")).toHaveLength(1);
   });
 
   it("renders grouped flow events only when enabled", async () => {
@@ -182,9 +207,10 @@ describe("history view element", () => {
     );
     await settleElement(element);
 
-    expect(element.querySelectorAll(".nc-history-flow-group")).toHaveLength(1);
-    expect(element.querySelectorAll(".nc-history-item")).toHaveLength(2);
-    const group = element.querySelector<HTMLDetailsElement>(
+    const root = element.shadowRoot!;
+    expect(root.querySelectorAll(".nc-history-flow-group")).toHaveLength(1);
+    expect(root.querySelectorAll(".nc-history-item")).toHaveLength(2);
+    const group = root.querySelector<HTMLDetailsElement>(
       ".nc-history-flow-group",
     );
     expect(group?.open).toBe(true);

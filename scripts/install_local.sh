@@ -26,3 +26,5 @@ cp \
     "$target_dir/frontend/panel.js"
 
 printf '%s\n' "Installed to $target_dir"
+
+exec /home/vscode/.local/ha-venv/bin/python -m homeassistant -c "$config_dir"

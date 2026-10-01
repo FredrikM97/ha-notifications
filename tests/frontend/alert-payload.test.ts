@@ -20,6 +20,23 @@ describe("buildAlertPayload", () => {
     expect(payload).not.toHaveProperty("condition");
   });
 
+  it("preserves native condition durations", () => {
+    const condition = [{
+      condition: "state",
+      entity_id: "binary_sensor.front_door",
+      state: "on",
+      for: "00:20:00",
+    }];
+    const payload = buildAlertPayload(
+      draftAlertFixture({ conditions: condition }),
+      alertFormValuesWithRecipients({
+        evaluate: { ...alertFormValues().evaluate, condition },
+      }),
+    );
+
+    expect(payload.conditions).toEqual(condition);
+  });
+
   it("omits the delivery action when recipients are selected", () => {
     const original = draftAlertFixture({ id: "test_alert" });
     const payload = buildAlertPayload(
@@ -27,6 +44,21 @@ describe("buildAlertPayload", () => {
       alertFormValuesWithRecipients(),
     );
     expect(payload).toMatchSnapshot();
+  });
+
+  it("keeps confirmation follow-up delivery explicitly disabled by default", () => {
+    const payload = buildAlertPayload(
+      draftAlertFixture(),
+      alertFormValuesWithRecipients({
+        confirmation: {
+          ...alertFormValues().confirmation,
+          notification: { enabled: false, message: "", clear: true },
+        },
+      }),
+    );
+
+    expect(payload.confirmation?.notification.enabled).toBe(false);
+    expect(payload.confirmation?.notification.target).toBeUndefined();
   });
 
   it("throws when there are no recipients", () => {
@@ -55,22 +87,17 @@ describe("buildAlertPayload", () => {
     expect(payload.runtime).toBeUndefined();
   });
 
-  it("preserves monitor settings that are not edited", () => {
-    const original = draftAlertFixture({
-      monitor: {
-        ...draftAlertFixture().monitor,
-        clear_on_inactive: true,
-      },
-    });
+  it("persists explicit native triggers", () => {
+    const original = draftAlertFixture();
     const payload = buildAlertPayload(
       original,
       alertFormValuesWithRecipients(),
     );
 
-    expect(payload.monitor?.clear_on_inactive).toBe(true);
+    expect(payload.triggers).toEqual(draftAlertFixture().triggers);
   });
 
-  it("emits canonical monitor fields without legacy evaluate fields", () => {
+  it("emits canonical triggers without legacy evaluate fields", () => {
     const original = draftAlertFixture();
 
     const payload = buildAlertPayload(
@@ -80,10 +107,7 @@ describe("buildAlertPayload", () => {
 
     expect(payload).not.toHaveProperty("evaluate");
     expect(payload).not.toHaveProperty("condition");
-    expect(payload.monitor).toMatchObject({
-      on_change: true,
-      startup: true,
-    });
+    expect(payload.triggers).toEqual(draftAlertFixture().triggers);
   });
 
   it("persists disabling existing post-send actions", () => {
@@ -192,20 +216,23 @@ describe("buildAlertPayload", () => {
     expect(payload.confirmation?.reminders.timeout).toBe(900);
   });
 
-  it("rejects malformed durations before transport", () => {
+  it("rejects malformed confirmation durations before transport", () => {
     const original = draftAlertFixture();
     expect(() =>
       buildAlertPayload(
         original,
         alertFormValues({
-          evaluate: {
-            ...alertFormValues().evaluate,
-            interval: "not-a-duration",
+          confirmation: {
+            ...alertFormValues().confirmation,
+            reminders: {
+              ...alertFormValues().confirmation.reminders,
+              timeout: "not-a-duration",
+            },
           },
         }),
         false,
       ),
-    ).toThrow("Monitor interval must be a valid duration.");
+    ).toThrow("Confirmation timeout must be a valid duration.");
   });
 
   it("throws when confirmation is enabled without recipients", () => {

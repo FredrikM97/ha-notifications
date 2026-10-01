@@ -7,10 +7,9 @@ description: "Use when adding or reviewing HA Notifications backend/frontend tes
 Use this skill whenever a task changes or reviews tests, fixtures, snapshots,
 config-entry flows, Home Assistant service calls, automation generation, or
 frontend/backend contract behavior. It is shared procedure, not an
-implementation owner: the `Backend` agent applies the backend section, the
-`Frontend` agent applies the frontend section, and `Lead` checks the
-integrated result. Do not load it for a source-only change with no test or
-validation impact.
+implementation owner: `Lead` applies the relevant backend and frontend
+sections and checks the integrated result. Do not load it for a source-only
+change with no test or validation impact.
 
 ## Backend
 

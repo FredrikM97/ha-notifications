@@ -9,10 +9,10 @@ import voluptuous as vol
 from homeassistant.components import automation as ha_automation
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 
 from ..automation import (
     async_reconcile_automations,
+    async_validate_alerts,
     automation_id,
     automation_status,
 )
@@ -89,18 +89,6 @@ def _automation_entity_for(
     return f"automation.{unique_id}"
 
 
-def _automation_state_is_available(
-    hass: HomeAssistant,
-    entity_id: str,
-) -> bool:
-    """Return whether an automation entity exists and is available."""
-    states = getattr(hass, "states", None)
-    if states is None:
-        return True
-    state = states.get(entity_id)
-    return state is not None and getattr(state, "state", "available") != "unavailable"
-
-
 class WebsocketDispatcher:
     """Implement websocket commands as typed methods."""
 
@@ -125,9 +113,11 @@ class WebsocketDispatcher:
         return _raw_config_for(hass)
 
     async def validate_config(
-        self, _hass: HomeAssistant, msg: dict[str, Any]
+        self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> dict[str, Any]:
-        return validate_config(msg["config"])
+        validated = validate_config(msg["config"])
+        await async_validate_alerts(hass, validated["alerts"])
+        return validated
 
     async def automation_status(
         self, hass: HomeAssistant, _msg: dict[str, Any]
@@ -142,10 +132,9 @@ class WebsocketDispatcher:
     async def get_history(
         self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        entry = _entry(hass)
-        if entry is None:
-            raise ValueError("HA Notifications has no config entry")
-        return await history_store(entry).async_entries(msg.get("alert_id"))
+        return await history_store(hass, _entry(hass)).async_entries(
+            msg.get("alert_id")
+        )
 
     async def save_config(
         self, hass: HomeAssistant, msg: dict[str, Any]
@@ -180,35 +169,6 @@ class WebsocketDispatcher:
         await async_reconcile_automations(hass, config["alerts"])
         return config
 
-    async def trigger(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, Any]:
-        config = _config_for(hass)
-        alert_id = msg["alert_id"]
-        alert = next(
-            (item for item in config["alerts"] if item["id"] == alert_id),
-            None,
-        )
-        if alert is None:
-            raise ValueError(f"unknown alert_id: {alert_id}")
-        automation_entity = _automation_entity_for(hass, alert)
-        if not _automation_state_is_available(hass, automation_entity):
-            await async_reconcile_automations(hass, config["alerts"])
-            automation_entity = _automation_entity_for(hass, alert)
-            if not _automation_state_is_available(hass, automation_entity):
-                raise HomeAssistantError(
-                    f"Generated automation {automation_id(alert)} has no available "
-                    f"entity (tried {automation_entity}). "
-                    "Check that the generated automation include is loaded."
-                )
-        await hass.services.async_call(
-            "automation",
-            "trigger",
-            {"entity_id": automation_entity, "skip_condition": False},
-            blocking=True,
-        )
-        return {"triggered": True, "alert_id": alert_id}
-
     @staticmethod
     def _require_entry(hass: HomeAssistant) -> Any:
         entry = _entry(hass)
@@ -226,8 +186,6 @@ def _automation_runtime_status(
     automation_entity = _automation_entity_for(hass, alert)
     states = getattr(hass, "states", None)
     state = states.get(automation_entity) if states is not None else None
-    entry = _entry(hass)
-    tracker = getattr(getattr(entry, "runtime_data", None), "automation_runs", None)
     generated = next(
         (
             item
@@ -236,28 +194,22 @@ def _automation_runtime_status(
         ),
         {},
     )
-    runtime = (
-        tracker.status(alert["id"])
-        if tracker is not None and hasattr(tracker, "status")
-        else {
-            "active_runs": 0,
-            "active_runs_waiting": 0,
-            "active_runs_running": 0,
-            "active_runs_uncertain": True,
-        }
-    )
+    current = state.attributes.get("current", 0) if state is not None else 0
     status = automation_status(document, alert)
     if status == "managed" and state is None:
         status = "missing"
-    return {
+    runtime_status = {
         "status": status,
         "enabled": state is not None and state.state == "on",
         "last_triggered": (
             state.attributes.get("last_triggered") if state is not None else None
         ),
         "mode": generated.get("mode", "single"),
-        **runtime,
+        "current": current if isinstance(current, int) else 0,
     }
+    if generated:
+        runtime_status["automation_id"] = generated["id"]
+    return runtime_status
 
 
 def _handler(
@@ -290,7 +242,6 @@ def register(hass: HomeAssistant) -> None:
         "save_config": (dispatcher.save_config, {vol.Required("config"): dict}),
         "delete": (dispatcher.delete, {vol.Required("alert_id"): str}),
         "reload": (dispatcher.reload, {}),
-        "trigger": (dispatcher.trigger, {vol.Required("alert_id"): str}),
     }
     for command, (handler, arguments) in commands.items():
         schema = {vol.Required("type"): f"{DOMAIN}/{command}", **arguments}

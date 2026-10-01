@@ -2,37 +2,36 @@ import { html } from "lit";
 import type { TemplateResult } from "lit";
 import type {
   CodeEditor as CodeEditorElement,
-  EditorContext,
+  EditorSectionContext,
 } from "../editor/types.js";
-import {
-  codeEditor,
-  field,
-  section,
-  showTemplateHelp,
-  valueOf,
-} from "../editor/helpers.js";
+import { codeEditor } from "../components/code-editor.js";
+import { formValue } from "../components/form-controls.js";
+import { renderFormField } from "../components/form-field.js";
+import { renderEditorSection } from "../editor/section.js";
+import { showTemplateHelp } from "../editor/overlay-events.js";
+import { buttonComponent as button } from "../components/button.js";
 
 export function renderNotificationSection(
-  context: EditorContext,
+  context: EditorSectionContext<"refreshStatuses">,
 ): TemplateResult {
   const notification = context.value.notification;
-  return section(
+  return renderEditorSection(
     context.localize("editor.notification.section"),
     html`<div class="nc-grid">
-        ${field(
+        ${renderFormField(
           context.localize("editor.notification.title"),
           html`<ha-input
             type="text"
             .value=${String(notification.data.title || "")}
             placeholder=${context.localize("editor.notification.title_placeholder")}
             @input=${(event: Event) => {
-              notification.data.title = valueOf(event);
+              notification.data.title = formValue(event);
               context.markDirty();
               context.refreshStatuses();
             }}
           ></ha-input>`,
         )}
-        ${field(
+        ${renderFormField(
           context.localize("editor.notification.message"),
           codeEditor({
             value: String(notification.data.message || ""),
@@ -53,12 +52,12 @@ export function renderNotificationSection(
       </div>
       <div class="nc-template-help-trigger">
         <span>${context.localize("editor.notification.template_help")}</span>
-        <button
-          class="nc-icon-button"
-          type="button"
-          aria-label=${context.localize("editor.notification.show_template_help")}
-          title=${context.localize("editor.notification.show_template_help")}
-          @click=${(event: Event) =>
+        ${button({
+          label: context.localize("editor.notification.show_template_help"),
+          icon: "mdi:information-outline",
+          iconOnly: true,
+          className: "nc-icon-button",
+          onClick: (event: MouseEvent) =>
             showTemplateHelp(
               event,
               context.localize("editor.notification.templates_help"),
@@ -80,10 +79,8 @@ export function renderNotificationSection(
           <code>state_attr('light.kitchen', 'brightness')</code>, and
           <code>is_state('binary_sensor.door', 'on')</code>.
         </div>`,
-            )}
-        >
-          <ha-icon icon="mdi:information-outline"></ha-icon>
-        </button>
+            ),
+        })}
       </div>`,
     "",
     context.activeSection === "Notification",

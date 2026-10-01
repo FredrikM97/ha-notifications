@@ -22,6 +22,7 @@ export interface CanonicalCondition {
 }
 
 export type AlertCondition = CanonicalCondition[];
+export type AlertTrigger = Record<string, unknown>;
 
 export interface AlertRecovery {
   notification?: NotificationConfig;
@@ -62,25 +63,10 @@ export interface NotificationTarget {
   user_id?: string[];
 }
 
-export interface EvaluateConfig {
-  on_change: boolean;
-  startup: boolean;
-  interval?: string | number | Record<string, number>;
-  clear_on_inactive?: boolean;
-  retention?: HistoryRetentionConfig;
-}
-
-export interface MonitorConfig {
-  on_change?: boolean;
-  startup?: boolean;
-  interval?: number | string;
-  clear_on_inactive?: boolean;
-}
-
 export interface ConfirmationConfig {
   enabled: boolean;
   buttons: { id?: string; label: string }[];
-  notification: CanonicalNotification;
+  notification: ConfirmationNotification;
   reminders: {
     enabled: boolean;
     interval: string | number | Record<string, number>;
@@ -90,6 +76,12 @@ export interface ConfirmationConfig {
     timeout: string | number | Record<string, number>;
   };
   actions: Record<string, unknown>[];
+}
+
+export interface ConfirmationNotification extends CanonicalNotification {
+  enabled?: boolean;
+  title?: string;
+  message?: string;
 }
 
 export interface NotificationConfig {
@@ -110,18 +102,12 @@ export interface CanonicalRecovery {
   notification?: CanonicalNotification;
 }
 
-export interface CanonicalEvaluateConfig {
-  on_change?: boolean;
-  startup?: boolean;
-  interval?: string | number | Record<string, unknown>;
-}
-
 export interface CanonicalAlert {
   id: string;
   name?: string | null;
   enabled?: boolean;
+  triggers: AlertTrigger[];
   conditions: CanonicalCondition[];
-  monitor?: MonitorConfig | null;
   notification: CanonicalNotification;
   repeat?: Record<string, unknown> | null;
   recovery?: CanonicalRecovery | null;
@@ -162,8 +148,8 @@ export interface AutomationRuntimeStatus {
   enabled: boolean;
   last_triggered?: string | null;
   mode: "single" | "restart" | "queued" | "parallel" | string;
-  active_runs: number;
-  active_runs_uncertain: boolean;
+  current: number;
+  automation_id?: string;
 }
 
 export interface RuntimeAlertState {
@@ -187,8 +173,8 @@ export interface Alert {
   description?: string;
   icon?: string;
   enabled: boolean;
+  triggers: AlertTrigger[];
   conditions: AlertCondition;
-  monitor?: MonitorConfig | null;
   notification: CanonicalNotification;
   confirmation?: ConfirmationConfig;
   post_send_actions?: PostSendActionsConfig;

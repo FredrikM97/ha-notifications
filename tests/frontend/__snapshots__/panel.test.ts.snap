@@ -12,7 +12,6 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
   "alerts": [
     {
       "actions": [
-        "Test alert",
         "Disable",
         "Edit alert",
         "View history",

@@ -11,6 +11,8 @@ commands and panel registration.
 `domain.py` holds runtime state. Keep those responsibilities separate and
 preserve Home Assistant-native extra fields through validation and rendering.
 
-Backend tests and reusable fixtures live in `tests/backend/`. Run a focused
-test file plus `python3 -m ruff check custom_components/ha_notifications
-tests/backend` when changing this package.
+Backend tests and reusable fixtures live in `tests/backend/`. Finish related
+backend edits before validating; then batch the focused pytest file with
+`python3 -m ruff check custom_components/ha_notifications tests/backend`.
+Run the full backend suite at the end of a coherent slice or before handoff,
+not after every small edit.

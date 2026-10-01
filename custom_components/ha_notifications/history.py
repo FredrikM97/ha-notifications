@@ -85,10 +85,12 @@ class HistoryStore:
                 retained.append(entry)
         self._entries = retained[:_MAX_ENTRIES]
 
-def history_store(entry: Any) -> HistoryStore:
-    """Return the history store owned by a configured entry."""
+def history_store(hass: HomeAssistant, entry: Any = None) -> HistoryStore:
+    """Return the entry-owned history store, creating it when missing."""
     runtime_data = getattr(entry, "runtime_data", None)
     store = getattr(runtime_data, "history", None)
     if store is None:
-        raise RuntimeError("HA Notifications history is not initialized")
+        store = HistoryStore(hass)
+        if runtime_data is not None and hasattr(runtime_data, "history"):
+            runtime_data.history = store
     return store

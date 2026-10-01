@@ -5,57 +5,26 @@ import { renderConditionSection } from "../sections/condition.js";
 import { renderConfirmationSection } from "../sections/confirmation.js";
 import { renderConfirmationNotificationSection } from "../sections/confirmation-notification.js";
 import { renderConfirmationReminderSection } from "../sections/confirmation-reminder.js";
-import { renderEvaluateSection } from "../sections/evaluate.js";
+import {
+  renderCustomTriggersSection,
+  renderTriggerSection,
+} from "../sections/triggers.js";
 import { renderNotificationSection } from "../sections/notification.js";
 import { renderPostConfirmationActionsSection } from "../sections/post-confirmation-actions.js";
 import { renderPostSendActionsSection } from "../sections/post-send-actions.js";
 import { renderRecipientSection } from "../sections/recipients.js";
-import type { EditorContext, OptionalSettings } from "./types.js";
+import type { EditorContext } from "./types.js";
 
-export function renderEditorSections(
-  context: EditorContext,
-  optionalSettings: OptionalSettings,
-): TemplateResult {
-  return html`${renderBasicSection(context)}${renderEvaluateSection(
+export function renderEditorSections(context: EditorContext): TemplateResult {
+  return html`${renderBasicSection(context)}${renderTriggerSection(
     context,
-  )}${renderConditionSection(context)}${renderRecipientSection(
+  )}${renderCustomTriggersSection(context)}${renderConditionSection(context)}${renderRecipientSection(
     context,
-  )}${renderNotificationSection(context)}
-    <div
-      class="nc-optional-setting"
-      data-setting="postSendActions"
-      ?hidden=${!optionalSettings.postSendActions}
-    >
-      ${renderPostSendActionsSection(context)}
-    </div>
-    <div
-      class="nc-optional-setting"
-      data-setting="confirmation"
-      ?hidden=${!optionalSettings.confirmation}
-    >
-      ${renderConfirmationSection(context)}
-    </div>
-    <div
-      class="nc-optional-setting"
-      data-setting="confirmationReminder"
-      ?hidden=${!optionalSettings.confirmationReminder ||
-      !optionalSettings.confirmation}
-    >
-      ${renderConfirmationReminderSection(context)}
-    </div>
-    <div
-      class="nc-optional-setting"
-      data-setting="confirmationNotification"
-      ?hidden=${!optionalSettings.confirmationNotification ||
-      !optionalSettings.confirmation}
-    >
-      ${renderConfirmationNotificationSection(context)}
-    </div>
-    <div
-      class="nc-optional-setting"
-      data-setting="postConfirmationActions"
-      ?hidden=${!optionalSettings.postConfirmationActions}
-    >
-      ${renderPostConfirmationActionsSection(context)}
-    </div>`;
+  )}${renderNotificationSection(context)}${renderPostSendActionsSection(
+    context,
+  )}${renderConfirmationSection(context)}${renderConfirmationReminderSection(
+    context,
+  )}${renderConfirmationNotificationSection(context)}${renderPostConfirmationActionsSection(
+    context,
+  )}`;
 }

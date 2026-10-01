@@ -16,17 +16,6 @@ from pydantic.functional_serializers import model_serializer
 ReminderInterval = int | float | str | dict[str, Any]
 
 
-class MonitorConfig(BaseModel):
-    """Settings used to derive Home Assistant automation triggers."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    on_change: bool | None = None
-    startup: bool | None = None
-    interval: int | float | None = None
-    clear_on_inactive: bool | None = None
-
-
 class NotificationConfig(BaseModel):
     """The notification shape exposed by the original editor."""
 
@@ -62,6 +51,7 @@ class ConfirmationNotificationConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    enabled: bool | None = None
     action: str | None = None
     target: dict[str, Any] | None = None
     title: str | None = None
@@ -70,11 +60,7 @@ class ConfirmationNotificationConfig(BaseModel):
 
     @model_serializer(mode="plain")
     def serialize(self) -> dict[str, Any]:
-        values = {
-            key: getattr(self, key)
-            for key in ("action", "target", "title", "message", "data")
-            if key in self.model_fields_set
-        }
+        values = {key: getattr(self, key) for key in ("enabled", "action", "target", "title", "message", "data") if key in self.model_fields_set}
         return {**values, **(self.__pydantic_extra__ or {})}
 
 
@@ -110,9 +96,7 @@ class ConfirmationConfig(BaseModel):
 
     enabled: bool = False
     buttons: list[ConfirmationButtonConfig] = Field(default_factory=list)
-    notification: ConfirmationNotificationConfig = Field(
-        default_factory=ConfirmationNotificationConfig
-    )
+    notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
     actions: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
 
@@ -127,13 +111,20 @@ class AlertConfig(BaseModel):
     enabled: bool = True
     description: str = ""
     icon: str = "mdi:bell-outline"
+    triggers: list[dict[str, Any]] = Field(default_factory=list)
     conditions: list[dict[str, Any]] = Field(default_factory=list)
-    monitor: MonitorConfig | None = None
     notification: NotificationConfig
     confirmation: ConfirmationConfig | None = None
     post_send_actions: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+    @field_validator("triggers")
+    @classmethod
+    def validate_triggers(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if any(not isinstance(trigger, dict) for trigger in value):
+            raise ValueError("triggers entries must be mappings")
+        return value
 
     @field_validator("conditions")
     @classmethod
@@ -158,6 +149,7 @@ class Configuration(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("alert IDs must be unique")
         return self
+
 
 def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     """Validate and serialize without legacy normalization."""

@@ -16,7 +16,6 @@ from .const import (
     SERVICE_REPORT,
     SERVICE_SEND,
 )
-from .domain import AutomationRunTracker
 from .history import history_store
 from .mobile_app import resolve_services
 from .targets import resolve_target
@@ -46,7 +45,7 @@ async def _async_record(hass: HomeAssistant, call: ServiceCall) -> None:
     flow_id = call.data.get("flow_id") or call.data.get("run_id")
     if isinstance(flow_id, str) and flow_id:
         kwargs["flow_id"] = flow_id
-    await history_store(_entry(hass)).async_record(
+    await history_store(hass, _entry(hass)).async_record(
         alert_id,
         str(call.data.get("alert_name", alert_id)),
         str(call.data.get("event_type", "action_executed")),
@@ -54,12 +53,6 @@ async def _async_record(hass: HomeAssistant, call: ServiceCall) -> None:
         call.data.get("details") if isinstance(call.data.get("details"), dict) else {},
         **kwargs,
     )
-
-
-def _run_tracker(hass: HomeAssistant) -> AutomationRunTracker | None:
-    entry = _entry(hass)
-    tracker = getattr(getattr(entry, "runtime_data", None), "automation_runs", None)
-    return tracker if isinstance(tracker, AutomationRunTracker) else None
 
 
 async def _confirmed_by(hass: HomeAssistant, details: dict[str, Any]) -> str:
@@ -132,11 +125,7 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
         raise HomeAssistantError(
             "ha_notifications.report requires status"
         )
-    if status == "inactive":
-        tracker = _run_tracker(hass)
-        if tracker is not None:
-            tracker.cleared(alert_id)
-    elif status == "started" or status.endswith("_completed") or status in {
+    if status == "started" or status.endswith("_completed") or status in {
         "waiting",
         "running",
     }:
@@ -144,14 +133,6 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
             raise HomeAssistantError(
                 f"ha_notifications.report status {status!r} requires run_id"
             )
-        tracker = _run_tracker(hass)
-        if tracker is not None:
-            if status == "started":
-                tracker.started(alert_id, run_id)
-            elif status.endswith("_completed"):
-                tracker.completed(alert_id, run_id)
-            else:
-                tracker.phase(alert_id, run_id, status)
     details = (
         dict(call.data.get("details"))
         if isinstance(call.data.get("details"), dict)
@@ -165,7 +146,7 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
     flow_id = call.data.get("flow_id") or call.data.get("run_id")
     if isinstance(flow_id, str) and flow_id:
         kwargs["flow_id"] = flow_id
-    await history_store(_entry(hass)).async_record(
+    await history_store(hass, _entry(hass)).async_record(
         alert_id,
         str(call.data.get("alert_name", alert_id)),
         status,
@@ -257,15 +238,11 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
         )
     alert_id = call.data.get("alert_id")
     if isinstance(alert_id, str) and alert_id:
-        if clear:
-            tracker = _run_tracker(hass)
-            if tracker is not None:
-                tracker.cleared(alert_id)
         kwargs = {}
         flow_id = call.data.get("flow_id") or call.data.get("run_id")
         if isinstance(flow_id, str) and flow_id:
             kwargs["flow_id"] = flow_id
-        await history_store(_entry(hass)).async_record(
+        await history_store(hass, _entry(hass)).async_record(
             alert_id,
             str(call.data.get("alert_name", alert_id)),
             "notification_cleared" if clear else "notification_sent",

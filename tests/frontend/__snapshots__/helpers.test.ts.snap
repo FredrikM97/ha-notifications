@@ -16,10 +16,3 @@ exports[`enabledLabel > reflects the enabled flag 1`] = `
   "Disabled",
 ]
 `;
-
-exports[`toggleTitle > describes the action the toggle performs next 1`] = `
-[
-  "Disable confirmation",
-  "Enable confirmation",
-]
-`;

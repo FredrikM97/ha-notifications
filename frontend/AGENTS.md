@@ -10,5 +10,7 @@ editing payload or editor code. Frontend fixtures and behavior tests are in
 `tests/frontend/`; snapshots are part of the test contract and should be
 updated deliberately.
 
-Use `npm run typecheck` for type validation, `npm run build` for bundling, and
-`npx vitest run tests/frontend/api.test.ts` for a focused test.
+Finish related frontend edits before validating. For a coherent slice, run the
+relevant focused Vitest tests and typecheck/build checks together; run the full
+frontend/repository suite at the end of the slice or before handoff rather than
+after each small edit.

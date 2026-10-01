@@ -6,6 +6,7 @@ import type { Alert, Hass, Registries } from "../../frontend/types.js";
 import {
   configFixture,
   configuredAlertFixture,
+  alertCardRoots,
   emptyRegistries,
   mountCustomElement,
   settleElement,
@@ -20,7 +21,6 @@ const getConfig = vi.fn();
 const saveAlert = vi.fn();
 const deleteAlert = vi.fn();
 const validateAlert = vi.fn();
-const triggerAlert = vi.fn();
 
 vi.mock("../../frontend/api.js", () => ({
   deleteAlert,
@@ -32,7 +32,6 @@ vi.mock("../../frontend/api.js", () => ({
   loadRegistries,
   saveAlert,
   validateAlert,
-  triggerAlert,
 }));
 
 await import("../../frontend/panel.js");
@@ -48,7 +47,11 @@ const alert: Alert = configuredAlertFixture();
 function setupApi(): void {
   getAlerts.mockResolvedValue([alert]);
   getAutomationStatus.mockResolvedValue({
-    [alert.id]: { status: "managed", enabled: true },
+    [alert.id]: {
+      status: "managed",
+      enabled: true,
+      automation_id: `ha_notifications_${alert.id}`,
+    },
   });
   getHistory.mockResolvedValue([]);
   loadRegistries.mockResolvedValue(emptyRegistries());
@@ -56,7 +59,6 @@ function setupApi(): void {
   saveAlert.mockResolvedValue(alert);
   deleteAlert.mockResolvedValue({});
   validateAlert.mockResolvedValue({});
-  triggerAlert.mockResolvedValue({ triggered: true, alert_id: alert.id });
 }
 
 function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
@@ -79,17 +81,32 @@ function panelContract(root: Element | null) {
       label: tab.textContent?.replace(/\s+/g, " ").trim(),
       active: tab.classList.contains("active"),
     })),
-    alerts: [...root.querySelectorAll(".nc-alert")].map((card) => ({
-      name: card.querySelector(".nc-alert-name")?.textContent?.trim(),
-      statuses: [...card.querySelectorAll(".nc-alert-statuses span")].map(
+    alerts: alertCardRoots(root).map((cardRoot) => ({
+      name: cardRoot.querySelector(".nc-alert-name")?.textContent?.trim(),
+      statuses: [...cardRoot.querySelectorAll(".nc-alert-statuses span")].map(
         (status) => status.textContent?.replace(/\s+/g, " ").trim(),
       ),
-      meta: card.querySelector(".nc-alert-meta")?.textContent?.replace(/\s+/g, " ").trim(),
-      actions: [...card.querySelectorAll(".nc-alert-actions button")].map(
+      meta: cardRoot.querySelector(".nc-alert-meta")?.textContent?.replace(/\s+/g, " ").trim(),
+      actions: [...cardRoot.querySelectorAll(".nc-alert-actions button")].map(
         (button) => button.getAttribute("aria-label"),
       ),
     })),
   };
+}
+
+function alertListRoot(root: ShadowRoot): ShadowRoot | null {
+  return root.querySelector("ha-notifications-alert-list")?.shadowRoot || null;
+}
+
+async function settlePanel(panel: HTMLElement & { shadowRoot: ShadowRoot }): Promise<void> {
+  await settleElement(panel);
+  const alertList = panel.shadowRoot.querySelector("ha-notifications-alert-list");
+  if (!alertList) return;
+  await settleElement(alertList);
+  await Promise.all(
+    [...(alertList.shadowRoot?.querySelectorAll("ha-notifications-alert-card") || [])]
+      .map((card) => settleElement(card)),
+  );
 }
 
 afterEach(() => {
@@ -101,13 +118,38 @@ describe("panel view", () => {
   it("renders the alert dashboard and status card", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
+    await settlePanel(panel);
 
     expect(panel.shadowRoot.textContent).not.toContain("Attempt 2/3");
-    expect(panel.shadowRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(5);
+    const cardRoot = alertCardRoots(panel.shadowRoot)[0];
+    expect(cardRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(4);
     expect(panel.shadowRoot.textContent).not.toContain("restart");
     expect(panel.shadowRoot.textContent).not.toContain("active:");
+    expect(
+      cardRoot.querySelector<HTMLAnchorElement>(".nc-open-automation")?.href,
+    ).toContain(`/config/automation/edit/ha_notifications_${alert.id}`);
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
+  });
+
+  it("labels a historical trigger separately from an active run", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(getAutomationStatus).toHaveBeenCalledOnce());
+    getAutomationStatus.mockResolvedValue({
+      [alert.id]: {
+        status: "managed",
+        enabled: true,
+        last_triggered: "2026-09-30T10:00:00Z",
+        current: 0,
+      },
+    });
+    await (panel as HTMLElement & { refresh(): Promise<void> }).refresh();
+    await settlePanel(panel);
+
+    const statuses = [...alertCardRoots(panel.shadowRoot!)[0].querySelectorAll(".nc-alert-statuses span")]
+      .map((status) => status.textContent?.replace(/\\s+/g, " ").trim());
+    expect(statuses).toContain("Last triggered");
+    expect(statuses).not.toContain("Active");
   });
 
   it("refreshes data when Home Assistant provides a newer hass state", async () => {
@@ -136,17 +178,17 @@ describe("panel view", () => {
         status: "missing",
         enabled: false,
         mode: "single",
-        active_runs: 0,
-        active_runs_uncertain: false,
+        current: 0,
         last_triggered: null,
       },
     });
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
+    await settlePanel(panel);
 
-    expect(panel.shadowRoot.textContent).toContain("Idle");
-    expect(panel.shadowRoot.textContent).not.toContain("Automation missing");
+    const cardRoot = alertCardRoots(panel.shadowRoot)[0];
+    expect(cardRoot.textContent).toContain("Idle");
+    expect(cardRoot.textContent).not.toContain("Automation missing");
   });
 
   it("shows unfinished alerts in the Active view", async () => {
@@ -155,8 +197,7 @@ describe("panel view", () => {
         status: "managed",
         enabled: true,
         mode: "parallel",
-        active_runs: 1,
-        active_runs_uncertain: false,
+        current: 1,
         last_triggered: "2026-09-29T12:00:00+00:00",
       },
     });
@@ -167,8 +208,9 @@ describe("panel view", () => {
     await testUser().click(within(panel.shadowRoot).getByRole("button", { name: "Active" }));
     await settleElement(panel);
 
-    expect(panel.shadowRoot.querySelectorAll(".nc-alert")).toHaveLength(1);
-    expect(panel.shadowRoot.textContent).toContain("Active");
+    const cardRoots = alertCardRoots(panel.shadowRoot);
+    expect(cardRoots).toHaveLength(1);
+    expect(cardRoots[0].textContent).toContain("Active");
   });
 
   it("keeps an exit to Home Assistant reachable from the dashboard", async () => {
@@ -185,26 +227,14 @@ describe("panel view", () => {
     getAlerts.mockResolvedValueOnce([
       {
         ...alert,
-        monitor: { ...alert.monitor, interval: "00:05:00" },
+        triggers: [{ trigger: "time_pattern", minutes: "/5" }],
       },
     ]);
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await settleElement(panel);
 
-    expect(panel.shadowRoot.querySelector(".nc-alert-meta")).toBeNull();
-  });
-
-  it("runs the configured automation from the alert test action", async () => {
-    const panel = mountPanel();
-    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
-
-    await testUser().click(
-      within(panel.shadowRoot).getByRole("button", { name: "Test alert" }),
-    );
-
-    expect(triggerAlert).toHaveBeenCalledWith(hass, alert.id);
+    expect(alertCardRoots(panel.shadowRoot)[0].querySelector(".nc-alert-meta")).toBeNull();
   });
 
   it("uses Home Assistant navigation when exiting the panel", async () => {
@@ -235,13 +265,28 @@ describe("panel view", () => {
     getAlerts.mockResolvedValueOnce([]);
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
+    await settlePanel(panel);
 
     expect({
-      title: panel.shadowRoot.querySelector(".nc-empty h2")?.textContent,
-      message: panel.shadowRoot.querySelector(".nc-empty p")?.textContent?.replace(/\s+/g, " ").trim(),
-      action: panel.shadowRoot.querySelector(".nc-empty button")?.textContent?.trim(),
+      title: alertListRoot(panel.shadowRoot)?.querySelector(".nc-empty h2")?.textContent,
+      message: alertListRoot(panel.shadowRoot)?.querySelector(".nc-empty p")?.textContent?.replace(/\s+/g, " ").trim(),
+      action: alertListRoot(panel.shadowRoot)?.querySelector(".nc-empty button")?.textContent?.trim(),
     }).toMatchSnapshot();
+  });
+
+  it("opens the editor from the alert-list create action", async () => {
+    getAlerts.mockResolvedValueOnce([]);
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settlePanel(panel);
+
+    await testUser().click(
+      alertListRoot(panel.shadowRoot)?.querySelector<HTMLButtonElement>(
+        ".nc-empty button",
+      )!,
+    );
+
+    await vi.waitFor(() => expect(loadRegistries).toHaveBeenCalledOnce());
   });
 
   it("switches between History and YAML views", async () => {
@@ -255,7 +300,7 @@ describe("panel view", () => {
     await settleElement(panel);
     const historyView = panel.shadowRoot.querySelector("ha-notifications-history-view")!;
     await settleElement(historyView);
-    expect(historyView.querySelector(".nc-empty")).not.toBeNull();
+    expect(historyView.shadowRoot?.querySelector(".nc-empty")).not.toBeNull();
 
     await user.click(queries.getByRole("button", { name: "YAML" }));
     await settleElement(panel);
@@ -277,9 +322,11 @@ describe("panel view", () => {
   it("toggles an alert through the save action", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
+    await settlePanel(panel);
     await testUser().click(
-      within(panel.shadowRoot).getByRole("button", { name: "Disable" }),
+      alertCardRoots(panel.shadowRoot)[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Disable"]',
+      )!,
     );
 
     expect(saveAlert).toHaveBeenCalledWith(
@@ -288,16 +335,43 @@ describe("panel view", () => {
     );
   });
 
+  it("opens the editor from an alert-card edit action", async () => {
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settlePanel(panel);
+
+    await testUser().click(
+      alertCardRoots(panel.shadowRoot)[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Edit alert"]',
+      )!,
+    );
+
+    await vi.waitFor(() =>
+      expect(
+        panel.shadowRoot.querySelector("ha-notifications-alert-editor"),
+      ).not.toBeNull(),
+    );
+    expect(loadRegistries).toHaveBeenCalledOnce();
+  });
+
   it("opens an empty local history view", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
-    await settleElement(panel);
+    await settlePanel(panel);
     const queries = within(panel.shadowRoot);
     const user = testUser();
 
-    await user.click(queries.getByRole("button", { name: "View history" }));
+    await user.click(
+      alertCardRoots(panel.shadowRoot)[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="View history"]',
+      )!,
+    );
     await settleElement(panel);
-    expect(panel.shadowRoot.querySelector(".nc-empty")).not.toBeNull();
+    expect(
+      panel.shadowRoot
+        .querySelector("ha-notifications-history-view")
+        ?.shadowRoot?.querySelector(".nc-empty"),
+    ).not.toBeNull();
   });
 
   it("registers the Lovelace card contract", () => {

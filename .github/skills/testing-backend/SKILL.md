@@ -23,8 +23,9 @@ event bus when the real fixture can exercise the contract. Use a small local
 stub only for a pure function or external protocol boundary that the test does
 not own. Tests should verify behavior at the owning integration boundary.
 
-Run focused tests immediately after a change. For a coherent backend slice run
-`python3 -m pytest tests/backend`. When snapshots change, run the focused test
-with `--snapshot-update`, inspect the diff, then rerun without update mode.
-Treat fixture drift, stale imports, and deleted architecture references as real
-failures.
+Finish related backend implementation and test edits before running checks.
+For a coherent slice, batch focused pytest and Ruff checks; run the full backend
+suite or repository gate before handoff instead of after each small edit. When
+snapshots change, run the focused test with `--snapshot-update`, inspect the
+diff, then validate without update mode. Treat fixture drift, stale imports,
+and deleted architecture references as real failures.

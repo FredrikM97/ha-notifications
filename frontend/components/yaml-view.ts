@@ -1,3 +1,4 @@
+import { css, html, LitElement, render } from "lit";
 import { parse, stringify } from "yaml";
 import {
   errorMessage,
@@ -5,43 +6,102 @@ import {
   reload,
   saveConfig,
   validateConfig,
-} from "./api.js";
-import { html, LitElement, render } from "lit";
-import { ref } from "lit/directives/ref.js";
-import type { Hass } from "./types.js";
-import { constrainCodeEditor } from "./editor/helpers.js";
-import { localize } from "./localize.js";
-type Toast = (message: string, error?: boolean) => void;
+} from "../api.js";
+import type { Hass } from "../types.js";
+import { buttonStyles } from "./button.js";
+import { codeEditor, type CodeEditor } from "./code-editor.js";
+import { localize } from "../localize.js";
 
-type CodeEditor = HTMLElement & {
-  value: string;
-  updateComplete?: Promise<unknown>;
-};
+export interface YamlToastEventDetail {
+  message: string;
+  error?: boolean;
+}
+
+export const yamlViewStyles = css`
+  :host {
+    display: block;
+    container-type: inline-size;
+    color: var(--primary-text-color);
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  .nc-yaml {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: calc(100vh - 180px);
+    padding: 16px;
+    border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
+  }
+
+  .nc-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .nc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @container (max-width: 700px) {
+    .nc-toolbar,
+    .nc-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      width: 100%;
+    }
+
+    .nc-button {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .nc-toolbar,
+    .nc-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      width: 100%;
+    }
+
+    .nc-button {
+      width: 100%;
+    }
+  }
+`;
 
 class YamlViewElement extends LitElement {
   declare hass: Hass;
 
-  declare showToast: Toast;
-
-  declare refreshPanel: () => Promise<void>;
-
   static properties = {
     hass: { attribute: false },
-    showToast: { attribute: false },
-    refreshPanel: { attribute: false },
   };
+
+  static styles = [buttonStyles, yamlViewStyles];
 
   private yaml = "";
   private busyAction: "reload" | "validate" | "save" | null = null;
   private editor: CodeEditor | null = null;
   private loadedHass: Hass | null = null;
 
-  protected createRenderRoot(): HTMLElement {
-    return this;
-  }
-
   renderImmediately(): void {
-    render(this.render(), this);
+    render(this.render(), this.renderRoot);
   }
 
   protected updated(): void {
@@ -57,14 +117,15 @@ class YamlViewElement extends LitElement {
       this.yaml = stringify(config);
       this.renderImmediately();
       await customElements.whenDefined("ha-code-editor");
-      this.editor = this.querySelector<CodeEditor>("ha-code-editor");
+      this.editor = this.renderRoot.querySelector<CodeEditor>(
+        "ha-notifications-code-editor",
+      );
       await this.editor?.updateComplete;
       if (this.editor) {
         this.editor.value = this.yaml;
-        constrainCodeEditor(this.editor);
       }
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      this.notify(errorMessage(err), true);
     }
   }
 
@@ -105,21 +166,19 @@ class YamlViewElement extends LitElement {
           </button>
         </div>
       </div>
-      <ha-code-editor
-        id="nc-yaml-editor"
-        class="nc-code-editor nc-yaml-editor"
-        mode="yaml"
-        language="yaml"
-        aria-label=${localize(this.hass, "yaml.aria")}
-        @input=${this.updateYaml}
-        @value-changed=${this.updateYaml}
-        ${ref((editor?: CodeEditor) => {
-          this.editor = editor ?? null;
-          if (editor && this.yaml) {
-            editor.value = this.yaml;
-          }
-        })}
-      ></ha-code-editor>
+      ${codeEditor({
+        id: "nc-yaml-editor",
+        value: this.yaml,
+        mode: "yaml",
+        language: "yaml",
+        label: localize(this.hass, "yaml.aria"),
+        className: "nc-yaml-editor",
+        size: "page",
+        onInput: this.updateYaml,
+        onReady: (editor) => {
+          this.editor = editor;
+        },
+      })}
     </div>`;
   }
 
@@ -138,9 +197,9 @@ class YamlViewElement extends LitElement {
   private copyYaml = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(this.yaml);
-      this.showToast(localize(this.hass, "yaml.copied"));
+      this.notify(localize(this.hass, "yaml.copied"));
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      this.notify(errorMessage(err), true);
     }
   };
 
@@ -150,9 +209,9 @@ class YamlViewElement extends LitElement {
     try {
       await reload(this.hass);
       await this.load();
-      this.showToast(localize(this.hass, "yaml.reloaded"));
+      this.notify(localize(this.hass, "yaml.reloaded"));
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      this.notify(errorMessage(err), true);
     } finally {
       this.busyAction = null;
       this.renderImmediately();
@@ -164,9 +223,9 @@ class YamlViewElement extends LitElement {
     this.renderImmediately();
     try {
       await validateConfig(this.hass, this.parseEditor());
-      this.showToast(localize(this.hass, "yaml.valid"));
+      this.notify(localize(this.hass, "yaml.valid"));
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      this.notify(errorMessage(err), true);
     } finally {
       this.busyAction = null;
       this.renderImmediately();
@@ -181,15 +240,30 @@ class YamlViewElement extends LitElement {
       if (!result.saved) {
         throw new Error(localize(this.hass, "yaml.not_saved"));
       }
-      this.showToast(localize(this.hass, "yaml.saved"));
-      await this.refreshPanel();
+      this.notify(localize(this.hass, "yaml.saved"));
+      this.dispatchEvent(
+        new CustomEvent("yaml-refresh-requested", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
     } catch (err) {
-      this.showToast(errorMessage(err), true);
+      this.notify(errorMessage(err), true);
     } finally {
       this.busyAction = null;
       this.renderImmediately();
     }
   };
+
+  private notify(message: string, error = false): void {
+    this.dispatchEvent(
+      new CustomEvent<YamlToastEventDetail>("yaml-toast", {
+        detail: { message, error },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
 }
 
 customElements.define("ha-notifications-yaml-view", YamlViewElement);

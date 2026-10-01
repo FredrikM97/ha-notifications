@@ -8,5 +8,6 @@ preserve native Home Assistant trigger, condition, template, and action data.
 Use existing integration modules and canonical backend fixtures; do not
 reintroduce removed architecture or invent frontend-visible contracts.
 
-For test or fixture changes, load `testing-backend` only when needed and use a
+For test, fixture, snapshot, config-entry, service, automation, or integration
+behavior work, load the shared `testing` and `testing-backend` skills. Use a
 focused pytest command before broader validation.

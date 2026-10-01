@@ -21,11 +21,7 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
       "data": {
         "message": "",
       },
-      "target": {
-        "entity_id": [
-          "notify.mobile_app_phone",
-        ],
-      },
+      "enabled": false,
     },
     "reminders": {
       "enabled": true,
@@ -38,11 +34,6 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
   "enabled": true,
   "icon": "mdi:bell-outline",
   "id": "test_alert",
-  "monitor": {
-    "clear_on_inactive": false,
-    "on_change": true,
-    "startup": true,
-  },
   "name": "Front door open",
   "notification": {
     "data": {
@@ -55,6 +46,12 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
       ],
     },
   },
+  "triggers": [
+    {
+      "event": "start",
+      "trigger": "homeassistant",
+    },
+  ],
 }
 `;
 
@@ -79,11 +76,7 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
       "data": {
         "message": "",
       },
-      "target": {
-        "entity_id": [
-          "notify.mobile_app_phone",
-        ],
-      },
+      "enabled": false,
     },
     "reminders": {
       "enabled": true,
@@ -96,11 +89,6 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
   "enabled": true,
   "icon": "mdi:door-open",
   "id": "custom_icon_alert",
-  "monitor": {
-    "clear_on_inactive": false,
-    "on_change": true,
-    "startup": true,
-  },
   "name": "Front door open",
   "notification": {
     "data": {
@@ -113,6 +101,12 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
       ],
     },
   },
+  "triggers": [
+    {
+      "event": "start",
+      "trigger": "homeassistant",
+    },
+  ],
 }
 `;
 
@@ -137,7 +131,7 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
       "data": {
         "message": "",
       },
-      "target": {},
+      "enabled": false,
     },
     "reminders": {
       "enabled": true,
@@ -150,11 +144,6 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
   "enabled": true,
   "icon": "mdi:bell-outline",
   "id": "preview_alert",
-  "monitor": {
-    "clear_on_inactive": false,
-    "on_change": true,
-    "startup": true,
-  },
   "name": "Front door open",
   "notification": {
     "data": {
@@ -163,5 +152,11 @@ exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] =
     },
     "target": {},
   },
+  "triggers": [
+    {
+      "event": "start",
+      "trigger": "homeassistant",
+    },
+  ],
 }
 `;

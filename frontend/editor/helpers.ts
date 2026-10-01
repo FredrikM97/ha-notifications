@@ -1,14 +1,16 @@
-import { html, nothing } from "lit";
-import type { TemplateResult } from "lit";
-import { ref } from "lit/directives/ref.js";
+import { html } from "lit";
+import type { CSSResult, TemplateResult } from "lit";
 import * as YAML from "yaml";
 import type { Alert, Hass } from "../types.js";
 import { localize } from "../localize.js";
+import { codeEditor } from "../components/code-editor.js";
+import "./section.js";
+
+export { codeEditor };
 import {
   ACTIONS_PLACEHOLDER,
   type CodeEditor,
   type ActionEditorRole,
-  type CodeEditorOptions,
   type EditorContext,
   type EditorMode,
   type FormControl,
@@ -33,12 +35,8 @@ export function defaultAlert(): Alert {
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
+    triggers: [{ trigger: "homeassistant", event: "start" }],
     conditions: [{ condition: "template", value_template: "{{ true }}" }],
-    monitor: {
-      on_change: true,
-      startup: true,
-      clear_on_inactive: false,
-    },
     notification: {
       target: {},
       data: { title: "", message: "" },
@@ -47,6 +45,7 @@ export function defaultAlert(): Alert {
       enabled: false,
       buttons: [{ id: "confirm", label: "Done" }],
       notification: {
+        enabled: false,
         data: { message: "" },
       },
       reminders: {
@@ -64,6 +63,57 @@ export function defaultAlert(): Alert {
 
 export function conditionYaml(condition: Alert["conditions"]): string {
   return YAML.stringify(condition);
+}
+
+export function triggerYaml(triggers: Alert["triggers"]): string {
+  return triggers.length ? YAML.stringify(triggers) : "";
+}
+
+export function customTriggers(
+  triggers: Alert["triggers"],
+): Alert["triggers"] {
+  return triggers.filter((trigger) => !isBuiltInTrigger(trigger));
+}
+
+export function confirmationNotificationEnabled(
+  notification: NonNullable<Alert["confirmation"]>["notification"],
+): boolean {
+  if (typeof notification.enabled === "boolean") return notification.enabled;
+  return Boolean(
+    notification.action ||
+      notification.target !== undefined ||
+      notification.title !== undefined ||
+      notification.message !== undefined ||
+      notification.data !== undefined,
+  );
+}
+
+function isBuiltInTrigger(trigger: Alert["triggers"][number]): boolean {
+  return (
+    (trigger.trigger === "homeassistant" && trigger.event === "start") ||
+    trigger.trigger === "time_pattern"
+  );
+}
+
+export function mergeCustomTriggers(
+  current: Alert["triggers"],
+  custom: Alert["triggers"],
+): Alert["triggers"] {
+  return [...current.filter(isBuiltInTrigger), ...custom];
+}
+
+export function parseTriggerYaml(value: string): Alert["triggers"] {
+  if (!value.trim()) return [];
+  const parsed = YAML.parse(value);
+  if (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (item) => item && typeof item === "object" && !Array.isArray(item),
+    )
+  ) {
+    return parsed as Alert["triggers"];
+  }
+  throw new Error("Triggers YAML must be a list of mappings.");
 }
 
 export function actionsYaml(
@@ -98,7 +148,11 @@ export function showEditorToast(
   duration = 6000,
 ): void {
   root.dispatchEvent(
-    new CustomEvent("nc-editor-toast", { detail: { message, duration } }),
+    new CustomEvent("nc-editor-toast", {
+      detail: { message, duration },
+      bubbles: true,
+      composed: true,
+    }),
   );
 }
 
@@ -206,76 +260,6 @@ export function durationInput(
   ></ha-input>`;
 }
 
-export async function fillActionEditors(host: HTMLElement): Promise<void> {
-  await customElements.whenDefined("ha-code-editor");
-
-  const editors = Array.from(
-    host.querySelectorAll<CodeEditor>("ha-code-editor.nc-action-editor"),
-  );
-
-  for (const editor of editors) {
-    await editor.updateComplete;
-    constrainCodeEditor(editor, "280px");
-  }
-}
-
-export function constrainCodeEditor(
-  editor: CodeEditor,
-  height = "var(--nc-code-editor-height)",
-): void {
-  const codeMirror = editor.codemirror?.dom;
-  if (!codeMirror || !editor.isConnected) return;
-
-  if (height) editor.style.height = height;
-  codeMirror.style.height = "100%";
-  const scroller = codeMirror.querySelector(
-    ".cm-scroller",
-  ) as HTMLElement | null;
-  if (scroller) scroller.style.height = "100%";
-}
-
-export function field(
-  label: string | TemplateResult,
-  content: TemplateResult = html``,
-  full = false,
-): TemplateResult {
-  let className = "nc-field";
-  if (full) {
-    className = "nc-field full";
-  }
-
-  return html`<div class=${className}><label>${label}</label>${content}</div>`;
-}
-
-export function codeEditor({
-  role,
-  value,
-  placeholder = "",
-  mode,
-  language,
-  label,
-  className = "nc-action-editor",
-  readOnly = false,
-  onInput,
-  onReady,
-}: CodeEditorOptions): TemplateResult {
-  return html`<ha-code-editor
-    data-role=${role || nothing}
-    .value=${value}
-    placeholder=${placeholder || nothing}
-    class=${`nc-code-editor ${className}`}
-    mode=${mode}
-    language=${language}
-    aria-label=${label}
-    ?read-only=${readOnly}
-    @input=${onInput || nothing}
-    @value-changed=${onInput || nothing}
-    ${ref((element) => {
-      if (element) onReady?.(element as CodeEditor);
-    })}
-  ></ha-code-editor>`;
-}
-
 export function actionSection({
   context,
   title,
@@ -312,35 +296,32 @@ export function section(
   content: TemplateResult,
   className = "",
   active = false,
+  featureStyles?: CSSResult,
 ): TemplateResult {
-  return html`<section
+  return html`<ha-notifications-editor-section
     class="nc-section ${className}${active ? " active" : ""}"
     data-title=${title}
-  >
-    <div class="nc-section-content">${content}</div>
-  </section>`;
+    .title=${title}
+    .content=${content}
+    .featureStyles=${featureStyles?.cssText || ""}
+  ></ha-notifications-editor-section>`;
 }
 
 export function optionalControls(
   context: EditorContext,
+  setting: OptionalSetting,
   enabled: boolean,
   label: string,
-  onToggle: (enabled: boolean) => void,
   disabled = false,
 ): TemplateResult {
-  const title = enabled
-    ? `${context.localize("alert.disable")} ${label}`
-    : `${context.localize("alert.enable")} ${label}`;
-
-  return html`<div class="nc-setting-controls">
-    <ha-switch
-      .checked=${enabled}
-      ?disabled=${disabled}
-      aria-label=${title}
-      title=${title}
-      @change=${(event: Event) => onToggle(checkedOf(event))}
-    ></ha-switch>
-  </div>`;
+  return html`<ha-notifications-setting-toggle
+    .setting=${setting}
+    .enabled=${enabled}
+    .label=${label}
+    .enableText=${context.localize("alert.enable")}
+    .disableText=${context.localize("alert.disable")}
+    ?disabled=${disabled}
+  ></ha-notifications-setting-toggle>`;
 }
 
 export function editorSectionControl(
@@ -369,6 +350,8 @@ export function showYaml(root: ShadowRoot, alert: Alert): void {
   root.dispatchEvent(
     new CustomEvent("nc-editor-modal", {
       detail: { kind: "yaml", alert },
+      bubbles: true,
+      composed: true,
     }),
   );
 }
@@ -391,6 +374,8 @@ export function showTemplateHelp(
         modalClass: "nc-template-help-modal",
         closeLabel: "Close template help",
       },
+      bubbles: true,
+      composed: true,
     }),
   );
 }

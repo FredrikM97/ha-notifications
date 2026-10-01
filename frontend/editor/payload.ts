@@ -7,13 +7,14 @@ import {
   buildAlertPayload,
   type AlertFormValues,
 } from "../alert-payload.js";
-import { durationInputValue } from "./helpers.js";
+import { durationInputValue } from "../components/duration-input.js";
+import { confirmationNotificationEnabled } from "./confirmation.js";
 
 export interface EditorPayloadInput {
   alert: Alert;
   condition: AlertCondition;
+  triggers: Alert["triggers"];
   recipients: NotificationTarget;
-  evaluateInterval?: string;
   confirmationActions: Record<string, unknown>[];
   postSendActions: Record<string, unknown>[];
   postSendActionsEnabled: boolean;
@@ -25,8 +26,8 @@ export function buildEditorPayload(input: EditorPayloadInput): Alert {
   const {
     alert,
     condition,
+    triggers,
     recipients,
-    evaluateInterval,
     confirmationActions,
     postSendActions,
     postSendActionsEnabled,
@@ -41,11 +42,8 @@ export function buildEditorPayload(input: EditorPayloadInput): Alert {
       icon: alert.icon,
     },
     evaluate: {
+      triggers,
       condition,
-      onChange: alert.monitor?.on_change !== false,
-      startup: alert.monitor?.startup !== false,
-      interval: evaluateInterval,
-      clearOnInactive: alert.monitor?.clear_on_inactive === true,
     },
     notification: {
       target: recipients,
@@ -56,7 +54,7 @@ export function buildEditorPayload(input: EditorPayloadInput): Alert {
       enabled: Boolean(confirmation.enabled),
       buttons: confirmation.buttons,
       notification: {
-        enabled: Boolean(confirmation.notification),
+        enabled: confirmationNotificationEnabled(confirmation.notification),
         message: String(confirmation.notification.data.message || ""),
         clear: true,
       },

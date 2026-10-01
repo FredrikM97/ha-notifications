@@ -1,12 +1,12 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
-import type { EditorContext } from "../editor/types.js";
-import { actionSection } from "../editor/helpers.js";
+import type { EditorSectionContext } from "../editor/types.js";
+import { renderActionSection } from "../editor/action-section.js";
 
 export function renderPostConfirmationActionsSection(
-  context: EditorContext,
+  context: EditorSectionContext<"setEditorControl">,
 ): TemplateResult {
-  return actionSection({
+  return renderActionSection({
     context,
     title: context.localize("editor.confirmation.actions.section"),
     help: context.localize("editor.confirmation.actions.help"),

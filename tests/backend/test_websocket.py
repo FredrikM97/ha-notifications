@@ -12,7 +12,6 @@ from custom_components.ha_notifications.bridge import (
     async_register_panel,
     websocket,
 )
-from custom_components.ha_notifications.domain import AutomationRunTracker
 
 
 async def _dispatch(
@@ -39,7 +38,7 @@ def test_registers_only_supported_namespaced_commands(
     websocket.register(hass)
     websocket.register(hass)
 
-    assert len(registered) == 8
+    assert len(registered) == 7
     assert {handler._ws_command for handler in registered} == {
         "ha_notifications/get_config",
         "ha_notifications/automation_status",
@@ -48,7 +47,6 @@ def test_registers_only_supported_namespaced_commands(
         "ha_notifications/save_config",
         "ha_notifications/delete",
         "ha_notifications/reload",
-        "ha_notifications/trigger",
     }
 
 
@@ -193,209 +191,6 @@ async def test_get_config_returns_invalid_persisted_document_for_repair() -> Non
 
 
 @pytest.mark.asyncio
-async def test_trigger_runs_generated_automation_for_alert() -> None:
-    entry = SimpleNamespace(
-        options={"version": 1, "alerts": [{
-            "id": "door",
-            "notification": {"action": "notify.mobile_app_phone"},
-        }]},
-        data={},
-    )
-    calls: list[tuple[str, str, dict[str, str], bool]] = []
-
-    async def async_call(
-        domain: str,
-        service: str,
-        data: dict[str, str],
-        blocking: bool,
-    ) -> None:
-        calls.append((domain, service, data, blocking))
-
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-        services=SimpleNamespace(async_call=async_call),
-        states=SimpleNamespace(get=lambda entity_id: object()),
-    )
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("trigger should not fail"),
-    )
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "alert_id": "door"},
-        websocket.WebsocketDispatcher().trigger,
-    )
-
-    assert calls == [(
-        "automation",
-        "trigger",
-        {
-            "entity_id": "automation.ha_notifications_door",
-            "skip_condition": False,
-        },
-        True,
-    )]
-    assert connection.result == {"triggered": True, "alert_id": "door"}
-
-
-@pytest.mark.asyncio
-async def test_trigger_uses_loaded_entity_id_for_generated_unique_id() -> None:
-    """Use Home Assistant's restored entity ID when it differs from the YAML ID."""
-    alert = {
-        "id": "alert_1_2",
-        "notification": {"action": "notify.mobile_app_phone"},
-    }
-    entry = SimpleNamespace(
-        options={"version": 1, "alerts": [alert]},
-        data={},
-    )
-    calls: list[tuple[str, str, dict[str, object], bool]] = []
-
-    async def async_call(
-        domain: str,
-        service: str,
-        data: dict[str, object],
-        blocking: bool,
-    ) -> None:
-        calls.append((domain, service, data, blocking))
-
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-        data={
-            websocket.ha_automation.DATA_COMPONENT: SimpleNamespace(entities=[
-                SimpleNamespace(
-                    unique_id="ha_notifications_alert_1_2",
-                    entity_id="automation.ha_notifications_alert_1_2",
-                ),
-            ]),
-        },
-        services=SimpleNamespace(async_call=async_call),
-        states=SimpleNamespace(get=lambda entity_id: object()),
-    )
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("trigger should not fail"),
-    )
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "alert_id": "alert_1_2"},
-        websocket.WebsocketDispatcher().trigger,
-    )
-
-    assert calls == [(
-        "automation",
-        "trigger",
-        {
-            "entity_id": "automation.ha_notifications_alert_1_2",
-            "skip_condition": False,
-        },
-        True,
-    )]
-
-
-@pytest.mark.asyncio
-async def test_trigger_reconciles_missing_automation_before_running_flow(
-    monkeypatch: pytest.MonkeyPatch,
-    alert_factory,
-) -> None:
-    """Restore the generated flow instead of bypassing its configured steps."""
-    alert = alert_factory("base")
-    entry = SimpleNamespace(
-        options={"version": 1, "alerts": [alert]},
-        data={},
-    )
-    calls: list[tuple[str, str, dict[str, object], bool]] = []
-    reconciled: list[list[dict[str, object]]] = []
-    automation_loaded = False
-
-    async def reconcile(_hass, alerts):
-        nonlocal automation_loaded
-        automation_loaded = True
-        reconciled.append(alerts)
-
-    monkeypatch.setattr(websocket, "async_reconcile_automations", reconcile)
-
-    async def async_call(
-        domain: str,
-        service: str,
-        data: dict[str, object],
-        blocking: bool,
-    ) -> None:
-        calls.append((domain, service, data, blocking))
-
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-        services=SimpleNamespace(async_call=async_call),
-        states=SimpleNamespace(
-            get=lambda entity_id: object() if automation_loaded else None,
-        ),
-    )
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("trigger should not fail"),
-    )
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "alert_id": "base_alert"},
-        websocket.WebsocketDispatcher().trigger,
-    )
-
-    assert len(reconciled) == 1
-    assert [item["id"] for item in reconciled[0]] == [alert["id"]]
-    assert calls == [(
-        "automation",
-        "trigger",
-        {
-            "entity_id": "automation.ha_notifications_base_alert",
-            "skip_condition": False,
-        },
-        True,
-    )]
-    assert connection.result == {"triggered": True, "alert_id": "base_alert"}
-
-
-@pytest.mark.asyncio
-async def test_trigger_reports_unavailable_automation_after_reconcile(
-    monkeypatch: pytest.MonkeyPatch,
-    alert_factory,
-) -> None:
-    """Do not call automation.trigger when reload did not create the entity."""
-    alert = alert_factory("base")
-    entry = SimpleNamespace(
-        options={"version": 1, "alerts": [alert]},
-        data={},
-    )
-
-    async def reconcile(_hass, _alerts):
-        return []
-
-    async def async_call(*_args, **_kwargs):
-        pytest.fail("automation.trigger should not run for a missing entity")
-
-    monkeypatch.setattr(websocket, "async_reconcile_automations", reconcile)
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-        services=SimpleNamespace(async_call=async_call),
-        states=SimpleNamespace(get=lambda entity_id: None),
-    )
-
-    with pytest.raises(
-        websocket.HomeAssistantError,
-        match="Generated automation ha_notifications_base_alert has no available",
-    ):
-        await websocket.WebsocketDispatcher().trigger(
-            hass,
-            {"alert_id": "base_alert"},
-        )
-
-
-@pytest.mark.asyncio
 async def test_automation_status_projects_generated_automation_ownership(
     tmp_path: Path,
     alert_factory,
@@ -439,110 +234,53 @@ async def test_automation_status_projects_generated_automation_ownership(
             "enabled": False,
             "last_triggered": None,
             "mode": "single",
-            "active_runs": 0,
-            "active_runs_waiting": 0,
-            "active_runs_running": 0,
-            "active_runs_uncertain": True,
+            "current": 0,
         },
         "demo": {
             "status": "missing",
             "enabled": False,
             "last_triggered": None,
             "mode": "single",
-            "active_runs": 0,
-            "active_runs_waiting": 0,
-            "active_runs_running": 0,
-            "active_runs_uncertain": True,
+            "current": 0,
         },
         "notification_alert": {
             "status": "missing",
             "enabled": False,
             "last_triggered": None,
             "mode": "single",
-            "active_runs": 0,
-            "active_runs_waiting": 0,
-            "active_runs_running": 0,
-            "active_runs_uncertain": True,
+            "current": 0,
         },
         "configuration_alert": {
             "status": "missing",
             "enabled": False,
             "last_triggered": None,
             "mode": "single",
-            "active_runs": 0,
-            "active_runs_waiting": 0,
-            "active_runs_running": 0,
-            "active_runs_uncertain": True,
+            "current": 0,
         },
     }]
 
-def test_automation_runtime_status_reports_parallel_runs(
+def test_automation_runtime_status_reports_native_current_runs(
     alert_factory,
 ) -> None:
     alert = alert_factory("base")
-    alert_id = alert["id"]
-    tracker = AutomationRunTracker.create()
-    tracker.started(alert_id, "run-a")
-    tracker.started(alert_id, "run-b")
-    tracker.phase(alert_id, "run-a", "waiting")
-    entry = SimpleNamespace(
-        runtime_data=SimpleNamespace(automation_runs=tracker),
-    )
     state = SimpleNamespace(
         state="on",
-        attributes={"last_triggered": "2026-09-29T12:00:00+00:00"},
+        attributes={
+            "current": 2,
+            "last_triggered": "2026-09-29T12:00:00+00:00",
+        },
     )
     hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
+        config_entries=SimpleNamespace(async_entries=lambda domain: []),
         states=SimpleNamespace(get=lambda entity_id: state),
     )
 
     result = websocket._automation_runtime_status(hass, [], alert)
 
-    assert result["active_runs"] == 2
-    assert result["active_runs_waiting"] == 1
-    assert result["active_runs_running"] == 1
-    assert result["active_runs_uncertain"] is False
+    assert result["current"] == 2
+    assert "automation_id" not in result
     assert result["enabled"] is True
     assert result["last_triggered"] == "2026-09-29T12:00:00+00:00"
-
-    tracker.completed(alert_id, "run-a")
-    assert tracker.status(alert_id) == {
-        "active_runs": 1,
-        "active_runs_waiting": 0,
-        "active_runs_running": 1,
-        "active_runs_uncertain": False,
-    }
-
-
-def test_automation_run_tracker_reports_phase_transitions(alert_factory) -> None:
-    tracker = AutomationRunTracker.create()
-    alert_id = alert_factory("base")["id"]
-
-    tracker.started(alert_id, "run-1")
-    assert tracker.status(alert_id)["active_runs_running"] == 1
-
-    tracker.phase(alert_id, "run-1", "waiting")
-    assert tracker.status(alert_id)["active_runs_waiting"] == 1
-    assert tracker.status(alert_id)["active_runs_running"] == 0
-
-    tracker.completed(alert_id, "run-1")
-    assert tracker.status(alert_id) == {
-        "active_runs": 0,
-        "active_runs_waiting": 0,
-        "active_runs_running": 0,
-        "active_runs_uncertain": False,
-    }
-
-    tracker.started(alert_id, "run-2")
-    tracker.phase(alert_id, "run-2", "waiting")
-    tracker.cleared(alert_id)
-    assert tracker.status(alert_id) == {
-        "active_runs": 0,
-        "active_runs_waiting": 0,
-        "active_runs_running": 0,
-        "active_runs_uncertain": False,
-    }
 
 
 def test_automation_runtime_status_reports_missing_loaded_entity(
@@ -565,6 +303,7 @@ def test_automation_runtime_status_reports_missing_loaded_entity(
     )
 
     assert result["status"] == "missing"
+    assert result["automation_id"] == "ha_notifications_base_alert"
 
 @pytest.mark.asyncio
 async def test_save_config_returns_frontend_response_envelope(

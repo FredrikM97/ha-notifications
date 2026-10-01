@@ -14,7 +14,7 @@ from custom_components.ha_notifications.configuration import (
 def test_validate_config_preserves_canonical_monitor_conditions_and_notification() -> None:
     config = validate_config({"alerts": [{
         "id": "low_water",
-        "monitor": {"on_change": True, "startup": True, "interval": 15},
+            "triggers": [{"trigger": "state", "entity_id": "sensor.water"}],
         "conditions": [{"condition": "state", "entity_id": "sensor.water", "state": "low"}],
         "notification": {
             "action": "notify.mobile_app_phone",
@@ -24,7 +24,7 @@ def test_validate_config_preserves_canonical_monitor_conditions_and_notification
     }]})
     alert = config["alerts"][0]
     assert config["version"] == 1
-    assert alert["monitor"]["interval"] == 15
+    assert alert["triggers"] == [{"trigger": "state", "entity_id": "sensor.water"}]
     assert alert["conditions"][0]["entity_id"] == "sensor.water"
     assert alert["notification"]["target"] == {"entity_id": ["notify.phone"]}
 
@@ -52,12 +52,11 @@ def test_validate_config_rejects_invalid_notification_action() -> None:
         validate_config({"alerts": [{"id": "low_water", "notification": {"action": "notify"}}]})
 
 
-@pytest.mark.parametrize("monitor_field", ["dependencies", "triggers"])
-def test_validate_config_rejects_unsupported_monitor_fields(monitor_field: str) -> None:
+def test_validate_config_rejects_invalid_trigger_entries() -> None:
     with pytest.raises(ValidationError):
         validate_config({"alerts": [{
             "id": "low_water",
-            "monitor": {monitor_field: []},
+            "triggers": ["not a mapping"],
             "notification": {"action": "notify.mobile_app_phone"},
         }]})
 
@@ -65,7 +64,7 @@ def test_validate_config_rejects_unsupported_monitor_fields(monitor_field: str) 
 def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
     config = validate_config({"alerts": [{
         "id": "confirm_alert",
-        "monitor": {"startup": True},
+            "triggers": [{"trigger": "homeassistant", "event": "start"}],
         "conditions": [],
         "notification": {"action": "notify.mobile_app_phone"},
         "confirmation": {
@@ -79,6 +78,27 @@ def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
     alert = config["alerts"][0]
     assert alert["confirmation"]["buttons"][0]["id"] == "confirm"
     assert alert["post_send_actions"]["actions"][0]["action"] == "logbook.log"
+
+
+def test_validate_config_preserves_confirmation_notification_opt_out() -> None:
+    config = validate_config({"alerts": [{
+        "id": "confirm_alert",
+        "notification": {"action": "notify.mobile_app_phone"},
+        "confirmation": {
+            "enabled": True,
+            "notification": {
+                "enabled": False,
+                "action": "notify.mobile_app_phone",
+                "message": "Confirmed",
+            },
+        },
+    }]})
+
+    assert config["alerts"][0]["confirmation"]["notification"] == {
+        "enabled": False,
+        "action": "notify.mobile_app_phone",
+        "message": "Confirmed",
+    }
 
 
 def test_validate_config_rejects_nonpositive_confirmation_attempts() -> None:

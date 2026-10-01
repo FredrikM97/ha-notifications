@@ -24,8 +24,7 @@ type Command =
   | "validate_config"
   | "save_config"
   | "delete"
-  | "reload"
-  | "trigger";
+  | "reload";
 
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -125,13 +124,6 @@ export function getAutomationStatus(
   hass: Hass,
 ): Promise<Record<string, AutomationRuntimeStatus>> {
   return call<Record<string, AutomationRuntimeStatus>>(hass, "automation_status");
-}
-
-export function triggerAlert(
-  hass: Hass,
-  alertId: string,
-): Promise<{ triggered: boolean; alert_id: string }> {
-  return call(hass, "trigger", { alert_id: alertId });
 }
 
 export function getHistory(

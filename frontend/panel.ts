@@ -6,19 +6,24 @@ import {
   getHistory,
   loadRegistries,
   saveAlert,
-  triggerAlert,
   validateAlert,
 } from "./api.js";
 import { openEditor } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
 import { localize } from "./localize.js";
-import { renderAlertCard } from "./panel/alert-card.js";
+import "./panel/alert-list.js";
 import "./history.js";
 import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
-import { styles } from "./styles.js";
-import { showToast as showToastOn, toastListTemplate } from "./toast.js";
-import type { Toast } from "./toast.js";
-import { LitElement, html } from "lit";
+import { css, LitElement, html } from "lit";
+import { buttonStyles } from "./components/button.js";
+import { sharedStyles } from "./components/shared-styles.js";
+import type {
+  AlertActionItem,
+  AlertActionRequest,
+} from "./panel/alert-card/actions.js";
+import { showToast as showToastOn, toastListTemplate } from "./components/toast.js";
+import type { Toast } from "./components/toast.js";
+import type { YamlToastEventDetail } from "./components/yaml-view.js";
 import type { TemplateResult } from "lit";
 import type {
   Alert,
@@ -27,7 +32,7 @@ import type {
   Registries,
   RuntimeAlertHistoryEntry,
 } from "./types.js";
-import "./yaml-view.js";
+import "./components/yaml-view.js";
 
 type PanelTab = "alerts" | "active" | "history" | "yaml";
 
@@ -47,6 +52,210 @@ const panelTabs: PanelTabDefinition[] = [
   { key: "yaml", label: "panel.tabs.yaml" },
 ];
 
+export const panelStyles = css`
+  :host {
+    display: block;
+    min-height: 100%;
+    box-sizing: border-box;
+    color: var(--primary-text-color);
+    background: var(--primary-background-color);
+  }
+
+  :host(ha-notifications-card) {
+    container-type: inline-size;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  .nc-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .nc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .nc-back-button {
+    display: none;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--primary-text-color);
+    background: var(--secondary-background-color);
+    text-decoration: none;
+  }
+
+  .nc-back-button:hover {
+    background: var(--divider-color);
+  }
+
+  :host(ha-notifications-card) .nc-back-button {
+    display: none;
+  }
+
+  .nc-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .nc-title-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 14px;
+    background: var(--primary-color);
+    color: var(--text-primary-color);
+    font-size: 24px;
+  }
+
+  .nc-title-icon img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+
+  .nc-title h1 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .nc-title p {
+    margin: 4px 0 0;
+    color: var(--secondary-text-color);
+  }
+
+  .nc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .nc-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    padding: 4px;
+    border-radius: var(--ha-border-radius-m, 8px);
+    background: var(--secondary-background-color);
+  }
+
+  .nc-tab {
+    flex: 1;
+    border: 0;
+    border-radius: var(--ha-border-radius-s, 4px);
+    padding: 8px 10px;
+    background: transparent;
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .nc-tab.active {
+    background: var(--card-background-color);
+    color: var(--primary-text-color);
+    box-shadow: var(--ha-box-shadow);
+  }
+
+  @container (max-width: 700px) {
+    .nc-page {
+      padding: 14px;
+    }
+
+    .nc-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nc-back-button {
+      display: inline-grid;
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .nc-title {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      min-width: 0;
+      justify-self: start;
+    }
+
+    .nc-title h1 {
+      font-size: 24px;
+    }
+
+    .nc-actions {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      justify-content: flex-end;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .nc-page {
+      padding: 14px;
+    }
+
+    .nc-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nc-back-button {
+      display: inline-grid;
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .nc-title {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      min-width: 0;
+      justify-self: start;
+    }
+
+    .nc-title h1 {
+      font-size: 24px;
+    }
+
+    .nc-actions {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      justify-content: flex-end;
+      width: 100%;
+    }
+  }
+`;
+
 function activeTabClass(active: boolean): string {
   const classes = ["nc-tab"];
   if (active) {
@@ -65,6 +274,8 @@ function toggleAlertToast(alert: Alert): string {
 }
 
 class HaNotificationsPanel extends LitElement {
+  static styles = [buttonStyles, sharedStyles, panelStyles];
+
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
   private automationStatus: Record<string, AutomationRuntimeStatus> = {};
@@ -87,6 +298,26 @@ class HaNotificationsPanel extends LitElement {
   private _initialized = false;
   private editorActive = false;
   toasts: Toast[] = [];
+  private readonly alertActionHandlers: Record<
+    string,
+    (alert?: Alert) => void
+  > = {
+    create: () => {
+      void this.addAlert();
+    },
+    toggle: (alert) => {
+      if (alert) void this.toggleAlert(alert);
+    },
+    edit: (alert) => {
+      if (alert) void this.editAlert(alert);
+    },
+    history: (alert) => {
+      if (alert) void this.showAlertHistory(alert);
+    },
+    delete: (alert) => {
+      if (alert) void this.removeAlert(alert);
+    },
+  };
 
   set hass(value: Hass) {
     const changed = this._hass !== null && this._hass !== value;
@@ -218,22 +449,13 @@ class HaNotificationsPanel extends LitElement {
 
   render() {
     if (!this.isAdmin()) {
-      return html`${this.styleTemplate()}${this.adminRequiredTemplate()}${toastListTemplate(
-        this.toasts,
-      )}`;
+      return html`${this.adminRequiredTemplate()}${toastListTemplate(this.toasts)}`;
     }
 
-    return html`${this.styleTemplate()}
-      <div class="nc-page" ?hidden=${this.editorActive}>
+    return html`<div class="nc-page" ?hidden=${this.editorActive}>
         ${this.headerTemplate()}${this.tabsTemplate()}${this.tabTemplate()}
       </div>
       ${toastListTemplate(this.toasts)}`;
-  }
-
-  private styleTemplate(): TemplateResult {
-    return html`<style>
-      ${styles}
-    </style>`;
   }
 
   private adminRequiredTemplate(): TemplateResult {
@@ -303,69 +525,37 @@ class HaNotificationsPanel extends LitElement {
   }
 
   private tabTemplate(): TemplateResult {
-    if (this.tab === "alerts") {
-      return this.alertsTemplate();
-    }
-
-    if (this.tab === "active") {
-      return this.activeTemplate();
+    if (this.tab === "alerts" || this.tab === "active") {
+      return html`<ha-notifications-alert-list
+        .alerts=${this.alerts}
+        .automationStatus=${this.automationStatus}
+        .hass=${this._hass}
+        .activeOnly=${this.tab === "active"}
+        .actionItems=${this.alertActionItems}
+        .emptyAction=${{
+          id: "create",
+          label: localize(this._hass, "panel.create_alert"),
+        }}
+        @alert-action=${this.handleAlertAction}
+      ></ha-notifications-alert-list>`;
     }
 
     if (this.tab === "history") {
       return html`<ha-notifications-history-view
         .history=${this.history}
         .options=${this.historyViewOptions()}
+        @history-filters-changed=${this.handleHistoryFiltersChanged}
+        @history-group-by-flow-changed=${this.handleHistoryGroupingChanged}
+        @history-alert-selected=${this.handleHistoryAlertSelected}
+        @history-show-all=${this.handleHistoryShowAll}
       ></ha-notifications-history-view>`;
     }
 
     return html`<ha-notifications-yaml-view
       .hass=${this._hass}
-      .showToast=${(message: string, error?: boolean) =>
-        this.showToast(message, error)}
-      .refreshPanel=${() => this.refresh()}
+      @yaml-toast=${this.handleYamlToast}
+      @yaml-refresh-requested=${this.handleYamlRefreshRequested}
     ></ha-notifications-yaml-view>`;
-  }
-
-  private alertsTemplate(): TemplateResult {
-    return this.alertListTemplate(this.alerts, "panel.no_alerts", true);
-  }
-
-  private activeTemplate(): TemplateResult {
-    const activeAlerts = this.alerts.filter((alert) => {
-      const status = this.automationStatus[alert.id];
-      return Boolean(status?.active_runs || status?.active_runs_uncertain);
-    });
-    return this.alertListTemplate(activeAlerts, "panel.no_active_alerts");
-  }
-
-  private alertListTemplate(
-    alerts: Alert[],
-    emptyTitle: string,
-    showCreate = false,
-  ): TemplateResult {
-    if (alerts.length) {
-      return html`<div class="nc-alerts">
-        ${alerts.map((alert) =>
-          renderAlertCard(alert, this._hass, {
-            onTest: (item) => this.testAlert(item),
-            onToggle: (item) => this.toggleAlert(item),
-            onEdit: (item) => this.editAlert(item),
-            onShowHistory: (item) => this.showAlertHistory(item),
-            onDelete: (item) => this.removeAlert(item),
-          }, this.automationStatus[alert.id]),
-        )}
-      </div>`;
-    }
-
-    return html`<div class="nc-card nc-empty">
-      <h2>${localize(this._hass, emptyTitle)}</h2>
-      ${showCreate
-        ? html`<p>${localize(this._hass, "panel.create_first")}</p>
-            <button class="nc-button" @click=${() => this.addAlert()}>
-              ${localize(this._hass, "panel.create_alert")}
-            </button>`
-        : ""}
-    </div>`;
   }
 
   private historyViewOptions(): HistoryRenderOptions {
@@ -382,17 +572,6 @@ class HaNotificationsPanel extends LitElement {
       types: [
         ...new Set(this.history.map((item) => item.event?.type).filter(Boolean)),
       ] as string[],
-      onFiltersChanged: (filters) => {
-        this.historyFilters = filters;
-        this.requestUpdate();
-      },
-      onGroupByFlowChanged: (groupByFlow) => {
-        this.historyGroupByFlow = groupByFlow;
-        this.requestUpdate();
-      },
-      onAlertSelected: (alertId, alertName) =>
-        this.showHistoryForAlert(alertId, alertName),
-      onShowAll: () => this.showAllHistory(),
     };
   }
 
@@ -401,16 +580,85 @@ class HaNotificationsPanel extends LitElement {
     this.requestUpdate();
   }
 
-  private async testAlert(alert: Alert): Promise<void> {
-    if (!this._hass) return;
-    try {
-      await triggerAlert(this._hass, alert.id);
-      this.showToast(localize(this._hass, "panel.test_triggered"));
-      await this.refresh({ silent: true });
-    } catch (error) {
-      this.showToast(errorMessage(error), true);
+  private handleAlertAction = (event: CustomEvent<AlertActionRequest>): void => {
+    this.alertActionHandlers[event.detail.actionId]?.(event.detail.alert);
+  };
+
+  private alertActionItems = (
+    alert: Alert,
+    status: AutomationRuntimeStatus | undefined,
+  ): AlertActionItem[] => {
+    const actions: AlertActionItem[] = [
+      {
+        id: "toggle",
+        label: localize(this._hass, alert.enabled ? "alert.disable" : "alert.enable"),
+        icon: alert.enabled
+          ? "mdi:pause-circle-outline"
+          : "mdi:play-circle-outline",
+      },
+      {
+        id: "edit",
+        label: localize(this._hass, "alert.edit"),
+        icon: "mdi:pencil-outline",
+      },
+      {
+        id: "history",
+        label: localize(this._hass, "alert.history"),
+        icon: "mdi:history",
+      },
+      {
+        id: "delete",
+        label: localize(this._hass, "alert.delete"),
+        icon: "mdi:delete-outline",
+        variant: "danger",
+      },
+    ];
+
+    if (status?.automation_id) {
+      actions.unshift({
+        id: "automation",
+        label: localize(this._hass, "alert.open_automation"),
+        icon: "mdi:open-in-new",
+        className: "nc-open-automation",
+        href: `/config/automation/edit/${encodeURIComponent(status.automation_id)}`,
+      });
     }
-  }
+    return actions;
+  };
+
+  private handleHistoryFiltersChanged = (
+    event: CustomEvent<HistoryFilters>,
+  ): void => {
+    this.historyFilters = event.detail;
+    this.requestUpdate();
+  };
+
+  private handleHistoryGroupingChanged = (
+    event: CustomEvent<boolean>,
+  ): void => {
+    this.historyGroupByFlow = event.detail;
+    this.requestUpdate();
+  };
+
+  private handleHistoryAlertSelected = (
+    event: CustomEvent<{ alertId: string; alertName: string }>,
+  ): void => {
+    void this.showHistoryForAlert(event.detail.alertId, event.detail.alertName);
+  };
+
+  private handleHistoryShowAll = (): void => {
+    void this.showAllHistory();
+  };
+
+  private handleYamlToast = (
+    event: CustomEvent<YamlToastEventDetail>,
+  ): void => {
+    this.showToast(event.detail.message, event.detail.error);
+  };
+
+  private handleYamlRefreshRequested = (): void => {
+    void this.refresh();
+  };
 
   private refreshHistoryAlertName(): void {
     if (!this.historyAlertId) {
@@ -424,42 +672,14 @@ class HaNotificationsPanel extends LitElement {
   }
 
   addAlert = async (): Promise<void> => {
-    let registries: Registries;
-    try {
-      registries = await this.getRegistries();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-      return;
-    }
-
-    this.editorActive = true;
-    this.requestUpdate();
-    openEditor({
-      root: this.renderRoot as ShadowRoot,
-      hass: this._hass!,
-      alert: null,
-      registries,
-      onValidateCondition: async (draft) => {
-        await validateAlert(this._hass, draft);
-        this.showToast(localize(this._hass, "panel.condition_valid"));
-      },
-      onSave: async (alert) => {
-        const saved = await saveAlert(this._hass, alert);
-        this.showToast(localize(this._hass, "panel.alert_created"));
-        return saved;
-      },
-      onSaved: async () => {
-        await this.refresh();
-      },
-      onClosed: () => {
-        this.editorActive = false;
-        void this.refresh();
-        this.requestUpdate();
-      },
-    });
+    await this.openAlertEditor(null);
   };
 
   async editAlert(alert: Alert): Promise<void> {
+    await this.openAlertEditor(alert);
+  }
+
+  private async openAlertEditor(alert: Alert | null): Promise<void> {
     let registries: Registries;
     try {
       registries = await this.getRegistries();
@@ -479,10 +699,14 @@ class HaNotificationsPanel extends LitElement {
         await validateAlert(this._hass, draft);
         this.showToast(localize(this._hass, "panel.condition_valid"));
       },
-      onSave: async (updated) => {
-        const saved = await saveAlert(this._hass, updated);
-        this.replaceSavedAlert(saved);
-        this.showToast(localize(this._hass, "panel.alert_saved"));
+      onSave: async (draft) => {
+        const saved = await saveAlert(this._hass, draft);
+        if (alert) {
+          this.replaceSavedAlert(saved);
+        }
+        this.showToast(
+          localize(this._hass, alert ? "panel.alert_saved" : "panel.alert_created"),
+        );
         return saved;
       },
       onSaved: async () => {
@@ -494,7 +718,7 @@ class HaNotificationsPanel extends LitElement {
         this.requestUpdate();
       },
     });
-  }
+  };
 
   private replaceSavedAlert(saved: Alert): void {
     this.alerts = this.alerts.map((item) => {

@@ -52,7 +52,9 @@ cp -R "$package_dir"/. "$staging_dir/"
 	cd "$staging_dir"
 	zip -qr "$zip_path" . \
 		-x '*.pyc' \
-		-x '*__pycache__/*'
+		-x '*__pycache__/*' \
+		-x 'AGENTS.md' \
+		-x '*/AGENTS.md'
 )
 
 unzip -tq "$zip_path"
@@ -72,6 +74,11 @@ done
 
 if printf '%s\n' "$archive_entries" | grep -q '^custom_components/'; then
 	printf '%s\n' "HACS archive must not contain custom_components/" >&2
+	exit 1
+fi
+
+if printf '%s\n' "$archive_entries" | grep -Eq '(^|/)AGENTS\.md$'; then
+	printf '%s\n' "HACS archive must not contain AGENTS.md files" >&2
 	exit 1
 fi
 

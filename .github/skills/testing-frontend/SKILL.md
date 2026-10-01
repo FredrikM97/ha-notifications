@@ -13,8 +13,10 @@ snapshots for complete serialized payloads, rendered contracts, and stable UI
 structures. Mock only the transport boundary when testing UI behavior, and keep
 frontend payloads aligned with the backend canonical schema.
 
-Run focused tests immediately after a change. For a coherent frontend slice
-run `npm run typecheck`, focused Vitest tests, `npm run build`, and the relevant
-full Vitest suite. When snapshots change, update them deliberately, inspect the
-diff, then rerun without update mode. Treat fixture drift, stale imports, and
-deleted architecture references as real failures.
+Finish related frontend implementation and test edits before running checks.
+For a coherent slice, batch the focused Vitest tests with `npm run typecheck`
+and `npm run build`; run the relevant full suite or repository gate before
+handoff. Do not rerun unchanged checks after each small edit. When snapshots
+change, update them deliberately, inspect the diff, then validate without
+update mode. Treat fixture drift, stale imports, and deleted architecture
+references as real failures.

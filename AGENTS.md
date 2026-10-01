@@ -33,7 +33,13 @@ integration and frontend sources instead. The generated frontend is copied to
 
 ## Validation
 
-Use focused checks while editing:
+Batch validation around coherent changes instead of rerunning checks after
+every small edit. Finish related edits first, then run the narrowest relevant
+checks once for that slice; run the repository gate before handoff. Avoid
+repeating unchanged checks after minor follow-up edits unless they affect the
+validated behavior.
+
+Typical checks are:
 
 ```bash
 python3 -m pytest tests/backend/test_automation.py
@@ -41,7 +47,7 @@ npm run typecheck
 npm run build
 ```
 
-For backend changes, always attempt to exercise the behavior with the real
+For backend changes, attempt to exercise the behavior with the real
 Home Assistant pytest custom component fixtures and components before falling
 back to pure unit tests or local stubs.
 

@@ -1,46 +1,28 @@
 import { errorMessage } from "../api.js";
-import { createRecipientPicker } from "../recipient-picker.js";
-import { localize } from "../localize.js";
+import { createRecipientPicker } from "../components/recipient-picker.js";
 import { html, render } from "lit";
-import type { TemplateResult } from "lit";
-import * as YAML from "yaml";
-import { ref } from "lit/directives/ref.js";
 import type { Alert, Hass, Registries } from "../types.js";
 import {
   clone,
   editorSections,
   type ActionEditorRole,
-  type CodeEditor,
   type EditorContext,
   type EditorElements,
   type EditorMode,
   type OptionalSetting,
-  type OptionalSettings,
 } from "./types.js";
-import {
-  actionArrayValue,
-  checkedOf,
-  constrainCodeEditor,
-  defaultAlert,
-  durationInputValue,
-  fillActionEditors,
-  parseConditionYaml,
-  showEditorToast,
-  showYaml,
-  valueOf,
-} from "./helpers.js";
-import { toastListTemplate, type Toast } from "../toast.js";
+import { actionArrayValue, parseConditionYaml, parseTriggerYaml } from "./serialization.js";
+import { confirmationNotificationEnabled } from "./confirmation.js";
+import { defaultAlert } from "./alert-defaults.js";
+import { mergeCustomTriggers } from "./triggers.js";
+import { showEditorToast, showYaml } from "./overlay-events.js";
 import { buildEditorPayload } from "./payload.js";
-import { renderEditorNavigation } from "./navigation.js";
-import { renderEditorSections } from "./sections.js";
-import { renderEditorFooter } from "./footer.js";
-import { renderEditorHeader } from "./header.js";
-import {
-  renderDiscardDialog,
-  renderEditorModal,
-} from "./modals.js";
+import { EditorNavigationController } from "./navigation.js";
+import { EditorOverlayController } from "./overlays.js";
 import { createEditorState } from "./state.js";
 import { createEditorContext } from "./context.js";
+import { renderEditorView } from "./view.js";
+import { createAlertEditorComponent } from "./component.js";
 
 interface OpenEditorOptions {
   root: ShadowRoot;
@@ -65,24 +47,13 @@ class AlertEditorController {
   private readonly onValidateCondition: (alert: Alert) => Promise<unknown>;
 
   private readonly value: Alert;
-  private readonly host: HTMLElement = document.createElement("div");
+  private readonly host = createAlertEditorComponent();
   private readonly context: EditorContext;
-  private readonly optionalSettings: OptionalSettings;
-  private readonly collapsedParents = new Set<string>();
   private readonly elements: EditorElements = {};
   private readonly state = createEditorState();
+  private readonly navigation: EditorNavigationController;
+  private readonly overlays: EditorOverlayController;
   private postConfirmationActionsEnabled = false;
-  private handleOutsideSectionPointer = (event: PointerEvent): void => {
-    if (!this.state.mobileSectionsOpen) return;
-
-    const path = event.composedPath();
-    if (this.elements.mobileMenu && path.includes(this.elements.mobileMenu)) return;
-    if (
-      this.elements.sectionManageButton &&
-      path.includes(this.elements.sectionManageButton)
-    ) return;
-    this.closeMobileSections();
-  };
 
   private recipients!: ReturnType<typeof createRecipientPicker>;
 
@@ -98,7 +69,7 @@ class AlertEditorController {
     this.value.confirmation = {
       enabled: false,
       buttons: [{ id: "confirm", label: "Done" }],
-      notification: { enabled: false, message: "", clear: true },
+      notification: { enabled: false, data: { message: "" } },
       reminders: {
         enabled: true,
         interval: "00:30:00",
@@ -110,12 +81,26 @@ class AlertEditorController {
       actions: { enabled: false, items: [] },
       ...this.value.confirmation,
     };
+    const confirmationNotification =
+      this.value.confirmation.notification || {
+        enabled: false,
+        data: { message: "" },
+      };
+    this.value.confirmation.notification = confirmationNotification;
+    confirmationNotification.enabled = confirmationNotificationEnabled(
+      confirmationNotification,
+    );
+    confirmationNotification.data = {
+      ...confirmationNotification.data,
+      message: String(
+        confirmationNotification.data?.message ??
+          confirmationNotification.message ??
+          "",
+      ),
+    };
     this.postConfirmationActionsEnabled = Boolean(
       this.value.confirmation.actions.length,
     );
-
-    this.root.addEventListener("nc-editor-toast", this.handleToastEvent);
-    this.root.addEventListener("nc-editor-modal", this.handleModalEvent);
 
     this.context = createEditorContext({
       hass: options.hass,
@@ -127,18 +112,17 @@ class AlertEditorController {
       validateCondition: this.validateCondition,
       validateActions: this.validateActions,
     });
-    this.optionalSettings = {
-      confirmation: true,
-      confirmationReminder: true,
-      confirmationNotification: true,
-      postSendActions: true,
-      postConfirmationActions: true,
-    };
-
+    this.navigation = new EditorNavigationController(
+      this.showSection,
+      this.renderEditor,
+    );
+    this.overlays = new EditorOverlayController(
+      this.root,
+      options.hass,
+      this.renderEditor,
+    );
     this.renderEditor();
     this.root.append(this.host);
-    document.addEventListener("pointerdown", this.handleOutsideSectionPointer);
-    void fillActionEditors(this.host);
 
     this.recipients = createRecipientPicker(
       this.registries,
@@ -151,120 +135,36 @@ class AlertEditorController {
     this.showSection(0);
   }
 
-  private handleToastEvent = (event: Event): void => {
-    const detail = (event as CustomEvent<{ message: string; duration: number }>).detail;
-    const toast: Toast = { id: Date.now(), message: detail.message, error: false };
-    this.state.toasts = [...this.state.toasts, toast];
-    this.renderEditor();
-    window.setTimeout(() => {
-      this.state.toasts = this.state.toasts.filter((item) => item.id !== toast.id);
-      this.renderEditor();
-    }, detail.duration);
-  };
-
-  private handleModalEvent = (event: Event): void => {
-    const detail = (event as CustomEvent<{
-      kind: "yaml" | "template-help";
-      alert?: Alert;
-      title?: string;
-      content?: TemplateResult;
-      modalClass?: string;
-      closeLabel?: string;
-    }>).detail;
-      if (detail.kind === "yaml" && detail.alert) {
-      this.state.modal = {
-        title: localize(this.context.hass, "editor.common.alert_yaml"),
-        content: html`<ha-code-editor
-          class="nc-code-editor nc-alert-yaml-editor"
-          mode="yaml"
-          language="yaml"
-            aria-label=${localize(this.context.hass, "editor.common.alert_yaml")}
-          .value=${""}
-          ${ref((element) => {
-            if (element) this.elements.yamlModalEditor = element as CodeEditor;
-          })}
-        ></ha-code-editor>`,
-        modalClass: "nc-alert-yaml-modal",
-          closeLabel: localize(this.context.hass, "editor.common.close_yaml"),
-        yaml: detail.alert,
-      };
-    } else if (detail.title && detail.content) {
-      this.state.modal = {
-        title: detail.title,
-        content: detail.content,
-        modalClass: detail.modalClass || "",
-          closeLabel: detail.closeLabel || localize(this.context.hass, "editor.common.close"),
-      };
-    }
-    this.renderEditor();
-    if (this.state.modal?.yaml) void this.prepareYamlModal(this.state.modal.yaml);
-  };
-
-  private async prepareYamlModal(alert: Alert): Promise<void> {
-    await customElements.whenDefined("ha-code-editor");
-    await this.elements.yamlModalEditor?.updateComplete;
-    if (!this.elements.yamlModalEditor) return;
-    constrainCodeEditor(this.elements.yamlModalEditor);
-    this.elements.yamlModalEditor.value = YAML.stringify(alert);
-  }
-
-  private closeModal = (): void => {
-    this.state.modal = null;
-    this.elements.yamlModalEditor = undefined;
-    this.renderEditor();
-  };
-
   private renderEditor = (): void => {
-    const optionalSettings = this.optionalSettings;
     const context = this.context;
-    render(
-      html`<div class="nc-editor-view">
-        <section class="nc-editor-shell">
-          ${renderEditorHeader({
-            alert: this.value,
-            context,
-            optionalSettings,
-            postConfirmationActionsEnabled: this.postConfirmationActionsEnabled,
-            activeSectionIndex: this.state.activeSectionIndex,
-            sectionTitle: this.sectionLabel(
-              editorSections[this.state.activeSectionIndex]?.parent,
-              editorSections[this.state.activeSectionIndex]?.title || "",
-            ),
-            mobileSectionsOpen: this.state.mobileSectionsOpen,
-            onToggleSetting: this.toggleOptionalSetting,
-            onToggleMobileSections: this.toggleMobileSections,
-            onSectionManageButton: (element) => {
-              this.elements.sectionManageButton = element;
-            },
-            renderNavigation: this.renderNavigation,
-          })}
-          <main class="nc-modal-body">
-            <div class="nc-editor-layout">
-              ${this.renderNavigation()}
-              <div class="nc-editor-sections">
-                ${renderEditorSections(context, optionalSettings)}
-              </div>
-            </div>
-          </main>
-          ${renderEditorFooter({
-            localize: this.context.localize,
-            onYamlView: this.yamlView,
-            onClose: this.close,
-            validationLabel: this.validationLabel(),
-            onValidate: this.validateCurrentSection,
-            onSave: this.save,
-          })}
-        </section>
-        ${renderDiscardDialog(
-          this.state.discardDialogOpen,
-          this.context.localize,
-          this.closeDiscardDialog,
-          this.discardChanges,
-        )}${renderEditorModal(this.state.modal, this.closeModal)}${toastListTemplate(
-          this.state.toasts,
-        )}
-      </div>`,
-      this.host,
+    this.host.updateView(
+      renderEditorView({
+        header: {
+          alert: this.value,
+          context,
+          postConfirmationActionsEnabled: this.postConfirmationActionsEnabled,
+          activeSectionIndex: this.state.activeSectionIndex,
+          sectionTitle: this.sectionLabel(
+            editorSections[this.state.activeSectionIndex]?.parent,
+            editorSections[this.state.activeSectionIndex]?.title || "",
+          ),
+          navigation: this.navigation,
+          onToggleSetting: this.toggleOptionalSetting,
+        },
+        footer: {
+          localize: context.localize,
+          onYamlView: this.yamlView,
+          onClose: this.close,
+          validationLabel: this.validationLabel(),
+          onValidate: this.validateCurrentSection,
+          onSave: this.save,
+          discardConfirmation: this.state.discardConfirmationOpen,
+          onStay: this.closeDiscardDialog,
+          onDiscard: this.discardChanges,
+          dirty: this.state.dirty,
+        },
+        overlays: this.overlays,
+      }),
     );
     this.updateDirtyIndicator();
   };
@@ -277,10 +177,10 @@ class AlertEditorController {
   };
 
   private updateDirtyIndicator = (): void => {
-    const state = this.host.querySelector<HTMLElement>(".nc-editor-state");
-    if (state) {
-      state.textContent = this.state.dirty ? "Unsaved changes" : "All changes saved";
-    }
+    const footer = this.host.shadowRoot?.querySelector<HTMLElement & {
+      setDirtyState(dirty: boolean): void;
+    }>("ha-notifications-editor-footer");
+    footer?.setDirtyState(this.state.dirty);
   };
 
   private setMode = (mode: EditorMode): void => {
@@ -309,7 +209,7 @@ class AlertEditorController {
     } else if (setting === "confirmationReminder") {
       this.value.confirmation!.reminders.enabled = enabled;
     } else if (setting === "confirmationNotification") {
-      this.value.confirmation!.enabled = enabled;
+      this.value.confirmation!.notification.enabled = enabled;
     } else {
       this.postConfirmationActionsEnabled = enabled;
       this.value.confirmation!.actions = enabled
@@ -320,31 +220,14 @@ class AlertEditorController {
     this.refreshStatuses();
   };
 
-  private renderNavigation = (className = "nc-section-header") =>
-    renderEditorNavigation({
-      localize: this.context.localize,
-      alert: this.value,
-      className,
-      optionalSettings: this.optionalSettings,
-      activeIndex: this.state.activeSectionIndex,
-      mobileOpen: this.state.mobileSectionsOpen,
-      collapsedParents: this.collapsedParents,
-      onMobileMenuReady: (element) => {
-        this.elements.mobileMenu = element;
-      },
-      onSelect: this.showSection,
-      onToggleChildren: this.toggleSidebarChildren,
-    });
-
   private showSection = (index: number): void => {
     this.state.activeSectionIndex = index;
     this.context.activeSection = editorSections[index]?.title || "Basic";
-    this.closeMobileSections();
     this.renderEditor();
   };
   private validationLabel = (): string => {
     const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
-    if (sectionTitle === "Condition") {
+    if (sectionTitle === "Conditions") {
       return "Validate condition";
     }
 
@@ -357,29 +240,6 @@ class AlertEditorController {
     return "";
   };
 
-  private toggleSidebarChildren = (parent: string): void => {
-    const collapsed = !this.collapsedParents.has(parent);
-    if (collapsed) this.collapsedParents.add(parent);
-    else this.collapsedParents.delete(parent);
-
-    this.renderEditor();
-  };
-
-  private toggleMobileSections = (): void => {
-    this.setMobileSectionsOpen(!this.state.mobileSectionsOpen);
-  };
-
-  private closeMobileSections = (): void => {
-    this.setMobileSectionsOpen(false);
-  };
-
-  private setMobileSectionsOpen = (open: boolean): void => {
-    if (this.state.mobileSectionsOpen === open) return;
-
-    this.state.mobileSectionsOpen = open;
-    this.renderEditor();
-  };
-
   private sectionLabel(parent: string | undefined, title: string): string {
     if (parent) {
       return `${parent} / ${title}`;
@@ -389,18 +249,18 @@ class AlertEditorController {
   }
 
   private showDiscardDialog = (): void => {
-    if (this.state.discardDialogOpen) return;
-    this.state.discardDialogOpen = true;
+    if (this.state.discardConfirmationOpen) return;
+    this.state.discardConfirmationOpen = true;
     this.renderEditor();
   };
 
   private closeDiscardDialog = (): void => {
-    this.state.discardDialogOpen = false;
+    this.state.discardConfirmationOpen = false;
     this.renderEditor();
   };
 
   private discardChanges = (): void => {
-    this.state.discardDialogOpen = false;
+    this.state.discardConfirmationOpen = false;
     this.close({ force: true });
   };
 
@@ -409,37 +269,30 @@ class AlertEditorController {
       this.showDiscardDialog();
       return false;
     }
-    this.state.discardDialogOpen = false;
-    document.removeEventListener("pointerdown", this.handleOutsideSectionPointer);
+    this.state.discardConfirmationOpen = false;
+    this.navigation.dispose();
+    this.overlays.dispose();
     this.host.remove();
     this.onClosed?.();
-    this.root.removeEventListener("nc-editor-toast", this.handleToastEvent);
-    this.root.removeEventListener("nc-editor-modal", this.handleModalEvent);
     return true;
   };
 
   private formPayload = (validate = true): Alert => {
     const value = this.value;
-    let confirmationActions: Record<string, unknown>[] = [];
-    if (this.optionalSettings.postConfirmationActions) {
-      confirmationActions = actionArrayValue(
-        this.elements.postConfirmationActionsEditor || null,
-        "Post-confirmation actions",
-      );
-    }
-    let postSendActions: Record<string, unknown>[] = [];
-    if (this.optionalSettings.postSendActions) {
-      postSendActions = actionArrayValue(
-        this.elements.postSendActionsEditor || null,
-        "Post-send actions",
-      );
-    }
+    const confirmationActions = actionArrayValue(
+      this.elements.postConfirmationActionsEditor || null,
+      "Post-confirmation actions",
+    );
+    const postSendActions = actionArrayValue(
+      this.elements.postSendActionsEditor || null,
+      "Post-send actions",
+    );
 
     return buildEditorPayload({
       alert: value,
       condition: this.conditionForCurrentMode(),
+      triggers: this.triggerForCurrentMode(),
       recipients: this.recipients.target(),
-      evaluateInterval: this.evaluateIntervalPayload(),
       confirmationActions,
       postSendActions,
       postSendActionsEnabled: Boolean(value.post_send_actions?.enabled),
@@ -468,18 +321,21 @@ class AlertEditorController {
     return parseConditionYaml(this.conditionsYamlValue());
   }
 
+  private triggerForCurrentMode(): Alert["triggers"] {
+    return mergeCustomTriggers(
+      this.value.triggers,
+      parseTriggerYaml(this.triggersYamlValue()),
+    );
+  }
+
+  private triggersYamlValue(): string {
+    return this.elements.triggersYamlEditor?.value || "[]";
+  }
+
   private conditionsYamlValue(): string {
     return (
       this.elements.conditionsYamlEditor?.value || "[]"
     );
-  }
-
-  private evaluateIntervalPayload(): string | undefined {
-    if (!this.value.monitor?.interval) {
-      return undefined;
-    }
-
-    return durationInputValue(this.value.monitor.interval, "12:00:00");
   }
 
   private hasRequiredCondition = (): boolean => {
@@ -503,7 +359,7 @@ class AlertEditorController {
 
   private validateCurrentSection = async (): Promise<void> => {
     const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
-    if (sectionTitle === "Condition") {
+    if (sectionTitle === "Conditions") {
       await this.validateCondition();
       return;
     }
@@ -541,8 +397,6 @@ class AlertEditorController {
       if (!this.value.name.trim()) throw new Error("Name is required.");
       if (!this.hasRequiredCondition())
         throw new Error("Condition is required.");
-      if (!this.value.monitor?.on_change && !this.value.monitor?.interval)
-        throw new Error("Enable condition changes, an interval, or both.");
       const result = this.formPayload();
       button.disabled = true;
       const saved = await this.onSave(result);
@@ -561,6 +415,12 @@ class AlertEditorController {
 
 export function openEditor(options: OpenEditorOptions): void {
   // Guard against a second click opening a stacked editor instance.
-  if (options.root.querySelector(".nc-editor-view")) return;
+  if (
+    options.root
+      .querySelector("ha-notifications-alert-editor")
+      ?.shadowRoot?.querySelector(".nc-editor-view")
+  ) {
+    return;
+  }
   new AlertEditorController(options);
 }

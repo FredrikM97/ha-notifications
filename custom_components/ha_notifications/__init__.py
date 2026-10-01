@@ -8,11 +8,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from pydantic import ValidationError
 
-from .automation import async_reconcile_automations
+from .automation import async_reconcile_automations, async_validate_alerts
 from .bridge import async_register_panel
 from .configuration import validate_config
 from .const import DOMAIN
-from .domain import AutomationRunTracker, RuntimeData
+from .domain import RuntimeData
 from .history import HistoryStore
 from .notification import async_setup_services, async_unload_services
 
@@ -95,7 +95,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
     entry.runtime_data = RuntimeData(
         config=validated,
         history=history,
-        automation_runs=AutomationRunTracker.create(),
         remove_update_listener=entry.add_update_listener(_async_update_listener),
     )
     await async_setup_services(hass)
@@ -118,6 +117,7 @@ async def async_save_config(
     except ValidationError:
         previous = raw_previous
     validated = validate_config(config)
+    await async_validate_alerts(hass, validated["alerts"])
     hass.config_entries.async_update_entry(entry, options=validated)
     if not isinstance(entry.runtime_data, RuntimeData):
         if hasattr(entry, "add_update_listener"):
@@ -125,7 +125,6 @@ async def async_save_config(
             await history.async_load()
             entry.runtime_data = RuntimeData(
                 config=validated,
-                automation_runs=AutomationRunTracker.create(),
                 history=history,
                 remove_update_listener=entry.add_update_listener(
                     _async_update_listener
@@ -135,7 +134,6 @@ async def async_save_config(
         else:
             entry.runtime_data = RuntimeData(
                 config=validated,
-                automation_runs=AutomationRunTracker.create(),
             )
     else:
         entry.runtime_data.config = validated

@@ -1,27 +1,31 @@
 import { html } from "lit";
 import type { TemplateResult } from "lit";
-import type { EditorContext } from "../editor/types.js";
-import { field, section, valueOf } from "../editor/helpers.js";
+import type { EditorSectionContext } from "../editor/types.js";
+import { formValue } from "../components/form-controls.js";
+import { renderFormField } from "../components/form-field.js";
+import { renderEditorSection } from "../editor/section.js";
 
-export function renderBasicSection(context: EditorContext): TemplateResult {
+export function renderBasicSection(
+  context: EditorSectionContext<"hass" | "refreshStatuses">,
+): TemplateResult {
   const { value } = context;
-  return section(
+  return renderEditorSection(
     context.localize("editor.basic.section"),
     html`<div class="nc-grid">
-      ${field(
+      ${renderFormField(
         context.localize("editor.basic.name"),
         html`<ha-input
           type="text"
           .value=${value.name}
           placeholder=${context.localize("editor.basic.alert_name")}
           @input=${(event: Event) => {
-            value.name = valueOf(event);
+            value.name = formValue(event);
             context.markDirty();
             context.refreshStatuses();
           }}
         ></ha-input>`,
       )}
-      ${field(
+      ${renderFormField(
         context.localize("editor.basic.description"),
         html`<ha-selector
           class="nc-description-input"
@@ -37,7 +41,7 @@ export function renderBasicSection(context: EditorContext): TemplateResult {
         ></ha-selector>`,
         true,
       )}
-      ${field(
+      ${renderFormField(
         context.localize("editor.basic.icon"),
         html`<ha-icon-picker
           .value=${value.icon || "mdi:bell-outline"}
