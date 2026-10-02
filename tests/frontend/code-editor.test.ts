@@ -15,6 +15,7 @@ import {
   installHaTestElements,
   testUser,
 } from "./conftest.js";
+import type { Hass } from "../../frontend/types.js";
 
 installHaTestElements();
 afterEach(cleanupTestDom);
@@ -37,6 +38,7 @@ async function mountEditor(
   value: string,
   visualType?: CodeEditorVisualType,
   size: CodeEditorSize = "content",
+  hassOverride?: Hass,
 ) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -46,7 +48,7 @@ async function mountEditor(
       mode: language,
       language,
       label: "Actions",
-      ...(visualType ? { hass: homeAssistantFixture() } : {}),
+      ...(visualType ? { hass: hassOverride || homeAssistantFixture() } : {}),
       visualType,
       size,
     }),
@@ -65,6 +67,34 @@ async function mountEditor(
 }
 
 describe("shared code editor visual mode", () => {
+  it("uses Home Assistant translations for the visual mode controls", async () => {
+    const nativeTranslations: Record<string, string> = {
+      "component.ha_notifications.frontend.editor.visual.mode": "Native mode",
+      "component.ha_notifications.frontend.editor.visual.yaml": "Native YAML",
+      "component.ha_notifications.frontend.editor.visual.visual": "Native visual",
+    };
+    const hass = homeAssistantFixture({
+      localize: vi.fn((key: string) => nativeTranslations[key] || key),
+    });
+    const editor = await mountEditor(
+      "yaml",
+      "- trigger: state\n",
+      "trigger",
+      "content",
+      hass,
+    );
+
+    expect(
+      editor.shadowRoot.querySelector(".mode-switch")?.getAttribute("aria-label"),
+    ).toBe("Native mode");
+    expect(modeButton(editor, "Native YAML")).not.toBeNull();
+    expect(modeButton(editor, "Native visual")).not.toBeNull();
+    expect(hass.localize).toHaveBeenCalledWith(
+      "component.ha_notifications.frontend.editor.visual.mode",
+      {},
+    );
+  });
+
   it.each([
     {
       visualType: "trigger",
