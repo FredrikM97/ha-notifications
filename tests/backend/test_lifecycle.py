@@ -7,7 +7,6 @@ import logging
 from datetime import timedelta
 
 import pytest
-import yaml
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import category_registry as cr
@@ -25,7 +24,6 @@ from custom_components.ha_notifications.automation import automation_id
 from custom_components.ha_notifications.const import (
     AUTOMATION_CATEGORY,
     AUTOMATION_CATEGORY_SCOPE,
-    AUTOMATION_FILE,
     AUTOMATION_LABEL,
     DOMAIN,
 )
@@ -62,6 +60,7 @@ async def test_config_entry_update_reload_and_unload_are_reconciled(
     hass: HomeAssistant,
     monkeypatch,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     caplog,
 ) -> None:
@@ -89,9 +88,7 @@ async def test_config_entry_update_reload_and_unload_are_reconciled(
         logging.DEBUG,
         logger="custom_components.ha_notifications.automation_runtime",
     )
-    path = hass.config.path(AUTOMATION_FILE)
-    with open(path, "w") as stream:
-        stream.write("[]\n")
+    mock_automation_files["prepare"](include=False)
 
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
@@ -105,7 +102,7 @@ async def test_config_entry_update_reload_and_unload_are_reconciled(
     assert reload_count == 1
     assert "Generated automations are unchanged; skipping reload" in caplog.text
 
-    document = yaml.safe_load(open(path).read())
+    document = mock_automation_files["read_automations"]()
     assert document[0]["id"] == "ha_notifications_base_alert"
     assert hass.services.has_service(DOMAIN, "send")
     assert hass.services.has_service(DOMAIN, "clear")
@@ -119,14 +116,14 @@ async def test_config_entry_update_reload_and_unload_are_reconciled(
     await hass.async_block_till_done()
     assert reload_count == 2
 
-    document = yaml.safe_load(open(path).read())
+    document = mock_automation_files["read_automations"]()
     assert document[0]["alias"] == "HA Notifications: Updated alert"
 
     assert await ha_notifications.async_unload_entry(hass, entry)
     await hass.async_block_till_done()
     assert reload_count == 3
 
-    document = yaml.safe_load(open(path).read())
+    document = mock_automation_files["read_automations"]()
     assert document == []
     assert not hass.services.has_service(DOMAIN, "send")
     assert not hass.services.has_service(DOMAIN, "clear")
@@ -135,7 +132,7 @@ async def test_config_entry_update_reload_and_unload_are_reconciled(
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
     assert reload_count == 4
-    document = yaml.safe_load(open(path).read())
+    document = mock_automation_files["read_automations"]()
     assert [item["id"] for item in document] == ["ha_notifications_base_alert"]
 
 
@@ -229,6 +226,7 @@ async def test_async_save_config_rolls_back_entry_and_runtime_on_failure(
 async def test_generated_automation_executes_lifecycle_delivery(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
     service_calls,
@@ -248,9 +246,7 @@ async def test_generated_automation_executes_lifecycle_delivery(
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
     hass.states.async_set("binary_sensor.door", condition_state)
-    configuration_path = hass.config.path("configuration.yaml")
-    with open(configuration_path, "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     alert = alert_factory(
         "base",
@@ -282,6 +278,7 @@ async def test_generated_automation_executes_lifecycle_delivery(
         if item.name == AUTOMATION_CATEGORY
     )
     assert generated_entity is not None
+    assert generated_entity.hidden_by is er.RegistryEntryHider.INTEGRATION
     assert generated_entity.categories[AUTOMATION_CATEGORY_SCOPE] == category.category_id
     label = lr.async_get(hass).async_get_label_by_name(AUTOMATION_LABEL)
     assert label is not None and label.label_id in generated_entity.labels
@@ -304,6 +301,7 @@ async def test_generated_automation_executes_lifecycle_delivery(
 async def test_generated_automation_reports_inactive_without_clearing(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -318,8 +316,7 @@ async def test_generated_automation_reports_inactive_without_clearing(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("binary_sensor.door", "off")
@@ -374,6 +371,7 @@ async def test_generated_automation_reports_inactive_without_clearing(
 async def test_generated_automation_executes_startup_trigger(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -388,8 +386,7 @@ async def test_generated_automation_executes_startup_trigger(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     alert = alert_factory(
         "base",
@@ -415,6 +412,7 @@ async def test_generated_automation_executes_startup_trigger(
 async def test_generated_automation_executes_interval_trigger(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -429,8 +427,7 @@ async def test_generated_automation_executes_interval_trigger(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     alert = alert_factory(
         "base",
@@ -463,6 +460,7 @@ async def test_generated_automation_executes_interval_trigger(
 async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -477,8 +475,7 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     hass.states.async_set("sensor.temperature", "20")
     alert = alert_factory(
@@ -514,6 +511,7 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
 async def test_on_condition_change_triggers_from_multiple_condition_entities(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -528,8 +526,7 @@ async def test_on_condition_change_triggers_from_multiple_condition_entities(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     hass.states.async_set("sensor.first_dependency", "off")
     hass.states.async_set("sensor.second_dependency", "off")
@@ -575,6 +572,7 @@ async def test_on_condition_change_triggers_from_multiple_condition_entities(
 async def test_generated_automation_deduplicates_repeated_condition_entities(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -589,8 +587,7 @@ async def test_generated_automation_deduplicates_repeated_condition_entities(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
     hass.states.async_set("sensor.repeated_dependency", "off")
     alert = alert_factory(
@@ -626,6 +623,7 @@ async def test_generated_automation_deduplicates_repeated_condition_entities(
 async def test_full_flow_uses_native_automation(
     hass: HomeAssistant,
     full_feature_alert,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -657,10 +655,7 @@ async def test_full_flow_uses_native_automation(
     hass.states.async_set("binary_sensor.door", "off")
     hass.states.async_set("binary_sensor.window", "off")
     hass.states.async_set("sensor.temperature", "20")
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write(
-            "automation ha_notifications: !include ha_notifications_automations.yaml\n"
-        )
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     entry = MockConfigEntry(
@@ -680,10 +675,9 @@ async def test_full_flow_uses_native_automation(
     await hass.async_block_till_done()
     assert saved["alerts"][0]["id"] == "full_feature"
     assert hass.states.get("automation.ha_notifications_full_feature") is not None
-    document = yaml.safe_load(open(hass.config.path(AUTOMATION_FILE)).read())
+    document = mock_automation_files["read_automations"]()
     assert [item["id"] for item in document] == [
         "ha_notifications_full_feature",
-        "ha_notifications_full_feature_condition_inactive",
     ]
 
     delivered.clear()
@@ -741,7 +735,7 @@ async def test_full_flow_uses_native_automation(
         {"version": 1, "alerts": [updated]},
     )
     await hass.async_block_till_done()
-    document = yaml.safe_load(open(hass.config.path(AUTOMATION_FILE)).read())
+    document = mock_automation_files["read_automations"]()
     assert document[0]["id"] == "ha_notifications_full_feature"
     assert document[0]["alias"] == "HA Notifications: Updated full feature"
 
@@ -751,13 +745,14 @@ async def test_full_flow_uses_native_automation(
         {"version": 1, "alerts": []},
     )
     await hass.async_block_till_done()
-    document = yaml.safe_load(open(hass.config.path(AUTOMATION_FILE)).read())
+    document = mock_automation_files["read_automations"]()
     assert document == []
 
 
 async def test_confirmation_response_completes_without_follow_ups(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -772,10 +767,7 @@ async def test_confirmation_response_completes_without_follow_ups(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write(
-            "automation ha_notifications: !include ha_notifications_automations.yaml\n"
-        )
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("binary_sensor.confirmation", "off")
@@ -828,6 +820,7 @@ async def test_confirmation_response_completes_without_follow_ups(
 async def test_inactive_transition_cancels_all_parallel_confirmation_waits(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -842,10 +835,7 @@ async def test_inactive_transition_cancels_all_parallel_confirmation_waits(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write(
-            "automation ha_notifications: !include ha_notifications_automations.yaml\n"
-        )
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("input_boolean.alert_button", "off")
@@ -916,6 +906,7 @@ async def test_inactive_transition_cancels_all_parallel_confirmation_waits(
 async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_conditions(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -932,10 +923,7 @@ async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_con
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
     hass.bus.async_listen("ha_notifications_command", commands.append)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write(
-            "automation ha_notifications: !include ha_notifications_automations.yaml\n"
-        )
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("input_boolean.alert_button", "off")
@@ -973,8 +961,7 @@ async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_con
 
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
-    with open(hass.config.path(AUTOMATION_FILE)) as automation_file:
-        generated = yaml.safe_load(automation_file)
+    generated = mock_automation_files["read_automations"]()
     assert len(generated) == 1
     assert any(
         trigger.get("id") == "inactive_alert_button"
@@ -1017,6 +1004,7 @@ async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_con
 async def test_inactive_transition_cancels_restart_mode_confirmation_wait(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -1031,10 +1019,7 @@ async def test_inactive_transition_cancels_restart_mode_confirmation_wait(
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write(
-            "automation ha_notifications: !include ha_notifications_automations.yaml\n"
-        )
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("input_boolean.alert_button", "off")
@@ -1109,6 +1094,7 @@ async def test_inactive_transition_cancels_restart_mode_confirmation_wait(
 async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     hass: HomeAssistant,
     alert_factory,
+    mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -1133,8 +1119,7 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
     hass.services.async_register("logbook", "log", handle_post_send)
     hass.services.async_register("light", "turn_on", handle_confirmation_action)
-    with open(hass.config.path("configuration.yaml"), "w") as configuration_file:
-        configuration_file.write("automation ha_notifications: !include ha_notifications_automations.yaml\n")
+    mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("binary_sensor.confirmation", "off")

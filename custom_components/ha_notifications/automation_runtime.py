@@ -149,12 +149,19 @@ def _organize_generated_automations(
             **registry_entry.categories,
             AUTOMATION_CATEGORY_SCOPE: category.category_id,
         }
+        hidden_by = (
+            registry_entry.hidden_by
+            if registry_entry.hidden_by is not None
+            else er.RegistryEntryHider.INTEGRATION
+        )
         if (
             labels != registry_entry.labels
             or categories != registry_entry.categories
+            or hidden_by != registry_entry.hidden_by
         ):
             entity_registry.async_update_entity(
                 entity.entity_id,
                 labels=labels,
                 categories=categories,
+                hidden_by=hidden_by,
             )

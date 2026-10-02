@@ -24,7 +24,8 @@ export function renderTriggerSection(
     context.localize("editor.triggers.section"),
     html`<div class="nc-trigger-setting">
       ${renderFormField(
-        html`${context.localize("editor.triggers.cancel_on_inactive")} ${renderHelpTooltip(
+        html`${context.localize("editor.triggers.cancel_on_inactive")}
+        ${renderHelpTooltip(
           context.localize("editor.triggers.cancel_on_inactive_help"),
           context.localize("editor.common.more_info"),
         )}`,
@@ -50,9 +51,15 @@ export function renderTriggerSection(
 function automationModeField(
   context: EditorSectionContext<"hass">,
 ): TemplateResult {
+  const hasConditions = context.value.conditions.length > 0;
   return renderFormField(
-    html`${context.localize("editor.basic.automation_mode")} ${renderHelpTooltip(
-      context.localize("editor.basic.automation_mode_help"),
+    html`${context.localize("editor.basic.automation_mode")}
+    ${renderHelpTooltip(
+      context.localize(
+        hasConditions
+          ? "editor.basic.automation_mode_condition_help"
+          : "editor.basic.automation_mode_help",
+      ),
       context.localize("editor.common.more_info"),
     )}`,
     html`<ha-selector
@@ -81,9 +88,11 @@ function automationModeField(
           ],
         },
       }}
-      .value=${context.value.automation_mode || "parallel"}
+      .disabled=${hasConditions}
+      .value=${hasConditions ? "parallel" : context.value.automation_mode || "parallel"}
       aria-label=${context.localize("editor.basic.automation_mode")}
       @value-changed=${(event: CustomEvent<{ value?: AutomationMode }>) => {
+        if (hasConditions) return;
         context.value.automation_mode = event.detail.value || "parallel";
         context.markDirty();
       }}
@@ -98,9 +107,14 @@ export function renderCustomTriggersSection(
 ): TemplateResult {
   return renderEditorSection(
     context.localize("editor.triggers.custom"),
-    html`<div class="nc-trigger-setting" ${ref((element) => element && context.setEditorElement("triggers-yaml", element as HTMLElement))} data-role="triggers-yaml">
+    html`<div
+      class="nc-trigger-setting"
+      ${ref((element) => element && context.setEditorElement("triggers-yaml", element as HTMLElement))}
+      data-role="triggers-yaml"
+    >
       ${renderFormField(
-        html`${context.localize("editor.triggers.on_condition_change")} ${renderHelpTooltip(
+        html`${context.localize("editor.triggers.on_condition_change")}
+        ${renderHelpTooltip(
           context.localize("editor.triggers.on_condition_change_help"),
           context.localize("editor.common.more_info"),
         )}`,
@@ -117,7 +131,8 @@ export function renderCustomTriggersSection(
         "nc-inline-toggle",
       )}
       ${renderFormField(
-        html`${context.localize("editor.triggers.yaml")} ${renderHelpTooltip(
+        html`${context.localize("editor.triggers.yaml")}
+        ${renderHelpTooltip(
           context.localize("editor.triggers.help"),
           context.localize("editor.common.more_info"),
         )}`,
@@ -131,7 +146,8 @@ export function renderCustomTriggersSection(
           language: "yaml",
           label: context.localize("editor.triggers.yaml"),
           onInput: () => context.markDirty(),
-          onReady: (editor) => context.setEditorControl("triggers-yaml", editor),
+          onReady: (editor) =>
+            context.setEditorControl("triggers-yaml", editor),
         }),
         true,
       )}

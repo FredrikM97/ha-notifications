@@ -46,6 +46,12 @@ export const codeEditorStyles = css`
     overflow: hidden;
   }
 
+  :host(.nc-code-editor-visual-active) {
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: 0;
+  }
+
   :host([data-size="content"]) {
     align-self: start;
     height: fit-content;
@@ -78,9 +84,15 @@ export const codeEditorStyles = css`
     min-width: 0;
   }
 
+  ha-selector[data-role="native-visual-selector"] {
+    --ha-card-border-width: 1px 0 0;
+  }
+
   .visual-selector-frame {
     min-width: 0;
-    padding: 12px;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--card-background-color);
   }
 
   .visual-error {
@@ -126,7 +138,8 @@ export const codeEditorStyles = css`
 
   .editor-body.visual-active {
     box-sizing: border-box;
-    padding: 8px;
+    padding: 0;
+    background: var(--card-background-color);
   }
 
   :host([data-size="page"]) .editor-body,
@@ -265,6 +278,7 @@ class HaNotificationsCodeEditor extends LitElement {
 
   private setViewMode(mode: "yaml" | "visual"): void {
     this.viewMode = mode;
+    this.classList.toggle("nc-code-editor-visual-active", mode === "visual");
     this.requestUpdate();
   }
 

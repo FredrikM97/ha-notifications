@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 _ALERT_FIXTURES = json.loads(
     (Path(__file__).parent / "fixtures" / "alerts.json").read_text()
@@ -39,3 +40,25 @@ def alert_factory():
 def full_feature_alert() -> dict[str, Any]:
     """Return the canonical full-feature automation case."""
     return alert_fixture("full_feature")
+
+
+@pytest.fixture
+def mock_automation_files(hass):
+    """Prepare and inspect isolated Home Assistant automation config files."""
+    configuration_path = Path(hass.config.path("configuration.yaml"))
+    automation_path = Path(hass.config.path("ha_notifications_automations.yaml"))
+
+    def prepare(*, include: bool = True) -> None:
+        configuration = (
+            "automation ha_notifications: !include "
+            "ha_notifications_automations.yaml\n"
+            if include
+            else ""
+        )
+        configuration_path.write_text(configuration)
+        automation_path.write_text("[]\n")
+
+    def read_automations() -> list[dict[str, Any]]:
+        return yaml.safe_load(automation_path.read_text())
+
+    return {"prepare": prepare, "read_automations": read_automations}

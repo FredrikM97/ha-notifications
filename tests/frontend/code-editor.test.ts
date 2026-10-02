@@ -126,7 +126,16 @@ describe("shared code editor visual mode", () => {
           "visual-active",
         ),
       ).toBe(true);
-      expect(codeEditorStyles.cssText).toContain("padding: 8px;");
+      expect(editor.classList.contains("nc-code-editor-visual-active")).toBe(true);
+      expect(codeEditorStyles.cssText).toContain("padding: 0;");
+      expect(codeEditorStyles.cssText).toContain(
+        ":host(.nc-code-editor-visual-active)",
+      );
+      expect(codeEditorStyles.cssText).toContain("border-inline: 0;");
+      expect(codeEditorStyles.cssText).toContain("border-bottom: 0;");
+      expect(codeEditorStyles.cssText).toContain(
+        "--ha-card-border-width: 1px 0 0;",
+      );
       expect(codeEditorStyles.cssText).toContain("box-sizing: border-box;");
       expect(codeEditorStyles.cssText).toContain("max-width: 100%;");
       expect(codeEditorStyles.cssText).not.toContain(
@@ -144,7 +153,9 @@ describe("shared code editor visual mode", () => {
       >('ha-selector[data-role="native-visual-selector"]');
       expect(selector?.parentElement?.classList.contains("visual-selector-frame")).toBe(true);
       expect(codeEditorStyles.cssText).toContain(".visual-selector-frame");
-      expect(codeEditorStyles.cssText).toContain("padding: 12px;");
+      expect(codeEditorStyles.cssText).toContain("padding: 8px;");
+      expect(codeEditorStyles.cssText).toContain("background: var(--card-background-color);");
+      expect(codeEditorStyles.cssText).toContain("border-radius: 8px;");
       expect(selector?.selector).toEqual({ [visualType]: {} });
       expect(selector?.value).toEqual(input);
       if (!selector) throw new Error("Home Assistant selector is missing.");
@@ -173,6 +184,7 @@ describe("shared code editor visual mode", () => {
 
     await testUser().click(modeButton(editor, "YAML"));
     await editor.updateComplete;
+    expect(editor.classList.contains("nc-code-editor-visual-active")).toBe(false);
     expect(
       editor.shadowRoot
         .querySelector("ha-code-editor")
