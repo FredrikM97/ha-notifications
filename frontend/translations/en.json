@@ -225,6 +225,8 @@
     "filter_alert": "Filter by alert",
     "unknown_alert": "Unknown alert",
     "started_by": "Started by {{trigger}}",
+    "reason": "Reason: {{reason}}",
+    "confirmation_notification": "Confirmation notification",
     "no_activity": "No activity yet",
     "no_activity_for": "No activity for {{name}}",
     "activity_help": "Notification activity and debug traces will appear here.",

@@ -487,13 +487,11 @@ class _ConfirmationCompletionComponent:
         follow_up = _follow_up_actions(alert, confirmation, steps)
         return _ConfirmationActionFragments(
             completion=(
-                *follow_up,
-                *steps.stop(
-                    "confirmation completed",
+                steps.report(
                     "confirmation_completed",
                     "confirmation_completed",
-                    "Confirmation completed",
-                    {
+                    message="Confirmation completed",
+                    details={
                         "action": "confirmation_completed",
                         "device_id": (
                             "{{ wait.trigger.event.data.device_id | default('', true) }}"
@@ -503,6 +501,8 @@ class _ConfirmationCompletionComponent:
                         ),
                     },
                 ),
+                *follow_up,
+                {"stop": "confirmation completed"},
             ),
         )
 
@@ -1081,7 +1081,7 @@ def _follow_up_actions(
     steps: _ActionStepBuilder,
 ) -> list[dict[str, Any]]:
     """Convert configured confirmation actions to native HA actions."""
-    actions: list[dict[str, Any]] = []
+    notification_action: dict[str, Any] | None = None
     notification = confirmation.notification
     if (
         notification.enabled is not False
@@ -1102,16 +1102,22 @@ def _follow_up_actions(
             data["confirmation_user_id"] = "{{ wait.trigger.event.context.user_id | default('', true) }}"
         if data:
             notification["data"] = data
-        actions.append(steps.send(notification))
+        notification_action = steps.send({
+            **notification,
+            "history_reason": "confirmation_notification",
+        })
     configured_actions = confirmation.actions
     if isinstance(configured_actions, dict):
         configured_actions = configured_actions.get("items", [])
     native_actions = [_copy_native_value(action) for action in configured_actions]
-    return actions + [
+    actions = [
         item
         for action in native_actions
         for item in steps.recorded_action(action)
     ]
+    if notification_action is not None:
+        actions.append(notification_action)
+    return actions
 
 
 def _confirmation_notification_mapping(

@@ -223,33 +223,6 @@
           - condition: template
             value_template: '{{ wait.trigger.id == ''confirmation'' }}'
           sequence:
-          - action: ha_notifications.send
-            data:
-              alert_id: full_feature
-              alert_name: Full feature
-              flow_id: '{{ context.parent_id or context.id }}'
-              target:
-                entity_id:
-                - notify.mobile_app_phone
-              data:
-                template_message: '{% raw %}Confirmed{% endraw %}'
-                confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                  true) }}'
-                confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                  true) }}'
-          - action: light.turn_on
-            target:
-              entity_id: light.hall
-          - action: ha_notifications.report
-            data:
-              alert_id: full_feature
-              alert_name: Full feature
-              flow_id: '{{ context.parent_id or context.id }}'
-              status: action_executed
-              run_id: '{{ context.parent_id or context.id }}'
-              message: Automation action executed
-              details:
-                action: light.turn_on
           - action: ha_notifications.report
             data:
               alert_id: full_feature
@@ -264,6 +237,34 @@
                   }}'
                 user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
                   }}'
+          - action: light.turn_on
+            target:
+              entity_id: light.hall
+          - action: ha_notifications.report
+            data:
+              alert_id: full_feature
+              alert_name: Full feature
+              flow_id: '{{ context.parent_id or context.id }}'
+              status: action_executed
+              run_id: '{{ context.parent_id or context.id }}'
+              message: Automation action executed
+              details:
+                action: light.turn_on
+          - action: ha_notifications.send
+            data:
+              alert_id: full_feature
+              alert_name: Full feature
+              flow_id: '{{ context.parent_id or context.id }}'
+              target:
+                entity_id:
+                - notify.mobile_app_phone
+              data:
+                template_message: '{% raw %}Confirmed{% endraw %}'
+                confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
+                  true) }}'
+                confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
+                  true) }}'
+              history_reason: confirmation_notification
           - stop: confirmation completed
         - conditions:
           - condition: template
@@ -344,33 +345,6 @@
                 - condition: template
                   value_template: '{{ wait.trigger.id == ''confirmation'' }}'
                 sequence:
-                - action: ha_notifications.send
-                  data:
-                    alert_id: full_feature
-                    alert_name: Full feature
-                    flow_id: '{{ context.parent_id or context.id }}'
-                    target:
-                      entity_id:
-                      - notify.mobile_app_phone
-                    data:
-                      template_message: '{% raw %}Confirmed{% endraw %}'
-                      confirmation_device_id: '{{ wait.trigger.event.data.device_id
-                        | default('''', true) }}'
-                      confirmation_user_id: '{{ wait.trigger.event.context.user_id |
-                        default('''', true) }}'
-                - action: light.turn_on
-                  target:
-                    entity_id: light.hall
-                - action: ha_notifications.report
-                  data:
-                    alert_id: full_feature
-                    alert_name: Full feature
-                    flow_id: '{{ context.parent_id or context.id }}'
-                    status: action_executed
-                    run_id: '{{ context.parent_id or context.id }}'
-                    message: Automation action executed
-                    details:
-                      action: light.turn_on
                 - action: ha_notifications.report
                   data:
                     alert_id: full_feature
@@ -385,6 +359,34 @@
                         true) }}'
                       user_id: '{{ wait.trigger.event.context.user_id | default('''',
                         true) }}'
+                - action: light.turn_on
+                  target:
+                    entity_id: light.hall
+                - action: ha_notifications.report
+                  data:
+                    alert_id: full_feature
+                    alert_name: Full feature
+                    flow_id: '{{ context.parent_id or context.id }}'
+                    status: action_executed
+                    run_id: '{{ context.parent_id or context.id }}'
+                    message: Automation action executed
+                    details:
+                      action: light.turn_on
+                - action: ha_notifications.send
+                  data:
+                    alert_id: full_feature
+                    alert_name: Full feature
+                    flow_id: '{{ context.parent_id or context.id }}'
+                    target:
+                      entity_id:
+                      - notify.mobile_app_phone
+                    data:
+                      template_message: '{% raw %}Confirmed{% endraw %}'
+                      confirmation_device_id: '{{ wait.trigger.event.data.device_id
+                        | default('''', true) }}'
+                      confirmation_user_id: '{{ wait.trigger.event.context.user_id |
+                        default('''', true) }}'
+                    history_reason: confirmation_notification
                 - stop: confirmation completed
               - conditions:
                 - condition: template
@@ -705,6 +707,31 @@
           - condition: template
             value_template: '{{ wait.trigger.id == ''confirmation'' }}'
           sequence:
+          - action: ha_notifications.report
+            data:
+              alert_id: matrix_confirmation_with_bounded_repeat
+              alert_name: Low water
+              flow_id: '{{ context.parent_id or context.id }}'
+              status: confirmation_completed
+              run_id: '{{ context.parent_id or context.id }}'
+              message: Confirmation completed
+              details:
+                action: confirmation_completed
+                device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
+                  }}'
+                user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
+                  }}'
+          - action: light.turn_on
+          - action: ha_notifications.report
+            data:
+              alert_id: matrix_confirmation_with_bounded_repeat
+              alert_name: Low water
+              flow_id: '{{ context.parent_id or context.id }}'
+              status: action_executed
+              run_id: '{{ context.parent_id or context.id }}'
+              message: Automation action executed
+              details:
+                action: light.turn_on
           - action: ha_notifications.send
             data:
               alert_id: matrix_confirmation_with_bounded_repeat
@@ -720,31 +747,7 @@
                   true) }}'
                 confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
                   true) }}'
-          - action: light.turn_on
-          - action: ha_notifications.report
-            data:
-              alert_id: matrix_confirmation_with_bounded_repeat
-              alert_name: Low water
-              flow_id: '{{ context.parent_id or context.id }}'
-              status: action_executed
-              run_id: '{{ context.parent_id or context.id }}'
-              message: Automation action executed
-              details:
-                action: light.turn_on
-          - action: ha_notifications.report
-            data:
-              alert_id: matrix_confirmation_with_bounded_repeat
-              alert_name: Low water
-              flow_id: '{{ context.parent_id or context.id }}'
-              status: confirmation_completed
-              run_id: '{{ context.parent_id or context.id }}'
-              message: Confirmation completed
-              details:
-                action: confirmation_completed
-                device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
-                  }}'
-                user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
-                  }}'
+              history_reason: confirmation_notification
           - stop: confirmation completed
         - conditions:
           - condition: template
@@ -825,6 +828,31 @@
                 - condition: template
                   value_template: '{{ wait.trigger.id == ''confirmation'' }}'
                 sequence:
+                - action: ha_notifications.report
+                  data:
+                    alert_id: matrix_confirmation_with_bounded_repeat
+                    alert_name: Low water
+                    flow_id: '{{ context.parent_id or context.id }}'
+                    status: confirmation_completed
+                    run_id: '{{ context.parent_id or context.id }}'
+                    message: Confirmation completed
+                    details:
+                      action: confirmation_completed
+                      device_id: '{{ wait.trigger.event.data.device_id | default('''',
+                        true) }}'
+                      user_id: '{{ wait.trigger.event.context.user_id | default('''',
+                        true) }}'
+                - action: light.turn_on
+                - action: ha_notifications.report
+                  data:
+                    alert_id: matrix_confirmation_with_bounded_repeat
+                    alert_name: Low water
+                    flow_id: '{{ context.parent_id or context.id }}'
+                    status: action_executed
+                    run_id: '{{ context.parent_id or context.id }}'
+                    message: Automation action executed
+                    details:
+                      action: light.turn_on
                 - action: ha_notifications.send
                   data:
                     alert_id: matrix_confirmation_with_bounded_repeat
@@ -840,31 +868,7 @@
                         | default('''', true) }}'
                       confirmation_user_id: '{{ wait.trigger.event.context.user_id |
                         default('''', true) }}'
-                - action: light.turn_on
-                - action: ha_notifications.report
-                  data:
-                    alert_id: matrix_confirmation_with_bounded_repeat
-                    alert_name: Low water
-                    flow_id: '{{ context.parent_id or context.id }}'
-                    status: action_executed
-                    run_id: '{{ context.parent_id or context.id }}'
-                    message: Automation action executed
-                    details:
-                      action: light.turn_on
-                - action: ha_notifications.report
-                  data:
-                    alert_id: matrix_confirmation_with_bounded_repeat
-                    alert_name: Low water
-                    flow_id: '{{ context.parent_id or context.id }}'
-                    status: confirmation_completed
-                    run_id: '{{ context.parent_id or context.id }}'
-                    message: Confirmation completed
-                    details:
-                      action: confirmation_completed
-                      device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                        true) }}'
-                      user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                        true) }}'
+                    history_reason: confirmation_notification
                 - stop: confirmation completed
               - conditions:
                 - condition: template
@@ -1054,6 +1058,20 @@
           - condition: template
             value_template: '{{ wait.trigger.id == ''confirmation'' }}'
           sequence:
+          - action: ha_notifications.report
+            data:
+              alert_id: matrix_confirmation_without_reminders
+              alert_name: Low water
+              flow_id: '{{ context.parent_id or context.id }}'
+              status: confirmation_completed
+              run_id: '{{ context.parent_id or context.id }}'
+              message: Confirmation completed
+              details:
+                action: confirmation_completed
+                device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
+                  }}'
+                user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
+                  }}'
           - action: ha_notifications.send
             data:
               alert_id: matrix_confirmation_without_reminders
@@ -1069,20 +1087,7 @@
                   true) }}'
                 confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
                   true) }}'
-          - action: ha_notifications.report
-            data:
-              alert_id: matrix_confirmation_without_reminders
-              alert_name: Low water
-              flow_id: '{{ context.parent_id or context.id }}'
-              status: confirmation_completed
-              run_id: '{{ context.parent_id or context.id }}'
-              message: Confirmation completed
-              details:
-                action: confirmation_completed
-                device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
-                  }}'
-                user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
-                  }}'
+              history_reason: confirmation_notification
           - stop: confirmation completed
         - conditions:
           - condition: template

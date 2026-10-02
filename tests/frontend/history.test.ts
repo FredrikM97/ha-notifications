@@ -225,6 +225,30 @@ describe("history entries events", () => {
 });
 
 describe("history view element", () => {
+  it("shows why a confirmation follow-up notification was sent", async () => {
+    const confirmationEntry = {
+      ...historyFixture[0],
+      event: {
+        ...historyFixture[0].event,
+        details: {
+          service: "notify.mobile_app_phone",
+          reason: "confirmation_notification",
+        },
+      },
+    };
+    const element = mountCustomElement<HTMLElement>(
+      "ha-notifications-history-view",
+      {
+        history: [confirmationEntry],
+        options: { filters: emptyHistoryFilters },
+      },
+    );
+    await settleHistory(element);
+
+    expect(historyEntriesRoot(element).querySelector(".nc-history-reason")?.textContent)
+      .toBe("Reason: Confirmation notification");
+  });
+
   it("shows which trigger started an automation", async () => {
     const startedEntry = {
       ...historyFixture[0],

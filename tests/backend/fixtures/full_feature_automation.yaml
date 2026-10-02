@@ -220,33 +220,6 @@ actions:
         - condition: template
           value_template: '{{ wait.trigger.id == ''confirmation'' }}'
         sequence:
-        - action: ha_notifications.send
-          data:
-            alert_id: full_feature
-            alert_name: Full feature
-            flow_id: '{{ context.parent_id or context.id }}'
-            target:
-              entity_id:
-              - notify.mobile_app_phone
-            data:
-              template_message: '{% raw %}Confirmed{% endraw %}'
-              confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                true) }}'
-              confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                true) }}'
-        - action: light.turn_on
-          target:
-            entity_id: light.hall
-        - action: ha_notifications.report
-          data:
-            alert_id: full_feature
-            alert_name: Full feature
-            flow_id: '{{ context.parent_id or context.id }}'
-            status: action_executed
-            run_id: '{{ context.parent_id or context.id }}'
-            message: Automation action executed
-            details:
-              action: light.turn_on
         - action: ha_notifications.report
           data:
             alert_id: full_feature
@@ -261,6 +234,34 @@ actions:
                 }}'
               user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
                 }}'
+        - action: light.turn_on
+          target:
+            entity_id: light.hall
+        - action: ha_notifications.report
+          data:
+            alert_id: full_feature
+            alert_name: Full feature
+            flow_id: '{{ context.parent_id or context.id }}'
+            status: action_executed
+            run_id: '{{ context.parent_id or context.id }}'
+            message: Automation action executed
+            details:
+              action: light.turn_on
+        - action: ha_notifications.send
+          data:
+            alert_id: full_feature
+            alert_name: Full feature
+            flow_id: '{{ context.parent_id or context.id }}'
+            target:
+              entity_id:
+              - notify.mobile_app_phone
+            data:
+              template_message: '{% raw %}Confirmed{% endraw %}'
+              confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
+                true) }}'
+              confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
+                true) }}'
+            history_reason: confirmation_notification
         - stop: confirmation completed
       - conditions:
         - condition: template
@@ -341,33 +342,6 @@ actions:
               - condition: template
                 value_template: '{{ wait.trigger.id == ''confirmation'' }}'
               sequence:
-              - action: ha_notifications.send
-                data:
-                  alert_id: full_feature
-                  alert_name: Full feature
-                  flow_id: '{{ context.parent_id or context.id }}'
-                  target:
-                    entity_id:
-                    - notify.mobile_app_phone
-                  data:
-                    template_message: '{% raw %}Confirmed{% endraw %}'
-                    confirmation_device_id: '{{ wait.trigger.event.data.device_id
-                      | default('''', true) }}'
-                    confirmation_user_id: '{{ wait.trigger.event.context.user_id |
-                      default('''', true) }}'
-              - action: light.turn_on
-                target:
-                  entity_id: light.hall
-              - action: ha_notifications.report
-                data:
-                  alert_id: full_feature
-                  alert_name: Full feature
-                  flow_id: '{{ context.parent_id or context.id }}'
-                  status: action_executed
-                  run_id: '{{ context.parent_id or context.id }}'
-                  message: Automation action executed
-                  details:
-                    action: light.turn_on
               - action: ha_notifications.report
                 data:
                   alert_id: full_feature
@@ -382,6 +356,34 @@ actions:
                       true) }}'
                     user_id: '{{ wait.trigger.event.context.user_id | default('''',
                       true) }}'
+              - action: light.turn_on
+                target:
+                  entity_id: light.hall
+              - action: ha_notifications.report
+                data:
+                  alert_id: full_feature
+                  alert_name: Full feature
+                  flow_id: '{{ context.parent_id or context.id }}'
+                  status: action_executed
+                  run_id: '{{ context.parent_id or context.id }}'
+                  message: Automation action executed
+                  details:
+                    action: light.turn_on
+              - action: ha_notifications.send
+                data:
+                  alert_id: full_feature
+                  alert_name: Full feature
+                  flow_id: '{{ context.parent_id or context.id }}'
+                  target:
+                    entity_id:
+                    - notify.mobile_app_phone
+                  data:
+                    template_message: '{% raw %}Confirmed{% endraw %}'
+                    confirmation_device_id: '{{ wait.trigger.event.data.device_id
+                      | default('''', true) }}'
+                    confirmation_user_id: '{{ wait.trigger.event.context.user_id |
+                      default('''', true) }}'
+                  history_reason: confirmation_notification
               - stop: confirmation completed
             - conditions:
               - condition: template

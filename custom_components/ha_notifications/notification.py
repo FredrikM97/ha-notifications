@@ -239,12 +239,16 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
         flow_id = call.data.get("flow_id") or call.data.get("run_id")
         if isinstance(flow_id, str) and flow_id:
             kwargs["flow_id"] = flow_id
+        details = {"service": services[0] if len(services) == 1 else services}
+        history_reason = call.data.get("history_reason")
+        if isinstance(history_reason, str) and history_reason:
+            details["reason"] = history_reason
         await history_store(hass, _entry(hass)).async_record(
             alert_id,
             str(call.data.get("alert_name", alert_id)),
             "notification_cleared" if clear else "notification_sent",
             "Notification cleared" if clear else "Notification sent",
-            {"service": services[0] if len(services) == 1 else services},
+            details,
             **kwargs,
         )
 

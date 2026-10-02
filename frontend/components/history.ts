@@ -433,6 +433,13 @@ export const historyEntriesStyles = css`
     overflow-wrap: anywhere;
   }
 
+  .nc-history-reason {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
   .nc-history-main {
     display: grid;
     gap: 2px;
@@ -1024,6 +1031,9 @@ function historyItemTemplate(
   const details = item.event?.details;
   const hasDetails = Boolean(details && Object.keys(details).length);
   const startedBy = historyStartedBySummary(details);
+  const reason = details?.reason === "confirmation_notification"
+    ? localize(options.hass, "history.confirmation_notification")
+    : "";
 
   return html`<div
     class=${`nc-history-item${hasDetails ? " clickable" : ""}`}
@@ -1057,6 +1067,9 @@ function historyItemTemplate(
       </div>
       ${startedBy
         ? html`<div class="nc-history-origin">${localize(options.hass, "history.started_by", { trigger: startedBy })}</div>`
+        : ""}
+      ${reason
+        ? html`<div class="nc-history-reason">${localize(options.hass, "history.reason", { reason })}</div>`
         : ""}
       ${historyDetailsTemplate(details, hasDetails, detailsOpen)}
     </div>

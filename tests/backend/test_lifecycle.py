@@ -639,15 +639,18 @@ async def test_full_flow_uses_native_automation(
     delivered: list[dict[str, object]] = []
     post_send_calls: list[dict[str, object]] = []
     confirmation_calls: list[dict[str, object]] = []
+    confirmation_execution_order: list[str] = []
 
     async def handle_notification(call) -> None:
         delivered.append(dict(call.data))
+        confirmation_execution_order.append("notification")
 
     async def handle_post_send(call) -> None:
         post_send_calls.append(dict(call.data))
 
     async def handle_confirmation_action(call) -> None:
         confirmation_calls.append(dict(call.data))
+        confirmation_execution_order.append("action")
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
     hass.services.async_register("logbook", "log", handle_post_send)
@@ -696,11 +699,13 @@ async def test_full_flow_uses_native_automation(
         }]},
     }]
 
+    confirmation_execution_order.clear()
     hass.bus.async_fire(
         "mobile_app_notification_action",
         {"action": "ha_notifications_full_feature_confirmation_confirm"},
     )
     await hass.async_block_till_done()
+    assert confirmation_execution_order == ["action", "notification"]
     assert delivered[-1] == {
         "message": "Confirmed by Unknown device",
         "data": {"tag": "full_feature"},
@@ -727,6 +732,21 @@ async def test_full_flow_uses_native_automation(
     assert {"notification_sent", "waiting", "confirmation_completed"} <= (
         completed_flow_events
     )
+    completion_index = next(
+        index
+        for index, item in enumerate(history_entries)
+        if item.get("event", {}).get("flow_id") == completed_flow_id
+        and item["event"]["type"] == "confirmation_completed"
+    )
+    notification_index = next(
+        index
+        for index, item in enumerate(history_entries)
+        if item.get("event", {}).get("flow_id") == completed_flow_id
+        and item["event"]["type"] == "notification_sent"
+    )
+    assert completion_index > notification_index
+    follow_up_event = history_entries[notification_index]["event"]
+    assert follow_up_event["details"]["reason"] == "confirmation_notification"
 
     updated = {**full_feature_alert, "name": "Updated full feature"}
     await ha_notifications.async_save_config(

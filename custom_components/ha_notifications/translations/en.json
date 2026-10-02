@@ -30,15 +30,5 @@
       "name": "Reload",
       "description": "Reload HA Notifications configuration from the managed YAML file."
     }
-  },
-  "frontend": {
-    "editor": {
-      "visual": {
-        "mode": "Editor mode",
-        "yaml": "YAML",
-        "visual": "Visual",
-        "invalid_yaml": "This YAML must be a valid list to use the Home Assistant visual editor. Switch back to YAML mode to edit it."
-      }
-    }
   }
 }

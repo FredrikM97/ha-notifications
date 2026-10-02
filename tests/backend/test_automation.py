@@ -99,10 +99,11 @@ def _assert_reported_stops(value: Any) -> None:
     if isinstance(value, list):
         for index, action in enumerate(value):
             if isinstance(action, dict) and "stop" in action:
-                assert index > 0
-                previous = value[index - 1]
-                assert isinstance(previous, dict)
-                assert previous.get("action") == "ha_notifications.report"
+                assert any(
+                    isinstance(previous, dict)
+                    and previous.get("action") == "ha_notifications.report"
+                    for previous in value[:index]
+                )
             _assert_reported_stops(action)
     elif isinstance(value, dict):
         for nested in value.values():
@@ -852,20 +853,20 @@ def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(fu
     completion = next(action for action in branch if "choose" in action)
     assert completion["choose"][0]["sequence"] == [
         {
-            "action": "ha_notifications.send",
+            "action": "ha_notifications.report",
             "data": {
                 "alert_id": "full_feature",
                 "alert_name": "Full feature",
                 "flow_id": "{{ context.parent_id or context.id }}",
-                "target": {
-                    "entity_id": ["notify.mobile_app_phone"],
-                },
-                "data": {
-                    "template_message": "{% raw %}Confirmed{% endraw %}",
-                    "confirmation_device_id": (
+                "status": "confirmation_completed",
+                "message": "Confirmation completed",
+                "run_id": "{{ context.parent_id or context.id }}",
+                "details": {
+                    "action": "confirmation_completed",
+                    "device_id": (
                         "{{ wait.trigger.event.data.device_id | default('', true) }}"
                     ),
-                    "confirmation_user_id": (
+                    "user_id": (
                         "{{ wait.trigger.event.context.user_id | default('', true) }}"
                     ),
                 },
@@ -885,20 +886,21 @@ def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(fu
             },
         },
         {
-            "action": "ha_notifications.report",
+            "action": "ha_notifications.send",
             "data": {
                 "alert_id": "full_feature",
                 "alert_name": "Full feature",
                 "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "confirmation_completed",
-                "message": "Confirmation completed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {
-                    "action": "confirmation_completed",
-                    "device_id": (
+                "history_reason": "confirmation_notification",
+                "target": {
+                    "entity_id": ["notify.mobile_app_phone"],
+                },
+                "data": {
+                    "template_message": "{% raw %}Confirmed{% endraw %}",
+                    "confirmation_device_id": (
                         "{{ wait.trigger.event.data.device_id | default('', true) }}"
                     ),
-                    "user_id": (
+                    "confirmation_user_id": (
                         "{{ wait.trigger.event.context.user_id | default('', true) }}"
                     ),
                 },
@@ -952,9 +954,19 @@ def test_confirmation_notification_opt_in_controls_only_follow_up_send(
         action for action in follow_up if action.get("action") == "ha_notifications.send"
     ]
 
+    assert follow_up[0]["action"] == "ha_notifications.report"
+    assert follow_up[0]["data"]["status"] == "confirmation_completed"
     assert bool(follow_up_sends) is notification_enabled
     assert any(action.get("action") == "light.turn_on" for action in follow_up)
+    if follow_up_sends:
+        action_index = next(
+            index
+            for index, action in enumerate(follow_up)
+            if action.get("action") == "light.turn_on"
+        )
+        assert follow_up.index(follow_up_sends[0]) > action_index
     assert all("enabled" not in action["data"] for action in follow_up_sends)
+    assert follow_up[-1] == {"stop": "confirmation completed"}
 
 
 def test_confirmation_button_action_is_an_event_identifier(full_feature_alert) -> None:
@@ -1235,17 +1247,20 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
     }]
     assert response["sequence"] == [
         {
-            "action": "ha_notifications.send",
+            "action": "ha_notifications.report",
             "data": {
                 "alert_id": "bounded_confirmation",
                 "alert_name": "",
                 "flow_id": "{{ context.parent_id or context.id }}",
-                "data": {
-                    "template_message": "{% raw %}Confirmed{% endraw %}",
-                    "confirmation_device_id": (
+                "status": "confirmation_completed",
+                "message": "Confirmation completed",
+                "run_id": "{{ context.parent_id or context.id }}",
+                "details": {
+                    "action": "confirmation_completed",
+                    "device_id": (
                         "{{ wait.trigger.event.data.device_id | default('', true) }}"
                     ),
-                    "confirmation_user_id": (
+                    "user_id": (
                         "{{ wait.trigger.event.context.user_id | default('', true) }}"
                     ),
                 },
@@ -1265,20 +1280,18 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
             },
         },
         {
-            "action": "ha_notifications.report",
+            "action": "ha_notifications.send",
             "data": {
                 "alert_id": "bounded_confirmation",
                 "alert_name": "",
                 "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "confirmation_completed",
-                "message": "Confirmation completed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {
-                    "action": "confirmation_completed",
-                    "device_id": (
+                "history_reason": "confirmation_notification",
+                "data": {
+                    "template_message": "{% raw %}Confirmed{% endraw %}",
+                    "confirmation_device_id": (
                         "{{ wait.trigger.event.data.device_id | default('', true) }}"
                     ),
-                    "user_id": (
+                    "confirmation_user_id": (
                         "{{ wait.trigger.event.context.user_id | default('', true) }}"
                     ),
                 },
