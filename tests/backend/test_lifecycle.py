@@ -705,7 +705,7 @@ async def test_full_flow_uses_native_automation(
         {"action": "ha_notifications_full_feature_confirmation_confirm"},
     )
     await hass.async_block_till_done()
-    assert confirmation_execution_order == ["action", "notification"]
+    assert confirmation_execution_order == ["notification", "action"]
     assert delivered[-1] == {
         "message": "Confirmed by Unknown device",
         "data": {"tag": "full_feature"},
@@ -729,9 +729,12 @@ async def test_full_flow_uses_native_automation(
         for item in history_entries
         if item.get("event", {}).get("flow_id") == completed_flow_id
     }
-    assert {"notification_sent", "waiting", "confirmation_completed"} <= (
-        completed_flow_events
-    )
+    assert {
+        "notification_sent",
+        "waiting",
+        "confirmation_completed",
+        "action_executed",
+    } <= completed_flow_events
     completion_index = next(
         index
         for index, item in enumerate(history_entries)
@@ -743,8 +746,18 @@ async def test_full_flow_uses_native_automation(
         for index, item in enumerate(history_entries)
         if item.get("event", {}).get("flow_id") == completed_flow_id
         and item["event"]["type"] == "notification_sent"
+        and item["event"].get("details", {}).get("reason")
+        == "confirmation_notification"
     )
-    assert completion_index > notification_index
+    action_executed_index = next(
+        index
+        for index, item in enumerate(history_entries)
+        if item.get("event", {}).get("flow_id") == completed_flow_id
+        and item["event"]["type"] == "action_executed"
+        and item["event"].get("details", {}).get("action") == "light.turn_on"
+    )
+    assert action_executed_index < notification_index
+    assert notification_index < completion_index
     follow_up_event = history_entries[notification_index]["event"]
     assert follow_up_event["details"]["reason"] == "confirmation_notification"
 

@@ -234,19 +234,6 @@ actions:
                 }}'
               user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
                 }}'
-        - action: light.turn_on
-          target:
-            entity_id: light.hall
-        - action: ha_notifications.report
-          data:
-            alert_id: full_feature
-            alert_name: Full feature
-            flow_id: '{{ context.parent_id or context.id }}'
-            status: action_executed
-            run_id: '{{ context.parent_id or context.id }}'
-            message: Automation action executed
-            details:
-              action: light.turn_on
         - action: ha_notifications.send
           data:
             alert_id: full_feature
@@ -262,6 +249,19 @@ actions:
               confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
                 true) }}'
             history_reason: confirmation_notification
+        - action: light.turn_on
+          target:
+            entity_id: light.hall
+        - action: ha_notifications.report
+          data:
+            alert_id: full_feature
+            alert_name: Full feature
+            flow_id: '{{ context.parent_id or context.id }}'
+            status: action_executed
+            run_id: '{{ context.parent_id or context.id }}'
+            message: Automation action executed
+            details:
+              action: light.turn_on
         - stop: confirmation completed
       - conditions:
         - condition: template
@@ -356,19 +356,6 @@ actions:
                       true) }}'
                     user_id: '{{ wait.trigger.event.context.user_id | default('''',
                       true) }}'
-              - action: light.turn_on
-                target:
-                  entity_id: light.hall
-              - action: ha_notifications.report
-                data:
-                  alert_id: full_feature
-                  alert_name: Full feature
-                  flow_id: '{{ context.parent_id or context.id }}'
-                  status: action_executed
-                  run_id: '{{ context.parent_id or context.id }}'
-                  message: Automation action executed
-                  details:
-                    action: light.turn_on
               - action: ha_notifications.send
                 data:
                   alert_id: full_feature
@@ -384,6 +371,19 @@ actions:
                     confirmation_user_id: '{{ wait.trigger.event.context.user_id |
                       default('''', true) }}'
                   history_reason: confirmation_notification
+              - action: light.turn_on
+                target:
+                  entity_id: light.hall
+              - action: ha_notifications.report
+                data:
+                  alert_id: full_feature
+                  alert_name: Full feature
+                  flow_id: '{{ context.parent_id or context.id }}'
+                  status: action_executed
+                  run_id: '{{ context.parent_id or context.id }}'
+                  message: Automation action executed
+                  details:
+                    action: light.turn_on
               - stop: confirmation completed
             - conditions:
               - condition: template

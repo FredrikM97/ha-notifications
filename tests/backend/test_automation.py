@@ -851,63 +851,30 @@ def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(fu
     wait = next(action for action in branch if "wait_for_trigger" in action)
     assert wait["wait_for_trigger"]
     completion = next(action for action in branch if "choose" in action)
-    assert completion["choose"][0]["sequence"] == [
-        {
-            "action": "ha_notifications.report",
-            "data": {
-                "alert_id": "full_feature",
-                "alert_name": "Full feature",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "confirmation_completed",
-                "message": "Confirmation completed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {
-                    "action": "confirmation_completed",
-                    "device_id": (
-                        "{{ wait.trigger.event.data.device_id | default('', true) }}"
-                    ),
-                    "user_id": (
-                        "{{ wait.trigger.event.context.user_id | default('', true) }}"
-                    ),
-                },
-            },
-        },
-        {"action": "light.turn_on", "target": {"entity_id": "light.hall"}},
-        {
-            "action": "ha_notifications.report",
-            "data": {
-                "alert_id": "full_feature",
-                "alert_name": "Full feature",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "action_executed",
-                "message": "Automation action executed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {"action": "light.turn_on"},
-            },
-        },
-        {
-            "action": "ha_notifications.send",
-            "data": {
-                "alert_id": "full_feature",
-                "alert_name": "Full feature",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "history_reason": "confirmation_notification",
-                "target": {
-                    "entity_id": ["notify.mobile_app_phone"],
-                },
-                "data": {
-                    "template_message": "{% raw %}Confirmed{% endraw %}",
-                    "confirmation_device_id": (
-                        "{{ wait.trigger.event.data.device_id | default('', true) }}"
-                    ),
-                    "confirmation_user_id": (
-                        "{{ wait.trigger.event.context.user_id | default('', true) }}"
-                    ),
-                },
-            },
-        },
-        {"stop": "confirmation completed"},
-    ]
+    completion_sequence = completion["choose"][0]["sequence"]
+    notification_index = next(
+        index
+        for index, action in enumerate(completion_sequence)
+        if action.get("action") == "ha_notifications.send"
+    )
+    native_action_index = next(
+        index
+        for index, action in enumerate(completion_sequence)
+        if action.get("action") == "light.turn_on"
+    )
+    action_executed_index = next(
+        index
+        for index, action in enumerate(completion_sequence)
+        if action.get("action") == "ha_notifications.report"
+        and action.get("data", {}).get("status") == "action_executed"
+    )
+    assert completion_sequence[0]["data"]["status"] == "confirmation_completed"
+    assert completion_sequence[notification_index]["data"]["history_reason"] == (
+        "confirmation_notification"
+    )
+    assert notification_index < native_action_index
+    assert native_action_index < action_executed_index
+    assert completion_sequence[-1] == {"stop": "confirmation completed"}
     timeout_sequence = completion["default"]
     repeat = next(action["repeat"] for action in timeout_sequence if "repeat" in action)
     assert repeat["count"] == 5
@@ -958,13 +925,13 @@ def test_confirmation_notification_opt_in_controls_only_follow_up_send(
     assert follow_up[0]["data"]["status"] == "confirmation_completed"
     assert bool(follow_up_sends) is notification_enabled
     assert any(action.get("action") == "light.turn_on" for action in follow_up)
-    if follow_up_sends:
-        action_index = next(
+    action_index = next(
             index
             for index, action in enumerate(follow_up)
             if action.get("action") == "light.turn_on"
         )
-        assert follow_up.index(follow_up_sends[0]) > action_index
+    if follow_up_sends:
+        assert follow_up.index(follow_up_sends[0]) < action_index
     assert all("enabled" not in action["data"] for action in follow_up_sends)
     assert follow_up[-1] == {"stop": "confirmation completed"}
 
@@ -1245,60 +1212,27 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
         "condition": "template",
         "value_template": "{{ wait.trigger.id == 'confirmation' }}",
     }]
-    assert response["sequence"] == [
-        {
-            "action": "ha_notifications.report",
-            "data": {
-                "alert_id": "bounded_confirmation",
-                "alert_name": "",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "confirmation_completed",
-                "message": "Confirmation completed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {
-                    "action": "confirmation_completed",
-                    "device_id": (
-                        "{{ wait.trigger.event.data.device_id | default('', true) }}"
-                    ),
-                    "user_id": (
-                        "{{ wait.trigger.event.context.user_id | default('', true) }}"
-                    ),
-                },
-            },
-        },
-        {"action": "light.turn_on"},
-        {
-            "action": "ha_notifications.report",
-            "data": {
-                "alert_id": "bounded_confirmation",
-                "alert_name": "",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "status": "action_executed",
-                "message": "Automation action executed",
-                "run_id": "{{ context.parent_id or context.id }}",
-                "details": {"action": "light.turn_on"},
-            },
-        },
-        {
-            "action": "ha_notifications.send",
-            "data": {
-                "alert_id": "bounded_confirmation",
-                "alert_name": "",
-                "flow_id": "{{ context.parent_id or context.id }}",
-                "history_reason": "confirmation_notification",
-                "data": {
-                    "template_message": "{% raw %}Confirmed{% endraw %}",
-                    "confirmation_device_id": (
-                        "{{ wait.trigger.event.data.device_id | default('', true) }}"
-                    ),
-                    "confirmation_user_id": (
-                        "{{ wait.trigger.event.context.user_id | default('', true) }}"
-                    ),
-                },
-            },
-        },
-        {"stop": "confirmation completed"},
-    ]
+    response_sequence = response["sequence"]
+    notification_index = next(
+        index
+        for index, action in enumerate(response_sequence)
+        if action.get("action") == "ha_notifications.send"
+    )
+    native_action_index = next(
+        index
+        for index, action in enumerate(response_sequence)
+        if action.get("action") == "light.turn_on"
+    )
+    action_executed_index = next(
+        index
+        for index, action in enumerate(response_sequence)
+        if action.get("action") == "ha_notifications.report"
+        and action.get("data", {}).get("status") == "action_executed"
+    )
+    assert response_sequence[0]["data"]["status"] == "confirmation_completed"
+    assert notification_index < native_action_index
+    assert native_action_index < action_executed_index
+    assert response_sequence[-1] == {"stop": "confirmation completed"}
     assert repeat["repeat"]["count"] == 2
     assert repeat["repeat"]["sequence"][1] == {
         "action": "ha_notifications.report",

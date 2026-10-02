@@ -1110,13 +1110,9 @@ def _follow_up_actions(
     if isinstance(configured_actions, dict):
         configured_actions = configured_actions.get("items", [])
     native_actions = [_copy_native_value(action) for action in configured_actions]
-    actions = [
-        item
-        for action in native_actions
-        for item in steps.recorded_action(action)
-    ]
-    if notification_action is not None:
-        actions.append(notification_action)
+    actions = [notification_action] if notification_action is not None else []
+    for action in native_actions:
+        actions.extend(steps.recorded_action(action))
     return actions
 
 
