@@ -11,7 +11,7 @@
     "create_first": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
     "create_alert": "Create alert",
     "admin_help": "HA Notifications alerts can only be viewed and edited by Home Assistant administrators.",
-    "condition_valid": "Condition is valid.", "alert_created": "Alert created.",
+    "condition_valid": "Condition is valid.", "triggers_valid": "Triggers are valid.", "alert_created": "Alert created.",
     "alert_saved": "Alert saved.", "alert_deleted": "Alert deleted.",
     "show_all": "Show all",
     "alert_added": "Alert added.",
@@ -22,31 +22,41 @@
   "alert": {
     "disabled": "Disabled", "enabled": "Enabled",
     "automation_managed": "Automation managed", "automation_manual": "Manual automation",
-    "automation_active": "Active", "automation_last_triggered": "Last triggered", "automation_idle": "Idle",
+    "automation_active": "Active", "automation_triggered": "Triggered", "automation_idle": "Idle",
+    "active_runs": "{{count}} active runs",
     "enable": "Enable", "disable": "Disable", "edit": "Edit alert",
-    "history": "View history", "delete": "Delete alert", "open_automation": "Open automation", "every": "every {{interval}}"
+    "history": "View history", "delete": "Delete alert", "open_automation": "Open automation", "cancel_run": "Cancel active runs", "run_cancelled": "Active runs cancelled.", "run_not_active": "No active run to cancel.", "every": "every {{interval}}"
   },
   "editor": {
     "common": {
-      "new_alert": "New alert", "close_sections": "Close section menu", "manage_sections": "Manage sections",
-      "view_yaml": "View alert YAML", "close": "Close", "cancel": "Cancel", "save_alert": "Save alert",
+      "new_alert": "New alert", "close_sections": "Close section menu", "manage_sections": "Manage sections", "more_info": "More information",
+      "view_yaml": "View alert YAML", "close": "Close", "cancel": "Cancel", "save_alert": "Save alert", "validate_triggers": "Validate triggers", "validate_conditions": "Validate conditions",
       "alert_sections": "Alert sections", "discard_title": "Unsaved changes", "discard_message": "You have unsaved changes. Leave without saving?", "stay": "Stay", "discard": "Discard changes",
       "alert_yaml": "Alert YAML", "close_yaml": "Close YAML", "duration": "Duration", "duration_format": "Duration (HH:MM:SS)"
     },
+    "visual": {
+      "mode": "Editor mode", "yaml": "YAML", "visual": "Visual", "invalid_yaml": "This YAML must be a valid list to use the Home Assistant visual editor. Switch back to YAML mode to edit it."
+    },
     "basic": {
-      "section": "Basic", "name": "Name", "alert_name": "Alert name", "description": "Description", "icon": "Icon"
+      "section": "Basic", "name": "Name", "alert_name": "Alert name", "description": "Description", "icon": "Icon",
+      "automation_mode": "Automation mode", "mode_single": "Single (ignore new triggers while running)",
+      "automation_mode_help": "Parallel is usually the best choice for alerts because each trigger can start an independent run. Keep this setting unless you specifically need to ignore, restart, or queue runs.",
+      "mode_restart": "Restart (cancel and start again)", "mode_queued": "Queued (run triggers in order)",
+      "mode_parallel": "Parallel (run triggers independently)"
     },
     "evaluate": {
-      "section": "When to check", "when_condition_changes": "When condition changes", "clear_when_inactive": "Clear notification when inactive", "check_startup": "Check at startup",
+      "section": "When to check", "when_condition_changes": "When condition changes", "check_startup": "Check at startup",
         "condition_change_help": "Condition changes are detected for referenced entities. Use a condition that references an entity, or use Test and interval checks for static templates.",
       "re_evaluate_every": "Re-evaluate condition every", "interval_help": "Re-checks the condition at this interval, even when no relevant entity-change event occurs.",
       "enable_history_retention": "Enable history retention", "history_retention": "History retention", "retention_days": "History retention days", "retention_help": "Completed alert history is removed after this period."
     },
     "triggers": {
-      "section": "When to run", "custom": "Triggers", "yaml": "Home Assistant triggers", "help": "Enter triggers as a YAML list, with each trigger starting with a dash. For example, state, event, and template triggers. Startup and repeat triggers are controlled above; Conditions are separate and only gate a triggered run.", "built_in_help": "Configure the built-in startup and repeat triggers here. Add other Home Assistant trigger types under Triggers.", "startup": "Startup trigger", "interval": "Repeat trigger", "startup_help": "Run this alert when Home Assistant starts.", "interval_help": "Re-evaluate the conditions on a repeating time pattern (default every 12 hours). Home Assistant aligns time patterns to the clock, so longer values are rounded to whole minutes or hours (up to 23), and 24 hours or more runs daily at midnight."
+      "section": "When to run", "custom": "Triggers", "yaml": "Triggers", "help": "Optional. Add event or state triggers as YAML when those events should start the alert. Startup and periodic checks are configured separately. Include each custom trigger as an item in a YAML list; common types include state, event, and template triggers.", "on_condition_change": "When conditions change", "on_condition_change_help": "Automatically trigger from entities referenced by Conditions. Entity-backed template conditions are watched too; static templates need a startup or periodic check, or a custom trigger.", "cancel_on_inactive": "Cancel on inactive", "cancel_on_inactive_help": "Cancel confirmation waits when Conditions become false or a configured on/off state trigger reaches its inverse state."
     },
     "conditions": {
-      "section": "Conditions", "yaml": "Conditions checked after a trigger", "help": "Conditions do not start an alert. They are checked after a built-in or additional trigger fires and determine whether the alert continues. YAML and JSON are supported.", "numeric_state_help": "For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration."
+      "section": "Conditions", "yaml": "Conditions", "help": "Conditions are optional and gate every trigger, including startup, periodic checks, and custom event triggers. With the condition-change trigger enabled, referenced entities also create triggers automatically. With no conditions, the alert runs whenever another trigger fires. YAML and JSON are supported. For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration.",
+      "placeholder": "- condition: state\n  entity_id: binary_sensor.front_door\n  state: \"on\"",
+      "startup": "Check at startup", "interval_enabled": "Enable periodic condition checks", "interval": "Re-evaluate conditions every", "interval_help": "Re-check conditions at this interval, even when no relevant entity-change event occurs."
     },
     "condition": {
       "section": "Condition", "conditions_yaml": "Native Home Assistant condition", "conditions_help": "Enter a Home Assistant condition as a template string, mapping, or list of mappings. YAML and JSON are supported.", "numeric_state_help": "For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration.",
@@ -59,20 +69,20 @@
     },
     "notification": {
       "section": "Notification", "title": "Title", "message": "Message", "title_placeholder": "Notification title", "message_placeholder": "Notification message",
-      "template_help": "Template variables and sensor helpers", "templates_help": "Notification templates and helpers", "show_template_help": "Show template variables and sensor helpers",
+      "templates_help": "Notification templates and helpers", "show_template_help": "Message template help", "condition_text_title": "Use condition results", "condition_text_help": "Add an ID to a condition, then use condition.<id> to show text based on its result.", "condition_text_example": "{% if condition.front_door %}Door open{% else %}All clear{% endif %}", "template_values_title": "Available values", "template_values_help": "alert_id, alert_name, alert_active, attempt, trigger, now, and condition.<id>.", "ha_templates_title": "Home Assistant templates", "ha_templates_help": "State helpers work here too, such as states('sensor.temperature'), state_attr('light.kitchen', 'brightness'), and is_state('binary_sensor.door', 'on').",
       "post_send_actions": "Post-send actions", "post_send_help": "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML."
     },
     "confirmation": {
-      "section": "Confirmation", "toggle": "confirmation", "message": "Confirmation message", "add_response": "Add response button", "remove_button": "Remove button",
+      "section": "Confirmation", "toggle": "confirmation", "message": "Confirmation message", "enable_timeout": "Enable confirmation timeout", "timeout": "Confirmation timeout", "timeout_help": "Set how long the confirmation notification stays active on recipients' devices. This does not change the reminder interval or maximum reminders.", "add_response": "Add response button", "remove_button": "Remove button",
       "button_ids": "Button IDs (optional)", "button_id_for": "Button {{index}} ID", "button_label": "Button text", "button_label_optional": "Button text (optional)", "clear_on_acknowledge": "Clear notifications when acknowledged",
       "reminder": {
-        "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "forget_after": "Forget after", "enable_forget_after": "Enable forget after", "show_attempt_count": "Show attempt count in notification title", "keep_until": "Set to 00:00:00 to keep the notification until confirmation."
+        "section": "Reminder policy", "remind_every": "Remind every", "maximum": "Maximum reminders", "show_attempt_count": "Show attempt count in notification title"
       },
       "notification": {
-        "section": "Notify recipients when confirmed", "follow_up_help": "Optionally send a follow-up message after acknowledgement.", "example": "Example:"
+        "section": "Notify recipients when confirmed", "help": "Optionally send a follow-up notification to alert recipients after one recipient confirms the alert.", "example": "Example:"
       },
       "actions": {
-        "section": "Post-confirmation actions", "help": "Runs after a recipient confirms. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML."
+        "section": "Post-confirmation actions", "help": "Run these Home Assistant actions after a recipient confirms the alert. Enter a YAML list; JSON arrays also work because JSON is valid YAML."
       }
     }
   },
@@ -82,7 +92,7 @@
     "no_matches": "No history entries match these filters.", "all_alerts": "All alerts", "all_event_types": "All event types",
     "event_type": "Event type", "filter_event_type": "Filter by event type", "all_severities": "All severities",
     "severity": "Severity", "filter_severity": "Filter by severity", "error": "Error", "success": "Success", "info": "Info", "muted": "Muted",
-    "details": "Details", "flow": "Flow", "group_by_flow": "Group by flow", "flow_events": "{{count}} events", "alert": "Alert", "filter_alert": "Filter by alert", "unknown_alert": "Unknown alert",
+    "details": "Details", "flow": "Flow", "flow_alert": "Alert: {{name}}", "group_by_flow": "Group by flow", "flow_events": "{{count}} events", "alert": "Alert", "filter_alert": "Filter by alert", "unknown_alert": "Unknown alert", "started_by": "Started by {{trigger}}",
     "no_activity": "No activity yet", "no_activity_for": "No activity for {{name}}", "activity_help": "Notification activity and debug traces will appear here.", "show_all": "Show all history"
   },
   "yaml": {

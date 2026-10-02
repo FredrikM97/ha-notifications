@@ -2,6 +2,7 @@
 
 exports[`buildAlertPayload > omits the delivery action when recipients are selected 1`] = `
 {
+  "automation_mode": "parallel",
   "conditions": [
     {
       "condition": "template",
@@ -57,6 +58,7 @@ exports[`buildAlertPayload > omits the delivery action when recipients are selec
 
 exports[`buildAlertPayload > persists a custom alert icon 1`] = `
 {
+  "automation_mode": "parallel",
   "conditions": [
     {
       "condition": "template",
@@ -112,6 +114,7 @@ exports[`buildAlertPayload > persists a custom alert icon 1`] = `
 
 exports[`buildAlertPayload > serializes incomplete drafts for YAML preview 1`] = `
 {
+  "automation_mode": "parallel",
   "conditions": [
     {
       "condition": "template",

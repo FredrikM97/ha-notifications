@@ -1,45 +1,10 @@
-record:
-  name: Record automation action
-  description: Record a successful automation action in HA Notifications history.
-  fields:
-    alert_id:
-      name: Alert ID
-      description: Alert that owns the automation action.
-      required: true
-      selector:
-        text:
-    alert_name:
-      name: Alert name
-      description: Display name of the alert.
-      required: false
-      selector:
-        text:
-    event_type:
-      name: Event type
-      description: Optional history event type.
-      required: false
-      selector:
-        text:
-    message:
-      name: Message
-      description: Optional history event message.
-      required: false
-      selector:
-        text:
-    details:
-      name: Details
-      description: Optional structured action details.
-      required: false
-      selector:
-        object:
-
 report:
   name: Report automation state
-  description: Record an automation lifecycle state and optional metadata.
+  description: Record an automation lifecycle or action event and optional metadata.
   fields:
     alert_id:
       name: Alert ID
-      description: Alert that owns the reported state.
+      description: Alert that owns the reported event.
       required: true
       selector:
         text:
@@ -51,7 +16,7 @@ report:
         text:
     status:
       name: Status
-      description: Lifecycle or domain-specific state being reported.
+      description: Lifecycle or action event being reported, such as action_executed.
       required: true
       selector:
         text:
@@ -73,6 +38,12 @@ report:
       required: false
       selector:
         object:
+    cancel_on_inactive:
+      name: Cancel on inactive
+      description: Emit a command to cancel confirmation waits after an inactive transition.
+      required: false
+      selector:
+        boolean:
 
 send:
   name: Send notification
@@ -116,3 +87,20 @@ clear:
       required: false
       selector:
         object:
+
+command:
+  name: Send alert command
+  description: Send an alert-scoped command event to HA Notifications automations.
+  fields:
+    alert_id:
+      name: Alert ID
+      description: Alert that receives the command.
+      required: true
+      selector:
+        text:
+    command:
+      name: Command
+      description: Command to send, such as skip_confirmation.
+      required: true
+      selector:
+        text:

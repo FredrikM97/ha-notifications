@@ -1,25 +1,21 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
-import { html, render } from "lit";
+import { html } from "lit";
 import "../../frontend/components/duration-input.js";
 import { durationInputValue } from "../../frontend/components/duration-input.js";
-import { renderFormField } from "../../frontend/components/form-field.js";
+import {
+  formFieldStyles,
+  renderFormField,
+} from "../../frontend/components/form-field.js";
 import "../../frontend/components/setting-toggle.js";
-
-const hosts: HTMLElement[] = [];
+import { cleanupTestDom, renderTemplate } from "./conftest.js";
 
 function renderIntoHost(template: ReturnType<typeof html>): HTMLElement {
-  const host = document.createElement("div");
-  hosts.push(host);
-  document.body.append(host);
-  render(template, host);
-  return host;
+  return renderTemplate(template);
 }
 
-afterEach(() => {
-  for (const host of hosts.splice(0)) host.remove();
-});
+afterEach(cleanupTestDom);
 
 describe("shared form components", () => {
   it("renders a named label slot and default content slot", async () => {
@@ -36,6 +32,27 @@ describe("shared form components", () => {
     expect(field?.shadowRoot?.querySelector('slot[name="label"]')).not.toBeNull();
     expect(field?.querySelector("input")?.getAttribute("aria-label")).toBe(
       "Alert name",
+    );
+  });
+
+  it("places inline toggle controls before their labels", async () => {
+    const host = renderIntoHost(
+      renderFormField(
+        "Start trigger",
+        html`<ha-switch aria-label="Start trigger"></ha-switch>`,
+        true,
+        "nc-inline-toggle",
+      ),
+    );
+    const field = host.querySelector<HTMLElement & { updateComplete: Promise<void> }>(
+      "ha-notifications-form-field",
+    );
+    await field?.updateComplete;
+
+    expect(field?.classList.contains("nc-inline-toggle")).toBe(true);
+    expect(formFieldStyles.cssText).toContain('grid-template-areas: "control label"');
+    expect(field?.querySelector("ha-switch")?.getAttribute("aria-label")).toBe(
+      "Start trigger",
     );
   });
 
@@ -91,6 +108,39 @@ describe("shared form components", () => {
     );
 
     expect((await emitted).detail.value).toBe("51:04:05");
+    const selector = duration?.shadowRoot?.querySelector("ha-selector");
+    expect(selector?.getAttribute("label")).toBeNull();
+    expect(selector?.getAttribute("aria-label")).toBe("Delay");
+  });
+
+  it("passes day-aware values to the native duration selector", async () => {
+    const host = renderIntoHost(html`<ha-notifications-duration-input
+      .hass=${{}}
+      .value=${"51:04:05"}
+      label="Interval"
+    ></ha-notifications-duration-input>`);
+    const duration = host.querySelector<HTMLElement & {
+      updateComplete: Promise<void>;
+    }>("ha-notifications-duration-input");
+    await duration?.updateComplete;
+
+    const selector = duration?.shadowRoot?.querySelector("ha-selector") as
+      | (HTMLElement & {
+          selector: { duration: { enable_day: boolean; enable_second: boolean } };
+          value: { days: number; hours: number; minutes: number; seconds: number };
+        })
+      | null;
+
+    expect(selector?.selector.duration).toEqual({
+      enable_day: true,
+      enable_second: true,
+    });
+    expect(selector?.value).toEqual({
+      days: 2,
+      hours: 3,
+      minutes: 4,
+      seconds: 5,
+    });
   });
 
   it("emits setting identity and enabled state without editor coupling", async () => {
@@ -122,6 +172,9 @@ describe("shared form components", () => {
     const event = await emitted;
     expect(event.detail).toEqual({ setting: "confirmation", enabled: true });
     expect(event.composed).toBe(true);
+    expect(toggle?.shadowRoot?.querySelector(".label")?.textContent).toBe(
+      "Enable Confirmation",
+    );
   });
 
   it("normalizes Home Assistant duration values including days", () => {

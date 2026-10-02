@@ -8,7 +8,7 @@ import {
   validateConfig,
 } from "../api.js";
 import type { Hass } from "../types.js";
-import { buttonStyles } from "./button.js";
+import { button, buttonStyles } from "./button.js";
 import { codeEditor, type CodeEditor } from "./code-editor.js";
 import { localize } from "../localize.js";
 
@@ -38,7 +38,9 @@ export const yamlViewStyles = css`
     display: flex;
     flex-direction: column;
     gap: 12px;
-    min-height: calc(100vh - 180px);
+    height: calc(100vh - 180px);
+    height: calc(100dvh - 180px);
+    min-height: 0;
     padding: 16px;
     border-radius: var(--ha-card-border-radius, 12px);
     background: var(--card-background-color);
@@ -130,40 +132,35 @@ class YamlViewElement extends LitElement {
   }
 
   protected render() {
-    return html`<div class="nc-card nc-yaml">
+    return html`<div class="nc-yaml">
       <div class="nc-toolbar">
         <div>
           ${localize(this.hass, "yaml.description")}
         </div>
         <div class="nc-actions">
-          <button
-            class="nc-button secondary"
-            ?disabled=${this.busyAction !== null}
-            @click=${this.copyYaml}
-          >
-            ${localize(this.hass, "yaml.copy")}
-          </button>
-          <button
-            class="nc-button secondary"
-            ?disabled=${this.busyAction !== null}
-            @click=${this.validateYamlText}
-          >
-            ${localize(this.hass, "yaml.validate")}
-          </button>
-          <button
-            class="nc-button secondary"
-            ?disabled=${this.busyAction !== null}
-            @click=${this.reloadYaml}
-          >
-            ${localize(this.hass, "yaml.reload")}
-          </button>
-          <button
-            class="nc-button"
-            ?disabled=${this.busyAction !== null}
-            @click=${this.saveYamlText}
-          >
-            ${localize(this.hass, "yaml.save")}
-          </button>
+          ${button({
+            label: localize(this.hass, "yaml.copy"),
+            variant: "secondary",
+            disabled: this.busyAction !== null,
+            onClick: this.copyYaml,
+          })}
+          ${button({
+            label: localize(this.hass, "yaml.validate"),
+            variant: "secondary",
+            disabled: this.busyAction !== null,
+            onClick: this.validateYamlText,
+          })}
+          ${button({
+            label: localize(this.hass, "yaml.reload"),
+            variant: "secondary",
+            disabled: this.busyAction !== null,
+            onClick: this.reloadYaml,
+          })}
+          ${button({
+            label: localize(this.hass, "yaml.save"),
+            disabled: this.busyAction !== null,
+            onClick: this.saveYamlText,
+          })}
         </div>
       </div>
       ${codeEditor({

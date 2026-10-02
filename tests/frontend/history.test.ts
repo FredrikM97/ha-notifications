@@ -1,66 +1,88 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   filterHistoryEntries,
   groupHistoryEntries,
   historyDetailSummary,
+  historyStartedBySummary,
   renderHistory,
 } from "../../frontend/history.js";
 import type { HistoryFilters } from "../../frontend/history.js";
 import {
   emptyHistoryFilters,
+  cleanupTestDom,
   historyFixture,
   mountCustomElement,
   settleElement,
   testUser,
 } from "./conftest.js";
 
+afterEach(cleanupTestDom);
+
 function historyContract(root: ParentNode | null) {
   if (!root) {
     return null;
   }
 
+  const filterRoot = root.querySelector("ha-notifications-history-filter")?.shadowRoot;
+  const entriesRoot = root.querySelector("ha-notifications-history-entries")?.shadowRoot;
+
   return {
-    filters: [...root.querySelectorAll("ha-input, ha-selector")].map(
+    filters: [...(filterRoot?.querySelectorAll("ha-input, ha-selector") || [])].map(
       (control) => control.getAttribute("aria-label"),
     ),
-    entries: [...root.querySelectorAll(".nc-history-item")].map((entry) => ({
+    entries: [...(entriesRoot?.querySelectorAll(".nc-history-item") || [])].map((entry) => ({
       title: entry.querySelector(".nc-history-alert-link")?.textContent?.trim(),
       badge: entry.querySelector(".nc-history-badge")?.textContent?.trim(),
       flow: entry.querySelector(".nc-history-flow")?.textContent?.trim(),
       hasDetails: Boolean(entry.querySelector(".nc-history-details")),
     })),
-    count: root.querySelector(".nc-history-count")?.textContent?.trim(),
+    count: entriesRoot?.querySelector(".nc-history-count")?.textContent?.trim(),
   };
 }
 
+function historyFilterRoot(element: HTMLElement): ShadowRoot {
+  return element.shadowRoot!.querySelector("ha-notifications-history-filter")!.shadowRoot!;
+}
+
+function historyEntriesRoot(element: HTMLElement): ShadowRoot {
+  return element.shadowRoot!.querySelector("ha-notifications-history-entries")!.shadowRoot!;
+}
+
+async function settleHistory(element: HTMLElement): Promise<void> {
+  if (element.isConnected) {
+    await settleElement(element);
+  } else {
+    await Promise.resolve();
+  }
+  for (const selector of [
+    "ha-notifications-history-filter",
+    "ha-notifications-history-entries",
+  ]) {
+    const child = element.shadowRoot?.querySelector<HTMLElement>(selector);
+    (child as (HTMLElement & { performUpdate?: () => void }) | null)
+      ?.performUpdate?.();
+  }
+  await Promise.resolve();
+}
+
 describe("filterHistoryEntries", () => {
-  it("matches search text across the event content", () => {
-    expect(
-      filterHistoryEntries(historyFixture, {
-        ...emptyHistoryFilters,
-        search: "device",
-      }),
-    ).toMatchSnapshot();
-  });
-
-  it("combines alert, event type, and severity filters", () => {
-    expect(
-      filterHistoryEntries(historyFixture, {
-        ...emptyHistoryFilters,
-        alertId: "garage",
-        type: "notification_sent",
-        severity: "success",
-      }),
-    ).toMatchSnapshot();
-  });
-
-  it("returns all entries when no filters are active", () => {
-    expect(
-      filterHistoryEntries(historyFixture, emptyHistoryFilters),
-    ).toMatchSnapshot();
-  });
+  it.each([
+    ["event content search", { ...emptyHistoryFilters, search: "device" }],
+    ["combined alert, event, and severity filters", {
+      ...emptyHistoryFilters,
+      alertId: "garage",
+      type: "notification_sent",
+      severity: "success",
+    }],
+    ["no active filters", emptyHistoryFilters],
+  ] satisfies [string, HistoryFilters][]) (
+    "snapshots entries for %s",
+    (_scenario, filters) => {
+      expect(filterHistoryEntries(historyFixture, filters)).toMatchSnapshot();
+    },
+  );
 });
 
 describe("groupHistoryEntries", () => {
@@ -90,14 +112,34 @@ describe("historyDetailSummary", () => {
   });
 });
 
+describe("historyStartedBySummary", () => {
+  it("summarizes a state trigger and its transition", () => {
+    expect(historyStartedBySummary({
+      started_by: {
+        platform: "state",
+        entity_id: "input_boolean.alert_button",
+        from_state: "off",
+        to_state: "on",
+      },
+    })).toBe("input_boolean.alert_button (off -> on)");
+  });
+
+  it("summarizes event triggers", () => {
+    expect(historyStartedBySummary({
+      started_by: { platform: "homeassistant", event_type: "homeassistant_started" },
+    })).toBe("homeassistant event homeassistant_started");
+  });
+});
+
 describe("history filter controls", () => {
-  it("emits filter changes as a bubbling composed event", () => {
+  it("emits filter changes as a bubbling composed event", async () => {
     const container = document.createElement("div");
     renderHistory(container, historyFixture, {
       filters: emptyHistoryFilters,
     });
 
     const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
     let filterDetail: HistoryFilters | undefined;
     let receivedEvent: Event | undefined;
     element.addEventListener("history-filters-changed", (event) => {
@@ -105,7 +147,7 @@ describe("history filter controls", () => {
       filterDetail = (event as CustomEvent<HistoryFilters>).detail;
     });
 
-    const search = element.shadowRoot!.querySelector(
+    const search = historyFilterRoot(element).querySelector(
       ".nc-history-search",
     ) as HTMLElement & { value: string };
     search.value = "garage";
@@ -116,7 +158,7 @@ describe("history filter controls", () => {
     expect(receivedEvent?.composed).toBe(true);
   });
 
-  it("keeps secondary filters collapsed until one is active", () => {
+  it("keeps secondary filters collapsed until one is active", async () => {
     const container = document.createElement("div");
     renderHistory(container, historyFixture, {
       filters: emptyHistoryFilters,
@@ -124,21 +166,23 @@ describe("history filter controls", () => {
       types: ["notification_sent"],
     });
 
-    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
-    const details = root?.querySelector(".nc-history-filter-details");
+    const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
+    const details = historyFilterRoot(element).querySelector(".nc-history-filter-details");
     expect(details?.hasAttribute("open")).toBe(false);
-    expect(root?.querySelectorAll("ha-selector")).toHaveLength(3);
+    expect(historyFilterRoot(element).querySelectorAll("ha-selector")).toHaveLength(3);
   });
 
-  it("opens secondary filters when one is active", () => {
+  it("opens secondary filters when one is active", async () => {
     const container = document.createElement("div");
     renderHistory(container, historyFixture, {
       filters: { ...emptyHistoryFilters, severity: "error" },
       types: ["notification_sent"],
     });
 
-    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
-    expect(root?.querySelector(".nc-history-filter-details")?.hasAttribute("open")).toBe(true);
+    const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
+    expect(historyFilterRoot(element).querySelector(".nc-history-filter-details")?.hasAttribute("open")).toBe(true);
   });
 });
 
@@ -148,7 +192,9 @@ describe("history detail controls", () => {
     renderHistory(container, historyFixture, {
       filters: emptyHistoryFilters,
     });
-    const root = container.querySelector("ha-notifications-history-view")?.shadowRoot;
+    const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
+    const root = historyEntriesRoot(element);
     const user = testUser();
     const item = root?.querySelector(".nc-history-item.clickable");
     const details = item?.querySelector("details");
@@ -159,7 +205,56 @@ describe("history detail controls", () => {
   });
 });
 
+describe("history entries events", () => {
+  it("bubbles alert selection through the entries and history components", async () => {
+    const container = document.createElement("div");
+    renderHistory(container, historyFixture, { filters: emptyHistoryFilters });
+    const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
+
+    let detail: { alertId: string; alertName: string } | undefined;
+    element.addEventListener("history-alert-selected", (event) => {
+      detail = (event as CustomEvent<{ alertId: string; alertName: string }>).detail;
+    });
+    historyEntriesRoot(element)
+      .querySelector<HTMLButtonElement>(".nc-history-alert-link")!
+      .click();
+
+    expect(detail).toEqual({ alertId: "garage", alertName: "Garage door" });
+  });
+});
+
 describe("history view element", () => {
+  it("shows which trigger started an automation", async () => {
+    const startedEntry = {
+      ...historyFixture[0],
+      event: {
+        ...historyFixture[0].event,
+        type: "started",
+        details: {
+          action: "automation_started",
+          started_by: {
+            platform: "state",
+            entity_id: "input_boolean.alert_button",
+            from_state: "off",
+            to_state: "on",
+          },
+        },
+      },
+    };
+    const element = mountCustomElement<HTMLElement>(
+      "ha-notifications-history-view",
+      {
+        history: [startedEntry],
+        options: { filters: emptyHistoryFilters },
+      },
+    );
+    await settleHistory(element);
+
+    expect(historyEntriesRoot(element).querySelector(".nc-history-origin")?.textContent)
+      .toContain("Started by input_boolean.alert_button (off -> on)");
+  });
+
   it("renders the registered history view", async () => {
     const element = mountCustomElement<HTMLElement>(
       "ha-notifications-history-view",
@@ -168,7 +263,7 @@ describe("history view element", () => {
         options: { filters: emptyHistoryFilters },
       },
     );
-    await settleElement(element);
+    await settleHistory(element);
 
     expect(historyContract(element.shadowRoot?.querySelector(".nc-history") || null)).toMatchSnapshot();
   });
@@ -181,14 +276,14 @@ describe("history view element", () => {
         options: { filters: emptyHistoryFilters },
       },
     );
-    await settleElement(element);
+    await settleHistory(element);
 
     element.options = {
       filters: { ...emptyHistoryFilters, severity: "error" },
     };
-    await settleElement(element);
+    await settleHistory(element);
 
-    expect(element.shadowRoot?.querySelectorAll(".nc-history-item")).toHaveLength(1);
+    expect(historyEntriesRoot(element).querySelectorAll(".nc-history-item")).toHaveLength(1);
   });
 
   it("renders grouped flow events only when enabled", async () => {
@@ -205,19 +300,22 @@ describe("history view element", () => {
         options: { filters: emptyHistoryFilters, groupByFlow: true },
       },
     );
-    await settleElement(element);
+    await settleHistory(element);
 
-    const root = element.shadowRoot!;
+    const root = historyEntriesRoot(element);
     expect(root.querySelectorAll(".nc-history-flow-group")).toHaveLength(1);
     expect(root.querySelectorAll(".nc-history-item")).toHaveLength(2);
     const group = root.querySelector<HTMLDetailsElement>(
       ".nc-history-flow-group",
     );
-    expect(group?.open).toBe(true);
+    expect(group?.open).toBe(false);
     expect(group?.querySelector(".nc-history-flow-heading")?.textContent).toContain(
       "Flow flow_garage",
     );
-    group!.open = false;
-    expect(group?.open).toBe(false);
+    expect(group?.querySelector(".nc-history-flow-alert")?.textContent).toContain(
+      "Alert: Garage door",
+    );
+    group!.open = true;
+    expect(group?.open).toBe(true);
   });
 });

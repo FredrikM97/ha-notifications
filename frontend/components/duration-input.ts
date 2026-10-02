@@ -58,6 +58,23 @@ export function durationInputValue(
     .join(":");
 }
 
+export function durationSelectorValue(
+  value: string | number | Record<string, number> | undefined,
+  fallback: string,
+): { days: number; hours: number; minutes: number; seconds: number } {
+  const [totalHoursValue, minutesValue, secondsValue] = durationInputValue(
+    value,
+    fallback,
+  ).split(":").map(Number);
+  const totalHours = Math.max(0, Math.floor(totalHoursValue || 0));
+  return {
+    days: Math.floor(totalHours / 24),
+    hours: totalHours % 24,
+    minutes: Math.min(59, Math.max(0, Math.floor(minutesValue || 0))),
+    seconds: Math.min(59, Math.max(0, Math.floor(secondsValue || 0))),
+  };
+}
+
 class DurationInput extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -85,8 +102,7 @@ class DurationInput extends LitElement {
       return html`<ha-selector
         .hass=${this.hass}
         .selector=${{ duration: { enable_day: true, enable_second: true } }}
-        .value=${this.value}
-        .label=${this.label || undefined}
+        .value=${durationSelectorValue(this.value, this.value)}
         aria-label=${this.ariaLabel || this.label}
         @value-changed=${this.handleSelectorChange}
       ></ha-selector>`;

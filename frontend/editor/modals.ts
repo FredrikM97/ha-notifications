@@ -34,12 +34,19 @@ export const editorModalStyles = css`
   }
 
   .nc-alert-yaml-modal {
+    display: flex;
+    flex-direction: column;
     width: min(1000px, 100%);
+    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
     max-height: 92vh;
+    max-height: 92dvh;
     overflow: hidden;
   }
 
   .nc-alert-yaml-modal .nc-modal-body {
+    display: flex;
+    flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
   }
@@ -65,8 +72,21 @@ export const editorModalStyles = css`
     line-height: 1.5;
   }
 
-  .nc-template-help-modal {
-    width: min(560px, 100%);
+  .nc-discard-modal {
+    width: min(480px, 100%);
+  }
+
+  .nc-discard-message {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .nc-discard-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 24px;
   }
 
   @container (max-width: 700px) {

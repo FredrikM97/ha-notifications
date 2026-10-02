@@ -1,7 +1,7 @@
-import { html, nothing } from "lit";
+import { html } from "lit";
 import type { TemplateResult } from "lit";
 import { localize } from "../../localize.js";
-import type { Alert, AutomationRuntimeStatus, Hass } from "../../types.js";
+import type { AutomationRuntimeStatus, Hass } from "../../types.js";
 
 interface AlertStatus {
   className: string;
@@ -9,47 +9,35 @@ interface AlertStatus {
   label: string;
 }
 
-function runtimeStatus(
+function runtimeStatuses(
   automationStatus: AutomationRuntimeStatus | undefined,
   hass: Hass | null,
-): AlertStatus | undefined {
-  if (!automationStatus) return undefined;
+): AlertStatus[] {
+  if (!automationStatus) return [];
+  const statuses: AlertStatus[] = [];
 
   if (automationStatus.current > 0) {
-    return {
-      className: "nc-status active",
+    statuses.push({
+      className: "nc-status triggered",
       icon: "mdi:progress-clock",
-      label: localize(hass, "alert.automation_active"),
-    };
-  }
-
-  if (automationStatus.last_triggered) {
-    return {
-      className: "nc-status ok",
+      label: localize(hass, "alert.automation_triggered"),
+    });
+    statuses.push({
+      className: "nc-status run-count",
       icon: "mdi:play-circle-outline",
-      label: localize(hass, "alert.automation_last_triggered"),
-    };
+      label: localize(hass, "alert.active_runs", {
+        count: automationStatus.current,
+      }),
+    });
   }
 
-  return {
-    className: "nc-status idle",
-    icon: "mdi:pause-circle-outline",
-    label: localize(hass, "alert.automation_idle"),
-  };
-}
-
-function enabledStatus(alert: Alert, hass: Hass | null): AlertStatus {
-  return alert.enabled
-    ? {
-        className: "nc-status ok",
-        icon: "mdi:check-circle",
-        label: localize(hass, "alert.enabled"),
-      }
-    : {
-        className: "nc-status disabled",
+  return statuses.length
+    ? statuses
+    : [{
+        className: "nc-status idle",
         icon: "mdi:pause-circle-outline",
-        label: localize(hass, "alert.disabled"),
-      };
+        label: localize(hass, "alert.automation_idle"),
+      }];
 }
 
 function statusBadge(status: AlertStatus): TemplateResult {
@@ -63,13 +51,9 @@ function statusBadge(status: AlertStatus): TemplateResult {
 }
 
 export function alertStatusTemplate(
-  alert: Alert,
   hass: Hass | null,
   automationStatus: AutomationRuntimeStatus | undefined,
 ): TemplateResult {
-  const automation = runtimeStatus(automationStatus, hass);
-  return html`<div class="nc-alert-statuses">
-    ${statusBadge(enabledStatus(alert, hass))}
-    ${automation ? statusBadge(automation) : nothing}
-  </div>`;
+  const automation = runtimeStatuses(automationStatus, hass);
+  return html`<div class="nc-alert-statuses">${automation.map(statusBadge)}</div>`;
 }

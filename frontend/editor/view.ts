@@ -5,8 +5,14 @@ import type { EditorFooterOptions } from "./footer.js";
 import type { EditorOverlayController } from "./overlays.js";
 import { toastListTemplate } from "../components/toast.js";
 import { renderEditorModal } from "./modals.js";
-import { renderEditorFooter } from "./footer.js";
-import { renderEditorHeader } from "./header.js";
+import {
+  renderDiscardConfirmationModal,
+  renderEditorFooter,
+} from "./footer.js";
+import {
+  renderEditorHeader,
+  renderEditorSectionControls,
+} from "./header.js";
 import { renderEditorSections } from "./sections.js";
 
 export interface EditorViewOptions {
@@ -29,12 +35,14 @@ export function renderEditorView(options: EditorViewOptions): TemplateResult {
             header.activeSectionIndex,
           )}
           <div class="nc-editor-sections">
+            ${renderEditorSectionControls(header)}
             ${renderEditorSections(header.context)}
           </div>
         </div>
       </main>
       ${renderEditorFooter(footer)}
     </section>
+    ${renderDiscardConfirmationModal(footer)}
     ${renderEditorModal(overlays.currentModal, overlays.closeModal)}${toastListTemplate(
       overlays.currentToasts,
     )}

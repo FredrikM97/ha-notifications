@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { showToast, toastListTemplate, type Toast } from "../../frontend/components/toast.js";
-import { renderTemplate } from "./conftest.js";
+import { cleanupTestDom, renderTemplate } from "./conftest.js";
 
 const host = () => ({
   toasts: [] as Toast[],
@@ -11,7 +11,7 @@ const host = () => ({
 
 afterEach(() => {
   vi.useRealTimers();
-  document.body.replaceChildren();
+  cleanupTestDom();
 });
 
 describe("toast notifications", () => {

@@ -28,13 +28,13 @@ export function alertActionsTemplate(
   return html`${actions.map((action) =>
     action.href
       ? html`<a
-          class=${`nc-icon-button ${action.className || ""}`.trim()}
+          class=${`nc-button secondary ${action.className || ""}`.trim()}
           href=${action.href}
           title=${action.title ?? action.label}
           aria-label=${action.ariaLabel ?? action.label}
           >${action.icon
             ? html`<ha-icon icon=${action.icon} aria-hidden="true"></ha-icon>`
-            : nothing}</a
+            : nothing}<span class="nc-button-label">${action.label}</span></a
         >`
       : button({
           label: action.label,

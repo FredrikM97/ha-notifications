@@ -11,6 +11,11 @@ import {
   type SectionStatus,
 } from "./types.js";
 import { confirmationNotificationEnabled } from "./confirmation.js";
+import {
+  customTriggers,
+  hasStartupTrigger,
+  intervalTrigger,
+} from "./triggers.js";
 import { localizeEditorTitle } from "../localize.js";
 
 export function enabledLabel(enabled: boolean): string {
@@ -21,7 +26,9 @@ export const editorNavigationStyles = css`
   :host([mode="desktop"]) {
     grid-area: sidebar;
     display: block;
+    align-self: stretch;
     min-width: 0;
+    border-left: 1px solid var(--divider-color);
   }
 
   :host([mode="mobile"]) {
@@ -36,7 +43,6 @@ export const editorNavigationStyles = css`
     display: grid;
     gap: 2px;
     padding: 4px 0 4px 14px;
-    border-left: 1px solid var(--divider-color);
     background: transparent;
   }
 
@@ -148,7 +154,7 @@ export const editorNavigationStyles = css`
     color: var(--success-color, #4caf50);
   }
 
-  @container (max-width: 700px) {
+  @container (max-width: 900px) {
     :host([mode="desktop"]) {
       display: none;
     }
@@ -177,7 +183,7 @@ export const editorNavigationStyles = css`
     }
   }
 
-  @media (max-width: 700px) {
+  @media (max-width: 900px) {
     :host([mode="desktop"]) {
       display: none;
     }
@@ -248,6 +254,17 @@ type NavigationRenderOptions = {
 };
 
 function statusEnabled(alert: Alert, status: SectionStatus): boolean {
+  if (status === "conditions") {
+    const conditionChecksEnabled =
+      hasStartupTrigger(alert.triggers) || Boolean(intervalTrigger(alert.triggers));
+    return conditionChecksEnabled || (
+      alert.conditions.length > 0 &&
+      (alert.triggers.length > 0 || alert.on_condition_change === true)
+    );
+  }
+  if (status === "triggers") {
+    return alert.on_condition_change === true;
+  }
   if (status === "postSendActions") {
     return Boolean(alert.post_send_actions?.enabled);
   }

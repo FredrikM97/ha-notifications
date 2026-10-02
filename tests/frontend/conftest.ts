@@ -27,6 +27,15 @@ export function createHassClient() {
   };
 }
 
+export function homeAssistantFixture(overrides: Partial<Hass> = {}): Hass {
+  return {
+    user: { is_admin: true },
+    locale: { language: "en", date_format: "YMD", time_format: "24" },
+    connection: { sendMessagePromise: vi.fn() },
+    ...overrides,
+  } as Hass;
+}
+
 export function alertFixture(overrides: Partial<Alert> = {}): Alert {
   return { id: "door", name: "Door", ...overrides } as Alert;
 }
@@ -103,6 +112,14 @@ export function installHaTestElements(): void {
     class HaCodeEditor extends HTMLElement {
       value = "";
       updateComplete = Promise.resolve();
+      codemirror = { dom: document.createElement("div") };
+
+      constructor() {
+        super();
+        const scroller = document.createElement("div");
+        scroller.className = "cm-scroller";
+        this.codemirror.dom.append(scroller);
+      }
     }
     customElements.define("ha-code-editor", HaCodeEditor);
   }
@@ -120,6 +137,10 @@ export function mountCustomElement<T extends HTMLElement>(
   Object.assign(element, properties);
   document.body.append(element);
   return element;
+}
+
+export function cleanupTestDom(): void {
+  document.body.replaceChildren();
 }
 
 export function alertCardRoots(root: ParentNode): ShadowRoot[] {
@@ -148,6 +169,26 @@ export async function settleElement(element: HTMLElement): Promise<void> {
     await updateComplete;
   }
   await Promise.resolve();
+}
+
+export async function settleLitTree(root: ParentNode): Promise<void> {
+  for (let pass = 0; pass < 5; pass += 1) {
+    const updates: Promise<unknown>[] = [];
+    const collect = (container: ParentNode): void => {
+      for (const element of container.querySelectorAll("*")) {
+        const component = element as HTMLElement & {
+          updateComplete?: Promise<unknown>;
+          shadowRoot?: ShadowRoot | null;
+        };
+        if (component.updateComplete) updates.push(component.updateComplete);
+        if (component.shadowRoot) collect(component.shadowRoot);
+      }
+    };
+    collect(root);
+    if (updates.length === 0) return;
+    await Promise.all(updates);
+    await Promise.resolve();
+  }
 }
 
 export function editorRoot(): ShadowRoot {
@@ -233,7 +274,7 @@ export function editorOptions(
     alert,
     registries,
     onSave: vi.fn().mockResolvedValue(alert),
-    onValidateCondition: vi.fn().mockResolvedValue({}),
+    onValidateAlert: vi.fn().mockResolvedValue({}),
     onSaved: vi.fn().mockResolvedValue(undefined),
     onClosed: vi.fn(),
   };

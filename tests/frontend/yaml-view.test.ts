@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { within } from "@testing-library/dom";
 import type { Hass } from "../../frontend/types.js";
 import {
   installHaTestElements,
   configFixture,
+  cleanupTestDom,
   mountCustomElement,
   testUser,
 } from "./conftest.js";
@@ -25,6 +26,8 @@ vi.mock("../../frontend/api.js", () => ({
 await import("../../frontend/components/yaml-view.js");
 
 installHaTestElements();
+
+afterEach(cleanupTestDom);
 
 type YamlViewTestElement = HTMLElement & {
   hass: Hass;
@@ -50,7 +53,11 @@ describe("YAML view", () => {
     const root = element.shadowRoot!;
     const editor = root.querySelector("ha-notifications-code-editor") as HTMLElement & {
       value: string;
+      updateComplete: Promise<unknown>;
+      shadowRoot: ShadowRoot;
     };
+    await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector(".mode-switch")).toBeNull();
     expect({
       buttons: [...root.querySelectorAll(".nc-actions button")].map((button) =>
         button.textContent?.replace(/\s+/g, " ").trim(),

@@ -3,6 +3,7 @@ import type { TemplateResult } from "lit";
 import type { Alert } from "../types.js";
 import { localizeEditorTitle } from "../localize.js";
 import { confirmationNotificationEnabled } from "./confirmation.js";
+import { renderHelpTooltip } from "./section.js";
 import { editorSections } from "./types.js";
 import "../components/setting-toggle.js";
 import type {
@@ -62,18 +63,11 @@ export const editorHeaderStyles = css`
     font-weight: 500;
   }
 
-  .nc-editor-section-controls {
-    display: flex;
-    align-items: center;
-    min-width: 118px;
-    flex: 0 1 auto;
-  }
-
   .nc-section-manage-button {
     display: none;
   }
 
-  @container (max-width: 700px) {
+  @container (max-width: 900px) {
     .nc-editor-header {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -85,13 +79,6 @@ export const editorHeaderStyles = css`
     .nc-editor-identity {
       grid-column: 1;
       grid-row: 1;
-    }
-
-    .nc-editor-section-controls {
-      min-width: 0;
-      width: auto;
-      grid-column: 1 / -1;
-      grid-row: 2;
     }
 
     .nc-section-manage-button {
@@ -126,7 +113,7 @@ export const editorHeaderStyles = css`
     }
   }
 
-  @media (max-width: 700px) {
+  @media (max-width: 900px) {
     .nc-editor-header {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -140,11 +127,6 @@ export const editorHeaderStyles = css`
     .nc-editor-identity {
       grid-column: 1;
       grid-row: 1;
-    }
-
-    .nc-editor-section-controls {
-      grid-column: 1 / -1;
-      grid-row: 2;
     }
 
     .nc-section-manage-button {
@@ -177,14 +159,22 @@ function optionalControls(
   setting: OptionalSetting,
   enabled: boolean,
   label: string,
+  help: string | TemplateResult = "",
+  disableText = context.localize("alert.disable"),
 ): TemplateResult {
   return html`<ha-notifications-setting-toggle
     .setting=${setting}
     .enabled=${enabled}
     .label=${label}
     .enableText=${context.localize("alert.enable")}
-    .disableText=${context.localize("alert.disable")}
-  ></ha-notifications-setting-toggle>`;
+    .disableText=${disableText}
+  >${help
+      ? html`<span slot="help">${renderHelpTooltip(
+          help,
+          context.localize("editor.common.more_info"),
+        )}</span>`
+      : nothing}
+  </ha-notifications-setting-toggle>`;
 }
 
 function editorSectionControl(
@@ -193,6 +183,7 @@ function editorSectionControl(
   visible: boolean,
 ): TemplateResult {
   return html`<div
+    class="nc-editor-section-control"
     data-role="editor-section-control"
     data-setting=${setting}
     ?hidden=${!visible}
@@ -211,16 +202,105 @@ function isOptionalSetting(value: string): value is OptionalSetting {
   ].includes(value);
 }
 
-function renderHeader({
+export function renderEditorSectionControls({
   alert,
   context,
   postConfirmationActionsEnabled,
   activeSectionIndex,
-  sectionTitle,
-  navigation,
   onToggleSetting,
 }: EditorHeaderOptions): TemplateResult {
   const activeSetting = editorSections[activeSectionIndex]?.setting;
+  return html`<div
+    class="nc-editor-section-controls"
+    ?hidden=${!activeSetting}
+    @nc-setting-change=${(event: CustomEvent<{
+      setting: string;
+      enabled: boolean;
+    }>) => {
+      if (isOptionalSetting(event.detail.setting)) {
+        onToggleSetting(event.detail.setting, event.detail.enabled);
+      }
+      }}
+  >
+    ${editorSectionControl(
+      "postSendActions",
+      optionalControls(
+        context,
+        "postSendActions",
+        Boolean(alert.post_send_actions?.enabled),
+        context.localize("editor.notification.post_send_actions"),
+        context.localize("editor.notification.post_send_help"),
+        context.localize("alert.enable"),
+      ),
+      activeSetting === "postSendActions",
+    )}
+    ${editorSectionControl(
+      "confirmation",
+      optionalControls(
+        context,
+        "confirmation",
+        Boolean(alert.confirmation?.enabled),
+        context.localize("editor.confirmation.toggle"),
+        "",
+        context.localize("alert.enable"),
+      ),
+      activeSetting === "confirmation",
+    )}
+    ${editorSectionControl(
+      "confirmationReminder",
+      optionalControls(
+        context,
+        "confirmationReminder",
+        alert.confirmation?.reminders.enabled !== false,
+        context.localize("editor.confirmation.reminder.section"),
+      ),
+      activeSetting === "confirmationReminder",
+    )}
+    ${editorSectionControl(
+      "confirmationNotification",
+      optionalControls(
+        context,
+        "confirmationNotification",
+        alert.confirmation
+          ? confirmationNotificationEnabled(alert.confirmation.notification)
+          : false,
+        context.localize("editor.confirmation.notification.section"),
+        html`<p>${context.localize("editor.confirmation.notification.help")}</p>
+          <p>${context.localize("editor.confirmation.notification.example")} <code>Confirmed by {{confirmed_by}}</code></p>
+          <p>
+            <code>confirmed_by</code>, <code>confirmation_response_id</code>,
+            <code>confirmation_response</code>, <code>alert_id</code>,
+            <code>alert_name</code>, <code>alert_active</code>,
+            <code>trigger</code>, <code>attempt</code>, and <code>now</code> are
+            available. Home Assistant helpers also work, for example
+            <code>states('sensor.temperature')</code>,
+            <code>state_attr('light.kitchen', 'brightness')</code>, and
+            <code>is_state('binary_sensor.door', 'on')</code>.
+          </p>`,
+      ),
+      activeSetting === "confirmationNotification",
+    )}
+    ${editorSectionControl(
+      "postConfirmationActions",
+      optionalControls(
+        context,
+        "postConfirmationActions",
+        postConfirmationActionsEnabled,
+        context.localize("editor.confirmation.actions.section"),
+        context.localize("editor.confirmation.actions.help"),
+      ),
+      activeSetting === "postConfirmationActions",
+    )}
+  </div>`;
+}
+
+function renderHeader({
+  alert,
+  context,
+  activeSectionIndex,
+  sectionTitle,
+  navigation,
+}: EditorHeaderOptions): TemplateResult {
   return html`<header class="nc-editor-header">
     <div class="nc-editor-identity">
       <div class="nc-editor-title-row">
@@ -228,70 +308,6 @@ function renderHeader({
         <span class="nc-editor-title-separator" aria-hidden="true">/</span>
         <h2 data-role="editor-section-title">${localizeEditorTitle(context.localize, sectionTitle)}</h2>
       </div>
-    </div>
-    <div
-      class="nc-editor-section-controls"
-      @nc-setting-change=${(event: CustomEvent<{
-        setting: string;
-        enabled: boolean;
-      }>) => {
-        if (isOptionalSetting(event.detail.setting)) {
-          onToggleSetting(event.detail.setting, event.detail.enabled);
-        }
-      }}
-    >
-      ${editorSectionControl(
-        "postSendActions",
-        optionalControls(
-          context,
-          "postSendActions",
-          Boolean(alert.post_send_actions?.enabled),
-          context.localize("editor.notification.post_send_actions"),
-        ),
-        activeSetting === "postSendActions",
-      )}
-      ${editorSectionControl(
-        "confirmation",
-        optionalControls(
-          context,
-          "confirmation",
-          Boolean(alert.confirmation?.enabled),
-          context.localize("editor.confirmation.toggle"),
-        ),
-        activeSetting === "confirmation",
-      )}
-      ${editorSectionControl(
-        "confirmationReminder",
-        optionalControls(
-          context,
-          "confirmationReminder",
-          alert.confirmation?.reminders.enabled !== false,
-          context.localize("editor.confirmation.reminder.section"),
-        ),
-        activeSetting === "confirmationReminder",
-      )}
-      ${editorSectionControl(
-        "confirmationNotification",
-        optionalControls(
-          context,
-          "confirmationNotification",
-          alert.confirmation
-            ? confirmationNotificationEnabled(alert.confirmation.notification)
-            : false,
-          context.localize("editor.confirmation.notification.section"),
-        ),
-        activeSetting === "confirmationNotification",
-      )}
-      ${editorSectionControl(
-        "postConfirmationActions",
-        optionalControls(
-          context,
-          "postConfirmationActions",
-          postConfirmationActionsEnabled,
-          context.localize("editor.confirmation.actions.section"),
-        ),
-        activeSetting === "postConfirmationActions",
-      )}
     </div>
     ${navigation.renderManageButton(context.localize)}
     ${navigation.render(

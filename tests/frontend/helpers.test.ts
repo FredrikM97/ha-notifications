@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { durationInputValue } from "../../frontend/components/duration-input.js";
 import {
   actionArrayValue,
+  conditionYaml,
+  parseConditionYaml,
   parseTriggerYaml,
   triggerYaml,
 } from "../../frontend/editor/serialization.js";
@@ -12,7 +14,7 @@ import {
   DEFAULT_INTERVAL,
   intervalValue,
   patternForDuration,
-} from "../../frontend/sections/triggers.js";
+} from "../../frontend/editor/triggers.js";
 
 describe("repeat trigger pattern", () => {
   it("defaults to every 12 hours", () => {
@@ -44,32 +46,22 @@ describe("repeat trigger pattern", () => {
   });
 });
 
+describe("optional alert conditions", () => {
+  it("round-trips an empty condition editor", () => {
+    expect(conditionYaml([])).toBe("");
+    expect(parseConditionYaml("")).toEqual([]);
+  });
+});
+
 describe("durationInputValue", () => {
-  it("pads an HH:MM string to HH:MM:SS", () => {
-    expect(durationInputValue("01:30", "00:00:00")).toMatchSnapshot();
-  });
-
-  it("passes an HH:MM:SS string through unchanged", () => {
-    expect(durationInputValue("100:00:00", "00:00:00")).toMatchSnapshot();
-  });
-
-  it("converts an hours/minutes/seconds object", () => {
-    expect(
-      durationInputValue({ hours: 1, minutes: 5, seconds: 9 }, "00:00:00"),
-    ).toMatchSnapshot();
-  });
-
-  it("includes days from a native duration value", () => {
-    expect(
-      durationInputValue(
-        { days: 2, hours: 3, minutes: 4, seconds: 5 },
-        "00:00:00",
-      ),
-    ).toMatchSnapshot();
-  });
-
-  it("falls back for missing/invalid values", () => {
-    expect(durationInputValue(undefined, "00:30:00")).toMatchSnapshot();
+  it.each([
+    ["HH:MM", "01:30", "00:00:00"],
+    ["long HH:MM:SS", "100:00:00", "00:00:00"],
+    ["object values", { hours: 1, minutes: 5, seconds: 9 }, "00:00:00"],
+    ["native days", { days: 2, hours: 3, minutes: 4, seconds: 5 }, "00:00:00"],
+    ["missing values", undefined, "00:30:00"],
+  ] as const)("normalizes %s input", (_scenario, value, fallback) => {
+    expect(durationInputValue(value, fallback)).toMatchSnapshot();
   });
 });
 

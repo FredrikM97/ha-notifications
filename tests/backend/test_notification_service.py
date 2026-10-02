@@ -14,9 +14,15 @@ from pytest_homeassistant_custom_component.common import (
     async_mock_service,
 )
 
-from custom_components.ha_notifications.const import DOMAIN
+from custom_components.ha_notifications.const import (
+    COMMAND_CANCEL_RUN,
+    DOMAIN,
+    EVENT_COMMAND,
+)
+from custom_components.ha_notifications.history import HistoryStore
 from custom_components.ha_notifications.notification import (
     _parse_notification,
+    _payload,
     async_setup_services,
 )
 
@@ -41,6 +47,13 @@ def test_parse_notification_returns_a_copy_of_the_payload() -> None:
     }
 
 
+def test_payload_preserves_an_empty_notification_message() -> None:
+    assert _payload({"message": ""}, False, "empty_alert") == {
+        "message": "",
+        "data": {"tag": "empty_alert"},
+    }
+
+
 @pytest.mark.asyncio
 async def test_async_setup_services_registers_send_and_clear(
     hass: HomeAssistant,
@@ -48,8 +61,9 @@ async def test_async_setup_services_registers_send_and_clear(
     await async_setup_services(hass)
     assert hass.services.has_service(DOMAIN, "send")
     assert hass.services.has_service(DOMAIN, "clear")
-    assert hass.services.has_service(DOMAIN, "record")
+    assert not hass.services.has_service(DOMAIN, "record")
     assert hass.services.has_service(DOMAIN, "report")
+    assert hass.services.has_service(DOMAIN, "command")
     assert not hass.services.has_service(DOMAIN, "trigger")
     assert not hass.services.has_service(DOMAIN, "resolve")
 
@@ -66,6 +80,173 @@ async def test_service_manifest_passes_home_assistant_description_validation(
     assert DOMAIN in descriptions
     assert "send" in descriptions[DOMAIN]
     assert "clear" in descriptions[DOMAIN]
+    assert "report" in descriptions[DOMAIN]
+    assert "record" not in descriptions[DOMAIN]
+    assert "command" in descriptions[DOMAIN]
+
+
+@pytest.mark.asyncio
+async def test_action_executed_report_records_history_without_run_id(
+    hass: HomeAssistant,
+) -> None:
+    await async_setup_services(hass)
+    history = type("History", (), {"async_record": AsyncMock()})()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": []},
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = type("RuntimeData", (), {"history": history})()
+
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {
+            "alert_id": "water",
+            "status": "action_executed",
+            "details": {"action": "light.turn_on"},
+        },
+        blocking=True,
+    )
+
+    history.async_record.assert_awaited_once_with(
+        "water",
+        "water",
+        "action_executed",
+        "Action Executed",
+        {"action": "light.turn_on"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_command_fires_alert_scoped_event(
+    hass: HomeAssistant,
+) -> None:
+    await async_setup_services(hass)
+    events = []
+    hass.bus.async_listen("ha_notifications_command", events.append)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "command",
+        {"alert_id": "water", "command": "skip_confirmation"},
+        blocking=True,
+    )
+
+    assert len(events) == 1
+    assert events[0].event_type == "ha_notifications_command"
+    assert events[0].data == {
+        "alert_id": "water",
+        "command": "skip_confirmation",
+    }
+
+
+@pytest.mark.asyncio
+async def test_inactive_report_records_once_and_only_cancels_after_activity(
+    hass: HomeAssistant,
+) -> None:
+    await async_setup_services(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": []},
+    )
+    entry.add_to_hass(hass)
+    history = HistoryStore(hass)
+    entry.runtime_data = type("RuntimeData", (), {"history": history})()
+    events = []
+    hass.bus.async_listen(EVENT_COMMAND, events.append)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {
+            "alert_id": "door",
+            "status": "inactive",
+            "cancel_on_inactive": True,
+        },
+        blocking=True,
+    )
+    assert [
+        item["event"]["type"] for item in await history.async_entries("door")
+    ] == ["inactive"]
+    assert events == []
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {"alert_id": "door", "status": "inactive"},
+        blocking=True,
+    )
+    assert [
+        item["event"]["type"] for item in await history.async_entries("door")
+    ] == ["inactive"]
+
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {"alert_id": "door", "status": "started", "run_id": "run-1"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {
+            "alert_id": "door",
+            "status": "inactive",
+            "cancel_on_inactive": True,
+        },
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {"alert_id": "door", "status": "inactive"},
+        blocking=True,
+    )
+
+    assert [
+        item["event"]["type"] for item in await history.async_entries("door")
+    ] == ["inactive", "started", "inactive"]
+    assert [event.data for event in events] == [{
+        "alert_id": "door",
+        "command": COMMAND_CANCEL_RUN,
+    }]
+
+
+@pytest.mark.asyncio
+async def test_inactive_report_does_not_cancel_waits_by_default(
+    hass: HomeAssistant,
+) -> None:
+    await async_setup_services(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": []},
+    )
+    entry.add_to_hass(hass)
+    history = HistoryStore(hass)
+    entry.runtime_data = type("RuntimeData", (), {"history": history})()
+    events = []
+    hass.bus.async_listen(EVENT_COMMAND, events.append)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {"alert_id": "door", "status": "started", "run_id": "run-1"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "report",
+        {"alert_id": "door", "status": "inactive"},
+        blocking=True,
+    )
+
+    assert [
+        item["event"]["type"] for item in await history.async_entries("door")
+    ] == ["inactive", "started"]
+    assert events == []
 
 
 @pytest.mark.asyncio
@@ -416,9 +597,8 @@ async def test_clear_uses_canonical_action_and_clear_message(
         data={"version": 1, "alerts": []},
     )
     entry.add_to_hass(hass)
-    entry.runtime_data = type("RuntimeData", (), {"history": type(
-        "History", (), {"async_record": AsyncMock()}
-    )()})()
+    history = type("History", (), {"async_record": AsyncMock()})()
+    entry.runtime_data = type("RuntimeData", (), {"history": history})()
     calls = async_mock_service(hass, "notify", "mobile_app_phone")
     await hass.services.async_call(
         DOMAIN,
@@ -433,6 +613,12 @@ async def test_clear_uses_canonical_action_and_clear_message(
         "message": "clear_notification",
         "data": {"tag": "water"},
     }
+    assert history.async_record.await_args.args[:4] == (
+        "water",
+        "water",
+        "notification_cleared",
+        "Notification cleared",
+    )
 
 
 @pytest.mark.asyncio

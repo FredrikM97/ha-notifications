@@ -8,7 +8,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from pydantic import ValidationError
 
-from .automation import async_reconcile_automations, async_validate_alerts
+from .automation import (
+    async_validate_alerts,
+)
+from .automation_runtime import async_reconcile_automations
 from .bridge import async_register_panel
 from .configuration import validate_config
 from .const import DOMAIN
@@ -138,7 +141,10 @@ async def async_save_config(
     else:
         entry.runtime_data.config = validated
     try:
-        automations = await async_reconcile_automations(hass, validated["alerts"])
+        automations = await async_reconcile_automations(
+            hass,
+            validated["alerts"],
+        )
         if isinstance(entry.runtime_data, RuntimeData):
             entry.runtime_data.automations = automations
     except Exception:

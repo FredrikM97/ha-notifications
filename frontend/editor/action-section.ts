@@ -1,9 +1,9 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { codeEditor } from "../components/code-editor.js";
-import type { ActionEditorRole, EditorSectionContext } from "./types.js";
+import type { ActionEditorRole, ActionEditorSectionContext } from "./types.js";
 import { actionsYaml } from "./serialization.js";
-import { renderEditorSection } from "./section.js";
+import { renderEditorSection, renderHelpTooltip } from "./section.js";
 import { ACTIONS_PLACEHOLDER } from "./types.js";
 
 export function renderActionSection({
@@ -13,7 +13,7 @@ export function renderActionSection({
   role,
   actions,
 }: {
-  context: EditorSectionContext<"setEditorControl">;
+  context: ActionEditorSectionContext;
   title: string;
   help: string;
   role: ActionEditorRole;
@@ -21,10 +21,17 @@ export function renderActionSection({
 }): TemplateResult {
   return renderEditorSection(
     title,
-    html`<div class="nc-help">${help}</div>
+    html`${help
+        ? html`<div class="nc-help">${renderHelpTooltip(
+            help,
+            context.localize("editor.common.more_info"),
+          )}</div>`
+        : nothing}
       ${codeEditor({
         role,
         value: actionsYaml(actions),
+        hass: context.hass,
+        visualType: "action",
         placeholder: ACTIONS_PLACEHOLDER,
         mode: "yaml",
         language: "yaml",

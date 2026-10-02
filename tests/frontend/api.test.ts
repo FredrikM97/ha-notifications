@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cancelRun,
   getAlerts,
   getAutomationStatus,
   getConfig,
@@ -21,6 +22,17 @@ import {
 } from "./conftest.js";
 
 describe("frontend API transport", () => {
+  it("cancels active automation runs by alert id", async () => {
+    const client = createHassClient();
+    client.sendMessagePromise.mockResolvedValueOnce({ cancelled: true });
+
+    await expect(cancelRun(client.hass, "door")).resolves.toEqual({ cancelled: true });
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "ha_notifications/cancel_run",
+      alert_id: "door",
+    });
+  });
+
   it("loads history through the namespaced history command", async () => {
     const client = createHassClient();
     const history = [{

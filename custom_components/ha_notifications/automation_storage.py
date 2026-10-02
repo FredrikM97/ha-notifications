@@ -25,7 +25,12 @@ def write_automation_files(
 ) -> None:
     """Replace the dedicated HA Notifications automation file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_text_atomically(path, _dump_yaml(document))
+    _write_text_atomically(path, automation_file_contents(document).decode("utf-8"))
+
+
+def automation_file_contents(document: list[dict[str, Any]]) -> bytes:
+    """Serialize the generated automation document for comparison or writing."""
+    return _dump_yaml(document).encode("utf-8")
 
 
 def _write_text_atomically(path: Path, content: str) -> None:

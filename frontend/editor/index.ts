@@ -32,7 +32,7 @@ interface OpenEditorOptions {
   onSave: (alert: Alert) => Promise<Alert | void>;
   onSaved?: (alert: Alert) => Promise<void> | void;
   onClosed?: () => void;
-  onValidateCondition: (alert: Alert) => Promise<unknown>;
+  onValidateAlert: (alert: Alert) => Promise<unknown>;
 }
 
 // The dialog's DOM, dirty-tracking, and section wiring are all tightly
@@ -44,7 +44,7 @@ class AlertEditorController {
   private readonly onSave: (alert: Alert) => Promise<Alert | void>;
   private readonly onSaved?: (alert: Alert) => Promise<void> | void;
   private readonly onClosed?: () => void;
-  private readonly onValidateCondition: (alert: Alert) => Promise<unknown>;
+  private readonly onValidateAlert: (alert: Alert) => Promise<unknown>;
 
   private readonly value: Alert;
   private readonly host = createAlertEditorComponent();
@@ -63,7 +63,7 @@ class AlertEditorController {
     this.onSave = options.onSave;
     this.onSaved = options.onSaved;
     this.onClosed = options.onClosed;
-    this.onValidateCondition = options.onValidateCondition;
+    this.onValidateAlert = options.onValidateAlert;
 
     this.value = clone(options.alert || defaultAlert());
     this.value.confirmation = {
@@ -228,7 +228,11 @@ class AlertEditorController {
   private validationLabel = (): string => {
     const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
     if (sectionTitle === "Conditions") {
-      return "Validate condition";
+      return this.context.localize("editor.common.validate_conditions");
+    }
+
+    if (sectionTitle === "Triggers") {
+      return this.context.localize("editor.common.validate_triggers");
     }
 
     if (
@@ -309,14 +313,6 @@ class AlertEditorController {
     }
   };
 
-  private conditionPayload = (): Alert => {
-    const value = this.value;
-    return {
-      ...value,
-      conditions: this.conditionForCurrentMode(),
-    };
-  };
-
   private conditionForCurrentMode(): Alert["conditions"] {
     return parseConditionYaml(this.conditionsYamlValue());
   }
@@ -324,7 +320,9 @@ class AlertEditorController {
   private triggerForCurrentMode(): Alert["triggers"] {
     return mergeCustomTriggers(
       this.value.triggers,
-      parseTriggerYaml(this.triggersYamlValue()),
+      this.value.on_condition_change === true
+        ? parseTriggerYaml(this.triggersYamlValue())
+        : [],
     );
   }
 
@@ -338,29 +336,47 @@ class AlertEditorController {
     );
   }
 
-  private hasRequiredCondition = (): boolean => {
-    try {
-      const condition = parseConditionYaml(this.conditionsYamlValue());
-      return condition.length > 0;
-    } catch {
-      return true;
-    }
-  };
-
   private validateCondition = async (): Promise<void> => {
     try {
-      if (!this.hasRequiredCondition())
-        throw new Error("Condition is required.");
-      await this.onValidateCondition(this.conditionPayload());
+      await this.onValidateAlert(this.validationPayload());
+      showEditorToast(
+        this.root,
+        this.context.localize("panel.condition_valid"),
+        4000,
+      );
     } catch (error) {
       showEditorToast(this.root, errorMessage(error));
     }
   };
 
+  private validateTriggers = async (): Promise<void> => {
+    try {
+      await this.onValidateAlert(this.validationPayload());
+      showEditorToast(
+        this.root,
+        this.context.localize("panel.triggers_valid"),
+        4000,
+      );
+    } catch (error) {
+      showEditorToast(this.root, errorMessage(error));
+    }
+  };
+
+  private validationPayload = (): Alert => ({
+    ...this.value,
+    triggers: this.triggerForCurrentMode(),
+    conditions: this.conditionForCurrentMode(),
+  });
+
   private validateCurrentSection = async (): Promise<void> => {
     const sectionTitle = editorSections[this.state.activeSectionIndex]?.title;
     if (sectionTitle === "Conditions") {
       await this.validateCondition();
+      return;
+    }
+
+    if (sectionTitle === "Triggers") {
+      await this.validateTriggers();
       return;
     }
 
@@ -395,8 +411,6 @@ class AlertEditorController {
     const button = event.currentTarget as HTMLButtonElement;
     try {
       if (!this.value.name.trim()) throw new Error("Name is required.");
-      if (!this.hasRequiredCondition())
-        throw new Error("Condition is required.");
       const result = this.formPayload();
       button.disabled = true;
       const saved = await this.onSave(result);

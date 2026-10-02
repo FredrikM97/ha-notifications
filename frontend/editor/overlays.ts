@@ -8,12 +8,8 @@ import type { Toast } from "../components/toast.js";
 import type { EditorModal } from "./modals.js";
 
 interface ModalEventDetail {
-  kind: "yaml" | "template-help";
-  alert?: Alert;
-  title?: string;
-  content?: TemplateResult;
-  modalClass?: string;
-  closeLabel?: string;
+  kind: "yaml";
+  alert: Alert;
 }
 
 export class EditorOverlayController {
@@ -75,7 +71,7 @@ export class EditorOverlayController {
 
   private handleModalEvent = (event: Event): void => {
     const detail = (event as CustomEvent<ModalEventDetail>).detail;
-    if (detail.kind === "yaml" && detail.alert) {
+    if (detail.kind === "yaml") {
       const title = localize(this.hass, "editor.common.alert_yaml");
       this.modal = {
         title,
@@ -93,14 +89,6 @@ export class EditorOverlayController {
         modalClass: "nc-alert-yaml-modal",
         closeLabel: localize(this.hass, "editor.common.close_yaml"),
         yaml: detail.alert,
-      };
-    } else if (detail.title && detail.content) {
-      this.modal = {
-        title: detail.title,
-        content: detail.content,
-        modalClass: detail.modalClass || "",
-        closeLabel:
-          detail.closeLabel || localize(this.hass, "editor.common.close"),
       };
     } else {
       return;

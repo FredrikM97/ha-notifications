@@ -58,6 +58,10 @@ export type EditorSectionContext<
   "value" | "localize" | "activeSection" | "markDirty" | Additional
 >;
 
+export type ActionEditorSectionContext = EditorSectionContext<
+  "hass" | "setEditorControl"
+>;
+
 export type OptionalSetting =
   | "confirmation"
   | "confirmationReminder"
@@ -66,6 +70,8 @@ export type OptionalSetting =
   | "postConfirmationActions";
 
 export type SectionStatus =
+  | "triggers"
+  | "conditions"
   | OptionalSetting
   | "confirmationReminder"
   | "confirmationNotification";
@@ -80,8 +86,8 @@ export interface EditorSection {
 export const editorSections: EditorSection[] = [
   { title: "Basic" },
   { title: "When to run" },
-  { title: "Triggers", parent: "When to run" },
-  { title: "Conditions", parent: "When to run" },
+  { title: "Triggers", parent: "When to run", status: "triggers" },
+  { title: "Conditions", parent: "When to run", status: "conditions" },
   { title: "Recipients" },
   { title: "Notification" },
   {

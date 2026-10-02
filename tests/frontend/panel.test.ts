@@ -7,7 +7,9 @@ import {
   configFixture,
   configuredAlertFixture,
   alertCardRoots,
+  cleanupTestDom,
   emptyRegistries,
+  homeAssistantFixture,
   mountCustomElement,
   settleElement,
   testUser,
@@ -20,10 +22,12 @@ const loadRegistries = vi.fn();
 const getConfig = vi.fn();
 const saveAlert = vi.fn();
 const deleteAlert = vi.fn();
+const cancelRun = vi.fn();
 const validateAlert = vi.fn();
 
 vi.mock("../../frontend/api.js", () => ({
   deleteAlert,
+  cancelRun,
   errorMessage: (error: unknown) => String(error),
   getAlerts,
   getAutomationStatus,
@@ -35,12 +39,6 @@ vi.mock("../../frontend/api.js", () => ({
 }));
 
 await import("../../frontend/panel.js");
-
-const hass = {
-  user: { is_admin: true },
-  locale: { language: "en", date_format: "YMD", time_format: "24" },
-  connection: { sendMessagePromise: vi.fn() },
-} as unknown as Hass;
 
 const alert: Alert = configuredAlertFixture();
 
@@ -58,6 +56,7 @@ function setupApi(): void {
   getConfig.mockResolvedValue(configFixture);
   saveAlert.mockResolvedValue(alert);
   deleteAlert.mockResolvedValue({});
+  cancelRun.mockResolvedValue({ cancelled: true });
   validateAlert.mockResolvedValue({});
 }
 
@@ -67,7 +66,7 @@ function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
 } {
   setupApi();
   return mountCustomElement("ha-notifications-panel", {
-    hass: { ...hass, ...overrides },
+    hass: homeAssistantFixture(overrides),
   }) as HTMLElement & { shadowRoot: ShadowRoot; updateComplete: Promise<unknown> };
 }
 
@@ -110,7 +109,7 @@ async function settlePanel(panel: HTMLElement & { shadowRoot: ShadowRoot }): Pro
 }
 
 afterEach(() => {
-  document.body.replaceChildren();
+  cleanupTestDom();
   vi.clearAllMocks();
 });
 
@@ -122,16 +121,25 @@ describe("panel view", () => {
 
     expect(panel.shadowRoot.textContent).not.toContain("Attempt 2/3");
     const cardRoot = alertCardRoots(panel.shadowRoot)[0];
-    expect(cardRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(4);
+    expect(cardRoot.querySelectorAll(".nc-alert-actions .nc-button-label")).toHaveLength(5);
     expect(panel.shadowRoot.textContent).not.toContain("restart");
     expect(panel.shadowRoot.textContent).not.toContain("active:");
     expect(
       cardRoot.querySelector<HTMLAnchorElement>(".nc-open-automation")?.href,
     ).toContain(`/config/automation/edit/ha_notifications_${alert.id}`);
+    expect(
+      cardRoot.querySelector<HTMLAnchorElement>(".nc-open-automation")?.classList,
+    ).toContain("nc-button");
+    expect(
+      cardRoot.querySelector<HTMLAnchorElement>(".nc-open-automation")?.textContent,
+    ).toContain("Open automation");
+    expect(
+      cardRoot.querySelector(".nc-open-automation ha-icon")?.getAttribute("icon"),
+    ).toBe("mdi:open-in-new");
     expect(panelContract(panel.shadowRoot.querySelector(".nc-page"))).toMatchSnapshot();
   });
 
-  it("labels a historical trigger separately from an active run", async () => {
+  it("shows Idle when an automation is not running", async () => {
     const panel = mountPanel();
     await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(getAutomationStatus).toHaveBeenCalledOnce());
@@ -139,7 +147,6 @@ describe("panel view", () => {
       [alert.id]: {
         status: "managed",
         enabled: true,
-        last_triggered: "2026-09-30T10:00:00Z",
         current: 0,
       },
     });
@@ -148,8 +155,7 @@ describe("panel view", () => {
 
     const statuses = [...alertCardRoots(panel.shadowRoot!)[0].querySelectorAll(".nc-alert-statuses span")]
       .map((status) => status.textContent?.replace(/\\s+/g, " ").trim());
-    expect(statuses).toContain("Last triggered");
-    expect(statuses).not.toContain("Active");
+    expect(statuses).toContain("Idle");
   });
 
   it("refreshes data when Home Assistant provides a newer hass state", async () => {
@@ -160,10 +166,9 @@ describe("panel view", () => {
     getAutomationStatus.mockClear();
     getHistory.mockClear();
 
-    (panel as HTMLElement & { hass: Hass }).hass = {
-      ...hass,
-      connection: hass.connection,
-    };
+    (panel as HTMLElement & { hass: Hass }).hass = homeAssistantFixture({
+      connection: (panel as HTMLElement & { hass: Hass }).hass.connection,
+    });
 
     await vi.waitFor(() => {
       expect(getAlerts).toHaveBeenCalledOnce();
@@ -179,7 +184,6 @@ describe("panel view", () => {
         enabled: false,
         mode: "single",
         current: 0,
-        last_triggered: null,
       },
     });
     const panel = mountPanel();
@@ -197,8 +201,9 @@ describe("panel view", () => {
         status: "managed",
         enabled: true,
         mode: "parallel",
-        current: 1,
-        last_triggered: "2026-09-29T12:00:00+00:00",
+        current: 3,
+        running: true,
+        triggered: false,
       },
     });
     const panel = mountPanel();
@@ -210,7 +215,144 @@ describe("panel view", () => {
 
     const cardRoots = alertCardRoots(panel.shadowRoot);
     expect(cardRoots).toHaveLength(1);
-    expect(cardRoots[0].textContent).toContain("Active");
+    expect(cardRoots[0].textContent).toContain("Triggered");
+    expect(cardRoots[0].querySelector(".nc-status.run-count")?.textContent).toContain(
+      "3 active runs",
+    );
+    expect(cardRoots[0].textContent).not.toContain("Active");
+    expect(cardRoots[0].querySelector(".nc-status.triggered")).not.toBeNull();
+    expect(cardRoots[0].querySelector(".nc-status.running")).toBeNull();
+    expect(
+      cardRoots[0].querySelector(".nc-status.triggered ha-icon")?.getAttribute("icon"),
+    ).toBe("mdi:progress-clock");
+    expect(
+      cardRoots[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Cancel active runs"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      cardRoots[0].querySelector<HTMLButtonElement>('button[aria-label="Disable"]'),
+    ).not.toBeNull();
+  });
+
+  it("cancels a running alert and refreshes runtime status", async () => {
+    getAutomationStatus
+      .mockResolvedValueOnce({
+        [alert.id]: {
+          status: "managed",
+          enabled: true,
+          mode: "restart",
+          current: 1,
+          running: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        [alert.id]: {
+          status: "managed",
+          enabled: true,
+          mode: "restart",
+          current: 0,
+          running: false,
+        },
+      });
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settlePanel(panel);
+
+    await testUser().click(
+      alertCardRoots(panel.shadowRoot)[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Cancel active runs"]',
+      )!,
+    );
+
+    await vi.waitFor(() =>
+      expect(cancelRun).toHaveBeenCalledWith(
+        expect.objectContaining({ user: { is_admin: true } }),
+        alert.id,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(
+        panel.shadowRoot
+          .querySelector("ha-notifications-toast-list")
+          ?.shadowRoot?.textContent,
+      ).toContain("Active runs cancelled."),
+    );
+    await vi.waitFor(() =>
+      expect(
+        alertCardRoots(panel.shadowRoot)[0].querySelector(
+          'button[aria-label="Cancel active runs"]',
+        ),
+      ).toBeNull(),
+    );
+  });
+
+  it("shows Idle after a trigger has finished, regardless of history", async () => {
+    getAutomationStatus.mockResolvedValueOnce({
+      [alert.id]: {
+        status: "managed",
+        enabled: true,
+        mode: "restart",
+        current: 0,
+        triggered: true,
+      },
+    });
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settlePanel(panel);
+
+    const cardRoot = alertCardRoots(panel.shadowRoot)[0];
+    expect(cardRoot.textContent).toContain("Idle");
+    expect(cardRoot.textContent).not.toContain("Triggered");
+    expect(cardRoot.querySelector(".nc-status.running")).toBeNull();
+    expect(cardRoot.querySelector(".nc-status.idle")).not.toBeNull();
+
+    await testUser().click(within(panel.shadowRoot).getByRole("button", { name: "Active" }));
+    await settleElement(panel);
+    expect(alertCardRoots(panel.shadowRoot)).toHaveLength(0);
+  });
+
+  it("returns to Idle after an inactive condition evaluation", async () => {
+    getAutomationStatus.mockResolvedValueOnce({
+      [alert.id]: {
+        status: "managed",
+        enabled: true,
+        mode: "restart",
+        current: 0,
+        triggered: false,
+      },
+    });
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settlePanel(panel);
+
+    const cardRoot = alertCardRoots(panel.shadowRoot)[0];
+    expect(cardRoot.textContent).toContain("Idle");
+    expect(cardRoot.textContent).not.toContain("Triggered");
+    expect(cardRoot.querySelector(".nc-status.inactive")).toBeNull();
+    expect(cardRoot.querySelector(".nc-status.idle")).not.toBeNull();
+  });
+
+  it("excludes idle alerts even when a notification is outstanding", async () => {
+    getAutomationStatus.mockResolvedValueOnce({
+      [alert.id]: {
+        status: "managed",
+        enabled: true,
+        mode: "parallel",
+        current: 0,
+        running: true,
+        notification_active: true,
+      },
+    });
+    const panel = mountPanel();
+    await vi.waitFor(() => expect(getAlerts).toHaveBeenCalledOnce());
+    await settleElement(panel);
+
+    await testUser().click(within(panel.shadowRoot).getByRole("button", { name: "Active" }));
+    await settleElement(panel);
+
+    expect(alertCardRoots(panel.shadowRoot)).toHaveLength(0);
+    expect(alertListRoot(panel.shadowRoot)?.querySelector(".nc-empty")).not.toBeNull();
   });
 
   it("keeps an exit to Home Assistant reachable from the dashboard", async () => {

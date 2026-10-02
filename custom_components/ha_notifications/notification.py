@@ -10,9 +10,11 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.template import Template
 
 from .const import (
+    COMMAND_CANCEL_RUN,
     DOMAIN,
+    EVENT_COMMAND,
     SERVICE_CLEAR,
-    SERVICE_RECORD,
+    SERVICE_COMMAND,
     SERVICE_REPORT,
     SERVICE_SEND,
 )
@@ -34,25 +36,6 @@ async def _async_send(hass: HomeAssistant, call: ServiceCall) -> None:
 
 async def _async_clear(hass: HomeAssistant, call: ServiceCall) -> None:
     await _deliver(hass, call, True)
-
-
-async def _async_record(hass: HomeAssistant, call: ServiceCall) -> None:
-    """Record a successful native automation action."""
-    alert_id = call.data.get("alert_id")
-    if not isinstance(alert_id, str) or not alert_id:
-        raise HomeAssistantError("ha_notifications.record requires alert_id")
-    kwargs = {}
-    flow_id = call.data.get("flow_id") or call.data.get("run_id")
-    if isinstance(flow_id, str) and flow_id:
-        kwargs["flow_id"] = flow_id
-    await history_store(hass, _entry(hass)).async_record(
-        alert_id,
-        str(call.data.get("alert_name", alert_id)),
-        str(call.data.get("event_type", "action_executed")),
-        str(call.data.get("message", "Automation action executed")),
-        call.data.get("details") if isinstance(call.data.get("details"), dict) else {},
-        **kwargs,
-    )
 
 
 async def _confirmed_by(hass: HomeAssistant, details: dict[str, Any]) -> str:
@@ -146,7 +129,22 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
     flow_id = call.data.get("flow_id") or call.data.get("run_id")
     if isinstance(flow_id, str) and flow_id:
         kwargs["flow_id"] = flow_id
-    await history_store(hass, _entry(hass)).async_record(
+    history = history_store(hass, _entry(hass))
+    if status == "inactive":
+        followed_active = await history.async_record_inactive(
+            alert_id,
+            str(call.data.get("alert_name", alert_id)),
+            str(call.data.get("message", "Condition inactive")),
+            details,
+            **kwargs,
+        )
+        if followed_active and call.data.get("cancel_on_inactive") is True:
+            hass.bus.async_fire(
+                EVENT_COMMAND,
+                {"alert_id": alert_id, "command": COMMAND_CANCEL_RUN},
+            )
+        return
+    await history.async_record(
         alert_id,
         str(call.data.get("alert_name", alert_id)),
         status,
@@ -204,8 +202,7 @@ def _payload(
     payload: dict[str, Any] = {}
     if title:
         payload["title"] = title
-    if message:
-        payload["message"] = message
+    payload["message"] = "" if message is None else str(message)
     if notification.get("action") and isinstance(notification.get("target"), dict):
         payload.update(notification["target"])
     if alert_id:
@@ -253,18 +250,31 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
-    """Register the two public delivery services."""
+    """Register the integration's Home Assistant services."""
     async def send(call: ServiceCall) -> None:
         await _deliver(hass, call, False)
 
     async def clear(call: ServiceCall) -> None:
         await _async_clear(hass, call)
 
-    async def record(call: ServiceCall) -> None:
-        await _async_record(hass, call)
-
     async def report(call: ServiceCall) -> None:
         await _async_report(hass, call)
+
+    async def command(call: ServiceCall) -> None:
+        alert_id = call.data.get("alert_id")
+        command_name = call.data.get("command")
+        if not isinstance(alert_id, str) or not alert_id:
+            raise HomeAssistantError(
+                "ha_notifications.command requires alert_id"
+            )
+        if not isinstance(command_name, str) or not command_name:
+            raise HomeAssistantError(
+                "ha_notifications.command requires command"
+            )
+        hass.bus.async_fire(
+            EVENT_COMMAND,
+            {"alert_id": alert_id, "command": command_name},
+        )
 
     hass.services.async_register(
         DOMAIN, SERVICE_SEND, send
@@ -272,10 +282,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_CLEAR, clear
     )
-    hass.services.async_register(
-        DOMAIN, SERVICE_RECORD, record
-    )
     hass.services.async_register(DOMAIN, SERVICE_REPORT, report)
+    hass.services.async_register(DOMAIN, SERVICE_COMMAND, command)
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
@@ -283,7 +291,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     for service in (
         SERVICE_SEND,
         SERVICE_CLEAR,
-        SERVICE_RECORD,
         SERVICE_REPORT,
+        SERVICE_COMMAND,
     ):
         hass.services.async_remove(DOMAIN, service)

@@ -4,7 +4,6 @@ import { buttonStyles } from "../components/button.js";
 import { alertActionsTemplate } from "./alert-card/actions.js";
 import type { AlertActionItem } from "./alert-card/actions.js";
 import { alertStatusTemplate } from "./alert-card/status.js";
-import { sharedStyles } from "../components/shared-styles.js";
 import type {
   Alert,
   AutomationRuntimeStatus,
@@ -24,6 +23,9 @@ export const alertCardStyles = css`
     align-items: center;
     gap: 12px;
     padding: 14px;
+    border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
   }
 
   .nc-alert-icon {
@@ -106,19 +108,24 @@ export const alertCardStyles = css`
     color: var(--error-color);
   }
 
-  .nc-status.ok {
+  .nc-status.idle {
+    background: var(--secondary-background-color);
+    color: var(--secondary-text-color);
+  }
+
+  .nc-status.triggered {
     background: rgba(76, 175, 80, 0.14);
     color: var(--success-color, #4caf50);
   }
 
-  .nc-status.idle {
-    background: rgba(33, 150, 243, 0.12);
-    color: var(--info-color, #2196f3);
+  .nc-status.running {
+    background: rgba(3, 169, 244, 0.14);
+    color: var(--info-color, #039be5);
   }
 
-  .nc-status.disabled {
+  .nc-status.run-count {
     background: var(--secondary-background-color);
-    color: var(--secondary-text-color);
+    color: var(--primary-text-color);
   }
 
   .nc-alert-actions .nc-open-automation {
@@ -223,7 +230,7 @@ export class AlertCard extends LitElement {
     automationStatus: { attribute: false },
   };
 
-  static styles = [buttonStyles, sharedStyles, alertCardStyles];
+  static styles = [buttonStyles, alertCardStyles];
 
   declare alert: Alert | undefined;
   declare actions: AlertActionItem[];
@@ -242,14 +249,14 @@ export class AlertCard extends LitElement {
 
     const { alert, hass, automationStatus } = this;
 
-    return html`<div class="nc-card nc-alert">
+    return html`<div class="nc-alert">
       <div class="nc-alert-icon">
         <ha-icon icon=${alert.icon || "mdi:bell-outline"}></ha-icon>
       </div>
       <div class="nc-alert-main">
         <div class="nc-alert-heading">
           <div class="nc-alert-name">${alert.name}</div>
-          ${alertStatusTemplate(alert, hass, automationStatus)}
+          ${alertStatusTemplate(hass, automationStatus)}
         </div>
       </div>
       <div class="nc-alert-actions">${alertActionsTemplate(

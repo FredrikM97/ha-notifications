@@ -38,11 +38,12 @@ def test_registers_only_supported_namespaced_commands(
     websocket.register(hass)
     websocket.register(hass)
 
-    assert len(registered) == 7
+    assert len(registered) == 8
     assert {handler._ws_command for handler in registered} == {
         "ha_notifications/get_config",
         "ha_notifications/automation_status",
         "ha_notifications/get_history",
+        "ha_notifications/cancel_run",
         "ha_notifications/validate_config",
         "ha_notifications/save_config",
         "ha_notifications/delete",
@@ -200,15 +201,77 @@ async def test_automation_status_projects_generated_automation_ownership(
         alert_factory("base"),
         alert_factory("persisted"),
         alert_factory("notification"),
+        alert_factory("base", id="inactive_notification_alert"),
+        alert_factory("base", id="history_waiting_alert"),
         alert_factory("configuration"),
     ]
+    async def history_entries(alert_id=None):
+        return [
+            {
+                "config": {"id": "base_alert"},
+                "event": {"type": "notification_sent"},
+            },
+            {
+                "config": {"id": "demo"},
+                "event": {"type": "inactive"},
+            },
+            {
+                "config": {"id": "demo"},
+                "event": {"type": "notification_cleared"},
+            },
+            {
+                "config": {"id": "demo"},
+                "event": {"type": "notification_sent"},
+            },
+            {
+                "config": {"id": "notification_alert"},
+                "event": {"type": "automation_completed"},
+            },
+            {
+                "config": {"id": "notification_alert"},
+                "event": {
+                    "type": "waiting",
+                    "flow_id": "confirmation-run",
+                },
+            },
+            {
+                "config": {"id": "notification_alert"},
+                "event": {"type": "notification_sent"},
+            },
+            {
+                "config": {"id": "history_waiting_alert"},
+                "event": {"type": "waiting", "flow_id": "stale-run"},
+            },
+            {
+                "config": {"id": "inactive_notification_alert"},
+                "event": {"type": "inactive"},
+            },
+            {
+                "config": {"id": "inactive_notification_alert"},
+                "event": {"type": "notification_sent"},
+            },
+        ]
+
     entry = SimpleNamespace(
         options={"version": 1, "alerts": alerts},
         data={},
+        runtime_data=SimpleNamespace(
+            history=SimpleNamespace(async_entries=history_entries),
+        ),
+    )
+    live_run_state = SimpleNamespace(
+        state="on",
+        attributes={"current": 1},
     )
     hass = SimpleNamespace(
         config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-        states=SimpleNamespace(get=lambda entity_id: None),
+        states=SimpleNamespace(
+            get=lambda entity_id: (
+                live_run_state
+                if entity_id == "automation.ha_notifications_notification_alert"
+                else None
+            ),
+        ),
     )
 
     async def add_executor_job(function, *args):
@@ -232,32 +295,177 @@ async def test_automation_status_projects_generated_automation_ownership(
         "base_alert": {
             "status": "missing",
             "enabled": False,
-            "last_triggered": None,
             "mode": "single",
             "current": 0,
+            "running": False,
+            "triggered": True,
+            "notification_active": True,
         },
         "demo": {
             "status": "missing",
             "enabled": False,
-            "last_triggered": None,
             "mode": "single",
             "current": 0,
+            "running": False,
+            "triggered": False,
+            "notification_active": False,
         },
         "notification_alert": {
             "status": "missing",
+            "enabled": True,
+            "mode": "single",
+            "current": 1,
+            "running": True,
+            "triggered": True,
+            "notification_active": True,
+        },
+        "inactive_notification_alert": {
+            "status": "missing",
             "enabled": False,
-            "last_triggered": None,
             "mode": "single",
             "current": 0,
+            "running": False,
+            "triggered": False,
+            "notification_active": False,
+        },
+        "history_waiting_alert": {
+            "status": "missing",
+            "enabled": False,
+            "mode": "single",
+            "current": 0,
+            "running": False,
+            "notification_active": False,
         },
         "configuration_alert": {
             "status": "missing",
             "enabled": False,
-            "last_triggered": None,
             "mode": "single",
             "current": 0,
+            "running": False,
+            "notification_active": False,
         },
     }]
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [("restart", False), ("parallel", True)],
+)
+def test_running_activity_respects_automation_mode(
+    mode: str,
+    expected: bool,
+) -> None:
+    entries = [
+        {
+            "config": {"id": "door"},
+            "event": {"type": "inactive", "flow_id": "new-run"},
+        },
+        {
+            "config": {"id": "door"},
+            "event": {"type": "waiting", "flow_id": "cancelled-run"},
+        },
+    ]
+
+    assert websocket._running_activity(entries, {"door": mode}) == {
+        "door": expected,
+    }
+
+
+def test_cancelled_history_is_terminal_for_running_activity() -> None:
+    entries = [
+        {
+            "config": {"id": "door"},
+            "event": {"type": "cancelled", "flow_id": "run-1"},
+        },
+        {
+            "config": {"id": "door"},
+            "event": {"type": "waiting", "flow_id": "run-1"},
+        },
+    ]
+
+    assert websocket._running_activity(entries, {"door": "parallel"}) == {
+        "door": False,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("enabled", "should_reenable"), [(True, True), (False, False)])
+async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
+    hass,
+    alert_factory,
+    enabled: bool,
+    should_reenable: bool,
+) -> None:
+    from pytest_homeassistant_custom_component.common import (
+        MockConfigEntry,
+        async_mock_service,
+    )
+
+    from custom_components.ha_notifications.const import (
+        COMMAND_CANCEL_RUN,
+        DOMAIN,
+        EVENT_COMMAND,
+    )
+    from custom_components.ha_notifications.history import HistoryStore
+
+    alert = alert_factory("base", id="door", enabled=enabled)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": [alert]},
+    )
+    entry.add_to_hass(hass)
+    history = HistoryStore(hass)
+    entry.runtime_data = SimpleNamespace(history=history, automations=[])
+    await history.async_record(
+        "door", "Door", "waiting", "Waiting for confirmation", flow_id="run-1"
+    )
+    command_events = []
+    hass.bus.async_listen(EVENT_COMMAND, command_events.append)
+
+    async def record_wait_cancellation(event) -> None:
+        if event.data.get("command") == COMMAND_CANCEL_RUN:
+            await history.async_record(
+                "door",
+                "Door",
+                "cancelled",
+                "Automation run cancelled",
+                flow_id="run-1",
+            )
+
+    hass.bus.async_listen(EVENT_COMMAND, record_wait_cancellation)
+    turn_off = async_mock_service(hass, "automation", "turn_off")
+    turn_on = async_mock_service(hass, "automation", "turn_on")
+
+    result = await websocket.WebsocketDispatcher().cancel_run(
+        hass,
+        {"alert_id": "door"},
+    )
+
+    assert result == {"cancelled": True}
+    assert [event.data for event in command_events] == [{
+        "alert_id": "door",
+        "command": COMMAND_CANCEL_RUN,
+    }]
+    assert turn_off[0].data == {
+        "entity_id": "automation.ha_notifications_door",
+        "stop_actions": True,
+    }
+    if should_reenable:
+        assert turn_on[0].data == {"entity_id": "automation.ha_notifications_door"}
+    else:
+        assert turn_on == []
+    assert history._entries[0]["event"]["type"] == "cancelled"
+    assert history._entries[0]["event"]["flow_id"] == "run-1"
+    assert sum(
+        item["event"]["type"] == "cancelled"
+        for item in history._entries
+        if item["event"].get("flow_id") == "run-1"
+    ) == 1
+    assert websocket._running_activity(
+        await history.async_entries("door"),
+        {"door": "restart"},
+    ) == {"door": False}
+
 
 def test_automation_runtime_status_reports_native_current_runs(
     alert_factory,
@@ -267,7 +475,6 @@ def test_automation_runtime_status_reports_native_current_runs(
         state="on",
         attributes={
             "current": 2,
-            "last_triggered": "2026-09-29T12:00:00+00:00",
         },
     )
     hass = SimpleNamespace(
@@ -280,7 +487,7 @@ def test_automation_runtime_status_reports_native_current_runs(
     assert result["current"] == 2
     assert "automation_id" not in result
     assert result["enabled"] is True
-    assert result["last_triggered"] == "2026-09-29T12:00:00+00:00"
+    assert "last_triggered" not in result
 
 
 def test_automation_runtime_status_reports_missing_loaded_entity(

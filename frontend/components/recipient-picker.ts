@@ -2,6 +2,7 @@ import { css, html, LitElement, render } from "lit";
 import type { NotificationTarget, Registries } from "../types.js";
 import type { Hass } from "../types.js";
 import { localize } from "../localize.js";
+import { renderHelpTooltip } from "../editor/section.js";
 
 type RecipientType = keyof NotificationTarget;
 type FilterType = "all" | RecipientType;
@@ -129,6 +130,12 @@ export const recipientPickerStyles = css`
     font-weight: 600;
   }
 
+  .nc-target-selection-heading {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .nc-target-chip {
     display: inline-flex;
     align-items: center;
@@ -233,7 +240,14 @@ class RecipientPickerElement extends LitElement {
       return { key, type: type as RecipientType, id, item: this.items.find((candidate) => candidate.type === type && candidate.id === id) };
     });
     return html`<div class="nc-target-picker">
-      <div class="nc-target-selection-label">${localize(this.hass, "editor.recipients.selected")}</div>
+      <div class="nc-target-selection-heading">
+        <span class="nc-target-selection-label">${localize(this.hass, "editor.recipients.selected")}</span>
+        ${renderHelpTooltip(
+          html`<p>${localize(this.hass, "editor.recipients.help")}</p>
+            <p>${localize(this.hass, "editor.recipients.service_help")}</p>`,
+          localize(this.hass, "editor.common.more_info"),
+        )}
+      </div>
       <div class="nc-target-chips">${selectedItems.map(({ key, type, id, item }) => html`<span class="nc-target-chip" title=${this.labels[type]}>${item?.label || id}<button class="nc-chip-remove" @click=${() => this.removeRecipient(key)}>${localize(this.hass, "common.remove")}</button></span>`)}</div>
       <div class="nc-recipient-input"><div class="nc-recipient-toolbar">
         <ha-input type="search" class="nc-recipient-search" autocomplete="off" name="ha-notifications-recipient-search" placeholder=${localize(this.hass, "editor.recipients.search")} .value=${this.search} @input=${this.handleSearchInput} @focus=${this.openResults}></ha-input>

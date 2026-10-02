@@ -1,9 +1,10 @@
-import { css, html } from "lit";
+import { css, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import type { EditorSectionContext } from "../editor/types.js";
+import { durationInputValue } from "../components/duration-input.js";
 import { checkedValue, formValue } from "../components/form-controls.js";
 import { renderFormField } from "../components/form-field.js";
-import { renderEditorSection } from "../editor/section.js";
+import { renderEditorSection, renderHelpTooltip } from "../editor/section.js";
 import { buttonComponent as button } from "../components/button.js";
 
 export const confirmationSectionStyles = css`
@@ -55,10 +56,35 @@ export const confirmationSectionStyles = css`
   .nc-confirmation-clear {
     margin-top: 16px;
   }
+
+  .nc-confirmation-timeout-options {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .nc-confirmation-timeout-field {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 16px;
+    max-width: 24rem;
+  }
+
+  .nc-confirmation-timeout-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .nc-confirmation-timeout-control ha-notifications-duration-input {
+    flex: 1;
+    min-width: 0;
+  }
 `;
 
 export function renderConfirmationSection(
-  context: EditorSectionContext<"refreshStatuses">,
+  context: EditorSectionContext<"hass" | "refreshStatuses">,
 ): TemplateResult {
   const confirmation = context.value.confirmation!;
   const buttons = confirmation.buttons;
@@ -69,7 +95,43 @@ export function renderConfirmationSection(
   };
   return renderEditorSection(
     context.localize("editor.confirmation.section"),
-    html`<div class="nc-grid">
+    html`<div class="nc-confirmation-timeout-options">
+        <label class="nc-switch-label">
+          <ha-switch
+            .checked=${confirmation.reminders.forget_after_enabled === true}
+            aria-label=${context.localize("editor.confirmation.enable_timeout")}
+            @change=${(event: Event) => {
+              confirmation.reminders.forget_after_enabled = checkedValue(event);
+              context.markDirty();
+              context.refreshStatuses();
+            }}
+          ></ha-switch>
+          <span>${context.localize("editor.confirmation.enable_timeout")}</span>
+        </label>
+        ${renderHelpTooltip(
+          context.localize("editor.confirmation.timeout_help"),
+          context.localize("editor.common.more_info"),
+        )}
+      </div>
+      ${confirmation.reminders.forget_after_enabled === true
+        ? renderFormField(
+            context.localize("editor.confirmation.timeout"),
+            html`<div class="nc-confirmation-timeout-control">
+              <ha-notifications-duration-input
+                .hass=${context.hass}
+                .value=${durationInputValue(confirmation.reminders.timeout, "00:15:00")}
+                aria-label=${context.localize("editor.confirmation.timeout")}
+                @nc-duration-change=${(event: CustomEvent<{ value: string }>) => {
+                  confirmation.reminders.timeout = event.detail.value;
+                  context.markDirty();
+                }}
+              ></ha-notifications-duration-input>
+            </div>`,
+            undefined,
+            "nc-confirmation-timeout-field",
+          )
+        : nothing}
+      <div class="nc-grid">
         ${buttons.map(
           (responseButton, index) => html`<div class="nc-confirmation-button-row">
             ${renderFormField(

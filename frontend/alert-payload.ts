@@ -135,6 +135,13 @@ export function buildAlertPayload(
       "Select at least one device, area, label, or notification entity in Recipients.",
     );
   }
+  if (
+    validate &&
+    values.confirmation.reminders.forget_after_enabled &&
+    (durationToSeconds(values.confirmation.reminders.timeout) ?? 0) <= 0
+  ) {
+    throw new Error("Forget-after duration must be greater than zero.");
+  }
 
   result.name = values.identity.name.trim();
   result.description = values.identity.description;

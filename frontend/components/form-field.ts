@@ -19,10 +19,25 @@ export const formFieldStyles = css`
     font-weight: 600;
   }
 
+  :host(.nc-inline-toggle) {
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-areas: "control label";
+    align-items: center;
+    gap: 12px;
+  }
+
+  :host(.nc-inline-toggle) .label {
+    grid-area: label;
+  }
+
   .content {
     display: grid;
     min-width: 0;
     gap: 10px;
+  }
+
+  :host(.nc-inline-toggle) .content {
+    grid-area: control;
   }
 
   ::slotted(ha-input),
@@ -33,10 +48,6 @@ export const formFieldStyles = css`
     display: block;
     width: 100%;
     min-width: 0;
-  }
-
-  ::slotted(ha-icon-picker) {
-    width: min(100%, 14rem);
   }
 
   ::slotted(ha-input.nc-number-field) {
@@ -61,9 +72,10 @@ export function renderFormField(
   label: string | TemplateResult,
   content: TemplateResult = html``,
   full = false,
+  className = "",
 ): TemplateResult {
   return html`<ha-notifications-form-field
-    class=${full ? "nc-field full" : "nc-field"}
+    class=${`${full ? "nc-field full" : "nc-field"} ${className}`.trim()}
   >
     <span slot="label">${label}</span>
     ${content}

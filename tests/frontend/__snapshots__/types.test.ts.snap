@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`canonical frontend configuration types > snapshots the canonical versioned alert contract 1`] = `
+{
+  "alerts": [
+    {
+      "automation": {
+        "id": "automation.door",
+        "ownership": "managed",
+        "status": "on",
+      },
+      "conditions": [
+        {
+          "condition": "and",
+          "conditions": [
+            {
+              "condition": "state",
+            },
+          ],
+        },
+        {
+          "condition": "template",
+          "value_template": "{{ is_state(...) }}",
+        },
+        {
+          "condition": "device",
+          "device_id": "front-door",
+        },
+      ],
+      "enabled": true,
+      "id": "door",
+      "name": "Front door",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "data": {
+          "message": "Open",
+        },
+        "target": {
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+      },
+      "recovery": {
+        "clear": true,
+        "notification": {
+          "action": "notify.mobile_app_phone",
+          "data": {
+            "message": "Closed",
+          },
+        },
+      },
+      "triggers": [
+        {
+          "event": "start",
+          "trigger": "homeassistant",
+        },
+      ],
+    },
+  ],
+  "version": 1,
+}
+`;

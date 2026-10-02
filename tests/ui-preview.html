@@ -6,30 +6,44 @@
     <title>HA Notifications UI Preview</title>
     <style>
       :root {
-        color-scheme: dark;
-        font-family: system-ui, sans-serif;
-        background: #111318;
-        color: #e8eaed;
+        color-scheme: light;
+        font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #fafafa;
+        color: #212121;
+        --primary-color: #03a9f4;
+        --text-primary-color: #fff;
+        --primary-background-color: #fafafa;
+        --secondary-background-color: #e5e5e5;
+        --card-background-color: #fff;
+        --primary-text-color: #212121;
+        --secondary-text-color: #727272;
+        --disabled-text-color: #bdbdbd;
+        --divider-color: rgba(0, 0, 0, 0.12);
+        --error-color: #db4437;
+        --warning-color: #ffa600;
+        --success-color: #43a047;
+        --ha-card-border-radius: 12px;
+        --ha-border-radius-m: 8px;
+        --ha-border-radius-s: 4px;
+        --ha-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.16);
+        --mdc-icon-size: 24px;
       }
 
       body {
         margin: 0;
         min-height: 100vh;
-        padding: 24px;
         box-sizing: border-box;
       }
 
       ha-notifications-card {
         display: block;
-        max-width: 1180px;
-        margin: 0 auto;
       }
     </style>
   </head>
   <body>
     <ha-notifications-card></ha-notifications-card>
     <script type="module">
-      import "/build/panel.js";
+      import "/build/frontend/panel.js";
 
       const alert = {
         id: "front_door",

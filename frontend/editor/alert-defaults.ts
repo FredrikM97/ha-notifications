@@ -12,8 +12,9 @@ export function defaultAlert(): Alert {
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
-    triggers: [{ trigger: "homeassistant", event: "start" }],
-    conditions: [{ condition: "template", value_template: "{{ true }}" }],
+    triggers: [],
+    conditions: [],
+    automation_mode: "parallel",
     notification: {
       target: {},
       data: { title: "", message: "" },

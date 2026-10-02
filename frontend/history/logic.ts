@@ -30,14 +30,49 @@ export function shortFlowId(value: string | undefined): string {
   return value;
 }
 
+export function historyStartedBySummary(
+  details: Record<string, unknown> | undefined,
+): string {
+  const origin = details?.started_by;
+  if (!origin || typeof origin !== "object" || Array.isArray(origin)) return "";
+
+  const trigger = origin as Record<string, unknown>;
+  const entityId = stringValue(trigger.entity_id);
+  const fromState = stringValue(trigger.from_state);
+  const toState = stringValue(trigger.to_state);
+  if (entityId) {
+    if (fromState || toState) {
+      return `${entityId} (${fromState || "?"} -> ${toState || "?"})`;
+    }
+    return entityId;
+  }
+
+  const platform = stringValue(trigger.platform);
+  const eventType = stringValue(trigger.event_type);
+  if (eventType) return platform ? `${platform} event ${eventType}` : eventType;
+
+  const description = stringValue(trigger.description);
+  if (description) return description;
+
+  const triggerId = stringValue(trigger.id);
+  if (triggerId) return platform ? `${platform} trigger ${triggerId}` : `trigger ${triggerId}`;
+  return platform ? `${platform} trigger` : "";
+}
+
 export function historyDetailSummary(
   details: Record<string, unknown> | undefined,
 ): string {
   if (!details || !Object.keys(details).length) return "";
   if (typeof details.error === "string") return details.error;
   if (typeof details.source === "string") return `Source: ${details.source}`;
+  const startedBy = historyStartedBySummary(details);
+  if (startedBy) return `Started by ${startedBy}`;
   if (Object.keys(details).every((key) => key === "attempt")) return "";
   return JSON.stringify(details);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export function filterHistoryEntries(

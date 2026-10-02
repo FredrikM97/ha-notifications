@@ -1,7 +1,6 @@
 import { css, html, LitElement, nothing } from "lit";
 import type { TemplateResult } from "lit";
-import { buttonStyles } from "../components/button.js";
-import { sharedStyles } from "../components/shared-styles.js";
+import { button, buttonStyles } from "../components/button.js";
 import { localize } from "../localize.js";
 import type { AlertActionItem, AlertActionRequest } from "./alert-card/actions.js";
 import "./alert-card.js";
@@ -19,7 +18,21 @@ export const alertListStyles = css`
 
   .nc-alerts {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+  }
+
+  .nc-empty {
+    padding: 55px 20px;
+    border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
+    color: var(--secondary-text-color);
+    text-align: center;
+  }
+
+  .nc-empty h2 {
+    color: var(--primary-text-color);
   }
 `;
 
@@ -33,7 +46,7 @@ class AlertList extends LitElement {
     activeOnly: { type: Boolean },
   };
 
-  static styles = [buttonStyles, sharedStyles, alertListStyles];
+  static styles = [buttonStyles, alertListStyles];
 
   declare alerts: Alert[];
   declare actionItems: (
@@ -47,7 +60,10 @@ class AlertList extends LitElement {
 
   protected render(): TemplateResult {
     const alerts = this.activeOnly
-      ? this.alerts.filter((alert) => this.automationStatus[alert.id]?.current)
+      ? this.alerts.filter((alert) => {
+          const status = this.automationStatus[alert.id];
+          return status?.current > 0;
+        })
       : this.alerts;
 
     if (!alerts.length) {
@@ -70,15 +86,17 @@ class AlertList extends LitElement {
     const title = this.activeOnly
       ? "panel.no_active_alerts"
       : "panel.no_alerts";
+    const emptyAction = this.emptyAction;
 
-    return html`<div class="nc-card nc-empty">
+    return html`<div class="nc-empty">
       <h2>${localize(this.hass, title)}</h2>
       ${this.activeOnly ? nothing : html`<p>${localize(this.hass, "panel.create_first")}</p>`}
-      ${this.activeOnly || !this.emptyAction
+      ${this.activeOnly || !emptyAction
         ? nothing
-        : html`<button class="nc-button" @click=${() => this.dispatchAction(this.emptyAction!.id)}>
-            ${this.emptyAction.label}
-          </button>`}
+        : button({
+            label: emptyAction.label,
+            onClick: () => this.dispatchAction(emptyAction.id),
+          })}
     </div>`;
   }
 

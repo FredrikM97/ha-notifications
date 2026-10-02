@@ -20,7 +20,6 @@ exports[`panel view > renders the alert dashboard and status card 1`] = `
       "meta": undefined,
       "name": "Front door",
       "statuses": [
-        "Enabled",
         "Idle",
       ],
     },

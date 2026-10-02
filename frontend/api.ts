@@ -20,6 +20,7 @@ const DOMAIN = "ha_notifications";
 type Command =
   | "get_config"
   | "automation_status"
+  | "cancel_run"
   | "get_history"
   | "validate_config"
   | "save_config"
@@ -133,6 +134,13 @@ export function getHistory(
   return call<RuntimeAlertHistoryEntry[]>(hass, "get_history", {
     ...(alertId ? { alert_id: alertId } : {}),
   });
+}
+
+export function cancelRun(
+  hass: Hass,
+  alertId: string,
+): Promise<{ cancelled: boolean }> {
+  return call(hass, "cancel_run", { alert_id: alertId });
 }
 
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {

@@ -27,6 +27,57 @@ def test_validate_config_preserves_canonical_monitor_conditions_and_notification
     assert alert["triggers"] == [{"trigger": "state", "entity_id": "sensor.water"}]
     assert alert["conditions"][0]["entity_id"] == "sensor.water"
     assert alert["notification"]["target"] == {"entity_id": ["notify.phone"]}
+    assert alert["automation_mode"] == "parallel"
+
+
+def test_validate_config_preserves_cancel_on_inactive_opt_in() -> None:
+    config = validate_config({"alerts": [{
+        "id": "quiet_alert",
+        "cancel_on_inactive": True,
+        "notification": {"action": "notify.mobile_app_phone"},
+    }]})
+
+    assert config["alerts"][0]["cancel_on_inactive"] is True
+
+
+def test_validate_config_preserves_condition_change_trigger_opt_in() -> None:
+    config = validate_config({"alerts": [{
+        "id": "condition_alert",
+        "on_condition_change": True,
+        "notification": {"action": "notify.mobile_app_phone"},
+    }]})
+
+    assert config["alerts"][0]["on_condition_change"] is True
+
+
+def test_validate_config_discards_retired_clear_on_inactive_option() -> None:
+    config = validate_config({"alerts": [{
+        "id": "legacy_alert",
+        "clear_on_inactive": True,
+        "notification": {"action": "notify.mobile_app_phone"},
+    }]})
+
+    assert "clear_on_inactive" not in config["alerts"][0]
+
+
+@pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
+def test_validate_config_accepts_automation_modes(mode: str) -> None:
+    config = validate_config({"alerts": [{
+        "id": "mode_alert",
+        "automation_mode": mode,
+        "notification": {"action": "notify.mobile_app_phone"},
+    }]})
+
+    assert config["alerts"][0]["automation_mode"] == mode
+
+
+def test_validate_config_rejects_unknown_automation_mode() -> None:
+    with pytest.raises(ValidationError):
+        validate_config({"alerts": [{
+            "id": "mode_alert",
+            "automation_mode": "restart_and_parallel",
+            "notification": {"action": "notify.mobile_app_phone"},
+        }]})
 
 
 def test_validate_config_rejects_legacy_shape() -> None:
@@ -112,6 +163,41 @@ def test_validate_config_rejects_nonpositive_confirmation_attempts() -> None:
                 "reminders": {"enabled": True, "max_attempts": 0},
             },
         }]})
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    [0, "0", "00:00", "00:00:00", {"seconds": 0}],
+)
+def test_validate_config_rejects_zero_forget_after_timeout(timeout: object) -> None:
+    with pytest.raises(ValidationError, match="requires a positive reminders.timeout"):
+        validate_config({"alerts": [{
+            "id": "confirm_alert",
+            "notification": {"action": "notify.mobile_app_phone"},
+            "confirmation": {
+                "enabled": True,
+                "reminders": {
+                    "forget_after_enabled": True,
+                    "timeout": timeout,
+                },
+            },
+        }]})
+
+
+def test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled() -> None:
+    config = validate_config({"alerts": [{
+        "id": "confirm_alert",
+        "notification": {"action": "notify.mobile_app_phone"},
+        "confirmation": {
+            "enabled": True,
+            "reminders": {
+                "forget_after_enabled": False,
+                "timeout": 0,
+            },
+        },
+    }]})
+
+    assert config["alerts"][0]["confirmation"]["reminders"]["timeout"] == 0
 
 
 def test_configuration_preserves_native_extensions_on_canonical_models() -> None:

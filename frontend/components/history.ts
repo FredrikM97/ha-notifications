@@ -1,9 +1,8 @@
 import { css, html, LitElement, render } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { formatLocalDateTime } from "../date-time.js";
-import { buttonStyles } from "./button.js";
+import { button, buttonStyles } from "./button.js";
 import { localize } from "../localize.js";
-import { sharedStyles } from "./shared-styles.js";
 import type {
   Hass,
   HassLocale,
@@ -14,6 +13,7 @@ import {
   formatType,
   groupHistoryEntries,
   historyDetailSummary,
+  historyStartedBySummary,
   historySeverity,
   shortFlowId,
 } from "../history/logic.js";
@@ -21,6 +21,7 @@ export {
   filterHistoryEntries,
   groupHistoryEntries,
   historyDetailSummary,
+  historyStartedBySummary,
 } from "../history/logic.js";
 
 export type { HistoryFilters } from "../history/logic.js";
@@ -50,6 +51,37 @@ export const historyViewStyles = css`
     border-radius: var(--ha-card-border-radius, 12px);
     background: var(--card-background-color);
     box-shadow: var(--ha-box-shadow);
+  }
+
+  .nc-empty {
+    padding: 55px 20px;
+    border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
+    color: var(--secondary-text-color);
+    text-align: center;
+  }
+
+  .nc-empty h2 {
+    color: var(--primary-text-color);
+  }
+`;
+
+export const historyFilterStyles = css`
+  :host {
+    display: block;
+    min-width: 0;
+    container-type: inline-size;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  button {
+    font: inherit;
   }
 
   .nc-history-filter {
@@ -225,6 +257,83 @@ export const historyViewStyles = css`
     min-width: 180px;
   }
 
+  .nc-history-filter-title {
+    font-weight: 700;
+  }
+
+  .nc-history-filter-subtitle {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+  }
+
+  @container (max-width: 700px) {
+    .nc-history-filter-heading {
+      align-items: center;
+      flex-direction: row;
+      gap: 8px;
+    }
+
+    .nc-history-filter-main {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .nc-history-filter-row {
+      align-items: center;
+    }
+
+    .nc-history-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .nc-history-controls .nc-history-search {
+      min-width: 0;
+    }
+
+    .nc-history-controls ha-input {
+      width: 100%;
+    }
+
+    .nc-history-filter-details {
+      min-width: 0;
+    }
+
+    .nc-history-filter-details summary {
+      justify-content: center;
+      width: 100%;
+      padding: 0 8px;
+    }
+
+    .nc-history-secondary-controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      margin-top: 8px;
+    }
+
+    .nc-history-secondary-controls ha-selector {
+      width: 100%;
+    }
+  }
+`;
+
+export const historyEntriesStyles = css`
+  :host {
+    display: block;
+    min-width: 0;
+    container-type: inline-size;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  button {
+    font: inherit;
+  }
+
   .nc-history-flow-group {
     border-bottom: 1px solid var(--divider-color);
   }
@@ -253,10 +362,17 @@ export const historyViewStyles = css`
   }
 
   .nc-history-flow-name,
+  .nc-history-flow-alert,
   .nc-history-flow-count {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .nc-history-flow-alert {
+    color: var(--primary-text-color);
+    font-weight: 500;
+    text-transform: none;
   }
 
   .nc-history-flow-name ha-icon {
@@ -287,15 +403,6 @@ export const historyViewStyles = css`
     font-size: 12px;
   }
 
-  .nc-history-filter-title {
-    font-weight: 700;
-  }
-
-  .nc-history-filter-subtitle {
-    color: var(--secondary-text-color);
-    font-size: 12px;
-  }
-
   .nc-history-item {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr);
@@ -317,6 +424,13 @@ export const historyViewStyles = css`
   .nc-history-time {
     color: var(--secondary-text-color);
     font-size: 12px;
+  }
+
+  .nc-history-origin {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
   }
 
   .nc-history-main {
@@ -431,101 +545,6 @@ export const historyViewStyles = css`
       grid-template-columns: 1fr;
       gap: 4px;
     }
-
-    .nc-history-filter-heading {
-      align-items: center;
-      flex-direction: row;
-      gap: 8px;
-    }
-
-    .nc-history-filter-main {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-
-    .nc-history-filter-row {
-      align-items: center;
-    }
-
-    .nc-history-controls {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .nc-history-controls .nc-history-search {
-      min-width: 0;
-    }
-
-    .nc-history-controls ha-input {
-      width: 100%;
-    }
-
-    .nc-history-filter-details {
-      min-width: 0;
-    }
-
-    .nc-history-filter-details summary {
-      justify-content: center;
-      width: 100%;
-      padding: 0 8px;
-    }
-
-    .nc-history-secondary-controls {
-      display: grid;
-      grid-template-columns: 1fr;
-      margin-top: 8px;
-    }
-
-    .nc-history-secondary-controls ha-selector {
-      width: 100%;
-    }
-  }
-
-  @media (max-width: 700px) {
-    .nc-history-item {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
-
-    .nc-history-filter-heading {
-      align-items: center;
-      flex-direction: row;
-      gap: 8px;
-    }
-
-    .nc-history-filter-main {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-
-    .nc-history-controls {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .nc-history-controls ha-input {
-      width: 100%;
-    }
-
-    .nc-history-filter-details {
-      min-width: 0;
-    }
-
-    .nc-history-filter-details summary {
-      justify-content: center;
-      width: 100%;
-      padding: 0 8px;
-    }
-
-    .nc-history-secondary-controls {
-      display: grid;
-      grid-template-columns: 1fr;
-      margin-top: 8px;
-    }
-
-    .nc-history-secondary-controls ha-selector {
-      width: 100%;
-    }
   }
 `;
 
@@ -544,11 +563,14 @@ export interface HistoryRenderOptions {
   types?: string[];
 }
 
-interface HistoryRenderState extends HistoryRenderOptions {
+interface HistoryFilterRenderState extends HistoryRenderOptions {
   onFiltersChanged(filters: HistoryFilters): void;
   onGroupByFlowChanged(groupByFlow: boolean): void;
-  onAlertSelected(alertId: string, alertName: string): void;
   onShowAll(): void;
+}
+
+interface HistoryEntriesRenderState extends HistoryRenderOptions {
+  onAlertSelected(alertId: string, alertName: string): void;
 }
 
 export function renderHistory(
@@ -570,19 +592,27 @@ export function renderHistory(
   element?.renderImmediately();
 }
 
+function dispatchHistoryEvent(
+  target: HTMLElement,
+  name: string,
+  detail?: unknown,
+): void {
+  target.dispatchEvent(
+    new CustomEvent(name, { detail, bubbles: true, composed: true }),
+  );
+}
+
 class HistoryViewElement extends LitElement {
   declare history: RuntimeAlertHistoryEntry[];
 
   declare options: HistoryRenderOptions;
-
-  private expandedDetails = new Set<number>();
 
   static properties = {
     history: { attribute: false },
     options: { attribute: false },
   };
 
-  static styles = [buttonStyles, sharedStyles, historyViewStyles];
+  static styles = [buttonStyles, historyViewStyles];
 
   protected createRenderRoot() {
     return this.shadowRoot || super.createRenderRoot();
@@ -593,68 +623,112 @@ class HistoryViewElement extends LitElement {
   }
 
   protected render() {
-    const options = this.renderState();
+    const options = this.options || {};
     const filters = options.filters || defaultHistoryFilters();
     const filteredHistory = filterHistoryEntries(this.history, filters);
     if (!this.history.length) {
-      return emptyHistoryTemplate(options);
+      return emptyHistoryTemplate(options, () =>
+        dispatchHistoryEvent(this, "history-show-all"),
+      );
     }
 
-    return historyTemplate(
-      filteredHistory,
-      this.history.length,
-      options,
-      this.expandedDetails,
-      (index) => {
-        if (this.expandedDetails.has(index)) {
-          this.expandedDetails.delete(index);
-        } else {
-          this.expandedDetails.add(index);
-        }
-        this.renderImmediately();
-      },
-    );
-  }
-
-  private renderState(): HistoryRenderState {
-    return {
-      ...this.options,
-      onFiltersChanged: (filters) =>
-        this.dispatchHistoryEvent("history-filters-changed", filters),
-      onGroupByFlowChanged: (groupByFlow) =>
-        this.dispatchHistoryEvent("history-group-by-flow-changed", groupByFlow),
-      onAlertSelected: (alertId, alertName) =>
-        this.dispatchHistoryEvent("history-alert-selected", { alertId, alertName }),
-      onShowAll: () => this.dispatchHistoryEvent("history-show-all"),
-    };
-  }
-
-  private dispatchHistoryEvent(name: string, detail?: unknown): void {
-    this.dispatchEvent(
-      new CustomEvent(name, { detail, bubbles: true, composed: true }),
-    );
+    return historyTemplate(filteredHistory, this.history.length, options);
   }
 }
 
 customElements.define("ha-notifications-history-view", HistoryViewElement);
 
+class HistoryFilterElement extends LitElement {
+  static properties = { options: { attribute: false } };
+  static styles = [buttonStyles, historyFilterStyles];
+
+  declare options: HistoryRenderOptions;
+
+  protected render() {
+    const options = this.options || {};
+    return historyFilterTemplate({
+      ...options,
+      onFiltersChanged: (filters) =>
+        dispatchHistoryEvent(this, "history-filters-changed", filters),
+      onGroupByFlowChanged: (groupByFlow) =>
+        dispatchHistoryEvent(this, "history-group-by-flow-changed", groupByFlow),
+      onShowAll: () => dispatchHistoryEvent(this, "history-show-all"),
+    });
+  }
+}
+
+if (!customElements.get("ha-notifications-history-filter")) {
+  customElements.define("ha-notifications-history-filter", HistoryFilterElement);
+}
+
+class HistoryEntriesElement extends LitElement {
+  static properties = {
+    history: { attribute: false },
+    totalCount: { attribute: false },
+    options: { attribute: false },
+  };
+  static styles = historyEntriesStyles;
+
+  declare history: RuntimeAlertHistoryEntry[];
+  declare totalCount: number;
+  declare options: HistoryRenderOptions;
+
+  private expandedDetails = new Set<number>();
+
+  protected render() {
+    const history = this.history || [];
+    const options: HistoryEntriesRenderState = {
+      ...(this.options || {}),
+      onAlertSelected: (alertId, alertName) =>
+        dispatchHistoryEvent(this, "history-alert-selected", { alertId, alertName }),
+    };
+    return html`${historyItemsTemplate(
+      history,
+      options,
+      this.expandedDetails,
+      this.toggleDetails,
+    )}${historyCountTemplate(
+      history.length,
+      this.totalCount,
+      options,
+    )}`;
+  }
+
+  private toggleDetails = (index: number): void => {
+    if (this.expandedDetails.has(index)) {
+      this.expandedDetails.delete(index);
+    } else {
+      this.expandedDetails.add(index);
+    }
+    this.requestUpdate();
+    this.performUpdate();
+  };
+}
+
+if (!customElements.get("ha-notifications-history-entries")) {
+  customElements.define("ha-notifications-history-entries", HistoryEntriesElement);
+}
+
 function historyTemplate(
   history: RuntimeAlertHistoryEntry[],
   totalCount: number,
-  options: HistoryRenderState,
-  expandedDetails: Set<number>,
-  toggleDetails: (index: number) => void,
+  options: HistoryRenderOptions,
 ) {
-  return html`<div class="nc-card nc-history">
-    ${historyFilterTemplate(options)}
-    ${historyItemsTemplate(history, options, expandedDetails, toggleDetails)}
-    ${historyCountTemplate(history.length, totalCount, options)}
+  return html`<div class="nc-history">
+    <ha-notifications-history-filter
+      .options=${options}
+    ></ha-notifications-history-filter>
+    <ha-notifications-history-entries
+      .history=${history}
+      .totalCount=${totalCount}
+      .options=${options}
+    ></ha-notifications-history-entries>
   </div>`;
 }
 
 function historyItemsTemplate(
   history: RuntimeAlertHistoryEntry[],
-    options: HistoryRenderState,
+  options: HistoryEntriesRenderState,
   expandedDetails: Set<number>,
   toggleDetails: (index: number) => void,
 ) {
@@ -691,7 +765,7 @@ function historyItemsTemplate(
 
 function historyFlowGroupTemplate(
   group: HistoryFlowGroup,
-    options: HistoryRenderState,
+  options: HistoryEntriesRenderState,
   expandedDetails: Set<number>,
   startIndex: number,
   toggleDetails: (index: number) => void,
@@ -705,11 +779,17 @@ function historyFlowGroupTemplate(
     );
   }
 
-  return html`<details class="nc-history-flow-group" open>
+  const alertName = group.entries[0]?.config?.name ||
+    localize(options.hass, "history.unknown_alert");
+
+  return html`<details class="nc-history-flow-group">
     <summary class="nc-history-flow-heading">
       <span class="nc-history-flow-name">
         <ha-icon icon="mdi:chevron-down"></ha-icon>
         <span>${localize(options.hass, "history.flow")} ${shortFlowId(group.flowId)}</span>
+      </span>
+      <span class="nc-history-flow-alert">
+        ${localize(options.hass, "history.flow_alert", { name: alertName })}
       </span>
       <span class="nc-history-flow-count">${localize(options.hass, "history.flow_events", { count: group.entries.length })}</span>
     </summary>
@@ -738,7 +818,7 @@ function historyCountTemplate(
   </div>`;
 }
 
-function historyFilterTemplate(options: HistoryRenderState) {
+function historyFilterTemplate(options: HistoryFilterRenderState) {
   const filters = options.filters || defaultHistoryFilters();
   const activeFilterCount = countSecondaryHistoryFilters(filters);
   return html`<div class="nc-history-filter">
@@ -764,7 +844,7 @@ function historyFilterTemplate(options: HistoryRenderState) {
 }
 
 function historyHeadingTemplate(
-  options: HistoryRenderState,
+  options: HistoryFilterRenderState,
   filters: HistoryFilters,
   activeFilterCount: number,
 ) {
@@ -802,7 +882,7 @@ function historyHeadingTemplate(
     ${historyClearButtonTemplate(options, filters)}`;
 }
 
-function historyGroupToggleTemplate(options: HistoryRenderState) {
+function historyGroupToggleTemplate(options: HistoryFilterRenderState) {
   return html`<label class="nc-history-group-toggle">
     <ha-switch
       .checked=${options.groupByFlow === true}
@@ -819,20 +899,20 @@ function historyFilterCountTemplate(count: number) {
 }
 
 function historyClearButtonTemplate(
-  options: HistoryRenderState,
+  options: HistoryFilterRenderState,
   filters: HistoryFilters,
 ) {
   if (!hasHistoryFilters(filters)) return "";
-  return html`<button
-    class="nc-button secondary nc-history-clear"
-    @click=${() => options.onFiltersChanged(defaultHistoryFilters())}
-  >
-    ${localize(options.hass, "history.clear")}
-  </button>`;
+  return button({
+    label: localize(options.hass, "history.clear"),
+    variant: "secondary",
+    className: "nc-history-clear",
+    onClick: () => options.onFiltersChanged(defaultHistoryFilters()),
+  });
 }
 
 function historySecondaryFiltersTemplate(
-  options: HistoryRenderState,
+  options: HistoryFilterRenderState,
   filters: HistoryFilters,
 ) {
   return html`<div class="nc-history-secondary-controls">
@@ -881,7 +961,7 @@ function historySecondaryFiltersTemplate(
 }
 
 function alertFilterTemplate(
-  options: HistoryRenderState,
+  options: HistoryFilterRenderState,
   filters: HistoryFilters,
 ) {
   if (!options.alerts?.length) return "";
@@ -912,7 +992,7 @@ function defaultHistoryFilters(): HistoryFilters {
 }
 
 function updateHistoryFilter(
-  options: HistoryRenderState,
+  options: HistoryFilterRenderState,
   key: keyof HistoryFilters,
   value: string,
 ): void {
@@ -936,13 +1016,14 @@ function countSecondaryHistoryFilters(filters: HistoryFilters): number {
 
 function historyItemTemplate(
   item: RuntimeAlertHistoryEntry,
-  options: HistoryRenderState,
+  options: HistoryEntriesRenderState,
   detailsOpen: boolean,
   toggleDetails: () => void,
   showFlow = true,
 ) {
   const details = item.event?.details;
   const hasDetails = Boolean(details && Object.keys(details).length);
+  const startedBy = historyStartedBySummary(details);
 
   return html`<div
     class=${`nc-history-item${hasDetails ? " clickable" : ""}`}
@@ -974,6 +1055,9 @@ function historyItemTemplate(
             >`
           : ""}
       </div>
+      ${startedBy
+        ? html`<div class="nc-history-origin">${localize(options.hass, "history.started_by", { trigger: startedBy })}</div>`
+        : ""}
       ${historyDetailsTemplate(details, hasDetails, detailsOpen)}
     </div>
   </div>`;
@@ -997,7 +1081,7 @@ function historyDetailsTemplate(
 
 function historyAlertTemplate(
   item: RuntimeAlertHistoryEntry,
-  options: HistoryRenderState,
+  options: HistoryEntriesRenderState,
 ) {
   const alertName = item.config?.name || localize(options.hass, "history.unknown_alert");
   if (!item.config?.id) {
@@ -1015,23 +1099,24 @@ function historyAlertTemplate(
   </button>`;
 }
 
-function emptyHistoryTemplate(options: HistoryRenderState) {
+function emptyHistoryTemplate(
+  options: HistoryRenderOptions,
+  onShowAll: () => void,
+) {
   let title = localize(options.hass, "history.no_activity");
   if (options.alertName) {
     title = localize(options.hass, "history.no_activity_for", { name: options.alertName });
   }
 
-  return html`<div class="nc-card nc-empty">
+  return html`<div class="nc-empty">
     <h2>${title}</h2>
     <p>${localize(options.hass, "history.activity_help")}</p>
     ${options.alertName
-      ? showAllButton(options.onShowAll, localize(options.hass, "history.show_all"))
+      ? showAllButton(onShowAll, localize(options.hass, "history.show_all"))
       : ""}
   </div>`;
 }
 
 function showAllButton(onShowAll: () => void, label: string) {
-  return html`<button class="nc-button secondary" @click=${onShowAll}>
-    ${label}
-  </button>`;
+  return button({ label, variant: "secondary", onClick: onShowAll });
 }

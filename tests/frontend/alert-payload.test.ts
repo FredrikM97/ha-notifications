@@ -7,34 +7,29 @@ import {
 } from "./conftest.js";
 
 describe("buildAlertPayload", () => {
-  it("preserves native condition mappings", () => {
-    const condition = [
+  it.each([
+    ["native condition mappings", [
       { condition: "state", entity_id: "binary_sensor.front_door", state: "on" },
       { condition: "template", value_template: "{{ true }}" },
-    ];
-    const payload = buildAlertPayload(
-      draftAlertFixture({ conditions: condition }),
-      alertFormValuesWithRecipients({ evaluate: { ...alertFormValues().evaluate, condition } }),
-    );
-    expect(payload.conditions).toEqual(condition);
-    expect(payload).not.toHaveProperty("condition");
-  });
-
-  it("preserves native condition durations", () => {
-    const condition = [{
+    ]],
+    ["native condition durations", [{
       condition: "state",
       entity_id: "binary_sensor.front_door",
       state: "on",
       for: "00:20:00",
-    }];
+    }]],
+  ])("preserves %s", (_scenario, condition) => {
+    const nativeConditions = condition as Record<string, unknown>[];
+    const values = alertFormValues();
     const payload = buildAlertPayload(
-      draftAlertFixture({ conditions: condition }),
+      draftAlertFixture({ conditions: nativeConditions }),
       alertFormValuesWithRecipients({
-        evaluate: { ...alertFormValues().evaluate, condition },
+        evaluate: { ...values.evaluate, condition: nativeConditions },
       }),
     );
 
-    expect(payload.conditions).toEqual(condition);
+    expect(payload.conditions).toEqual(nativeConditions);
+    expect(payload).not.toHaveProperty("condition");
   });
 
   it("omits the delivery action when recipients are selected", () => {
@@ -214,6 +209,25 @@ describe("buildAlertPayload", () => {
     );
 
     expect(payload.confirmation?.reminders.timeout).toBe(900);
+  });
+
+  it("rejects zero forget-after duration when enabled", () => {
+    const confirmation = alertFormValues().confirmation;
+    expect(() =>
+      buildAlertPayload(
+        draftAlertFixture(),
+        alertFormValuesWithRecipients({
+          confirmation: {
+            ...confirmation,
+            reminders: {
+              ...confirmation.reminders,
+              forget_after_enabled: true,
+              timeout: "00:00:00",
+            },
+          },
+        }),
+      ),
+    ).toThrow("Forget-after duration must be greater than zero.");
   });
 
   it("rejects malformed confirmation durations before transport", () => {

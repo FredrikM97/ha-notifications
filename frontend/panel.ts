@@ -1,4 +1,5 @@
 import {
+  cancelRun,
   deleteAlert,
   errorMessage,
   getAlerts,
@@ -15,8 +16,7 @@ import "./panel/alert-list.js";
 import "./history.js";
 import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
 import { css, LitElement, html } from "lit";
-import { buttonStyles } from "./components/button.js";
-import { sharedStyles } from "./components/shared-styles.js";
+import { button, buttonStyles } from "./components/button.js";
 import type {
   AlertActionItem,
   AlertActionRequest,
@@ -80,6 +80,19 @@ export const panelStyles = css`
   textarea,
   select {
     font: inherit;
+  }
+
+  .nc-empty {
+    padding: 55px 20px;
+    border-radius: var(--ha-card-border-radius, 12px);
+    background: var(--card-background-color);
+    box-shadow: var(--ha-box-shadow);
+    color: var(--secondary-text-color);
+    text-align: center;
+  }
+
+  .nc-empty h2 {
+    color: var(--primary-text-color);
   }
 
   .nc-page {
@@ -219,6 +232,11 @@ export const panelStyles = css`
   }
 
   @media (max-width: 700px) {
+    :host(ha-notifications-panel) .nc-page.nc-mobile-full-page {
+      min-height: 100dvh;
+      padding: 0;
+    }
+
     .nc-page {
       padding: 14px;
     }
@@ -274,7 +292,7 @@ function toggleAlertToast(alert: Alert): string {
 }
 
 class HaNotificationsPanel extends LitElement {
-  static styles = [buttonStyles, sharedStyles, panelStyles];
+  static styles = [buttonStyles, panelStyles];
 
   private _hass: Hass | null = null;
   private alerts: Alert[] = [];
@@ -316,6 +334,9 @@ class HaNotificationsPanel extends LitElement {
     },
     delete: (alert) => {
       if (alert) void this.removeAlert(alert);
+    },
+    cancel_run: (alert) => {
+      if (alert) void this.cancelAlertRun(alert);
     },
   };
 
@@ -452,7 +473,10 @@ class HaNotificationsPanel extends LitElement {
       return html`${this.adminRequiredTemplate()}${toastListTemplate(this.toasts)}`;
     }
 
-    return html`<div class="nc-page" ?hidden=${this.editorActive}>
+    return html`<div
+      class=${this.tab === "history" ? "nc-page nc-mobile-full-page" : "nc-page"}
+      ?hidden=${this.editorActive}
+    >
         ${this.headerTemplate()}${this.tabsTemplate()}${this.tabTemplate()}
       </div>
       ${toastListTemplate(this.toasts)}`;
@@ -460,7 +484,7 @@ class HaNotificationsPanel extends LitElement {
 
   private adminRequiredTemplate(): TemplateResult {
     return html`<div class="nc-page">
-      <div class="nc-card nc-empty">
+      <div class="nc-empty">
         <h2>${localize(this._hass, "panel.admin_required")}</h2>
         <p>
           ${localize(this._hass, "panel.admin_help")}
@@ -494,9 +518,11 @@ class HaNotificationsPanel extends LitElement {
         </div>
       </div>
       <div class="nc-actions">
-        <button class="nc-button" @click=${() => this.addAlert()}>
-          + ${localize(this._hass, "panel.add_alert")}
-        </button>
+        ${button({
+          label: localize(this._hass, "panel.add_alert"),
+          icon: "mdi:plus",
+          onClick: () => this.addAlert(),
+        })}
       </div>
     </div>`;
   }
@@ -623,6 +649,14 @@ class HaNotificationsPanel extends LitElement {
         href: `/config/automation/edit/${encodeURIComponent(status.automation_id)}`,
       });
     }
+    if (status?.current > 0) {
+      actions.unshift({
+        id: "cancel_run",
+        label: localize(this._hass, "alert.cancel_run"),
+        icon: "mdi:stop-circle-outline",
+        variant: "danger",
+      });
+    }
     return actions;
   };
 
@@ -695,9 +729,8 @@ class HaNotificationsPanel extends LitElement {
       hass: this._hass!,
       alert,
       registries,
-      onValidateCondition: async (draft) => {
+      onValidateAlert: async (draft) => {
         await validateAlert(this._hass, draft);
-        this.showToast(localize(this._hass, "panel.condition_valid"));
       },
       onSave: async (draft) => {
         const saved = await saveAlert(this._hass, draft);
@@ -783,6 +816,21 @@ class HaNotificationsPanel extends LitElement {
     try {
       await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
       this.showToast(toggleAlertToast(alert));
+      await this.refresh();
+    } catch (err) {
+      this.showToast(errorMessage(err), true);
+    }
+  }
+
+  private async cancelAlertRun(alert: Alert): Promise<void> {
+    try {
+      const result = await cancelRun(this._hass, alert.id);
+      this.showToast(
+        localize(
+          this._hass,
+          result.cancelled ? "alert.run_cancelled" : "alert.run_not_active",
+        ),
+      );
       await this.refresh();
     } catch (err) {
       this.showToast(errorMessage(err), true);

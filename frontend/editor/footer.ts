@@ -2,33 +2,10 @@ import { css, html, LitElement, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import type { Localize } from "../localize.js";
 import { buttonComponent as button } from "../components/button.js";
+import { renderEditorModal } from "./modals.js";
+import type { EditorModal } from "./modals.js";
 
 export const editorFooterStyles = css`
-  .nc-discard-confirmation {
-    display: flex;
-    align-items: center;
-    flex: 1 0 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--warning-color, var(--divider-color));
-    border-radius: 8px;
-    background: var(--secondary-background-color);
-    color: var(--primary-text-color);
-  }
-
-  .nc-discard-message {
-    margin: 0;
-    line-height: 1.4;
-  }
-
-  .nc-discard-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
   .nc-modal-footer {
     position: sticky;
     bottom: 0;
@@ -73,9 +50,6 @@ class EditorFooterComponent extends LitElement {
     validationLabel: { type: String },
     onValidate: { attribute: false },
     onSave: { attribute: false },
-    discardConfirmation: { type: Boolean },
-    onStay: { attribute: false },
-    onDiscard: { attribute: false },
     dirty: { type: Boolean },
   };
 
@@ -87,9 +61,6 @@ class EditorFooterComponent extends LitElement {
   declare validationLabel: string;
   declare onValidate: () => void;
   declare onSave: (event: Event) => void;
-  declare discardConfirmation: boolean;
-  declare onStay: () => void;
-  declare onDiscard: () => void;
   declare dirty: boolean;
 
   protected render(): TemplateResult {
@@ -100,32 +71,9 @@ class EditorFooterComponent extends LitElement {
       onValidate,
       onSave,
       localize,
-      discardConfirmation,
-      onStay,
-      onDiscard,
       dirty,
     } = this;
     return html`<footer class="nc-modal-footer">
-    ${discardConfirmation
-      ? html`<div
-          class="nc-discard-confirmation"
-          role="group"
-          aria-label=${localize("editor.common.discard_title")}
-        >
-          <p class="nc-discard-message">${localize("editor.common.discard_message")}</p>
-          <div class="nc-discard-actions">
-            ${button({
-              label: localize("editor.common.stay"),
-              variant: "secondary",
-              onClick: onStay,
-            })}
-            ${button({
-              label: localize("editor.common.discard"),
-              onClick: onDiscard,
-            })}
-          </div>
-        </div>`
-      : nothing}
     <span class="nc-editor-state" aria-live="polite">${dirty ? "Unsaved changes" : "All changes saved"}</span>
     ${button({
       label: localize("editor.common.view_yaml"),
@@ -173,9 +121,33 @@ export function renderEditorFooter(options: EditorFooterOptions): TemplateResult
     .validationLabel=${options.validationLabel}
     .onValidate=${options.onValidate}
     .onSave=${options.onSave}
-    .discardConfirmation=${options.discardConfirmation}
-    .onStay=${options.onStay}
-    .onDiscard=${options.onDiscard}
     .dirty=${options.dirty}
   ></ha-notifications-editor-footer>`;
+}
+
+export function renderDiscardConfirmationModal(
+  options: EditorFooterOptions,
+): TemplateResult | typeof nothing {
+  if (!options.discardConfirmation) return nothing;
+
+  const modal: EditorModal = {
+    title: options.localize("editor.common.discard_title"),
+    content: html`<p class="nc-discard-message">${options.localize("editor.common.discard_message")}</p>
+      <div class="nc-discard-actions">
+        ${button({
+          label: options.localize("editor.common.stay"),
+          variant: "secondary",
+          onClick: options.onStay,
+        })}
+        ${button({
+          label: options.localize("editor.common.discard"),
+          variant: "danger",
+          onClick: options.onDiscard,
+        })}
+      </div>`,
+    modalClass: "nc-discard-modal",
+    closeLabel: options.localize("editor.common.stay"),
+  };
+
+  return renderEditorModal(modal, options.onStay);
 }

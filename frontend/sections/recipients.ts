@@ -18,12 +18,7 @@ export function renderRecipientSection(
   return renderEditorSection(
     context.localize("editor.recipients.section"),
     html`<div ${ref((element) => context.setEditorElement("recipients", element as HTMLElement))} data-role="recipients"></div>
-      <div class="nc-help">
-        ${context.localize("editor.recipients.help")}
-      </div>
-      <div class="nc-help">
-        ${context.localize("editor.recipients.service_help")}
-      </div>`,
+      `,
     "nc-section-recipient",
     context.activeSection === "Recipients",
     recipientSectionStyles,

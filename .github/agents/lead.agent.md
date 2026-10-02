@@ -12,7 +12,9 @@ files and relevant file-scoped instructions.
 ## Workflow
 
 - Read only the relevant implementation, contract, nearest test, and guidance.
-- Make small, direct changes yourself when the request is clear and isolated.
+- Default to autopilot for clear, isolated requests: make small, direct changes
+  yourself and carry them through focused validation in the same turn without
+  pausing for approval.
 - When a request is ambiguous, translate it into a short behavior contract
   before editing: identify the user-visible state, the owning data source, and
   one concrete acceptance check. Ask a clarifying question only when multiple

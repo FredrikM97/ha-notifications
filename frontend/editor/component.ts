@@ -52,16 +52,110 @@ export const editorComponentStyles = css`
   .nc-editor-sections {
     grid-area: content;
     min-width: 0;
+    padding: 24px;
   }
 
-  @container (max-width: 700px) {
+  .nc-editor-section-controls {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--divider-color);
+  }
+
+  .nc-editor-section-control {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nc-editor-section-control[hidden] {
+    display: none;
+  }
+
+  @container (max-width: 900px) {
     .nc-editor-view {
+      width: 100%;
+      max-width: none;
+      min-height: 100dvh;
+      margin: 0;
+      padding: 0;
+    }
+
+    .nc-editor-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    .nc-modal-body {
+      display: flex;
+      flex: 1;
+      padding: 0;
+    }
+
+    .nc-editor-layout {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .nc-editor-sections {
+      flex: 1;
       padding: 16px;
     }
 
+    .nc-editor-shell {
+      overflow: visible;
+    }
+  }
+
+  @container (max-width: 480px) {
+    .nc-editor-view {
+      padding-inline: 0;
+    }
+
+    .nc-editor-shell {
+      border-radius: 0;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .nc-editor-view {
+      width: 100%;
+      max-width: none;
+      min-height: 100dvh;
+      margin: 0;
+      padding: 0;
+    }
+
+    .nc-editor-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    .nc-modal-body {
+      display: flex;
+      flex: 1;
+      padding: 0;
+    }
+
     .nc-editor-layout {
+      display: flex;
+      flex-direction: column;
       position: relative;
-      display: block;
+      flex: 1;
+    }
+
+    .nc-editor-sections {
+      flex: 1;
+      padding: 16px;
     }
 
     .nc-editor-shell {
@@ -69,14 +163,13 @@ export const editorComponentStyles = css`
     }
   }
 
-  @media (max-width: 700px) {
-    .nc-editor-layout {
-      display: block;
-      position: relative;
+  @media (max-width: 480px) {
+    .nc-editor-view {
+      padding-inline: 0;
     }
 
     .nc-editor-shell {
-      overflow: visible;
+      border-radius: 0;
     }
   }
 `;

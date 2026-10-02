@@ -11,6 +11,7 @@ export interface ButtonOptions {
   icon?: string;
   title?: string;
   ariaLabel?: string;
+  ariaDescribedBy?: string;
   type?: "button" | "submit" | "reset";
   disabled?: boolean;
   iconOnly?: boolean;
@@ -160,6 +161,7 @@ class NotificationsButton extends LitElement {
     title: { type: String },
     ariaLabel: { type: String, attribute: "aria-label" },
     ariaExpanded: { type: String, attribute: "aria-expanded" },
+    ariaDescribedBy: { type: String, attribute: "aria-describedby" },
     type: { type: String },
     disabled: { type: Boolean },
     iconOnly: { type: Boolean, attribute: "icon-only" },
@@ -175,6 +177,7 @@ class NotificationsButton extends LitElement {
   declare title: string;
   declare ariaLabel: string;
   declare ariaExpanded: string;
+  declare ariaDescribedBy: string;
   declare type: "button" | "submit" | "reset";
   declare disabled: boolean;
   declare iconOnly: boolean;
@@ -189,6 +192,7 @@ class NotificationsButton extends LitElement {
     this.title = "";
     this.ariaLabel = "";
     this.ariaExpanded = "";
+    this.ariaDescribedBy = "";
     this.type = "button";
     this.disabled = false;
     this.iconOnly = false;
@@ -210,6 +214,7 @@ class NotificationsButton extends LitElement {
       title=${this.title || this.label}
       aria-label=${this.ariaLabel || this.label}
       aria-expanded=${this.ariaExpanded || nothing}
+      aria-describedby=${this.ariaDescribedBy || nothing}
       ?disabled=${this.disabled}
       @click=${this.onClick}
     >
@@ -242,6 +247,7 @@ export function buttonComponent(options: ButtonOptions): TemplateResult {
     .title=${options.title ?? options.label}
     .ariaLabel=${options.ariaLabel ?? options.label}
     .ariaExpanded=${options.ariaExpanded ?? ""}
+    .ariaDescribedBy=${options.ariaDescribedBy ?? ""}
     .type=${options.type ?? "button"}
     .disabled=${options.disabled ?? false}
     .iconOnly=${options.iconOnly ?? false}
@@ -270,6 +276,7 @@ export function button(options: ButtonOptions): TemplateResult {
     title=${options.title ?? options.label}
     aria-label=${options.ariaLabel ?? options.label}
     aria-expanded=${options.ariaExpanded ?? nothing}
+    aria-describedby=${options.ariaDescribedBy ?? nothing}
     data-role=${options.dataRole ?? nothing}
     ?disabled=${options.disabled ?? false}
     ?hidden=${options.hidden ?? false}

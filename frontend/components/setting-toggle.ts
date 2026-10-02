@@ -4,9 +4,22 @@ const SETTING_TOGGLE_TAG = "ha-notifications-setting-toggle";
 
 export const settingToggleStyles = css`
   :host {
-    display: inline-flex;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .label {
+    display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    color: var(--primary-text-color);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
   }
 
   ha-switch {
@@ -46,13 +59,14 @@ class SettingToggle extends LitElement {
   protected render() {
     const action = this.enabled ? this.disableText : this.enableText;
     const accessibleName = `${action} ${this.label}`;
-    return html`<ha-switch
-      .checked=${this.enabled}
-      ?disabled=${this.disabled}
-      aria-label=${accessibleName}
-      title=${accessibleName}
-      @change=${this.handleChange}
-    ></ha-switch>`;
+    return html`<span class="label"><span>${accessibleName}</span><slot name="help"></slot></span>
+      <ha-switch
+        .checked=${this.enabled}
+        ?disabled=${this.disabled}
+        aria-label=${accessibleName}
+        title=${accessibleName}
+        @change=${this.handleChange}
+      ></ha-switch>`;
   }
 
   private handleChange = (event: Event): void => {

@@ -3,7 +3,7 @@ import type { Alert } from "../types.js";
 import { ACTIONS_PLACEHOLDER, type CodeEditor } from "./types.js";
 
 export function conditionYaml(condition: Alert["conditions"]): string {
-  return YAML.stringify(condition);
+  return condition.length ? YAML.stringify(condition) : "";
 }
 
 export function triggerYaml(triggers: Alert["triggers"]): string {
@@ -31,6 +31,7 @@ export function parseTriggerYaml(value: string): Alert["triggers"] {
 }
 
 export function parseConditionYaml(value: string): Alert["conditions"] {
+  if (!value.trim()) return [];
   const parsed = YAML.parse(value);
   if (
     Array.isArray(parsed) &&

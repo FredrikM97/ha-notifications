@@ -43,6 +43,8 @@ export type AutomationStatusValue =
   | "disabled"
   | "conflict";
 
+export type AutomationMode = "single" | "restart" | "queued" | "parallel";
+
 export interface AutomationRuntimeStatus {
   status: AutomationStatusValue;
   enabled: boolean;
@@ -108,6 +110,8 @@ export interface CanonicalAlert {
   enabled?: boolean;
   triggers: AlertTrigger[];
   conditions: CanonicalCondition[];
+  on_condition_change?: boolean;
+  automation_mode?: AutomationMode;
   notification: CanonicalNotification;
   repeat?: Record<string, unknown> | null;
   recovery?: CanonicalRecovery | null;
@@ -146,9 +150,11 @@ export interface RuntimeState {
 export interface AutomationRuntimeStatus {
   status: AutomationStatusValue;
   enabled: boolean;
-  last_triggered?: string | null;
   mode: "single" | "restart" | "queued" | "parallel" | string;
   current: number;
+  running?: boolean;
+  triggered?: boolean;
+  notification_active?: boolean;
   automation_id?: string;
 }
 
@@ -175,6 +181,9 @@ export interface Alert {
   enabled: boolean;
   triggers: AlertTrigger[];
   conditions: AlertCondition;
+  on_condition_change?: boolean;
+  automation_mode?: AutomationMode;
+  cancel_on_inactive?: boolean;
   notification: CanonicalNotification;
   confirmation?: ConfirmationConfig;
   post_send_actions?: PostSendActionsConfig;
