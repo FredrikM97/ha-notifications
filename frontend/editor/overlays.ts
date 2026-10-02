@@ -21,7 +21,7 @@ export class EditorOverlayController {
 
   constructor(
     private readonly root: ShadowRoot,
-    private readonly hass: Hass,
+    private hass: Hass,
     private readonly onChange: () => void,
   ) {
     root.addEventListener("nc-editor-toast", this.handleToastEvent);
@@ -34,6 +34,10 @@ export class EditorOverlayController {
 
   get currentToasts(): Toast[] {
     return this.toasts;
+  }
+
+  setHass(hass: Hass): void {
+    this.hass = hass;
   }
 
   closeModal = (): void => {

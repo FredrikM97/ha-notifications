@@ -89,7 +89,7 @@ describe("buildAlertPayload", () => {
       alertFormValuesWithRecipients(),
     );
 
-    expect(payload.triggers).toEqual(draftAlertFixture().triggers);
+    expect(payload.triggers).toEqual(alertFormValues().evaluate.triggers);
   });
 
   it("emits canonical triggers without legacy evaluate fields", () => {
@@ -102,7 +102,7 @@ describe("buildAlertPayload", () => {
 
     expect(payload).not.toHaveProperty("evaluate");
     expect(payload).not.toHaveProperty("condition");
-    expect(payload.triggers).toEqual(draftAlertFixture().triggers);
+    expect(payload.triggers).toEqual(alertFormValues().evaluate.triggers);
   });
 
   it("persists disabling existing post-send actions", () => {

@@ -9,7 +9,7 @@ import {
   saveAlert,
   validateAlert,
 } from "./api.js";
-import { openEditor } from "./editor/index.js";
+import { openEditor, updateOpenEditorHass } from "./editor/index.js";
 import { formatLocalDateTime } from "./date-time.js";
 import { localize } from "./localize.js";
 import "./panel/alert-list.js";
@@ -343,6 +343,9 @@ class HaNotificationsPanel extends LitElement {
   set hass(value: Hass) {
     const changed = this._hass !== null && this._hass !== value;
     this._hass = value;
+    if (this.editorActive) {
+      updateOpenEditorHass(this.renderRoot as ShadowRoot, value);
+    }
     this.requestUpdate();
 
     if (this.isConnected && !this._initialized) {
@@ -724,9 +727,14 @@ class HaNotificationsPanel extends LitElement {
 
     this.editorActive = true;
     this.requestUpdate();
+    const hass = this._hass;
+    if (!hass) {
+      this.editorActive = false;
+      return;
+    }
     openEditor({
       root: this.renderRoot as ShadowRoot,
-      hass: this._hass!,
+      hass,
       alert,
       registries,
       onValidateAlert: async (draft) => {

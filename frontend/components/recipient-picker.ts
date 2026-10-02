@@ -194,7 +194,7 @@ class RecipientPickerElement extends LitElement {
 
   initialize(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): void {
     this.hass = hass;
-    this.labels = { all: localize(hass, "common.all"), device_id: localize(hass, "common.devices"), area_id: localize(hass, "common.areas"), floor_id: localize(hass, "common.floors"), label_id: localize(hass, "common.labels"), entity_id: localize(hass, "common.notification_entities"), user_id: localize(hass, "common.users") };
+    this.updateLabels();
     this.items = [
       ...registries.devices.map((item) => ({ type: "device_id" as const, id: item.id, label: item.name_by_user || item.name || item.id })),
       ...registries.areas.map((item) => ({ type: "area_id" as const, id: item.area_id || item.id || "", label: item.name || item.id || "" })),
@@ -209,6 +209,16 @@ class RecipientPickerElement extends LitElement {
       ),
     );
     this.markDirty = markDirty;
+  }
+
+  setHass(hass: Hass): void {
+    this.hass = hass;
+    this.updateLabels();
+    this.rerender();
+  }
+
+  private updateLabels(): void {
+    this.labels = { all: localize(this.hass, "common.all"), device_id: localize(this.hass, "common.devices"), area_id: localize(this.hass, "common.areas"), floor_id: localize(this.hass, "common.floors"), label_id: localize(this.hass, "common.labels"), entity_id: localize(this.hass, "common.notification_entities"), user_id: localize(this.hass, "common.users") };
   }
 
   currentTarget(): NotificationTarget {
@@ -300,9 +310,13 @@ class RecipientPickerElement extends LitElement {
 
 customElements.define("ha-notifications-recipient-picker", RecipientPickerElement);
 
-export function createRecipientPicker(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): { element: HTMLElement; target: () => NotificationTarget } {
+export function createRecipientPicker(registries: Registries, target: NotificationTarget, markDirty: () => void, hass?: Hass): { element: HTMLElement; target: () => NotificationTarget; setHass: (hass: Hass) => void } {
   const element = new RecipientPickerElement();
   element.initialize(registries, target, markDirty, hass);
   element.renderImmediately();
-  return { element, target: () => element.currentTarget() };
+  return {
+    element,
+    target: () => element.currentTarget(),
+    setHass: (nextHass) => element.setHass(nextHass),
+  };
 }

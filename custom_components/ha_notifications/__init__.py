@@ -38,25 +38,24 @@ def _affected_alert_ids(
 
 async def _async_update_listener(hass: HomeAssistant, entry: Any) -> None:
     """Reconcile persisted options whenever Home Assistant updates the entry."""
-    previous = (
-        entry.runtime_data.config
-        if isinstance(entry.runtime_data, RuntimeData)
-        else validate_config(dict(entry.data))
-    )
+    runtime_data = getattr(entry, "runtime_data", None)
+    previous = runtime_data.config if isinstance(runtime_data, RuntimeData) else validate_config(dict(entry.data))
     validated = validate_config(dict(entry.options or entry.data))
     try:
-        if not isinstance(entry.runtime_data, RuntimeData):
+        if not isinstance(runtime_data, RuntimeData):
             entry.runtime_data = RuntimeData(config=validated)
+            runtime_data = entry.runtime_data
         else:
-            entry.runtime_data.config = validated
+            runtime_data.config = validated
         await async_setup_services(hass)
-        entry.runtime_data.automations = await async_reconcile_automations(
+        runtime_data.automations = await async_reconcile_automations(
             hass,
             validated["alerts"],
         )
     except Exception:
-        if isinstance(entry.runtime_data, RuntimeData):
-            entry.runtime_data.config = previous
+        runtime_data = getattr(entry, "runtime_data", None)
+        if isinstance(runtime_data, RuntimeData):
+            runtime_data.config = previous
         raise
 
 
@@ -122,7 +121,8 @@ async def async_save_config(
     validated = validate_config(config)
     await async_validate_alerts(hass, validated["alerts"])
     hass.config_entries.async_update_entry(entry, options=validated)
-    if not isinstance(entry.runtime_data, RuntimeData):
+    runtime_data = getattr(entry, "runtime_data", None)
+    if not isinstance(runtime_data, RuntimeData):
         if hasattr(entry, "add_update_listener"):
             history = HistoryStore(hass)
             await history.async_load()
@@ -138,19 +138,21 @@ async def async_save_config(
             entry.runtime_data = RuntimeData(
                 config=validated,
             )
+        runtime_data = entry.runtime_data
     else:
-        entry.runtime_data.config = validated
+        runtime_data.config = validated
     try:
         automations = await async_reconcile_automations(
             hass,
             validated["alerts"],
         )
-        if isinstance(entry.runtime_data, RuntimeData):
-            entry.runtime_data.automations = automations
+        if isinstance(runtime_data, RuntimeData):
+            runtime_data.automations = automations
     except Exception:
         hass.config_entries.async_update_entry(entry, options=previous)
-        if isinstance(entry.runtime_data, RuntimeData):
-            entry.runtime_data.config = previous
+        runtime_data = getattr(entry, "runtime_data", None)
+        if isinstance(runtime_data, RuntimeData):
+            runtime_data.config = previous
         raise
     return validated
 

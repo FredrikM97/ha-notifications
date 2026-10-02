@@ -320,7 +320,6 @@ async def test_async_save_config_updates_entry_runtime_data(tmp_path) -> None:
     class Entry:
         options: dict[str, object] = {}
         data: dict[str, object] = {"version": 1, "alerts": []}
-        runtime_data: RuntimeData | None = None
 
     hass = Hass()
     entry = Entry()

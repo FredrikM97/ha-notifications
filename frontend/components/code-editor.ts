@@ -78,6 +78,11 @@ export const codeEditorStyles = css`
     min-width: 0;
   }
 
+  .visual-selector-frame {
+    min-width: 0;
+    padding: 12px;
+  }
+
   .visual-error {
     padding: 16px;
     color: var(--error-color);
@@ -243,14 +248,16 @@ class HaNotificationsCodeEditor extends LitElement {
               ? html`<div class="visual-error" role="alert">
                   ${localize(this.hass, "editor.visual.invalid_yaml")}
                 </div>`
-              : html`<ha-selector
-                  .hass=${this.hass}
-                  .selector=${this.selectorConfig()}
-                  .value=${visualValue}
-                  data-role="native-visual-selector"
-                  aria-label=${this.label}
-                  @value-changed=${this.handleVisualValueChanged}
-                ></ha-selector>`
+              : html`<div class="visual-selector-frame">
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${this.selectorConfig()}
+                    .value=${visualValue}
+                    data-role="native-visual-selector"
+                    aria-label=${this.label}
+                    @value-changed=${this.handleVisualValueChanged}
+                  ></ha-selector>
+                </div>`
             : nothing
         }
       </div>`;

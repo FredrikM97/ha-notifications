@@ -8,7 +8,10 @@ import {
   buttonComponentStyles,
 } from "../../frontend/components/button.js";
 import { defaultAlert } from "../../frontend/editor/alert-defaults.js";
-import { openEditor } from "../../frontend/editor/index.js";
+import {
+  openEditor,
+  updateOpenEditorHass,
+} from "../../frontend/editor/index.js";
 import { helpTooltipStyles } from "../../frontend/editor/section.js";
 import { editorSections } from "../../frontend/editor/types.js";
 import { createRecipientPicker } from "../../frontend/components/recipient-picker.js";
@@ -124,6 +127,34 @@ function sectionContract(section: Element | null) {
 }
 
 describe("alert editor interactions", () => {
+  it("updates native selector context when Home Assistant replaces hass", async () => {
+    const root = editorRoot();
+    const options = editorOptions(root);
+    const replacementHass = {
+      ...options.hass,
+      connection: { sendMessagePromise: vi.fn() },
+    } as Hass;
+    openEditor(options);
+
+    const triggerEditor = nestedQuery(
+      root,
+      'ha-notifications-code-editor[data-role="triggers-yaml-editor"]',
+    )[0] as HTMLElement & { shadowRoot: ShadowRoot };
+    const visualButton = [...triggerEditor.shadowRoot.querySelectorAll("button")]
+      .find((button) => button.textContent?.trim() === "Visual");
+    visualButton?.click();
+    await settleLitTree(triggerEditor.shadowRoot);
+
+    updateOpenEditorHass(root, replacementHass);
+    await settleLitTree(root);
+
+    const triggerSelector = nestedQuery(
+      root,
+      'ha-selector[data-role="native-visual-selector"]',
+    )[0] as (HTMLElement & { hass?: Hass }) | undefined;
+    expect(triggerSelector?.hass).toBe(replacementHass);
+  });
+
   it("spaces startup and periodic condition checks", () => {
     const root = editorRoot();
     openEditor(editorOptions(root));

@@ -142,6 +142,9 @@ describe("shared code editor visual mode", () => {
           value: unknown;
         }
       >('ha-selector[data-role="native-visual-selector"]');
+      expect(selector?.parentElement?.classList.contains("visual-selector-frame")).toBe(true);
+      expect(codeEditorStyles.cssText).toContain(".visual-selector-frame");
+      expect(codeEditorStyles.cssText).toContain("padding: 12px;");
       expect(selector?.selector).toEqual({ [visualType]: {} });
       expect(selector?.value).toEqual(input);
       if (!selector) throw new Error("Home Assistant selector is missing.");

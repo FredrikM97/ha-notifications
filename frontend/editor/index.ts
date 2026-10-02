@@ -1,5 +1,6 @@
 import { errorMessage } from "../api.js";
 import { createRecipientPicker } from "../components/recipient-picker.js";
+import { createLocalizer } from "../localize.js";
 import { html, render } from "lit";
 import type { Alert, Hass, Registries } from "../types.js";
 import {
@@ -169,6 +170,14 @@ class AlertEditorController {
     this.updateDirtyIndicator();
   };
 
+  updateHass(hass: Hass): void {
+    this.context.hass = hass;
+    this.context.localize = createLocalizer(hass);
+    this.overlays.setHass(hass);
+    this.recipients?.setHass(hass);
+    this.renderEditor();
+  }
+
   private markDirty = (): void => {
     if (this.state.dirty) return;
 
@@ -277,6 +286,7 @@ class AlertEditorController {
     this.navigation.dispose();
     this.overlays.dispose();
     this.host.remove();
+    openEditors.delete(this.root);
     this.onClosed?.();
     return true;
   };
@@ -427,6 +437,12 @@ class AlertEditorController {
   };
 }
 
+const openEditors = new WeakMap<ShadowRoot, AlertEditorController>();
+
+export function updateOpenEditorHass(root: ShadowRoot, hass: Hass): void {
+  openEditors.get(root)?.updateHass(hass);
+}
+
 export function openEditor(options: OpenEditorOptions): void {
   // Guard against a second click opening a stacked editor instance.
   if (
@@ -436,5 +452,5 @@ export function openEditor(options: OpenEditorOptions): void {
   ) {
     return;
   }
-  new AlertEditorController(options);
+  openEditors.set(options.root, new AlertEditorController(options));
 }
