@@ -18,16 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check whether main has changed
+      - name: Check whether main has changed since the dev build
         id: changes
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          current_sha=$(git rev-parse --short HEAD)
-          previous_notes=$(gh release view dev --json body --jq '.body' 2>/dev/null || true)
-          if printf '%s' "$previous_notes" | grep -Fq "**Commit**: $current_sha"; then
+          current_sha=$(git rev-parse HEAD)
+          previous_sha=$(git rev-parse --verify 'refs/tags/dev^{commit}' 2>/dev/null || true)
+          if [ "$current_sha" = "$previous_sha" ]; then
+            echo "main is already built at $current_sha"
             echo "create=false" >> "$GITHUB_OUTPUT"
           else
+            echo "main changed since the last dev build ($previous_sha -> $current_sha)"
             echo "create=true" >> "$GITHUB_OUTPUT"
           fi
 
