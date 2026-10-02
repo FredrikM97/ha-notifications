@@ -1001,6 +1001,94 @@ async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_con
     assert len(delivered) == 1
 
 
+async def test_saving_alert_cancels_active_confirmation_wait(
+    hass: HomeAssistant,
+    alert_factory,
+    mock_automation_files,
+    enable_custom_integrations,
+    monkeypatch,
+) -> None:
+    """A generated automation reload must close history for stopped runs."""
+    async def register_panel(_hass: HomeAssistant) -> None:
+        return None
+
+    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
+    delivered: list[dict[str, object]] = []
+
+    async def handle_notification(call) -> None:
+        delivered.append(dict(call.data))
+
+    hass.services.async_register("notify", "mobile_app_phone", handle_notification)
+    mock_automation_files["prepare"]()
+    assert await async_setup_component(hass, "automation", {})
+
+    hass.states.async_set("input_boolean.alert_button", "off")
+    alert = alert_factory(
+        "base",
+        triggers=[{
+            "trigger": "state",
+            "entity_id": "input_boolean.alert_button",
+            "to": "on",
+        }],
+        conditions=[{
+            "condition": "state",
+            "entity_id": "input_boolean.alert_button",
+            "state": "on",
+        }],
+        confirmation={
+            "enabled": True,
+            "buttons": [{"id": "confirm", "label": "Confirm"}],
+            "notification": {"enabled": False},
+            "actions": [],
+            "reminders": {"enabled": False, "interval": 60},
+        },
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": [alert]},
+    )
+    entry.add_to_hass(hass)
+
+    assert await ha_notifications.async_setup_entry(hass, entry)
+    await hass.async_block_till_done()
+    hass.states.async_set("input_boolean.alert_button", "on")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    waiting = next(
+        item
+        for item in await entry.runtime_data.history.async_entries(alert["id"])
+        if item["event"]["type"] == "waiting"
+    )
+    flow_id = waiting["event"]["flow_id"]
+    automation = next(
+        state
+        for state in hass.states.async_all("automation")
+        if state.attributes.get("id") == automation_id(alert)
+    )
+    assert automation.attributes["current"] == 1
+
+    updated_alert = {**alert, "name": "Updated alert"}
+    await ha_notifications.async_save_config(
+        hass,
+        entry,
+        {"version": 1, "alerts": [updated_alert]},
+    )
+    await hass.async_block_till_done()
+
+    automation = hass.states.get(automation.entity_id)
+    assert automation.state == "on"
+    assert automation.attributes["current"] == 0
+    run_events = [
+        item["event"]
+        for item in await entry.runtime_data.history.async_entries(alert["id"])
+        if item["event"].get("flow_id") == flow_id
+    ]
+    assert run_events[0]["type"] == "cancelled"
+    assert run_events[0]["details"]["action"] == "automation_reloaded"
+
+
 async def test_inactive_transition_cancels_restart_mode_confirmation_wait(
     hass: HomeAssistant,
     alert_factory,

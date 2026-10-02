@@ -26,6 +26,7 @@ from .const import (
     AUTOMATION_CATEGORY_SCOPE,
     AUTOMATION_FILE,
     AUTOMATION_LABEL,
+    DOMAIN,
 )
 
 _RECONCILIATION_LOCKS: weakref.WeakKeyDictionary[HomeAssistant, asyncio.Lock] = weakref.WeakKeyDictionary()
@@ -39,6 +40,61 @@ def _reconciliation_lock(hass: HomeAssistant) -> asyncio.Lock:
         return _RECONCILIATION_LOCKS.setdefault(hass, asyncio.Lock())
     except TypeError:
         return _RECONCILIATION_FALLBACK_LOCKS.setdefault(id(hass), asyncio.Lock())
+
+
+async def _async_record_reloaded_run_cancellations(hass: HomeAssistant) -> None:
+    """Close history for runs stopped by reloading Home Assistant automations."""
+    config_entries = getattr(hass, "config_entries", None)
+    async_entries = getattr(config_entries, "async_entries", None)
+    if not callable(async_entries):
+        return
+    active_statuses = {"started", "waiting", "running"}
+    terminal_statuses = {
+        "cancelled",
+        "completed",
+        "inactive",
+        "confirmation_completed",
+        "confirmation_timeout",
+    }
+    for entry in async_entries(DOMAIN):
+        runtime_data = getattr(entry, "runtime_data", None)
+        history = getattr(runtime_data, "history", None)
+        if history is None:
+            continue
+        entries = await history.async_entries()
+        latest: dict[tuple[str, str], tuple[bool, str]] = {}
+        for history_entry in entries:
+            config = history_entry.get("config")
+            event = history_entry.get("event")
+            if not isinstance(config, dict) or not isinstance(event, dict):
+                continue
+            alert_id = config.get("id")
+            flow_id = event.get("flow_id")
+            event_type = event.get("type")
+            if (
+                not isinstance(alert_id, str)
+                or not isinstance(flow_id, str)
+                or not flow_id
+                or event_type not in active_statuses | terminal_statuses
+            ):
+                continue
+            key = (alert_id, flow_id)
+            if key not in latest:
+                latest[key] = (
+                    event_type in active_statuses,
+                    str(config.get("name", alert_id)),
+                )
+        for (alert_id, flow_id), (active, alert_name) in latest.items():
+            if not active:
+                continue
+            await history.async_record(
+                alert_id,
+                alert_name,
+                "cancelled",
+                "Automation run stopped because automations were reloaded",
+                {"action": "automation_reloaded"},
+                flow_id=flow_id,
+            )
 
 
 def ensure_automation_include(path: Path) -> bool:
@@ -94,6 +150,7 @@ async def async_reconcile_automations(
             else:
                 await hass.async_add_executor_job(write_automation_files, path, document)
                 await hass.services.async_call("automation", "reload", blocking=True)
+                await _async_record_reloaded_run_cancellations(hass)
                 _LOGGER.info(
                     "Reloaded %d generated automation(s)",
                     len(document),

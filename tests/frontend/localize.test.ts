@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLocalizer, localizeEditorTitle } from "../../frontend/localize.js";
 import type { Hass } from "../../frontend/types.js";
+import componentStrings from "../../custom_components/ha_notifications/strings.json";
+import componentTranslations from "../../custom_components/ha_notifications/translations/en.json";
 
 describe("editor localizer", () => {
   it("uses the Home Assistant translator once it is bound", () => {
@@ -22,5 +24,11 @@ describe("editor localizer", () => {
 
     expect(localize("editor.basic.section")).toBe("Basic");
     expect(localize("editor.missing", {}, "Fallback")).toBe("Fallback");
+  });
+
+  it("publishes visual editor strings through Home Assistant translations", () => {
+    expect(componentStrings.frontend.editor.visual).toEqual(
+      componentTranslations.frontend.editor.visual,
+    );
   });
 });

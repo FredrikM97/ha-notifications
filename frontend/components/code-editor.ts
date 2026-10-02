@@ -47,9 +47,8 @@ export const codeEditorStyles = css`
   }
 
   :host(.nc-code-editor-visual-active) {
-    border-inline: 0;
-    border-bottom: 0;
-    border-radius: 0;
+    border: 1px solid var(--divider-color);
+    border-radius: 10px;
   }
 
   :host([data-size="content"]) {

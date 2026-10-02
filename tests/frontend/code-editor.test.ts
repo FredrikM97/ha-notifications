@@ -131,8 +131,10 @@ describe("shared code editor visual mode", () => {
       expect(codeEditorStyles.cssText).toContain(
         ":host(.nc-code-editor-visual-active)",
       );
-      expect(codeEditorStyles.cssText).toContain("border-inline: 0;");
-      expect(codeEditorStyles.cssText).toContain("border-bottom: 0;");
+      expect(codeEditorStyles.cssText).toContain(
+        "border: 1px solid var(--divider-color);",
+      );
+      expect(codeEditorStyles.cssText).toContain("border-radius: 10px;");
       expect(codeEditorStyles.cssText).toContain(
         "--ha-card-border-width: 1px 0 0;",
       );
