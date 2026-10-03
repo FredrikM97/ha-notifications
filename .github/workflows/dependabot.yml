@@ -30,8 +30,7 @@ jobs:
 
           while [ "$elapsed" -lt "$max_wait" ]; do
             checks=$(gh api \
-              "/repos/$REPOSITORY/commits/$SHA/check-runs" \
-              --paginate)
+              "/repos/$REPOSITORY/commits/$SHA/check-runs?per_page=100")
 
             total=$(echo "$checks" | jq '
               [
@@ -44,7 +43,7 @@ jobs:
               [
                 .check_runs[]
                 | select(.name != "Dependabot auto-approve")
-                | select(.status != "completed")
+                | select(.conclusion == null)
               ] | length
             ')
 
@@ -52,7 +51,7 @@ jobs:
               [
                 .check_runs[]
                 | select(.name != "Dependabot auto-approve")
-                | select(.status == "completed")
+                | select(.conclusion != null)
                 | select(
                     .conclusion != "success" and
                     .conclusion != "neutral" and
@@ -63,28 +62,22 @@ jobs:
 
             echo "Checks: $total total, $pending pending, $failed failed"
 
+            echo "$checks" | jq -r '
+              .check_runs[]
+              | select(.name != "Dependabot auto-approve")
+              | "\(.name): \(.conclusion // "pending")"
+            '
+
             if [ "$failed" -gt 0 ]; then
-              echo "One or more checks failed:"
-              echo "$checks" | jq -r '
-                .check_runs[]
-                | select(.name != "Dependabot auto-approve")
-                | select(.status == "completed")
-                | select(
-                    .conclusion != "success" and
-                    .conclusion != "neutral" and
-                    .conclusion != "skipped"
-                  )
-                | "  \(.name): \(.conclusion)"
-              '
+              echo "One or more checks failed."
               exit 1
             fi
 
             if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
-              echo "All checks completed successfully."
+              echo "All checks have completed successfully."
               exit 0
             fi
 
-            echo "Waiting ${interval}s..."
             sleep "$interval"
             elapsed=$((elapsed + interval))
           done
