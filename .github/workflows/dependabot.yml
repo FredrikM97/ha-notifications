@@ -1,4 +1,4 @@
-name: Dependabot auto-approve
+name: Dependabot
 
 on:
   pull_request:
@@ -13,9 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
-    if: >
-      github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.repository == 'FredrikM97/ha-notifications'
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
 
     steps:
       - name: Wait for checks
@@ -23,6 +21,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           max_wait=1800
           interval=15
@@ -32,39 +31,41 @@ jobs:
             checks=$(gh api \
               "/repos/$REPOSITORY/commits/$SHA/check-runs?per_page=100")
 
-            total=$(echo "$checks" | jq '
+            relevant_checks=$(echo "$checks" | jq --arg run_id "$RUN_ID" '
               [
                 .check_runs[]
-                | select(.name != "Dependabot auto-approve")
-              ] | length
+                | select(
+                    .details_url == null
+                    or (.details_url | contains("/actions/runs/" + $run_id) | not)
+                  )
+              ]
             ')
 
-            pending=$(echo "$checks" | jq '
+            total=$(echo "$relevant_checks" | jq 'length')
+
+            pending=$(echo "$relevant_checks" | jq '
               [
-                .check_runs[]
-                | select(.name != "Dependabot auto-approve")
+                .[]
                 | select(.conclusion == null)
               ] | length
             ')
 
-            failed=$(echo "$checks" | jq '
+            failed=$(echo "$relevant_checks" | jq '
               [
-                .check_runs[]
-                | select(.name != "Dependabot auto-approve")
-                | select(.conclusion != null)
+                .[]
                 | select(
-                    .conclusion != "success" and
-                    .conclusion != "neutral" and
-                    .conclusion != "skipped"
+                    .conclusion != null
+                    and .conclusion != "success"
+                    and .conclusion != "neutral"
+                    and .conclusion != "skipped"
                   )
               ] | length
             ')
 
             echo "Checks: $total total, $pending pending, $failed failed"
 
-            echo "$checks" | jq -r '
-              .check_runs[]
-              | select(.name != "Dependabot auto-approve")
+            echo "$relevant_checks" | jq -r '
+              .[]
               | "\(.name): \(.conclusion // "pending")"
             '
 
@@ -74,7 +75,7 @@ jobs:
             fi
 
             if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
-              echo "All checks have completed successfully."
+              echo "All checks completed."
               exit 0
             fi
 
