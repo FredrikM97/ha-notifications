@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: >
+      github.repository == 'FredrikM97/ha-notifications' &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
 
     steps:
       - name: Wait for checks
