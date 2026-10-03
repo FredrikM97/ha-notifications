@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 all = [
-    "pytest==9.0.3",
+    "pytest",
     "pytest-asyncio==1.4.0",
     "homeassistant==2026.9.3",
     "home-assistant-frontend==20260826.7",
