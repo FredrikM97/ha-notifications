@@ -170,6 +170,35 @@ def test_generate_automation_uses_explicit_triggers_and_active_branches(automati
     }
 
 
+def test_generate_automation_excludes_notification_editor_options(automation_alert) -> None:
+    editor_options = {
+        "fields": {
+            "mobile.color": {"enabled": False, "value": "#ff0000"},
+            "android.channel": {"enabled": False, "value": "Disabled channel"},
+        },
+        "sections": {
+            "ios": {"enabled": False, "values": {"push": {"sound": "disabled.aiff"}}},
+        },
+    }
+    automation_alert["notification"].update({
+        "editor_options": editor_options,
+        "notification_native": {"priority": "high"},
+    })
+
+    generated = generate_automation(automation_alert)
+    notification = _active_sequence(generated)[0]["data"]
+
+    assert "editor_options" not in notification
+    assert notification["notification_native"] == {"priority": "high"}
+    assert notification["data"] == {"message": "Low water"}
+    rendered = _render_yaml(generated)
+    assert "editor_options" not in rendered
+    assert "Disabled channel" not in rendered
+    assert "#ff0000" not in rendered
+    assert "disabled.aiff" not in rendered
+    assert automation_alert["notification"]["editor_options"] == editor_options
+
+
 def test_started_by_event_type_handles_non_event_triggers(
     hass: HomeAssistant,
     automation_alert: dict[str, object],

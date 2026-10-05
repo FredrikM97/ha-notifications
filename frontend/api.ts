@@ -1,24 +1,52 @@
-import type {
-  Alert,
-  AlertsConfig,
-  AutomationRuntimeStatus,
-  AutomationStatusValue,
-  Hass,
-  Registries,
-  RegistryArea,
-  RegistryDevice,
-  RegistryEntity,
-  RegistryFloor,
-  RegistryLabel,
-  RegistryState,
-  RegistryUser,
-  RuntimeAlertHistoryEntry,
-} from "./types.js";
-import { serializeAlertDurations } from "./alert-payload.js";
+import type { Alert, AlertsConfig, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
+
+// ---- Durations (canonical storage is seconds) ----
+
+type DurationValue = string | number | Record<string, number>;
+
+const UNIT_SECONDS: Record<string, number> = { days: 86400, hours: 3600, minutes: 60, seconds: 1 };
+
+export function durationToSeconds(value: DurationValue | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+  if (typeof value === "string") {
+    const parts = value.split(":").map(Number);
+    if (parts.some((part) => !Number.isFinite(part))) return undefined;
+    if (parts.length === 2) parts.unshift(0);
+    if (parts.length !== 3) return undefined;
+    return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  }
+  if (value && typeof value === "object") {
+    return Math.max(
+      0,
+      Object.entries(UNIT_SECONDS).reduce((sum, [unit, factor]) => sum + (Number(value[unit]) || 0) * factor, 0),
+    );
+  }
+  return undefined;
+}
+
+/** Store reminder durations as seconds, the canonical backend form. */
+export function serializeAlertDurations(alert: Alert): Alert {
+  const result = JSON.parse(JSON.stringify(alert)) as Alert;
+  const reminders = result.confirmation?.reminders;
+  if (!reminders) return result;
+  for (const [key, label] of [
+    ["interval", "Confirmation reminder interval"],
+    ["timeout", "Confirmation timeout"],
+  ] as const) {
+    if (reminders[key] === undefined) continue;
+    const seconds = durationToSeconds(reminders[key] as DurationValue);
+    if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
+    reminders[key] = seconds;
+  }
+  return result;
+}
+
+// ---- Websocket API ----
 
 const DOMAIN = "ha_notifications";
 type Command =
   | "get_config"
+  | "mobile_platforms"
   | "automation_status"
   | "cancel_run"
   | "get_history"
@@ -59,48 +87,27 @@ export async function call<T>(
   }
 }
 
-async function callRegistry<T>(hass: Hass, type: string): Promise<T[]> {
-  const result = await hass.connection.sendMessagePromise<T[]>({ type });
-  if (Array.isArray(result)) {
-    return result;
-  }
-
-  return [];
-}
-
 function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
   const serialized = serializeAlertDurations(alert);
   const { runtime: _runtime, ...canonical } = serialized;
   return canonical as AlertsConfig["alerts"][number];
 }
 
-export async function loadRegistries(hass: Hass): Promise<Registries> {
-  const [entities, states, devices, areas, labels, floors, users] =
-    await Promise.all([
-      callRegistry<RegistryEntity>(hass, "config/entity_registry/list"),
-      callRegistry<RegistryState>(hass, "get_states"),
-      callRegistry<RegistryDevice>(hass, "config/device_registry/list"),
-      callRegistry<RegistryArea>(hass, "config/area_registry/list"),
-      callRegistry<RegistryLabel>(hass, "config/label_registry/list"),
-      callRegistry<RegistryFloor>(hass, "config/floor_registry/list"),
-      callRegistry<RegistryUser>(hass, "config/auth/list"),
-    ]);
-  const friendlyNames = new Map(
-    states.map((state) => [state.entity_id, state.attributes?.friendly_name]),
-  );
+/** Active, human users as select options for user recipients. */
+export async function loadUsers(hass: Hass): Promise<{ value: string; label: string }[]> {
+  const users = await hass.connection.sendMessagePromise<
+    { id: string; name: string; is_active?: boolean; system_generated?: boolean }[]
+  >({ type: "config/auth/list" });
+  return users
+    .filter((user) => user.is_active !== false && !user.system_generated)
+    .map((user) => ({ value: user.id, label: user.name }));
+}
 
-  return {
-    entities: entities.map((entity) => ({
-      ...entity,
-      friendly_name:
-        friendlyNames.get(entity.entity_id) || entity.friendly_name,
-    })),
-    devices,
-    areas,
-    labels,
-    floors,
-    users,
-  };
+export function getMobilePlatforms(hass: Hass, target: Alert["notification"]["target"]): Promise<{
+  platforms: ("android" | "ios")[];
+  unknown: boolean;
+}> {
+  return call(hass, "mobile_platforms", { target });
 }
 
 export async function getAlerts(hass: Hass): Promise<Alert[]> {

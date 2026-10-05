@@ -8,6 +8,16 @@
 
   "remoteUser": "vscode",
 
+  "forwardPorts": [8124],
+  "portsAttributes": {
+    "8124": {
+      "label": "Home Assistant Dev",
+      "protocol": "http",
+      "onAutoForward": "notify",
+      "requireLocalPort": true
+    }
+  },
+
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
       "version": "24"
@@ -39,5 +49,5 @@
     "type=bind,source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,readonly"
   ],
 
-  "postCreateCommand": "pip install -e '.[all]' && npm ci && git config core.hooksPath .githooks"
+  "postCreateCommand": "pip install -e . && npm ci && git config core.hooksPath .githooks"
 }

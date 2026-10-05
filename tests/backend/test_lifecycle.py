@@ -4,20 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
 
 import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import category_registry as cr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 from homeassistant.setup import async_setup_component
-from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_fire_time_changed_exact,
-)
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications.automation import automation_id
@@ -28,6 +22,7 @@ from custom_components.ha_notifications.const import (
     DOMAIN,
 )
 from custom_components.ha_notifications.domain import RuntimeData
+from tests.backend.conftest import MockConfigEntry
 
 
 async def test_invalid_config_entry_still_loads_panel(
@@ -229,7 +224,6 @@ async def test_generated_automation_executes_lifecycle_delivery(
     mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
-    service_calls,
     condition_state: str,
     skip_condition: bool,
     should_deliver: bool,
@@ -443,11 +437,10 @@ async def test_generated_automation_executes_interval_trigger(
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
     delivered.clear()
-    async_fire_time_changed_exact(
-        hass,
-        dt_util.utcnow() + timedelta(seconds=1),
-        fire_all=False,
-    )
+    # The real time_pattern trigger fires on the next whole second.
+    async with asyncio.timeout(5):
+        while not delivered:
+            await asyncio.sleep(0.05)
     await hass.async_block_till_done()
     await ha_notifications.async_unload_entry(hass, entry)
     await hass.async_block_till_done()
@@ -955,7 +948,7 @@ async def test_inverse_state_trigger_in_main_automation_cancels_wait_without_con
         delivered.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    hass.bus.async_listen("ha_notifications_command", commands.append)
+    hass.bus.async_listen("ha_notifications_command", callback(lambda event: commands.append(event)))
     mock_automation_files["prepare"]()
     assert await async_setup_component(hass, "automation", {})
 

@@ -40,6 +40,57 @@ def test_validate_config_preserves_cancel_on_inactive_opt_in() -> None:
     assert config["alerts"][0]["cancel_on_inactive"] is True
 
 
+def test_validate_config_roundtrips_notification_editor_options(alert_factory) -> None:
+    editor_options = {
+        "fields": {
+            "mobile.color": {"enabled": False, "value": "#ff0000"},
+            "android.channel": {"enabled": False, "value": "Alerts"},
+            "ios.sound": {"enabled": True, "value": {"name": "default", "volume": 0.5}},
+        },
+        "sections": {
+            "android": {"enabled": False, "values": {"channel": "Alerts", "ttl": 0}},
+            "ios": {"enabled": False, "values": {"push": {"sound": None}}},
+        },
+    }
+    raw = {"alerts": [alert_factory(notification={
+        "message": "Low water",
+        "editor_options": editor_options,
+        "notification_native": {"priority": "high"},
+    })]}
+
+    validated = validate_config(raw)
+    notification = Configuration.model_validate(validated).alerts[0].notification
+
+    assert notification.editor_options == editor_options
+    assert notification.__pydantic_extra__ == {"notification_native": {"priority": "high"}}
+    assert validated["alerts"][0]["notification"]["editor_options"] == editor_options
+    assert validate_config(validated) == validated
+    assert raw["alerts"][0]["notification"]["editor_options"] == editor_options
+
+
+@pytest.mark.parametrize("editor_options", [None, {}])
+def test_validate_config_accepts_optional_notification_editor_options(editor_options) -> None:
+    validated = validate_config({"alerts": [{
+        "id": "water",
+        "notification": {"editor_options": editor_options},
+    }]})
+
+    notification = validated["alerts"][0]["notification"]
+    if editor_options is None:
+        assert "editor_options" not in notification
+    else:
+        assert notification["editor_options"] == {}
+
+
+@pytest.mark.parametrize("editor_options", [False, 1, "invalid", [], [["fields", {}]], {1: {}}])
+def test_validate_config_rejects_unsafe_notification_editor_options(editor_options) -> None:
+    with pytest.raises(ValidationError, match="editor_options"):
+        validate_config({"alerts": [{
+            "id": "water",
+            "notification": {"editor_options": editor_options},
+        }]})
+
+
 def test_validate_config_preserves_condition_change_trigger_opt_in() -> None:
     config = validate_config({"alerts": [{
         "id": "condition_alert",

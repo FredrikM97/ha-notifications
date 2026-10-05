@@ -51,60 +51,44 @@
         description: "Notify when the front door stays open.",
         icon: "mdi:door-open",
         enabled: true,
-        conditions: [
+        triggers: [
           {
-            type: "state",
-            id: "front_door",
+            trigger: "state",
             entity_id: "binary_sensor.front_door",
+            from: "off",
             state: "on",
-            for: "00:05:00",
           },
         ],
-        evaluate: {
-          on_change: true,
-          startup: true,
-          interval: "01:00:00",
-          retention: { enabled: true, days: 14 },
-        },
+        conditions: [{
+          condition: "state",
+          entity_id: "binary_sensor.front_door",
+          state: "on",
+          for: "00:05:00",
+        }],
+        monitor: { on_change: true, startup: true, interval: "01:00:00" },
         notification: {
+          action: "notify.mobile_app_phone",
           target: { entity_id: ["notify.phone"] },
-          title: "Front door",
-          message: "The front door is still open.",
-        },
-      };
-
-      const registries = {
-        entities: [
-          {
-            entity_id: "binary_sensor.front_door",
-            name: "Front door",
-            friendly_name: "Front door",
+          data: {
+            title: "Front door",
+            message: "The front door is still open.",
           },
-          { entity_id: "notify.phone", name: "Phone" },
-          { entity_id: "light.hall", name: "Hall light" },
-        ],
-        devices: [{ id: "device_phone", name: "Phone", name_by_user: "Main phone" }],
-        areas: [{ area_id: "hall", name: "Hall" }],
-        labels: [],
-        floors: [],
-        users: [{ id: "user_fred", name: "Fred", is_active: true }],
+        },
       };
 
       const responses = {
-        "config/entity_registry/list": registries.entities,
-        get_states: registries.entities.map((entity) => ({
-          entity_id: entity.entity_id,
-          attributes: { friendly_name: entity.friendly_name || entity.name },
-        })),
-        "config/device_registry/list": registries.devices,
-        "config/area_registry/list": registries.areas,
-        "config/label_registry/list": registries.labels,
-        "config/floor_registry/list": registries.floors,
-        "config/auth/list": registries.users,
-        "ha_notifications/list": [alert],
-        "ha_notifications/runtime": {
-          [alert.id]: { active: true, confirmation_attempts: 2 },
+        "config/auth/list": [{ id: "user_fred", name: "Fred", is_active: true }],
+        "ha_notifications/get_config": { version: 1, alerts: [alert] },
+        "ha_notifications/automation_status": {
+          [alert.id]: {
+            status: "managed",
+            enabled: true,
+            mode: "parallel",
+            current: 1,
+            automation_id: "front_door",
+          },
         },
+        "ha_notifications/get_history": [],
       };
 
       const hass = {

@@ -157,7 +157,7 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
 def _parse_notification(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise HomeAssistantError("notification must be a mapping")
-    return dict(payload)
+    return {key: value for key, value in payload.items() if key != "editor_options"}
 
 
 def _target_services(

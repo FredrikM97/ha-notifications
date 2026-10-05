@@ -9,14 +9,17 @@
     "lint:backend": "ruff check custom_components/ha_notifications tests/backend",
     "test": "npm run typecheck && npm run build &&  vitest run",
     "ui:preview": "npm run build && node scripts/ui_preview.mjs",
+    "dev": "python3 scripts/dev_ha.py",
     "clean": "rm -rf dist",
     "package:hacs": "npm run build && sh scripts/package_hacs.sh"
   },
   "devDependencies": {
+    "@mdi/js": "^7.4.47",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/user-event": "^14.6.7",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.5",
+    "home-assistant-js-websocket": "^9.7.1",
     "lit": "^3.3.3",
     "prettier": "^3.9.9",
     "typescript": "^7.0.2",

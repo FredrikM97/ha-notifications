@@ -48,9 +48,10 @@ npm run typecheck
 npm run build
 ```
 
-For backend changes, attempt to exercise the behavior with the real
-Home Assistant pytest custom component fixtures and components before falling
-back to pure unit tests or local stubs.
+For backend changes, exercise the behavior with the real Home Assistant core
+fixtures in `tests/backend/conftest.py` before falling back to pure unit tests
+or local stubs. For frontend changes, check behavior in a real Home Assistant
+with `npm run dev`.
 
 Prefer snapshot testing for serialized contracts, generated automations,
 payloads, and complete structures whenever practical. Use manual assertions

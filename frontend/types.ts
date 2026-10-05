@@ -1,13 +1,17 @@
+/**
+ * Frontend contracts for the HA Notifications config and websocket API.
+ * Home Assistant shapes come from `home-assistant-js-websocket`, HA's own types.
+ */
+import type { Connection, HassServiceTarget } from "home-assistant-js-websocket";
+
+/** The subset of HA's frontend `hass` object this panel uses. */
 export interface Hass {
-  connection: {
-    sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
-  };
+  connection: Connection;
   navigate?(path: string): void;
   localize?(key: string, variables?: Record<string, unknown>): string;
+  loadFragmentTranslation?(fragment: string): Promise<void>;
   locale?: HassLocale;
-  user?: {
-    is_admin: boolean;
-  };
+  user?: { is_admin: boolean };
 }
 
 export interface HassLocale {
@@ -16,141 +20,66 @@ export interface HassLocale {
   time_format: string;
 }
 
-export interface CanonicalCondition {
-  condition: string;
-  [key: string]: unknown;
-}
+type HaConfig = Record<string, unknown>;
+type Duration = string | number | Record<string, number>;
 
-export type AlertCondition = CanonicalCondition[];
-export type AlertTrigger = Record<string, unknown>;
+/** HA service target plus `user_id`, which the integration resolves to mobile devices. */
+export type NotificationTarget = HassServiceTarget & { user_id?: string[] };
 
-export interface AlertRecovery {
-  notification?: NotificationConfig;
-  [key: string]: unknown;
-}
-
-export interface AutomationStatus {
-  id?: string;
-  ownership?: "managed" | "manual";
-  status?: string;
-  [key: string]: unknown;
-}
-
-export type AutomationStatusValue =
-  | "managed"
-  | "manual"
-  | "missing"
-  | "disabled"
-  | "conflict";
-
-export type AutomationMode = "single" | "restart" | "queued" | "parallel";
-
-export interface AutomationRuntimeStatus {
-  status: AutomationStatusValue;
-  enabled: boolean;
-  last_triggered?: string | null;
-}
-
-export interface AlertsConfig {
-  version: number;
-  alerts: CanonicalAlert[];
-}
-
-export interface NotificationTarget {
-  device_id?: string[];
-  area_id?: string[];
-  floor_id?: string[];
-  label_id?: string[];
-  entity_id?: string[];
-  user_id?: string[];
+export interface Notification {
+  editor_options?: {
+    fields?: Record<string, { enabled: boolean; value?: unknown }>;
+    sections?: Record<string, { enabled: boolean; values: Record<string, unknown> }>;
+  };
+  action?: string;
+  target?: NotificationTarget;
+  title?: string;
+  message?: string;
+  data: Record<string, unknown>;
 }
 
 export interface ConfirmationConfig {
   enabled: boolean;
   buttons: { id?: string; label: string }[];
-  notification: ConfirmationNotification;
+  notification: Notification & { enabled?: boolean };
   reminders: {
     enabled: boolean;
-    interval: string | number | Record<string, number>;
+    interval: Duration;
     max_attempts: number;
     show_attempts: boolean;
     forget_after_enabled: boolean;
-    timeout: string | number | Record<string, number>;
+    timeout: Duration;
   };
-  actions: Record<string, unknown>[];
+  actions: HaConfig[];
 }
 
-export interface ConfirmationNotification extends CanonicalNotification {
-  enabled?: boolean;
-  title?: string;
-  message?: string;
-}
-
-export interface NotificationConfig {
-  target: NotificationTarget;
-  title: string;
-  message: string;
-  data?: Record<string, unknown>;
-}
-
-export interface CanonicalNotification {
-  action?: string;
-  target?: NotificationTarget;
-  data: Record<string, unknown>;
-}
-
-export interface CanonicalRecovery {
-  clear?: boolean;
-  notification?: CanonicalNotification;
-}
-
-export interface CanonicalAlert {
+/** One alert, as stored in the integration's canonical configuration. */
+export interface Alert {
   id: string;
-  name?: string | null;
-  enabled?: boolean;
-  triggers: AlertTrigger[];
-  conditions: CanonicalCondition[];
-  on_condition_change?: boolean;
-  automation_mode?: AutomationMode;
-  notification: CanonicalNotification;
-  repeat?: Record<string, unknown> | null;
-  recovery?: CanonicalRecovery | null;
-  confirmation?: ConfirmationConfig | null;
-  snooze?: Record<string, unknown> | null;
-  escalation?: Record<string, unknown> | null;
-  automation?: AutomationStatus;
-}
-
-export interface PostSendActionsConfig {
+  name: string;
+  description?: string;
+  icon?: string;
   enabled: boolean;
-  actions?: Record<string, unknown>[];
+  triggers: HaConfig[];
+  conditions: HaConfig[];
+  on_condition_change?: boolean;
+  automation_mode?: "single" | "restart" | "queued" | "parallel";
+  cancel_on_inactive?: boolean;
+  notification: Notification & { target: NotificationTarget };
+  confirmation?: ConfirmationConfig;
+  post_send_actions?: { enabled: boolean; actions?: HaConfig[] };
+  runtime?: unknown;
 }
 
-export interface RuntimeEvent {
-  event_id: string;
-  timestamp: string;
-  type: string;
-  message: string;
-  details: Record<string, unknown>;
-  flow_id?: string;
-}
-
-export interface RuntimeState {
-  active?: boolean;
-  flow_id?: string;
-  started_at?: string;
-  last_evaluated?: string;
-  last_notified?: string;
-  last_error?: string;
-  acknowledged?: boolean;
-  confirmed_at?: string;
-  confirmed_by?: string;
+export interface AlertsConfig {
+  version: number;
+  alerts: Alert[];
 }
 
 export interface AutomationRuntimeStatus {
-  status: AutomationStatusValue;
+  status: "managed" | "manual" | "missing" | "disabled" | "conflict";
   enabled: boolean;
-  mode: "single" | "restart" | "queued" | "parallel" | string;
+  mode: string;
   current: number;
   running?: boolean;
   triggered?: boolean;
@@ -158,89 +87,14 @@ export interface AutomationRuntimeStatus {
   automation_id?: string;
 }
 
-export interface RuntimeAlertState {
-  config?: Alert;
-  state?: RuntimeState;
-  trace?: Record<string, unknown>[];
-}
-
-export interface RuntimeAlertHistoryEntry extends RuntimeAlertState {
-  event: RuntimeEvent;
-}
-
-export interface HistoryRetentionConfig {
-  enabled?: boolean;
-  days?: number;
-}
-
-export interface Alert {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  enabled: boolean;
-  triggers: AlertTrigger[];
-  conditions: AlertCondition;
-  on_condition_change?: boolean;
-  automation_mode?: AutomationMode;
-  cancel_on_inactive?: boolean;
-  notification: CanonicalNotification;
-  confirmation?: ConfirmationConfig;
-  post_send_actions?: PostSendActionsConfig;
-  runtime?: RuntimeAlertState;
-}
-
-export interface Registries {
-  entities: RegistryEntity[];
-  devices: RegistryDevice[];
-  areas: RegistryArea[];
-  labels: RegistryLabel[];
-  floors: RegistryFloor[];
-  users: RegistryUser[];
-}
-
-export interface RegistryEntity {
-  entity_id: string;
-  friendly_name?: string;
-  name?: string;
-  name_by_user?: string;
-  original_name?: string;
-}
-
-export interface RegistryState {
-  entity_id: string;
-  attributes?: {
-    friendly_name?: string;
-    [key: string]: unknown;
+export interface RuntimeAlertHistoryEntry {
+  config?: { id: string; name: string };
+  event: {
+    event_id: string;
+    timestamp: string;
+    type: string;
+    message: string;
+    details: Record<string, unknown>;
+    flow_id?: string;
   };
-}
-
-export interface RegistryDevice {
-  id: string;
-  name?: string;
-  name_by_user?: string;
-}
-
-export interface RegistryArea {
-  id?: string;
-  area_id?: string;
-  name?: string;
-}
-
-export interface RegistryLabel {
-  id?: string;
-  label_id?: string;
-  name?: string;
-}
-
-export interface RegistryFloor {
-  id?: string;
-  floor_id?: string;
-  name?: string;
-}
-
-export interface RegistryUser {
-  id: string;
-  name: string;
-  is_active?: boolean;
 }

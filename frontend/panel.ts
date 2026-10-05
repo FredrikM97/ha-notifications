@@ -1,3 +1,6 @@
+import { css, html, LitElement, nothing } from "lit";
+import type { TemplateResult } from "lit";
+import { mdiPlus } from "@mdi/js";
 import {
   cancelRun,
   deleteAlert,
@@ -5,866 +8,263 @@ import {
   getAlerts,
   getAutomationStatus,
   getHistory,
-  loadRegistries,
+  loadUsers,
   saveAlert,
   validateAlert,
 } from "./api.js";
-import { openEditor, updateOpenEditorHass } from "./editor/index.js";
-import { formatLocalDateTime } from "./date-time.js";
+import type { Alert, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
 import { localize } from "./localize.js";
-import "./panel/alert-list.js";
-import "./history.js";
-import type { HistoryFilters, HistoryRenderOptions } from "./history.js";
-import { css, LitElement, html } from "lit";
-import { button, buttonStyles } from "./components/button.js";
-import type {
-  AlertActionItem,
-  AlertActionRequest,
-} from "./panel/alert-card/actions.js";
-import { showToast as showToastOn, toastListTemplate } from "./components/toast.js";
-import type { Toast } from "./components/toast.js";
-import type { YamlToastEventDetail } from "./components/yaml-view.js";
-import type { TemplateResult } from "lit";
-import type {
-  Alert,
-  AutomationRuntimeStatus,
-  Hass,
-  Registries,
-  RuntimeAlertHistoryEntry,
-} from "./types.js";
-import "./components/yaml-view.js";
+import { emptyState, NarrowController, notify, uiStyles } from "./ui.js";
+import { openEditor, updateOpenEditorHass } from "./editor/index.js";
+import { alertList, alertListStyles, type AlertHandlers } from "./views/alerts.js";
+import "./views/history.js";
+import "./views/yaml.js";
 
-type PanelTab = "alerts" | "active" | "history" | "yaml";
+const TABS = ["alerts", "active", "history", "yaml"] as const;
+type Tab = (typeof TABS)[number];
+const AUTO_REFRESH_MS = 5000;
 
-interface PanelTabDefinition {
-  key: PanelTab;
-  label: string;
-}
-
-interface HaNotificationsCardConfig {
-  type: "custom:ha-notifications-card";
-}
-
-const panelTabs: PanelTabDefinition[] = [
-  { key: "alerts", label: "panel.tabs.alerts" },
-  { key: "active", label: "panel.tabs.active" },
-  { key: "history", label: "panel.tabs.history" },
-  { key: "yaml", label: "panel.tabs.yaml" },
-];
-
-export const panelStyles = css`
-  :host {
-    display: block;
-    min-height: 100%;
-    box-sizing: border-box;
-    color: var(--primary-text-color);
-    background: var(--primary-background-color);
+const panelStyles = css`
+  /* Full width like HA's own dashboards and config lists. */
+  .nc-content {
+    padding: var(--ha-space-4, 16px);
   }
 
-  :host(ha-notifications-card) {
-    container-type: inline-size;
+  .nc-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ha-space-4, 16px) var(--ha-space-4, 16px) 0;
   }
 
-  *,
-  *::before,
-  *::after {
-    box-sizing: border-box;
+  .nc-card-header h1 {
+    margin: 0;
+    font-size: var(--ha-font-size-xl, 20px);
   }
 
   [hidden] {
     display: none !important;
   }
-
-  button,
-  input,
-  textarea,
-  select {
-    font: inherit;
-  }
-
-  .nc-empty {
-    padding: 55px 20px;
-    border-radius: var(--ha-card-border-radius, 12px);
-    background: var(--card-background-color);
-    box-shadow: var(--ha-box-shadow);
-    color: var(--secondary-text-color);
-    text-align: center;
-  }
-
-  .nc-empty h2 {
-    color: var(--primary-text-color);
-  }
-
-  .nc-page {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 24px;
-  }
-
-  .nc-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-
-  .nc-back-button {
-    display: none;
-    flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
-    place-items: center;
-    border-radius: 50%;
-    color: var(--primary-text-color);
-    background: var(--secondary-background-color);
-    text-decoration: none;
-  }
-
-  .nc-back-button:hover {
-    background: var(--divider-color);
-  }
-
-  :host(ha-notifications-card) .nc-back-button {
-    display: none;
-  }
-
-  .nc-title {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .nc-title-icon {
-    display: grid;
-    width: 48px;
-    height: 48px;
-    place-items: center;
-    border-radius: 14px;
-    background: var(--primary-color);
-    color: var(--text-primary-color);
-    font-size: 24px;
-  }
-
-  .nc-title-icon img {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-  }
-
-  .nc-title h1 {
-    margin: 0;
-    font-size: 28px;
-  }
-
-  .nc-title p {
-    margin: 4px 0 0;
-    color: var(--secondary-text-color);
-  }
-
-  .nc-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .nc-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 18px;
-    padding: 4px;
-    border-radius: var(--ha-border-radius-m, 8px);
-    background: var(--secondary-background-color);
-  }
-
-  .nc-tab {
-    flex: 1;
-    border: 0;
-    border-radius: var(--ha-border-radius-s, 4px);
-    padding: 8px 10px;
-    background: transparent;
-    color: var(--secondary-text-color);
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  .nc-tab.active {
-    background: var(--card-background-color);
-    color: var(--primary-text-color);
-    box-shadow: var(--ha-box-shadow);
-  }
-
-  @container (max-width: 700px) {
-    .nc-page {
-      padding: 14px;
-    }
-
-    .nc-header {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 10px;
-    }
-
-    .nc-back-button {
-      display: inline-grid;
-      grid-column: 1;
-      grid-row: 2;
-    }
-
-    .nc-title {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      min-width: 0;
-      justify-self: start;
-    }
-
-    .nc-title h1 {
-      font-size: 24px;
-    }
-
-    .nc-actions {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      justify-content: flex-end;
-      width: 100%;
-    }
-  }
-
-  @media (max-width: 700px) {
-    :host(ha-notifications-panel) .nc-page.nc-mobile-full-page {
-      min-height: 100dvh;
-      padding: 0;
-    }
-
-    .nc-page {
-      padding: 14px;
-    }
-
-    .nc-header {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 10px;
-    }
-
-    .nc-back-button {
-      display: inline-grid;
-      grid-column: 1;
-      grid-row: 2;
-    }
-
-    .nc-title {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      min-width: 0;
-      justify-self: start;
-    }
-
-    .nc-title h1 {
-      font-size: 24px;
-    }
-
-    .nc-actions {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      justify-content: flex-end;
-      width: 100%;
-    }
-  }
 `;
 
-function activeTabClass(active: boolean): string {
-  const classes = ["nc-tab"];
-  if (active) {
-    classes.push("active");
-  }
-
-  return classes.join(" ");
-}
-
-function toggleAlertToast(alert: Alert): string {
-  if (alert.enabled) {
-    return "Alert disabled.";
-  }
-
-  return "Alert enabled.";
-}
-
 class HaNotificationsPanel extends LitElement {
-  static styles = [buttonStyles, panelStyles];
+  static styles = [uiStyles, alertListStyles, panelStyles];
 
+  private layout = new NarrowController(this);
   private _hass: Hass | null = null;
+  private tab: Tab = "alerts";
   private alerts: Alert[] = [];
-  private automationStatus: Record<string, AutomationRuntimeStatus> = {};
+  private statuses: Record<string, AutomationRuntimeStatus> = {};
   private history: RuntimeAlertHistoryEntry[] = [];
-  private historyAlertId: string | null = null;
-  private historyAlertName: string | null = null;
-  private historyFilters: HistoryFilters = {
-    search: "",
-    alertId: "",
-    type: "",
-    severity: "",
-  };
-  private historyGroupByFlow = false;
-  private tab: PanelTab = "alerts";
-  private loading = false;
+  private historyAlert: { id: string; name: string } | null = null;
+  private editing = false;
   private refreshing = false;
-  private refreshTimer: number | null = null;
-  private _registries: Registries | null = null;
-  private _registriesPromise: Promise<Registries> | null = null;
-  private _initialized = false;
-  private editorActive = false;
-  toasts: Toast[] = [];
-  private readonly alertActionHandlers: Record<
-    string,
-    (alert?: Alert) => void
-  > = {
-    create: () => {
-      void this.addAlert();
-    },
-    toggle: (alert) => {
-      if (alert) void this.toggleAlert(alert);
-    },
-    edit: (alert) => {
-      if (alert) void this.editAlert(alert);
-    },
-    history: (alert) => {
-      if (alert) void this.showAlertHistory(alert);
-    },
-    delete: (alert) => {
-      if (alert) void this.removeAlert(alert);
-    },
-    cancel_run: (alert) => {
-      if (alert) void this.cancelAlertRun(alert);
-    },
-  };
+  private timer?: number;
+  private users?: Promise<{ value: string; label: string }[]>;
 
-  set hass(value: Hass) {
-    const changed = this._hass !== null && this._hass !== value;
-    this._hass = value;
-    if (this.editorActive) {
-      updateOpenEditorHass(this.renderRoot as ShadowRoot, value);
-    }
+  /** The Lovelace card renders without the full-page app bar. */
+  protected get isCard(): boolean {
+    return false;
+  }
+
+  set hass(hass: Hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (this.editing) updateOpenEditorHass(this.renderRoot as ShadowRoot, hass);
     this.requestUpdate();
-
-    if (this.isConnected && !this._initialized) {
-      this._initialized = true;
-      void this.refresh();
-    } else if (this.isConnected && changed) {
-      void this.refresh({ silent: true });
-    }
+    if (this.isConnected) void this.refresh(!first);
   }
 
-  get hass() {
-    return this._hass;
-  }
-
-  protected isAdmin(): boolean {
-    return Boolean(this._hass?.user?.is_admin);
+  get hass(): Hass {
+    return this._hass!;
   }
 
   connectedCallback(): void {
-    super.connectedCallback();
-    this.startAutoRefresh();
-
-    if (this._hass) {
-      this._initialized = true;
-      void this.refresh();
+    // HA may set hass before this module loads; that own property shadows the setter.
+    if (Object.prototype.hasOwnProperty.call(this, "hass")) {
+      const hass = (this as { hass?: Hass }).hass;
+      delete (this as { hass?: Hass }).hass;
+      if (hass) this._hass = hass;
     }
+    super.connectedCallback();
+    this.timer = window.setInterval(() => void this.refresh(true), AUTO_REFRESH_MS);
+    if (this._hass) void this.refresh();
   }
 
   disconnectedCallback(): void {
-    this.stopAutoRefresh();
+    window.clearInterval(this.timer);
     super.disconnectedCallback();
   }
 
-  async getRegistries(): Promise<Registries> {
-    if (this._registries) {
-      return this._registries;
-    }
+  private t = (key: string, variables?: Record<string, unknown>) => localize(this._hass, key, variables);
 
-    if (!this._registriesPromise) {
-      this._registriesPromise = loadRegistries(this._hass)
-        .then((registries) => {
-          this._registries = registries;
-          return registries;
-        })
-        .catch((err) => {
-          this._registriesPromise = null;
-          throw err;
-        });
-    }
-
-    return this._registriesPromise;
-  }
-
-  private startAutoRefresh(): void {
-    if (this.refreshTimer !== null) {
-      return;
-    }
-
-    this.refreshTimer = window.setInterval(() => {
-      void this.refresh({ silent: true });
-    }, 5000);
-  }
-
-  private stopAutoRefresh(): void {
-    if (this.refreshTimer === null) {
-      return;
-    }
-
-    window.clearInterval(this.refreshTimer);
-    this.refreshTimer = null;
-  }
-
-  private editorOpen(): boolean {
-    return this.editorActive || this.tab === "yaml";
-  }
-
-  async refresh({ silent = false }: { silent?: boolean } = {}): Promise<void> {
-    if (!this._hass || !this.isAdmin() || this.refreshing) {
-      return;
-    }
-
-    if (silent && this.editorOpen()) {
-      return;
-    }
-
+  async refresh(silent = false): Promise<void> {
+    if (!this._hass?.user?.is_admin || this.refreshing) return;
+    if (silent && (this.editing || this.tab === "yaml")) return;
     this.refreshing = true;
+    const results = await Promise.allSettled([
+      getAlerts(this._hass),
+      getAutomationStatus(this._hass),
+      getHistory(this._hass, this.historyAlert?.id),
+    ]);
+    this.refreshing = false;
+    const [alerts, statuses, history] = results;
+    if (alerts.status === "fulfilled") this.alerts = alerts.value;
+    if (statuses.status === "fulfilled") this.statuses = statuses.value;
+    if (history.status === "fulfilled") this.history = history.value;
+    if (this.historyAlert) {
+      const alert = this.alerts.find(({ id }) => id === this.historyAlert!.id);
+      if (alert) this.historyAlert = { id: alert.id, name: alert.name };
+    }
     if (!silent) {
-      this.loading = true;
+      for (const result of results) {
+        if (result.status === "rejected") notify(this, errorMessage(result.reason));
+      }
     }
     this.requestUpdate();
-
-    try {
-      const [alertsResult, automationStatusResult, historyResult] =
-        await Promise.allSettled([
-          getAlerts(this._hass),
-          getAutomationStatus(this._hass),
-          getHistory(this._hass, this.historyAlertId || undefined),
-        ]);
-
-      if (alertsResult.status === "fulfilled") {
-        this.alerts = alertsResult.value;
-        this.refreshHistoryAlertName();
-      } else if (!silent) {
-        this.showToast(errorMessage(alertsResult.reason), true);
-      }
-
-      if (historyResult.status === "fulfilled") {
-        this.history = historyResult.value;
-      } else if (!silent) {
-        this.showToast(errorMessage(historyResult.reason), true);
-      }
-      if (automationStatusResult.status === "fulfilled") {
-        this.automationStatus = automationStatusResult.value;
-      } else if (!silent) {
-        this.showToast(errorMessage(automationStatusResult.reason), true);
-      }
-    } finally {
-      this.refreshing = false;
-      if (!silent) {
-        this.loading = false;
-      }
-      this.requestUpdate();
-    }
   }
 
-  render() {
-    if (!this.isAdmin()) {
-      return html`${this.adminRequiredTemplate()}${toastListTemplate(this.toasts)}`;
+  protected render(): TemplateResult {
+    if (!this._hass?.user?.is_admin) {
+      return emptyState(this.t("panel.admin_required"), this.t("panel.admin_help"));
     }
-
-    return html`<div
-      class=${this.tab === "history" ? "nc-page nc-mobile-full-page" : "nc-page"}
-      ?hidden=${this.editorActive}
+    const narrow = this.layout.narrow;
+    const add = html`<ha-icon-button
+      .label=${this.t("panel.add_alert")}
+      .path=${mdiPlus}
+      @click=${this.on.create}
+    ></ha-icon-button>`;
+    const tabs = html`<ha-tab-group
+      @wa-tab-show=${(event: CustomEvent<{ name: Tab }>) => this.selectTab(event.detail.name)}
     >
-        ${this.headerTemplate()}${this.tabsTemplate()}${this.tabTemplate()}
-      </div>
-      ${toastListTemplate(this.toasts)}`;
+      ${TABS.map(
+        (tab) => html`<ha-tab-group-tab slot="nav" panel=${tab} .active=${tab === this.tab}>
+          ${this.t(`panel.tabs.${tab}`)}
+        </ha-tab-group-tab>`,
+      )}
+    </ha-tab-group>`;
+    const content = html`<div class="nc-content">${this.tabContent()}</div>`;
+
+    if (this.isCard) {
+      return html`<ha-card ?hidden=${this.editing}>
+        <div class="nc-card-header"><h1>${this.t("panel.title")}</h1>${add}</div>
+        ${tabs}${content}
+      </ha-card>`;
+    }
+    return html`<ha-top-app-bar-fixed .narrow=${narrow} ?hidden=${this.editing}>
+      <div slot="title">${this.t("panel.title")}</div>
+      <div slot="actionItems">${add}</div>
+      <div slot="subRow">${tabs}</div>
+      ${content}
+    </ha-top-app-bar-fixed>`;
   }
 
-  private adminRequiredTemplate(): TemplateResult {
-    return html`<div class="nc-page">
-      <div class="nc-empty">
-        <h2>${localize(this._hass, "panel.admin_required")}</h2>
-        <p>
-          ${localize(this._hass, "panel.admin_help")}
-        </p>
-      </div>
-    </div>`;
+  private tabContent(): TemplateResult | typeof nothing {
+    switch (this.tab) {
+      case "alerts":
+      case "active":
+        return alertList(this._hass, this.alerts, this.statuses, this.tab === "active", this.on, this.layout.narrow);
+      case "history":
+        return html`<ha-notifications-history-view
+          .hass=${this._hass}
+          .history=${this.history}
+          .alerts=${this.alerts}
+          .alertName=${this.historyAlert?.name ?? null}
+          @history-alert-selected=${(event: CustomEvent<{ alertId: string; alertName: string }>) =>
+            this.showHistory({ id: event.detail.alertId, name: event.detail.alertName })}
+          @history-show-all=${() => this.showHistory(null)}
+        ></ha-notifications-history-view>`;
+      case "yaml":
+        return html`<ha-notifications-yaml-view
+          .hass=${this._hass}
+          @yaml-saved=${() => void this.refresh()}
+        ></ha-notifications-yaml-view>`;
+    }
   }
 
-  private headerTemplate(): TemplateResult {
-    return html`<div class="nc-header">
-      <a
-        class="nc-back-button"
-        href="/"
-        aria-label=${localize(this._hass, "panel.back_home")}
-        title=${localize(this._hass, "panel.back_home")}
-        @click=${this.navigateHome}
-      >
-        <ha-icon icon="mdi:arrow-left"></ha-icon>
-      </a>
-      <div class="nc-title">
-        <div class="nc-title-icon">
-          <img
-            src="/ha_notifications/brand/icon.png"
-            alt=""
-            aria-hidden="true"
-          />
-        </div>
-        <div>
-          <h1>${localize(this._hass, "panel.title")}</h1>
-          <p>${localize(this._hass, "panel.subtitle")}</p>
-        </div>
-      </div>
-      <div class="nc-actions">
-        ${button({
-          label: localize(this._hass, "panel.add_alert"),
-          icon: "mdi:plus",
-          onClick: () => this.addAlert(),
-        })}
-      </div>
-    </div>`;
-  }
-
-  private navigateHome(event: Event): void {
-    if (!this._hass?.navigate) {
+  private selectTab(tab: Tab): void {
+    if (this.tab === tab) return;
+    const yaml = this.renderRoot.querySelector<HTMLElement & { confirmLeave(): boolean }>(
+      "ha-notifications-yaml-view",
+    );
+    if (yaml && !yaml.confirmLeave()) {
+      this.requestUpdate();
       return;
     }
-
-    event.preventDefault();
-    this._hass.navigate("/");
-  }
-
-  private tabsTemplate(): TemplateResult {
-    return html`<div class="nc-tabs">
-      ${panelTabs.map(
-        ({ key, label }) =>
-          html`<button
-            class=${activeTabClass(this.tab === key)}
-            @click=${() => this.selectTab(key)}
-          >
-            ${localize(this._hass, label)}
-          </button>`,
-      )}
-    </div>`;
-  }
-
-  private tabTemplate(): TemplateResult {
-    if (this.tab === "alerts" || this.tab === "active") {
-      return html`<ha-notifications-alert-list
-        .alerts=${this.alerts}
-        .automationStatus=${this.automationStatus}
-        .hass=${this._hass}
-        .activeOnly=${this.tab === "active"}
-        .actionItems=${this.alertActionItems}
-        .emptyAction=${{
-          id: "create",
-          label: localize(this._hass, "panel.create_alert"),
-        }}
-        @alert-action=${this.handleAlertAction}
-      ></ha-notifications-alert-list>`;
-    }
-
-    if (this.tab === "history") {
-      return html`<ha-notifications-history-view
-        .history=${this.history}
-        .options=${this.historyViewOptions()}
-        @history-filters-changed=${this.handleHistoryFiltersChanged}
-        @history-group-by-flow-changed=${this.handleHistoryGroupingChanged}
-        @history-alert-selected=${this.handleHistoryAlertSelected}
-        @history-show-all=${this.handleHistoryShowAll}
-      ></ha-notifications-history-view>`;
-    }
-
-    return html`<ha-notifications-yaml-view
-      .hass=${this._hass}
-      @yaml-toast=${this.handleYamlToast}
-      @yaml-refresh-requested=${this.handleYamlRefreshRequested}
-    ></ha-notifications-yaml-view>`;
-  }
-
-  private historyViewOptions(): HistoryRenderOptions {
-    return {
-      alertName: this.historyAlertName,
-      hass: this._hass || undefined,
-      locale: this._hass?.locale,
-      alerts: this.alerts.map((alert) => ({
-        id: alert.id,
-        name: alert.name,
-      })),
-      filters: this.historyFilters,
-      groupByFlow: this.historyGroupByFlow,
-      types: [
-        ...new Set(this.history.map((item) => item.event?.type).filter(Boolean)),
-      ] as string[],
-    };
-  }
-
-  private selectTab(tab: PanelTab): void {
     this.tab = tab;
     this.requestUpdate();
   }
 
-  private handleAlertAction = (event: CustomEvent<AlertActionRequest>): void => {
-    this.alertActionHandlers[event.detail.actionId]?.(event.detail.alert);
-  };
+  private async showHistory(alert: { id: string; name: string } | null): Promise<void> {
+    this.historyAlert = alert;
+    this.history = [];
+    this.selectTab("history");
+    await this.refresh();
+  }
 
-  private alertActionItems = (
-    alert: Alert,
-    status: AutomationRuntimeStatus | undefined,
-  ): AlertActionItem[] => {
-    const actions: AlertActionItem[] = [
-      {
-        id: "toggle",
-        label: localize(this._hass, alert.enabled ? "alert.disable" : "alert.enable"),
-        icon: alert.enabled
-          ? "mdi:pause-circle-outline"
-          : "mdi:play-circle-outline",
-      },
-      {
-        id: "edit",
-        label: localize(this._hass, "alert.edit"),
-        icon: "mdi:pencil-outline",
-      },
-      {
-        id: "history",
-        label: localize(this._hass, "alert.history"),
-        icon: "mdi:history",
-      },
-      {
-        id: "delete",
-        label: localize(this._hass, "alert.delete"),
-        icon: "mdi:delete-outline",
-        variant: "danger",
-      },
-    ];
-
-    if (status?.automation_id) {
-      actions.unshift({
-        id: "automation",
-        label: localize(this._hass, "alert.open_automation"),
-        icon: "mdi:open-in-new",
-        className: "nc-open-automation",
-        href: `/config/automation/edit/${encodeURIComponent(status.automation_id)}`,
-      });
-    }
-    if (status?.current > 0) {
-      actions.unshift({
-        id: "cancel_run",
-        label: localize(this._hass, "alert.cancel_run"),
-        icon: "mdi:stop-circle-outline",
-        variant: "danger",
-      });
-    }
-    return actions;
-  };
-
-  private handleHistoryFiltersChanged = (
-    event: CustomEvent<HistoryFilters>,
-  ): void => {
-    this.historyFilters = event.detail;
-    this.requestUpdate();
-  };
-
-  private handleHistoryGroupingChanged = (
-    event: CustomEvent<boolean>,
-  ): void => {
-    this.historyGroupByFlow = event.detail;
-    this.requestUpdate();
-  };
-
-  private handleHistoryAlertSelected = (
-    event: CustomEvent<{ alertId: string; alertName: string }>,
-  ): void => {
-    void this.showHistoryForAlert(event.detail.alertId, event.detail.alertName);
-  };
-
-  private handleHistoryShowAll = (): void => {
-    void this.showAllHistory();
-  };
-
-  private handleYamlToast = (
-    event: CustomEvent<YamlToastEventDetail>,
-  ): void => {
-    this.showToast(event.detail.message, event.detail.error);
-  };
-
-  private handleYamlRefreshRequested = (): void => {
-    void this.refresh();
-  };
-
-  private refreshHistoryAlertName(): void {
-    if (!this.historyAlertId) {
-      return;
-    }
-
-    const alert = this.alerts.find((item) => item.id === this.historyAlertId);
-    if (alert) {
-      this.historyAlertName = alert.name;
+  /** Run an API call, report its outcome, and refresh. */
+  private async act(call: () => Promise<unknown>, success?: string): Promise<void> {
+    try {
+      const message = await call();
+      const text = typeof message === "string" ? message : success;
+      if (text) notify(this, text);
+      await this.refresh();
+    } catch (error) {
+      notify(this, errorMessage(error));
     }
   }
 
-  addAlert = async (): Promise<void> => {
-    await this.openAlertEditor(null);
+  private on: AlertHandlers = {
+    create: () => void this.openAlertEditor(null),
+    edit: (alert) => void this.openAlertEditor(alert),
+    history: (alert) => void this.showHistory({ id: alert.id, name: alert.name }),
+    navigate: (path) => this._hass?.navigate?.(path),
+    toggle: (alert) =>
+      void this.act(
+        () => saveAlert(this._hass, { ...alert, enabled: !alert.enabled }),
+        alert.enabled ? "Alert disabled." : "Alert enabled.",
+      ),
+    cancelRun: (alert) =>
+      void this.act(async () => {
+        const result = await cancelRun(this._hass, alert.id);
+        return this.t(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
+      }),
+    remove: (alert) => {
+      if (!window.confirm(`Delete "${alert.name}"?`)) return;
+      void this.act(() => deleteAlert(this._hass, alert.id), this.t("panel.alert_deleted"));
+    },
   };
-
-  async editAlert(alert: Alert): Promise<void> {
-    await this.openAlertEditor(alert);
-  }
 
   private async openAlertEditor(alert: Alert | null): Promise<void> {
-    let registries: Registries;
-    try {
-      registries = await this.getRegistries();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-      return;
-    }
-
-    this.editorActive = true;
-    this.requestUpdate();
     const hass = this._hass;
-    if (!hass) {
-      this.editorActive = false;
+    if (!hass) return;
+    let users: { value: string; label: string }[];
+    try {
+      this.users ??= loadUsers(hass);
+      users = await this.users;
+    } catch (error) {
+      this.users = undefined;
+      notify(this, errorMessage(error));
       return;
     }
+    this.editing = true;
+    this.requestUpdate();
     openEditor({
       root: this.renderRoot as ShadowRoot,
       hass,
       alert,
-      registries,
-      onValidateAlert: async (draft) => {
-        await validateAlert(this._hass, draft);
-      },
+      users,
+      onValidateAlert: (draft) => validateAlert(this._hass, draft),
       onSave: async (draft) => {
         const saved = await saveAlert(this._hass, draft);
-        if (alert) {
-          this.replaceSavedAlert(saved);
-        }
-        this.showToast(
-          localize(this._hass, alert ? "panel.alert_saved" : "panel.alert_created"),
-        );
+        notify(this, this.t(alert ? "panel.alert_saved" : "panel.alert_created"));
         return saved;
       },
-      onSaved: async () => {
-        await this.refresh();
-      },
       onClosed: () => {
-        this.editorActive = false;
+        this.editing = false;
         void this.refresh();
-        this.requestUpdate();
       },
     });
-  };
-
-  private replaceSavedAlert(saved: Alert): void {
-    this.alerts = this.alerts.map((item) => {
-      if (item.id === saved.id) {
-        return {
-          ...item,
-          ...saved,
-        };
-      }
-
-      return item;
-    });
-    this.requestUpdate();
-  }
-
-  private async showAlertHistory(alert: Alert): Promise<void> {
-    await this.showHistoryForAlert(alert.id, alert.name);
-  }
-
-  private async showHistoryForAlert(
-    alertId: string,
-    alertName: string,
-  ): Promise<void> {
-    if (!this._hass) {
-      return;
-    }
-
-    this.historyAlertId = alertId;
-    this.historyAlertName = alertName;
-    this.historyFilters = {
-      search: "",
-      alertId: "",
-      type: "",
-      severity: "",
-    };
-    this.tab = "history";
-    this.history = [];
-    await this.refresh();
-    this.requestUpdate();
-  }
-
-  private async showAllHistory(): Promise<void> {
-    if (!this._hass) {
-      return;
-    }
-
-    this.historyAlertId = null;
-    this.historyAlertName = null;
-    this.historyFilters = {
-      search: "",
-      alertId: "",
-      type: "",
-      severity: "",
-    };
-    this.tab = "history";
-    this.history = [];
-    await this.refresh();
-    this.requestUpdate();
-  }
-
-  private async toggleAlert(alert: Alert): Promise<void> {
-    try {
-      await saveAlert(this._hass, { ...alert, enabled: !alert.enabled });
-      this.showToast(toggleAlertToast(alert));
-      await this.refresh();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    }
-  }
-
-  private async cancelAlertRun(alert: Alert): Promise<void> {
-    try {
-      const result = await cancelRun(this._hass, alert.id);
-      this.showToast(
-        localize(
-          this._hass,
-          result.cancelled ? "alert.run_cancelled" : "alert.run_not_active",
-        ),
-      );
-      await this.refresh();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    }
-  }
-
-  async removeAlert(alert: Alert): Promise<void> {
-    if (!window.confirm(`Delete "${alert.name}"?`)) {
-      return;
-    }
-
-    try {
-      await deleteAlert(this._hass, alert.id);
-      this.showToast(localize(this._hass, "panel.alert_deleted"));
-      await this.refresh();
-    } catch (err) {
-      this.showToast(errorMessage(err), true);
-    }
-  }
-
-  formatTime(value: string | undefined): string {
-    return formatLocalDateTime(value, false, this._hass?.locale);
-  }
-
-  showToast(message: string, error = false): void {
-    showToastOn(this, message, error);
   }
 }
 
@@ -872,22 +272,26 @@ if (!customElements.get("ha-notifications-panel")) {
   customElements.define("ha-notifications-panel", HaNotificationsPanel);
 }
 
-class HaNotificationsCard extends HaNotificationsPanel {
-  private config: HaNotificationsCardConfig | null = null;
+interface CardConfig {
+  type: "custom:ha-notifications-card";
+}
 
-  setConfig(config: HaNotificationsCardConfig): void {
-    if (!config || config.type !== "custom:ha-notifications-card") {
+class HaNotificationsCard extends HaNotificationsPanel {
+  protected get isCard(): boolean {
+    return true;
+  }
+
+  setConfig(config: CardConfig): void {
+    if (config?.type !== "custom:ha-notifications-card") {
       throw new Error("Card type must be custom:ha-notifications-card.");
     }
-    this.config = config;
-    this.requestUpdate();
   }
 
   getCardSize(): number {
     return 12;
   }
 
-  static getStubConfig(): HaNotificationsCardConfig {
+  static getStubConfig(): CardConfig {
     return { type: "custom:ha-notifications-card" };
   }
 }
@@ -896,22 +300,11 @@ if (!customElements.get("ha-notifications-card")) {
   customElements.define("ha-notifications-card", HaNotificationsCard);
 }
 
-const customCardWindow = window as Window & {
-  customCards?: Array<{
-    type: string;
-    name: string;
-    description: string;
-  }>;
-};
-customCardWindow.customCards = customCardWindow.customCards || [];
-if (
-  !customCardWindow.customCards.some(
-    (card) => card.type === "ha-notifications-card",
-  )
-) {
-  customCardWindow.customCards.push({
+const cards = ((window as { customCards?: { type: string }[] }).customCards ??= []);
+if (!cards.some(({ type }) => type === "ha-notifications-card")) {
+  cards.push({
     type: "ha-notifications-card",
     name: "HA Notifications",
     description: "Manage HA Notifications alerts, history, and YAML.",
-  });
+  } as { type: string });
 }

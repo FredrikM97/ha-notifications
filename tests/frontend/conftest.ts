@@ -1,23 +1,13 @@
 import { vi } from "vitest";
-import { within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { render } from "lit";
 import type { TemplateResult } from "lit";
-import type {
-  Alert,
-  Hass,
-  Registries,
-  RuntimeAlertHistoryEntry,
-} from "../../frontend/types.js";
-import type { AlertFormValues } from "../../frontend/alert-payload.js";
-import { defaultAlert } from "../../frontend/editor/alert-defaults.js";
+import type { Alert, Hass, RuntimeAlertHistoryEntry } from "../../frontend/types.js";
+import { defaultAlert } from "../../frontend/editor/alert-model.js";
 import alertFixtureData from "./fixtures/alerts.json";
-import alertFormValuesData from "./fixtures/alert-form-values.json";
 import fixtureData from "./fixtures/history.json";
-import registriesFixtureData from "./fixtures/registries.json";
 
 export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
-export const emptyHistoryFilters = fixtureData.emptyFilters;
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
 export function createHassClient() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});
@@ -66,69 +56,6 @@ export function draftAlertFixture(overrides: Partial<Alert> = {}): Alert {
   };
 }
 
-export function populatedRegistries(overrides: Partial<Registries> = {}): Registries {
-  return {
-    ...(structuredClone(registriesFixtureData) as Registries),
-    ...overrides,
-  };
-}
-
-export function alertFormValues(
-  overrides: Partial<AlertFormValues> = {},
-): AlertFormValues {
-  return {
-    ...(alertFormValuesData as AlertFormValues),
-    ...overrides,
-  };
-}
-
-export function alertFormValuesWithRecipients(
-  overrides: Partial<AlertFormValues> = {},
-  entityIds = ["notify.mobile_app_phone"],
-): AlertFormValues {
-  const values = alertFormValues(overrides);
-  return {
-    ...values,
-    notification: {
-      ...values.notification,
-      target: { entity_id: entityIds },
-    },
-  };
-}
-
-export function emptyRegistries(): Registries {
-  return {
-    entities: [],
-    devices: [],
-    areas: [],
-    labels: [],
-    floors: [],
-    users: [],
-  };
-}
-
-export function installHaTestElements(): void {
-  if (!customElements.get("ha-code-editor")) {
-    class HaCodeEditor extends HTMLElement {
-      value = "";
-      updateComplete = Promise.resolve();
-      codemirror = { dom: document.createElement("div") };
-
-      constructor() {
-        super();
-        const scroller = document.createElement("div");
-        scroller.className = "cm-scroller";
-        this.codemirror.dom.append(scroller);
-      }
-    }
-    customElements.define("ha-code-editor", HaCodeEditor);
-  }
-}
-
-export function stableMarkup(element: Element | null): string | undefined {
-  return element?.outerHTML.replace(/<!--.*?-->/g, "");
-}
-
 export function mountCustomElement<T extends HTMLElement>(
   tagName: string,
   properties: Record<string, unknown> = {},
@@ -141,17 +68,6 @@ export function mountCustomElement<T extends HTMLElement>(
 
 export function cleanupTestDom(): void {
   document.body.replaceChildren();
-}
-
-export function alertCardRoots(root: ParentNode): ShadowRoot[] {
-  const cardRoots = [...root.querySelectorAll("ha-notifications-alert-card")]
-    .map((card) => card.shadowRoot)
-    .filter((shadowRoot): shadowRoot is ShadowRoot => shadowRoot !== null);
-  const nestedRoots = [...root.querySelectorAll("*")]
-    .map((element) => element.shadowRoot)
-    .filter((shadowRoot): shadowRoot is ShadowRoot => shadowRoot !== null)
-    .flatMap((shadowRoot) => alertCardRoots(shadowRoot));
-  return [...cardRoots, ...nestedRoots];
 }
 
 export function renderTemplate(template: TemplateResult): HTMLElement {
@@ -169,26 +85,6 @@ export async function settleElement(element: HTMLElement): Promise<void> {
     await updateComplete;
   }
   await Promise.resolve();
-}
-
-export async function settleLitTree(root: ParentNode): Promise<void> {
-  for (let pass = 0; pass < 5; pass += 1) {
-    const updates: Promise<unknown>[] = [];
-    const collect = (container: ParentNode): void => {
-      for (const element of container.querySelectorAll("*")) {
-        const component = element as HTMLElement & {
-          updateComplete?: Promise<unknown>;
-          shadowRoot?: ShadowRoot | null;
-        };
-        if (component.updateComplete) updates.push(component.updateComplete);
-        if (component.shadowRoot) collect(component.shadowRoot);
-      }
-    };
-    collect(root);
-    if (updates.length === 0) return;
-    await Promise.all(updates);
-    await Promise.resolve();
-  }
 }
 
 export function editorRoot(): ShadowRoot {
@@ -232,50 +128,10 @@ export function editorRoot(): ShadowRoot {
       },
     },
   });
-  root.innerHTML = `
-    <div class="nc-page">
-      <div class="nc-alerts"></div>
-      <div class="nc-tabs"></div>
-      <div class="nc-actions"></div>
-    </div>`;
   document.body.append(host);
   return root;
 }
 
-export function domQueries(container: Element | DocumentFragment) {
-  return within(container);
-}
-
 export function testUser() {
   return userEvent.setup();
-}
-
-export function editorQueries(root: ShadowRoot) {
-  return domQueries(root);
-}
-
-export async function settleEditorNavigation(root: ShadowRoot): Promise<void> {
-  const navigations = root.querySelectorAll(
-    "ha-notifications-editor-navigation",
-  ) as NodeListOf<HTMLElement & { updateComplete?: Promise<unknown> }>;
-  await Promise.all(
-    [...navigations].map((navigation) => navigation.updateComplete),
-  );
-}
-
-export function editorOptions(
-  root: ShadowRoot,
-  alert: Alert = defaultAlert(),
-  registries = emptyRegistries(),
-) {
-  return {
-    root,
-    hass: createHassClient().hass,
-    alert,
-    registries,
-    onSave: vi.fn().mockResolvedValue(alert),
-    onValidateAlert: vi.fn().mockResolvedValue({}),
-    onSaved: vi.fn().mockResolvedValue(undefined),
-    onClosed: vi.fn(),
-  };
 }

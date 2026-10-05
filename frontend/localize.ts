@@ -49,25 +49,3 @@ export function localize(
 ): string {
   return resolveLocalized(hass, key, variables, fallback);
 }
-
-const editorTitleKeys: Record<string, string> = {
-  Basic: "editor.basic.section",
-  "When to run": "editor.triggers.section",
-  Triggers: "editor.triggers.custom",
-  Conditions: "editor.conditions.section",
-  Condition: "editor.condition.section",
-  Recipients: "editor.recipients.section",
-  Notification: "editor.notification.section",
-  "Post-send actions": "editor.notification.post_send_actions",
-  Confirmation: "editor.confirmation.section",
-  "Reminder policy": "editor.confirmation.reminder.section",
-  "Notify recipients when confirmed": "editor.confirmation.notification.section",
-  "Post-confirmation actions": "editor.confirmation.actions.section",
-};
-
-export function localizeEditorTitle(
-  translate: Localize,
-  title: string,
-): string {
-  return translate(editorTitleKeys[title] || title, {}, title);
-}

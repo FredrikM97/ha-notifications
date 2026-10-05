@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLocalizer, localizeEditorTitle } from "../../frontend/localize.js";
+import { createLocalizer } from "../../frontend/localize.js";
 import type { Hass } from "../../frontend/types.js";
 
-describe("editor localizer", () => {
+describe("frontend localizer", () => {
   it("uses the Home Assistant translator once it is bound", () => {
     const localize = createLocalizer({
       localize: vi.fn((key: string) => {
@@ -14,7 +14,6 @@ describe("editor localizer", () => {
     } as Hass);
 
     expect(localize("editor.basic.section")).toBe("Grundlegend");
-    expect(localizeEditorTitle(localize, "Basic")).toBe("Grundlegend");
   });
 
   it("falls back to the bundled catalog", () => {

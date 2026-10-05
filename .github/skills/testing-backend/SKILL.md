@@ -5,10 +5,14 @@ description: "Use when adding or reviewing HA Notifications Python tests, Home A
 # HA Notifications backend testing
 
 Use this skill for Python and Home Assistant integration tests. Use
-`pytest-homeassistant-custom-component` fixtures and real Home Assistant
-components first: `hass`, `MockConfigEntry`, `enable_custom_integrations`,
-`async_mock_service`, config-entry flows, service calls, event bus, states,
-registries, and automation schema validation.
+the real Home Assistant fixtures in `tests/backend/conftest.py` first: `hass` (a
+real core on an isolated config dir, bootstrapped with Home Assistant's own
+startup code), `enable_custom_integrations`, `MockConfigEntry`,
+`async_mock_service`, plus config-entry flows, service calls, event bus,
+states, registries, and automation schema validation. Tests depend on
+`homeassistant` directly; do not add `pytest-homeassistant-custom-component`.
+Register test event listeners with `@callback` (or wrap them), and wait on real
+outcomes rather than single event-loop ticks.
 
 Reuse builders and YAML fixtures from `tests/backend/conftest.py` and the
 shared backend setup. Pass fixtures as test parameters instead of rebuilding

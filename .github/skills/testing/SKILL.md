@@ -13,10 +13,14 @@ change with no test or validation impact.
 
 ## Backend
 
-Use `pytest-homeassistant-custom-component` fixtures and real Home Assistant
-components first: `hass`, `MockConfigEntry`, `enable_custom_integrations`,
-`async_mock_service`, config-entry flows, service calls, event bus, states,
-registries, and automation schema validation. Reuse builders and YAML fixtures
+Use the real Home Assistant fixtures in `tests/backend/conftest.py` first: `hass` (a
+real core on an isolated config dir, bootstrapped with Home Assistant's own
+startup code), `enable_custom_integrations`, `MockConfigEntry`,
+`async_mock_service`, plus config-entry flows, service calls, event bus,
+states, registries, and automation schema validation. Tests depend on
+`homeassistant` directly; do not add `pytest-homeassistant-custom-component`.
+Register test event listeners with `@callback` (or wrap them), and wait on real
+outcomes rather than single event-loop ticks. Reuse builders and YAML fixtures
 from `tests/backend/conftest.py` and the repository's shared test setup. Use
 pytest fixtures as test parameters instead of rebuilding the same alert or HA
 object in each test. Use `pytest.mark.parametrize` or parameterized fixtures

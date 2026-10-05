@@ -14,6 +14,7 @@ _STORAGE_VERSION = 1
 _STORAGE_KEY = "ha_notifications.history"
 _MAX_ENTRIES = 500
 _RETENTION_DAYS = 30
+_SAVE_DELAY = 1
 
 
 class HistoryStore:
@@ -65,7 +66,7 @@ class HistoryStore:
                 "event": event,
             })
             self._prune()
-            await self._store.async_save({"entries": self._entries})
+            self._schedule_save()
 
     async def async_record_inactive(
         self,
@@ -108,8 +109,12 @@ class HistoryStore:
                 "event": event,
             })
             self._prune()
-            await self._store.async_save({"entries": self._entries})
+            self._schedule_save()
             return active_transition
+
+    def _schedule_save(self) -> None:
+        # Batched like HA's own registries; never blocks delivery on disk I/O.
+        self._store.async_delay_save(lambda: {"entries": list(self._entries)}, _SAVE_DELAY)
 
     async def async_entries(self, alert_id: str | None = None) -> list[dict[str, Any]]:
         """Return newest-first history entries."""

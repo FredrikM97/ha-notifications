@@ -6,7 +6,7 @@ import {
   getConfig,
   getHistory,
   deleteAlert,
-  loadRegistries,
+  loadUsers,
   reload,
   saveAlert,
   saveConfig,
@@ -278,21 +278,21 @@ describe("frontend API transport", () => {
     );
   });
 
-  it("enriches registry entities with friendly state names", async () => {
+  it("loads active human users for recipient selectors", async () => {
     const client = createHassClient();
-    client.sendMessagePromise
-      .mockResolvedValueOnce([{ entity_id: "light.kitchen" }])
-      .mockResolvedValueOnce([
-        { entity_id: "light.kitchen", attributes: { friendly_name: "Kitchen" } },
-      ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+    client.sendMessagePromise.mockResolvedValueOnce([
+      { id: "admin", name: "Admin" },
+      { id: "inactive", name: "Inactive", is_active: false },
+      { id: "system", name: "System", system_generated: true },
+      { id: "operator", name: "Operator", is_active: true },
+    ]);
 
-    await expect(loadRegistries(client.hass)).resolves.toMatchObject({
-      entities: [{ entity_id: "light.kitchen", friendly_name: "Kitchen" }],
+    await expect(loadUsers(client.hass)).resolves.toEqual([
+      { value: "admin", label: "Admin" },
+      { value: "operator", label: "Operator" },
+    ]);
+    expect(client.sendMessagePromise).toHaveBeenCalledWith({
+      type: "config/auth/list",
     });
   });
 });

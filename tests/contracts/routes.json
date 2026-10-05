@@ -1,6 +1,7 @@
 {
   "commands": [
     "get_config",
+    "mobile_platforms",
     "automation_status",
     "get_history",
     "validate_config",

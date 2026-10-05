@@ -2,69 +2,85 @@
 
 ## Setup
 
-Install the Node and Python development dependencies from the repository root:
-
 ```bash
 npm ci
-python3 -m pip install -e ".[all]"
+python3 -m pip install -e .
+git config core.hooksPath .githooks   # optional: run checks before each commit
 ```
 
-Run the complete local validation suite:
+## Run it
+
+`npm run dev` starts a throwaway Home Assistant with this integration loaded:
 
 ```bash
-sh scripts/validate.sh
+npm run dev               # http://localhost:8124/ha_notifications
+npm run dev -- --reset    # start again from a clean instance
 ```
 
-The suite checks Python lint and tests, the frontend build, frontend smoke
-checks, and frontend unit tests.
+- Real Home Assistant and its frontend: every switch, selector, and editor is
+  the genuine component, and every API call reaches the real backend.
+- No login for local clients, and sample alerts are seeded on first run.
+- The frontend rebuilds on save; reload the page to see changes.
+- State lives in the gitignored `.ha-config/`.
 
-To run the same checks automatically before each local commit:
+## Validate
 
 ```bash
-git config core.hooksPath .githooks
+sh scripts/validate.sh    # everything: lint, backend tests, frontend build and tests
 ```
 
-Snapshots use Syrupy with Home Assistant-aware serialization. Review snapshot
-changes explicitly with:
+Focused checks while working:
+
+```bash
+python3 -m pytest tests/backend/test_automation.py
+python3 -m ruff check custom_components/ha_notifications tests/backend
+npm run typecheck
+npm run build
+```
+
+Backend tests run a real Home Assistant core (see `tests/backend/conftest.py`)
+using the `homeassistant` package directly; there is no
+`pytest-homeassistant-custom-component` dependency. Snapshots use Syrupy;
+review changes with:
 
 ```bash
 python3 -m pytest --snapshot-update
 ```
 
-## Local Home Assistant
+## Project layout
 
-After building the frontend with `npm run build`, copy the current integration
-into a local Home Assistant configuration. With no argument, the script uses
-the Home Assistant config directory two levels above the repository (the
-standard `config/repos/<repository>` layout); pass a path or set
-`HA_CONFIG_DIR` to use another configuration:
+```
+custom_components/ha_notifications/   Python integration
+  configuration.py   Canonical config schema (pydantic)
+  automation*.py     Generating, storing, and reconciling automations
+  notification.py    send / clear / command / report services
+  history.py         Persistent history (batched writes)
+  bridge/            Websocket API and panel registration
+frontend/            Lit + TypeScript panel (see frontend/AGENTS.md)
+tests/backend/       pytest suites, fixtures, and snapshots
+tests/frontend/      Vitest suites
+scripts/             dev_ha.py, validation, local install, HACS packaging
+```
+
+The panel bundle is served from the integration's `frontend/` folder with a
+content-hashed URL, so a browser never runs a stale build after an update.
+
+## Install into an existing Home Assistant
 
 ```bash
+npm run build
 sh scripts/install_local.sh /path/to/home-assistant-config
 ```
 
-The integration source is authored under `custom_components/ha_notifications/`.
-The build writes the frontend bundle to `build/frontend/panel.js`. The local
-install script copies that bundle into the installed integration, while the
-HACS packaging script includes it in the release archive.
+With no argument the script uses the config directory two levels above the
+repository (the `config/repos/<repository>` layout) or `HA_CONFIG_DIR`.
 
 ## HACS package
 
-Build the release HACS package locally:
-
 ```bash
-npm run package:hacs
+npm run package:hacs            # build and zip the integration
+npm run package:hacs -- 1.2.3   # override the version for a release test
 ```
 
-Pass a version to override the manifest for a release test:
-
-```bash
-npm run package:hacs -- 1.2.3
-```
-
-The package script builds the frontend, copies the canonical integration into a
-temporary export tree, and creates a ZIP with the integration files at its root,
-as expected by HACS when `content_in_root` is enabled.
-
-For source layout, feature ownership, and runtime flow, see
-[architecture.md](architecture.md).
+The ZIP contains the integration files at its root, as HACS expects with
+`content_in_root`.

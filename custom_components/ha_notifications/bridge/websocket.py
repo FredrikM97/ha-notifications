@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.components import automation as ha_automation
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 
 from ..automation import (
     async_validate_alerts,
@@ -21,6 +22,7 @@ from ..automation_runtime import (
 from ..configuration import validate_config
 from ..const import COMMAND_CANCEL_RUN, DOMAIN, EVENT_COMMAND
 from ..history import history_store
+from ..mobile_app import resolve_platforms
 
 ERROR_CODE = "ha_notifications_error"
 _WEBSOCKET_REGISTERED: set[int] = set()
@@ -237,6 +239,11 @@ class WebsocketDispatcher:
     ) -> dict[str, Any]:
         return _raw_config_for(hass)
 
+    async def mobile_platforms(
+        self, hass: HomeAssistant, msg: dict[str, Any]
+    ) -> dict[str, Any]:
+        return resolve_platforms(hass, msg["target"])
+
     async def validate_config(
         self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> dict[str, Any]:
@@ -407,6 +414,8 @@ def _handler(
     dispatcher: WebsocketDispatcher,
     handler: Callable[[HomeAssistant, dict[str, Any]], Awaitable[Any]],
     schema: dict[Any, Any],
+    *,
+    require_admin: bool = False,
 ) -> Any:
     """Build a Home Assistant websocket handler for a command."""
     @websocket_api.websocket_command(schema)
@@ -416,7 +425,7 @@ def _handler(
     ) -> None:
         await dispatcher.dispatch(hass, connection, msg, handler)
 
-    return handle
+    return websocket_api.require_admin(handle) if require_admin else handle
 
 
 def register(hass: HomeAssistant) -> None:
@@ -427,6 +436,18 @@ def register(hass: HomeAssistant) -> None:
     dispatcher = WebsocketDispatcher()
     commands = {
         "get_config": (dispatcher.get_config, {}),
+        "mobile_platforms": (
+            dispatcher.mobile_platforms,
+            {
+                vol.Required("target"): vol.Schema(
+                    {
+                        **cv.TARGET_SERVICE_FIELDS,
+                        vol.Optional("user_id"): vol.All(cv.ensure_list, [str]),
+                    },
+                    extra=vol.ALLOW_EXTRA,
+                ),
+            },
+        ),
         "automation_status": (dispatcher.automation_status, {}),
         "get_history": (dispatcher.get_history, {vol.Optional("alert_id"): str}),
         "cancel_run": (dispatcher.cancel_run, {vol.Required("alert_id"): str}),
@@ -439,6 +460,9 @@ def register(hass: HomeAssistant) -> None:
         schema = {vol.Required("type"): f"{DOMAIN}/{command}", **arguments}
         websocket_api.async_register_command(
             hass,
-            _handler(dispatcher, handler, schema),
+            _handler(
+                dispatcher, handler, schema,
+                require_admin=command == "mobile_platforms",
+            ),
         )
     _WEBSOCKET_REGISTERED.add(id(hass))

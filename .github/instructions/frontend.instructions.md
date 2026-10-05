@@ -4,8 +4,9 @@ applyTo: "frontend/**/*.ts, tests/frontend/**/*.ts, tests/frontend/**/*.tsx"
 ---
 
 Use `frontend/api.ts` as the transport boundary and preserve the canonical
-backend configuration shape and YAML syntax. Keep editor orchestration in
-`frontend/editor/index.ts` and section UI in `frontend/panel/sections/`.
+backend configuration shape and YAML syntax. Keep editor orchestration and
+section UI in `frontend/editor/`, dashboard tab views in `frontend/views/`, and
+panel state/action coordination in `frontend/panel.ts`.
 Prefer Home Assistant native selectors and stable literal types. Do not change
 persisted shape or invent backend contracts without Lead establishing them.
 For Home Assistant-specific frontend APIs, consult the official developer
@@ -18,39 +19,27 @@ Use typed properties and events, keep transient UI state separate from
 canonical alert data, and make state changes explicit. Respect Lit lifecycle
 and clean up listeners, timers, and subscriptions when components disconnect.
 
-Build controls with semantic HTML, accessible names, keyboard operation, and
-visible focus states. Keep layouts usable at narrow widths and ensure loading,
-empty, success, and error states are handled where applicable. Reuse localization
-helpers for user-facing text; do not hardcode strings in components when the
-project has a translation path. Avoid unnecessary dependencies and generic
-shared-style modules. CSS-only shared styles are brittle: changes can silently
-affect unrelated shadow roots and style owners drift apart. Keep styles with
-their Lit component, even when a small declaration is repeated. When UI and
-behavior are genuinely reused, reuse a component rather than exporting a
-catch-all stylesheet.
+Build UI from Home Assistant's own elements (`ha-card`, `ha-button`,
+`ha-icon-button`, `ha-icon-overflow-menu`, `ha-dropdown`, `ha-dialog`,
+`ha-settings-row`, `ha-form`, `ha-selector`, `ha-yaml-editor`,
+`ha-top-app-bar-fixed`, `ha-tab-group`) and HA theme variables; keep custom CSS
+to layout. Reuse the generic helpers in `frontend/ui.ts` instead of
+re-implementing them per view:
+- `toolbar()` for every card header: leading content, icon actions that
+  collapse into a menu on narrow screens, at most one main button.
+- `.nc-filters` grid for filter controls under the toolbar.
+- `NarrowController` for responsive layout (HA's 870px breakpoint, measured on
+  the element so the panel and the Lovelace card behave alike).
+- `navMenu()` for section navigation, `emptyState()`, and `notify()` for
+  feedback through HA's snackbar.
+Editor sections are declarative `ha-form` schemas in
+`frontend/editor/sections.ts`. Keep selector and schema objects stable between
+renders (`selectConfig()`, the editor's schema cache) or HA rebuilds the control.
 
-Keep shared visual states and semantics in reusable components such as the
-shared button template; callers may provide a variant and caller-specific
-layout classes. Keep component-specific styles beside the component that owns
-the markup and behavior. Extract repeated markup when its callers share
-behavior, and split large components at clear presentation or behavior
-boundaries instead of growing generic `styles.ts` or `shared-styles.ts` files.
-
-Prefer Lit components for cohesive interactive or independently styled UI, not
-for wrapping basic semantic elements such as headings, links, and layout
-containers. Give each component its own typed properties, composed events, and
-`static styles`; keep single-owner private components in the owning module
-rather than creating a file per small part. For component and style ownership:
-- Keep each exported stylesheet focused on one component or cohesive rendered
-  responsibility; do not combine unrelated selector regions just because their
-  templates share a file.
-- Use existing render-helper boundaries to identify distinct UI regions. Give
-  independently styled or interactive regions their own component and
-  `static styles`; keep subtemplates that belong to one component under its
-  styles.
-- Expose supported style variants through typed properties or CSS custom
-  properties consumed by the owning component, not parent selectors that reach
-  across component roots.
+Keep accessible names and keyboard operation, and handle loading, empty,
+success, and error states. Reuse localization helpers for user-facing text.
+Do not create a folder for one file or a module with one caller: keep code next
+to its only user and split only when a second real owner appears.
 
 When changing behavior, cover the user-visible contract with focused tests,
 including relevant interaction and failure states. Update snapshots only when
@@ -61,8 +50,8 @@ repository validation gate before handoff when the change warrants it.
 ## Frontend Test Patterns
 
 Reuse the typed fixture builders and DOM helpers in `tests/frontend/conftest.ts`
-for canonical alerts, form values, Home Assistant state, Lit mounting, queries,
-and update settling. Keep one-off scenario data beside its test; promote setup
+for canonical alerts, Home Assistant state, Lit mounting, and update settling.
+Keep one-off scenario data beside its test; promote setup
 to a shared fixture only when multiple suites need the same contract. Use
 Vitest `it.each` for equivalent behavior across input scenarios instead of
 copying test bodies. For Lit elements, mount the registered custom element,

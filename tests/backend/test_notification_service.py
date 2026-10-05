@@ -3,28 +3,28 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_get_all_descriptions
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_mock_service,
-)
 
+from custom_components.ha_notifications.automation import _SendComponent
+from custom_components.ha_notifications.configuration import AlertConfig
 from custom_components.ha_notifications.const import (
     COMMAND_CANCEL_RUN,
     DOMAIN,
     EVENT_COMMAND,
 )
+from custom_components.ha_notifications.domain import RuntimeData
 from custom_components.ha_notifications.history import HistoryStore
 from custom_components.ha_notifications.notification import (
     _parse_notification,
     _payload,
     async_setup_services,
 )
+from tests.backend.conftest import MockConfigEntry, async_mock_service
 
 
 def test_parse_notification_returns_a_copy_of_the_payload() -> None:
@@ -52,6 +52,20 @@ def test_payload_preserves_an_empty_notification_message() -> None:
         "message": "",
         "data": {"tag": "empty_alert"},
     }
+
+
+def test_parse_notification_discards_editor_options_without_mutating_input() -> None:
+    payload = {
+        "message": "Low water",
+        "editor_options": {"fields": {"mobile.color": {"enabled": False, "value": "#ff0000"}}},
+        "notification_native": {"priority": "high"},
+    }
+
+    notification = _parse_notification(payload)
+
+    assert "editor_options" not in notification
+    assert notification["notification_native"] == {"priority": "high"}
+    assert "editor_options" in payload
 
 
 @pytest.mark.asyncio
@@ -125,7 +139,7 @@ async def test_command_fires_alert_scoped_event(
 ) -> None:
     await async_setup_services(hass)
     events = []
-    hass.bus.async_listen("ha_notifications_command", events.append)
+    hass.bus.async_listen("ha_notifications_command", callback(lambda event: events.append(event)))
 
     await hass.services.async_call(
         DOMAIN,
@@ -156,7 +170,7 @@ async def test_inactive_report_records_once_and_only_cancels_after_activity(
     history = HistoryStore(hass)
     entry.runtime_data = type("RuntimeData", (), {"history": history})()
     events = []
-    hass.bus.async_listen(EVENT_COMMAND, events.append)
+    hass.bus.async_listen(EVENT_COMMAND, callback(lambda event: events.append(event)))
 
     await hass.services.async_call(
         DOMAIN,
@@ -228,7 +242,7 @@ async def test_inactive_report_does_not_cancel_waits_by_default(
     history = HistoryStore(hass)
     entry.runtime_data = type("RuntimeData", (), {"history": history})()
     events = []
-    hass.bus.async_listen(EVENT_COMMAND, events.append)
+    hass.bus.async_listen(EVENT_COMMAND, callback(lambda event: events.append(event)))
 
     await hass.services.async_call(
         DOMAIN,
@@ -287,6 +301,113 @@ async def test_send_resolves_explicit_notify_targets(
         "message": "Low water",
         "data": {"tag": "low_water"},
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested_options", [False, True], ids=["flat", "nested"])
+async def test_send_preserves_companion_option_placement_from_stored_alert(
+    hass: HomeAssistant, alert_factory, nested_options: bool,
+) -> None:
+    options = {
+        "group": "water",
+        "channel": "Alerts",
+        "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0}},
+        "ttl": 0,
+        "priority": "high",
+    }
+    option_data = {"data": options} if nested_options else options
+    stored = alert_factory(notification={
+        "action": "notify.mobile_app_phone",
+        "target": {"entity_id": ["notify.mobile_app_phone"]},
+        "data": {"title": "Water", "message": "Low water", **option_data},
+    })
+    alert = AlertConfig.model_validate(stored)
+    before = alert.model_dump(mode="python")
+    notification = _SendComponent.notification_mapping(alert.notification)
+    assert notification["data"] == stored["notification"]["data"]
+    await async_setup_services(hass)
+    config = {"version": 1, "alerts": [stored]}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    entry.runtime_data = RuntimeData(config=config, history=HistoryStore(hass))
+    calls = async_mock_service(hass, "notify", "mobile_app_phone")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "send",
+        {"alert_id": alert.id, **notification},
+        blocking=True,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].data == {
+        "title": "Water",
+        "message": "Low water",
+        "data": {**option_data, "tag": alert.id},
+    }
+    assert alert.model_dump(mode="python") == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service", ["send", "clear"])
+@pytest.mark.parametrize("payload_source", ["mapped", "direct_flat", "direct_nested"])
+async def test_delivery_excludes_notification_editor_options(
+    hass: HomeAssistant, alert_factory, service: str, payload_source: str,
+) -> None:
+    stored = alert_factory(notification={
+        "action": "notify.mobile_app_phone",
+        "target": {"entity_id": ["notify.mobile_app_phone"]},
+        "title": "Water",
+        "message": "Low water",
+        "data": {"priority": "high"},
+        "editor_options": {
+            "fields": {
+                "mobile.color": {"enabled": False, "value": "#ff0000"},
+                "android.channel": {"enabled": False, "value": "Disabled channel"},
+                "ios.sound": {"enabled": False, "value": "disabled.aiff"},
+            },
+            "sections": {
+                "android": {"enabled": False, "values": {"channel": "Disabled channel", "ttl": 0}},
+                "ios": {"enabled": False, "values": {"push": {"sound": "disabled.aiff"}}},
+            },
+        },
+    })
+    alert = AlertConfig.model_validate(stored)
+    serialized = alert.notification.model_dump(mode="json", exclude_none=True)
+    before = alert.model_dump(mode="python")
+    mapped = _SendComponent.notification_mapping(alert.notification)
+    assert "editor_options" not in mapped
+    assert mapped["data"] == {"priority": "high"}
+    if payload_source == "mapped":
+        payload = mapped
+    elif payload_source == "direct_flat":
+        payload = serialized
+    else:
+        payload = {"notification": serialized}
+
+    await async_setup_services(hass)
+    config = {"version": 1, "alerts": [stored]}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    entry.runtime_data = RuntimeData(config=config, history=HistoryStore(hass))
+    calls = async_mock_service(hass, "notify", "mobile_app_phone")
+
+    await hass.services.async_call(
+        DOMAIN,
+        service,
+        {"alert_id": alert.id, **payload},
+        blocking=True,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].data == {
+        "title": "Water",
+        "message": "clear_notification" if service == "clear" else "Low water",
+        "data": {"priority": "high", "tag": alert.id},
+        **({"entity_id": ["notify.mobile_app_phone"]} if payload_source != "mapped" else {}),
+    }
+    assert alert.model_dump(mode="python") == before
+    assert serialized["editor_options"] == stored["notification"]["editor_options"]
 
 
 @pytest.mark.asyncio

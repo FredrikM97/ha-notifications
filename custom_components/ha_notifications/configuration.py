@@ -60,6 +60,7 @@ class NotificationConfig(BaseModel):
     title: str = ""
     message: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
+    editor_options: dict[str, Any] | None = None
 
     @field_validator("action")
     @classmethod

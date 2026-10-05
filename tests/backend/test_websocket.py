@@ -5,9 +5,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from homeassistant.core import callback
 
 from custom_components.ha_notifications.bridge import (
     BRAND_URL,
+    FRONTEND_URL,
     PANEL_URL,
     async_register_panel,
     websocket,
@@ -38,9 +40,10 @@ def test_registers_only_supported_namespaced_commands(
     websocket.register(hass)
     websocket.register(hass)
 
-    assert len(registered) == 8
+    assert len(registered) == 9
     assert {handler._ws_command for handler in registered} == {
         "ha_notifications/get_config",
+        "ha_notifications/mobile_platforms",
         "ha_notifications/automation_status",
         "ha_notifications/get_history",
         "ha_notifications/cancel_run",
@@ -140,6 +143,9 @@ async def test_async_register_panel_registers_packaged_static_asset(
         data: dict[str, object] = {}
         http = Http()
 
+        async def async_add_executor_job(self, function, *args):
+            return function(*args)
+
     async def register_panel(hass: object, **kwargs: object) -> None:
         panels.append(kwargs)
 
@@ -148,17 +154,19 @@ async def test_async_register_panel_registers_packaged_static_asset(
     await async_register_panel(Hass())
 
     assert len(static_paths) == 2
-    assert static_paths[0].url_path == PANEL_URL
-    assert static_paths[0].path == str(panel_path)
+    assert static_paths[0].url_path == FRONTEND_URL
+    assert static_paths[0].path == str(panel_path.parent)
     assert static_paths[1].url_path == BRAND_URL
     assert static_paths[1].path == str(brand_path)
+    module_url = panels[0].pop("module_url")
+    assert module_url.startswith(f"{PANEL_URL}?v=")
+    assert len(module_url.rsplit("=", 1)[1]) == 12
     assert panels == [
         {
             "webcomponent_name": "ha-notifications-panel",
             "sidebar_title": "HA Notifications",
             "sidebar_icon": "mdi:bell-outline",
             "frontend_url_path": "ha_notifications",
-            "module_url": PANEL_URL,
             "require_admin": True,
         }
     ]
@@ -395,17 +403,13 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
     enabled: bool,
     should_reenable: bool,
 ) -> None:
-    from pytest_homeassistant_custom_component.common import (
-        MockConfigEntry,
-        async_mock_service,
-    )
-
     from custom_components.ha_notifications.const import (
         COMMAND_CANCEL_RUN,
         DOMAIN,
         EVENT_COMMAND,
     )
     from custom_components.ha_notifications.history import HistoryStore
+    from tests.backend.conftest import MockConfigEntry, async_mock_service
 
     alert = alert_factory("base", id="door", enabled=enabled)
     entry = MockConfigEntry(
@@ -420,7 +424,7 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
         "door", "Door", "waiting", "Waiting for confirmation", flow_id="run-1"
     )
     command_events = []
-    hass.bus.async_listen(EVENT_COMMAND, command_events.append)
+    hass.bus.async_listen(EVENT_COMMAND, callback(lambda event: command_events.append(event)))
 
     async def record_wait_cancellation(event) -> None:
         if event.data.get("command") == COMMAND_CANCEL_RUN:

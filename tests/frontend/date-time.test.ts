@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLocalDateTime } from "../../frontend/date-time.js";
+import { formatLocalDateTime } from "../../frontend/views/history.js";
 
 describe("formatLocalDateTime", () => {
   it("uses the user date and time format settings", () => {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -60,7 +61,7 @@ def resolve_target(hass: HomeAssistant, target: dict[str, Any]) -> TargetResolut
                 entity_ids.add(entity.entity_id)
 
         for entry in hass.config_entries.async_entries("mobile_app"):
-            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            entry_data = entry.data if isinstance(entry.data, Mapping) else {}
             if str(entry_data.get("user_id")) not in user_ids:
                 continue
             entity_ids.update(
@@ -91,7 +92,7 @@ def _target_device_ids(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
     floor_ids = set(target_values(target, "floor_id"))
     label_ids = set(target_values(target, "label_id"))
     area_ids.update(
-        area.area_id
+        area.id
         for area in area_registry.areas.values()
         if area.floor_id in floor_ids
     )
