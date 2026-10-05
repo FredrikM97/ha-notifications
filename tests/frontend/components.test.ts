@@ -991,6 +991,7 @@ describe("alert editor interactions", () => {
       modeSelector?.selector.select.options.map(({ value }) => value),
     ).toEqual(["single", "restart", "queued", "parallel"]);
     if (!modeSelector) throw new Error("Automation mode selector is missing.");
+    const modeSelectorConfig = modeSelector.selector;
 
     const inactiveSwitch = root.querySelector<
       HTMLElement & { checked: boolean }
@@ -1000,6 +1001,7 @@ describe("alert editor interactions", () => {
       throw new Error("Cancel-on-inactive switch is missing.");
     inactiveSwitch.checked = true;
     inactiveSwitch.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(modeSelector.selector).toBe(modeSelectorConfig);
 
     modeSelector.value = "parallel";
     modeSelector.dispatchEvent(

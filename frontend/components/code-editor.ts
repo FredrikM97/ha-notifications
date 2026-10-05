@@ -8,6 +8,15 @@ import { localize } from "../localize.js";
 export type CodeEditorSize = "content" | "page" | "modal";
 export type CodeEditorVisualType = "trigger" | "condition" | "action";
 
+const VISUAL_SELECTOR_CONFIGS: Record<
+  CodeEditorVisualType,
+  Record<string, unknown>
+> = {
+  trigger: { trigger: {} },
+  condition: { condition: {} },
+  action: { action: {} },
+};
+
 type NativeCodeEditor = HTMLElement & {
   value: string;
   updateComplete?: Promise<unknown>;
@@ -207,6 +216,8 @@ class HaNotificationsCodeEditor extends LitElement {
   }
 
   private viewMode: "yaml" | "visual" = "yaml";
+  private visualValueSource: string | undefined;
+  private visualValueCache: unknown[] | null = null;
 
   protected firstUpdated(): void {
     void this.sizeNativeEditor();
@@ -282,17 +293,23 @@ class HaNotificationsCodeEditor extends LitElement {
   }
 
   private parseVisualValue(): unknown[] | null {
-    if (!this.value.trim()) return [];
+    if (this.visualValueSource === this.value) return this.visualValueCache;
+    this.visualValueSource = this.value;
+    if (!this.value.trim()) {
+      this.visualValueCache = [];
+      return this.visualValueCache;
+    }
     try {
       const value: unknown = YAML.parse(this.value);
-      return Array.isArray(value) ? value : null;
+      this.visualValueCache = Array.isArray(value) ? value : null;
     } catch {
-      return null;
+      this.visualValueCache = null;
     }
+    return this.visualValueCache;
   }
 
   private selectorConfig(): Record<string, unknown> {
-    return this.visualType ? { [this.visualType]: {} } : {};
+    return this.visualType ? VISUAL_SELECTOR_CONFIGS[this.visualType] : {};
   }
 
   private handleVisualValueChanged = (
@@ -303,6 +320,8 @@ class HaNotificationsCodeEditor extends LitElement {
     this.value = event.detail.value.length
       ? YAML.stringify(event.detail.value)
       : "";
+    this.visualValueSource = this.value;
+    this.visualValueCache = event.detail.value;
     this.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   };
 

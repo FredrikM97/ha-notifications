@@ -161,6 +161,7 @@ describe("shared code editor visual mode", () => {
       expect(selector?.selector).toEqual({ [visualType]: {} });
       expect(selector?.value).toEqual(input);
       if (!selector) throw new Error("Home Assistant selector is missing.");
+      const selectorConfig = selector.selector;
 
       selector.dispatchEvent(
         new CustomEvent("value-changed", {
@@ -171,6 +172,13 @@ describe("shared code editor visual mode", () => {
       );
 
       expect(YAML.parse(editor.value)).toEqual(output);
+      await editor.updateComplete;
+      expect(selector.selector).toBe(selectorConfig);
+      expect(selector.value).toBe(output);
+      editor.requestUpdate();
+      await editor.updateComplete;
+      expect(selector.selector).toBe(selectorConfig);
+      expect(selector.value).toBe(output);
     },
   );
 

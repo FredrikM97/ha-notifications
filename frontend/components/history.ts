@@ -580,6 +580,23 @@ interface HistoryEntriesRenderState extends HistoryRenderOptions {
   onAlertSelected(alertId: string, alertName: string): void;
 }
 
+const historySelectorConfigs = new Map<
+  string,
+  { key: string; config: Record<string, unknown> }
+>();
+
+function historySelectorConfig(
+  cacheKey: string,
+  options: { value: string; label: string }[],
+): Record<string, unknown> {
+  const key = JSON.stringify(options);
+  const cached = historySelectorConfigs.get(cacheKey);
+  if (cached?.key === key) return cached.config;
+  const config = { select: { mode: "dropdown", options } };
+  historySelectorConfigs.set(cacheKey, { key, config });
+  return config;
+}
+
 export function renderHistory(
   container: HTMLElement,
   history: RuntimeAlertHistoryEntry[],
@@ -926,18 +943,13 @@ function historySecondaryFiltersTemplate(
     ${alertFilterTemplate(options, filters)}
     <ha-selector
       .hass=${options.hass}
-      .selector=${{
-        select: {
-          mode: "dropdown",
-          options: [
-            { value: "", label: localize(options.hass, "history.all_event_types") },
-            ...(options.types || []).map((type) => ({
-              value: type,
-              label: localize(options.hass, `event.${type}`, {}, formatType(type)),
-            })),
-          ],
-        },
-      }}
+      .selector=${historySelectorConfig("event-types", [
+        { value: "", label: localize(options.hass, "history.all_event_types") },
+        ...(options.types || []).map((type) => ({
+          value: type,
+          label: localize(options.hass, `event.${type}`, {}, formatType(type)),
+        })),
+      ])}
       .value=${filters.type}
       label=${localize(options.hass, "history.event_type")}
       aria-label=${localize(options.hass, "history.filter_event_type")}
@@ -946,18 +958,13 @@ function historySecondaryFiltersTemplate(
     ></ha-selector>
     <ha-selector
       .hass=${options.hass}
-      .selector=${{
-        select: {
-          mode: "dropdown",
-          options: [
-            { value: "", label: localize(options.hass, "history.all_severities") },
-            { value: "error", label: localize(options.hass, "history.error") },
-            { value: "success", label: localize(options.hass, "history.success") },
-            { value: "info", label: localize(options.hass, "history.info") },
-            { value: "muted", label: localize(options.hass, "history.muted") },
-          ],
-        },
-      }}
+      .selector=${historySelectorConfig("severities", [
+        { value: "", label: localize(options.hass, "history.all_severities") },
+        { value: "error", label: localize(options.hass, "history.error") },
+        { value: "success", label: localize(options.hass, "history.success") },
+        { value: "info", label: localize(options.hass, "history.info") },
+        { value: "muted", label: localize(options.hass, "history.muted") },
+      ])}
       .value=${filters.severity}
       label=${localize(options.hass, "history.severity")}
       aria-label=${localize(options.hass, "history.filter_severity")}
@@ -974,18 +981,13 @@ function alertFilterTemplate(
   if (!options.alerts?.length) return "";
   return html`<ha-selector
     .hass=${options.hass}
-    .selector=${{
-      select: {
-        mode: "dropdown",
-        options: [
-          { value: "", label: localize(options.hass, "history.all_alerts") },
-          ...options.alerts.map((alert) => ({
-            value: alert.id,
-            label: alert.name,
-          })),
-        ],
-      },
-    }}
+    .selector=${historySelectorConfig("alerts", [
+      { value: "", label: localize(options.hass, "history.all_alerts") },
+      ...options.alerts.map((alert) => ({
+        value: alert.id,
+        label: alert.name,
+      })),
+    ])}
     .value=${filters.alertId}
     label=${localize(options.hass, "history.alert")}
     aria-label=${localize(options.hass, "history.filter_alert")}

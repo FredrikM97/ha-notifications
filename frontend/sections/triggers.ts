@@ -10,6 +10,20 @@ import { customTriggers } from "../editor/triggers.js";
 import { triggerYaml } from "../editor/serialization.js";
 import { renderEditorSection, renderHelpTooltip } from "../editor/section.js";
 
+let automationModeSelectorConfigCache:
+  { key: string; config: Record<string, unknown> } | undefined;
+
+function automationModeSelectorConfig(
+  options: { value: string; label: string }[],
+): Record<string, unknown> {
+  const key = JSON.stringify(options);
+  if (automationModeSelectorConfigCache?.key === key)
+    return automationModeSelectorConfigCache.config;
+  const config = { select: { mode: "dropdown", options } };
+  automationModeSelectorConfigCache = { key, config };
+  return config;
+}
+
 const triggerSectionStyles = css`
   .nc-trigger-setting {
     display: grid;
@@ -65,29 +79,24 @@ function automationModeField(
     html`<ha-selector
       data-role="automation-mode"
       .hass=${context.hass}
-      .selector=${{
-        select: {
-          mode: "dropdown",
-          options: [
-            {
-              value: "single",
-              label: context.localize("editor.basic.mode_single"),
-            },
-            {
-              value: "restart",
-              label: context.localize("editor.basic.mode_restart"),
-            },
-            {
-              value: "queued",
-              label: context.localize("editor.basic.mode_queued"),
-            },
-            {
-              value: "parallel",
-              label: context.localize("editor.basic.mode_parallel"),
-            },
-          ],
+      .selector=${automationModeSelectorConfig([
+        {
+          value: "single",
+          label: context.localize("editor.basic.mode_single"),
         },
-      }}
+        {
+          value: "restart",
+          label: context.localize("editor.basic.mode_restart"),
+        },
+        {
+          value: "queued",
+          label: context.localize("editor.basic.mode_queued"),
+        },
+        {
+          value: "parallel",
+          label: context.localize("editor.basic.mode_parallel"),
+        },
+      ])}
       .disabled=${hasConditions}
       .value=${hasConditions ? "parallel" : context.value.automation_mode || "parallel"}
       aria-label=${context.localize("editor.basic.automation_mode")}

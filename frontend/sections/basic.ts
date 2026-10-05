@@ -5,6 +5,8 @@ import { formValue } from "../components/form-controls.js";
 import { renderFormField } from "../components/form-field.js";
 import { renderEditorSection } from "../editor/section.js";
 
+const DESCRIPTION_SELECTOR_CONFIG = { text: { multiline: true } };
+
 export function renderBasicSection(
   context: EditorSectionContext<"hass" | "refreshStatuses">,
 ): TemplateResult {
@@ -30,7 +32,7 @@ export function renderBasicSection(
         html`<ha-selector
           class="nc-description-input"
           .hass=${context.hass}
-          .selector=${{ text: { multiline: true } }}
+          .selector=${DESCRIPTION_SELECTOR_CONFIG}
           aria-label=${context.localize("editor.basic.description")}
           .value=${value.description}
           @value-changed=${(event: CustomEvent<{ value?: string }>) => {

@@ -2,6 +2,9 @@ import { css, html, LitElement } from "lit";
 import type { Hass } from "../types.js";
 
 const DURATION_INPUT_TAG = "ha-notifications-duration-input";
+const DURATION_SELECTOR_CONFIG = {
+  duration: { enable_day: true, enable_second: true },
+};
 
 export const durationInputStyles = css`
   :host {
@@ -90,19 +93,23 @@ class DurationInput extends LitElement {
   declare label: string;
   declare ariaLabel: string;
 
+  private selectorValueSource: string | undefined;
+  private selectorValueCache: ReturnType<typeof durationSelectorValue>;
+
   constructor() {
     super();
     this.value = "00:00:00";
     this.label = "";
     this.ariaLabel = "";
+    this.selectorValueCache = durationSelectorValue(this.value, this.value);
   }
 
   protected render() {
     if (this.hass) {
       return html`<ha-selector
         .hass=${this.hass}
-        .selector=${{ duration: { enable_day: true, enable_second: true } }}
-        .value=${durationSelectorValue(this.value, this.value)}
+        .selector=${DURATION_SELECTOR_CONFIG}
+        .value=${this.getSelectorValue()}
         aria-label=${this.ariaLabel || this.label}
         @value-changed=${this.handleSelectorChange}
       ></ha-selector>`;
@@ -118,6 +125,14 @@ class DurationInput extends LitElement {
       @blur=${this.handleCommit}
       @change=${this.handleCommit}
     ></ha-input>`;
+  }
+
+  private getSelectorValue(): ReturnType<typeof durationSelectorValue> {
+    if (this.selectorValueSource !== this.value) {
+      this.selectorValueSource = this.value;
+      this.selectorValueCache = durationSelectorValue(this.value, this.value);
+    }
+    return this.selectorValueCache;
   }
 
   private handleSelectorChange = (event: CustomEvent<{ value?: unknown }>): void => {

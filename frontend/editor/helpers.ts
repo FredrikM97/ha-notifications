@@ -17,6 +17,10 @@ import {
   type OptionalSetting,
 } from "./types.js";
 
+const DURATION_SELECTOR_CONFIG = {
+  duration: { enable_day: true, enable_second: true },
+};
+
 export function editorModeFor(value: Alert): EditorMode {
   return "yaml";
 }
@@ -210,7 +214,7 @@ export function durationInput(
     return html`<ha-selector
       class="nc-duration-input"
       .hass=${hass}
-      .selector=${{ duration: { enable_day: true, enable_second: true } }}
+      .selector=${DURATION_SELECTOR_CONFIG}
       .value=${value}
       .label=${label || undefined}
       aria-label=${localize(hass, "editor.common.duration")}

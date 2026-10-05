@@ -141,6 +141,13 @@ describe("shared form components", () => {
       minutes: 4,
       seconds: 5,
     });
+    if (!duration || !selector) throw new Error("Duration selector is missing.");
+    const selectorConfig = selector.selector;
+    const selectorValue = selector.value;
+    duration.requestUpdate();
+    await duration.updateComplete;
+    expect(selector.selector).toBe(selectorConfig);
+    expect(selector.value).toBe(selectorValue);
   });
 
   it("emits setting identity and enabled state without editor coupling", async () => {

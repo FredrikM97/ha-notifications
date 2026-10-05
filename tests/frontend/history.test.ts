@@ -173,6 +173,30 @@ describe("history filter controls", () => {
     expect(historyFilterRoot(element).querySelectorAll("ha-selector")).toHaveLength(3);
   });
 
+  it("keeps filter selector configs stable across rerenders", async () => {
+    const container = document.createElement("div");
+    const options = {
+      filters: emptyHistoryFilters,
+      alerts: [{ id: "garage", name: "Garage" }],
+      types: ["notification_sent"],
+    };
+    renderHistory(container, historyFixture, options);
+
+    const element = container.querySelector("ha-notifications-history-view")!;
+    await settleHistory(element);
+    const selectors = [...historyFilterRoot(element).querySelectorAll<
+      HTMLElement & { selector: Record<string, unknown> }
+    >("ha-selector")];
+    const configs = selectors.map((selector) => selector.selector);
+
+    renderHistory(container, historyFixture, options);
+
+    expect(selectors.map((selector) => selector.selector)).toEqual(configs);
+    selectors.forEach((selector, index) =>
+      expect(selector.selector).toBe(configs[index]),
+    );
+  });
+
   it("opens secondary filters when one is active", async () => {
     const container = document.createElement("div");
     renderHistory(container, historyFixture, {
