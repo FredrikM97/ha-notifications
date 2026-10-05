@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
 import { mdiCheckCircle, mdiCloseCircle } from "@mdi/js";
-import { navMenu } from "../../frontend/ui.js";
+import { navMenu, uiStyles } from "../../frontend/ui.js";
 import { editableAlert } from "../../frontend/editor/alert-model.js";
 import { editorSections, sectionStatus, type EditorState } from "../../frontend/editor/sections.js";
 import { cleanupTestDom, draftAlertFixture, homeAssistantFixture, renderTemplate } from "./conftest.js";
@@ -17,6 +17,20 @@ const items = [
 ];
 
 describe("section navigation status", () => {
+  it("separates parent sections from child items without spacing the first item", () => {
+    const container = renderTemplate(navMenu([
+      { key: "when", label: "When to run" },
+      { key: "triggers", label: "Triggers", child: true },
+      { key: "recipients", label: "Recipients" },
+    ], "triggers", vi.fn(), false, "Sections"));
+    const recipients = [...container.querySelectorAll("button")]
+      .find(button => button.textContent?.trim() === "Recipients")!;
+    expect(recipients.matches(".nc-nav-item + .nc-nav-item:not(.nc-child)")).toBe(true);
+    expect(container.querySelector("button")!.matches(".nc-nav-item + .nc-nav-item:not(.nc-child)")).toBe(false);
+    expect(uiStyles.cssText).toContain("gap: var(--ha-space-1, 4px);");
+    expect(uiStyles.cssText).toContain("margin-block-start: var(--ha-space-2, 8px);");
+  });
+
   it.each([false, true])("section status follows its own enabled flag=%s", enabled => {
     const alert = editableAlert(draftAlertFixture());
     alert.enabled = true;

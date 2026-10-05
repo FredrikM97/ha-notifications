@@ -158,8 +158,24 @@ describe("native editor controls", () => {
     const state = (editor as unknown as { state: EditorState }).state;
     if (Object.keys(values).length) editorSections.find(section => section.key === key)!.write(state, values);
     await selectSection(editor, key);
-    expect(nativeForm(editor, name).className).toBe("");
+    expect(nativeForm(editor, name).classList.contains("nc-compact-form")).toBe(false);
+    expect(nativeForm(editor, name).classList.contains("nc-medium-form")).toBe(false);
     expect(nativeForm(editor, name).schema.every(field => !("width" in field))).toBe(true);
+  });
+
+  it.each([
+    { key: "triggers", name: "triggers" },
+    { key: "conditions", name: "conditions" },
+    { key: "inactive", name: "triggers" },
+    { key: "postSendActions", name: "actions" },
+    { key: "postConfirmationActions", name: "actions" },
+  ])("uses the shared native selector theme in $key", async ({ key, name }) => {
+    const { editor } = await mount();
+    await selectSection(editor, key);
+    expect(nativeForm(editor, name).classList.contains("nc-native-form")).toBe(true);
+    const styles = (editor.constructor as typeof LitElement).styles!.toString();
+    expect(styles).toMatch(/ha-form\.nc-native-form\s*\{\s*color: var\(--secondary-text-color\);/);
+    expect(nativeForm(editor, name).style.backgroundColor).toBe("");
   });
 
   it("merges split Basic updates and changes mode without resetting sibling configuration", async () => {

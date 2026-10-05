@@ -233,7 +233,11 @@ export const uiStyles = css`
   .nc-nav {
     display: grid;
     align-content: start;
-    gap: 2px;
+    gap: var(--ha-space-1, 4px);
+  }
+
+  .nc-nav-item + .nc-nav-item:not(.nc-child) {
+    margin-block-start: var(--ha-space-2, 8px);
   }
 
   .nc-nav-item {

@@ -67,6 +67,10 @@ const styles = css`
     --code-mirror-max-height: unset;
   }
 
+  ha-form.nc-native-form {
+    color: var(--secondary-text-color);
+  }
+
   ha-form.nc-compact-form {
     width: 100%;
     max-width: 360px;
@@ -411,8 +415,9 @@ class AlertEditor extends LitElement {
       return html`${fields.map(item => this.form(section, item))}`;
     }
     const width = fields.length === 1 ? fields[0].width : undefined;
+    const native = fields.some(item => ["trigger", "condition", "action"].some(type => type in item.selector));
     return html`<ha-form
-      class=${width ? `nc-${width}-form` : ""}
+      class=${[width ? `nc-${width}-form` : "", native ? "nc-native-form" : ""].filter(Boolean).join(" ")}
       .hass=${s.hass}
       .narrow=${this.layout.narrow}
       .schema=${this.schema(section, field)}
