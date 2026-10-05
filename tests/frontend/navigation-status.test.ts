@@ -17,24 +17,23 @@ const items = [
 ];
 
 describe("section navigation status", () => {
-  it.each([
-    { startup: false, periodic: false, enabled: false },
-    { startup: true, periodic: false, enabled: true },
-    { startup: false, periodic: true, enabled: true },
-    { startup: true, periodic: true, enabled: true },
-  ])("Conditions status follows startup=$startup and periodic=$periodic only", ({ startup, periodic, enabled }) => {
+  it.each([false, true])("section status follows its own enabled flag=%s", enabled => {
     const alert = editableAlert(draftAlertFixture());
-    alert.conditions = [{ condition: "state", entity_id: "binary_sensor.door", state: "on" }];
-    alert.on_condition_change = true;
-    alert.triggers = [
+    alert.enabled = true;
+    alert.monitor.triggers.enabled = enabled;
+    alert.monitor.conditions.enabled = !enabled;
+    alert.monitor.conditions.items = [{ condition: "state", entity_id: "binary_sensor.door", state: "on" }];
+    alert.monitor.triggers.items = [
       { trigger: "state", entity_id: "binary_sensor.door", to: "on" },
-      ...(startup ? [{ trigger: "homeassistant", event: "start" }] : []),
-      ...(periodic ? [{ trigger: "time_pattern", minutes: "/5" }] : []),
+      { trigger: "homeassistant", event: "start" },
+      { trigger: "time_pattern", minutes: "/5" },
     ];
     const state: EditorState = {
       alert, hass: homeAssistantFixture(), localize: () => "", users: [], postConfirmationActions: false,
     };
-    expect(sectionStatus(editorSections.find(section => section.key === "conditions")!, state)).toBe(enabled);
+    expect(sectionStatus(editorSections.find(section => section.key === "when")!, state)).toBeUndefined();
+    expect(sectionStatus(editorSections.find(section => section.key === "triggers")!, state)).toBe(enabled);
+    expect(sectionStatus(editorSections.find(section => section.key === "conditions")!, state)).toBe(!enabled);
   });
 
   it.each([false, true])("renders both status icons in narrow=%s navigation", narrow => {

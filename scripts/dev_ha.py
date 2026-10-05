@@ -1,38 +1,35 @@
 """Run a throwaway local Home Assistant with this integration for UI development.
 
-Usage: npm run dev   (or: python3 scripts/dev_ha.py [--reset] [--port 8124])
-
-- Config lives in .ha-config/ (gitignored); --reset wipes it.
-- The integration source is symlinked in, and esbuild watches frontend/ and
-  writes the bundle where HA serves it uncached: save, then reload the page.
-- First run completes onboarding, adds the config entry, and seeds alerts.
-- Login is skipped for local clients via the trusted_networks auth provider.
+Usage: npm run dev (or: python3 scripts/dev_ha.py [--reset] [--port 8124])
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import fcntl
+import hashlib
 import json
+import os
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import aiohttp
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".ha-config"
+LOCK_FILE = Path(tempfile.gettempdir()) / f"ha-notifications-dev-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]}.lock"
 INTEGRATION = ROOT / "custom_components" / "ha_notifications"
-BUNDLE = INTEGRATION / "frontend" / "dev.js"
-# HA's service worker caches panel.js; a per-load URL always fetches the fresh bundle.
-LOADER = 'await import(`./dev.js?t=${Date.now()}`);\n'
 TOKEN_FILE = CONFIG / ".dev-token"
 CLIENT_ID = "http://localhost:8124/"
 
 CONFIGURATION_YAML = """\
-# Minimal explicit set; default_config pulls integrations with uninstalled deps.
 frontend:
 config:
 automation:
@@ -62,7 +59,6 @@ logger:
   logs:
     custom_components.ha_notifications: debug
 
-# Demo entities so triggers, conditions and actions have something to target.
 input_boolean:
   front_door:
     name: Front door
@@ -87,18 +83,50 @@ template:
 """
 
 
-def prepare_config(port: int, reset: bool) -> None:
+def _with_http_port(configuration: str, port: int) -> str:
+    lines = configuration.splitlines()
+    http_index = next(
+        (index for index, line in enumerate(lines) if line.partition("#")[0].strip() == "http:"),
+        None,
+    )
+    if http_index is None:
+        lines.extend(["", "http:", f"  server_port: {port}"])
+    else:
+        for index in range(http_index + 1, len(lines)):
+            line = lines[index]
+            if line and not line[0].isspace():
+                lines.insert(index, f"  server_port: {port}")
+                break
+            if line.strip().startswith("server_port:"):
+                indentation = line[: len(line) - len(line.lstrip())]
+                lines[index] = f"{indentation}server_port: {port}"
+                break
+        else:
+            lines.append(f"  server_port: {port}")
+    return "\n".join(lines) + "\n"
+
+
+def prepare_config(port: int, reset: bool) -> Path:
     if reset and CONFIG.exists():
         shutil.rmtree(CONFIG)
     (CONFIG / "custom_components").mkdir(parents=True, exist_ok=True)
-    link = CONFIG / "custom_components" / "ha_notifications"
-    if not link.is_symlink():
-        if link.exists():
-            shutil.rmtree(link)
-        link.symlink_to(INTEGRATION, target_is_directory=True)
+    (CONFIG / "custom_components" / "__init__.py").touch()
+    installed = CONFIG / "custom_components" / "ha_notifications"
+    if installed.is_symlink():
+        installed.unlink()
+    elif installed.exists():
+        shutil.rmtree(installed)
+    shutil.copytree(INTEGRATION, installed, ignore=shutil.ignore_patterns("frontend", "__pycache__", "*.pyc"))
+    bundle = installed / "frontend" / "panel.js"
+    bundle.parent.mkdir()
     configuration = CONFIG / "configuration.yaml"
     if not configuration.exists():
         configuration.write_text(CONFIGURATION_YAML.format(port=port))
+    existing = configuration.read_text()
+    updated = _with_http_port(existing, port)
+    if updated != existing:
+        configuration.write_text(updated)
+    return bundle
 
 
 async def wait_for_http(base: str, session: aiohttp.ClientSession) -> None:
@@ -113,8 +141,24 @@ async def wait_for_http(base: str, session: aiohttp.ClientSession) -> None:
     raise TimeoutError("Home Assistant did not start within 2 minutes.")
 
 
+async def websocket(base: str, session: aiohttp.ClientSession, token: str, *messages: dict) -> object:
+    result: object = None
+    async with session.ws_connect(f"{base.replace('http', 'ws', 1)}/api/websocket") as ws:
+        await ws.receive_json()
+        await ws.send_json({"type": "auth", "access_token": token})
+        if (await ws.receive_json())["type"] != "auth_ok":
+            raise RuntimeError("Websocket authentication failed.")
+        for index, message in enumerate(messages, start=1):
+            await ws.send_json({"id": index, **message})
+            while (reply := await ws.receive_json()).get("id") != index:
+                pass
+            if not reply.get("success", True):
+                raise RuntimeError(f"{message['type']}: {reply.get('error')}")
+            result = reply.get("result")
+    return result
+
+
 async def onboard(base: str, session: aiohttp.ClientSession) -> str:
-    """Finish onboarding and return a long-lived access token."""
     async with session.post(
         f"{base}/api/onboarding/users",
         json={
@@ -142,47 +186,30 @@ async def onboard(base: str, session: aiohttp.ClientSession) -> str:
         async with session.post(f"{base}/api/onboarding/{step}", json=body, headers=headers):
             pass
     token = await websocket(
-        base, session, access, {"type": "auth/long_lived_access_token", "client_name": "dev", "lifespan": 3650}
+        base,
+        session,
+        access,
+        {"type": "auth/long_lived_access_token", "client_name": "dev", "lifespan": 3650},
     )
     TOKEN_FILE.write_text(token)
     return token
 
 
-async def websocket(
-    base: str, session: aiohttp.ClientSession, token: str, *messages: dict
-) -> object:
-    """Send messages over one authenticated websocket; return the last result."""
-    result: object = None
-    async with session.ws_connect(f"{base.replace('http', 'ws', 1)}/api/websocket") as ws:
-        await ws.receive_json()
-        await ws.send_json({"type": "auth", "access_token": token})
-        if (await ws.receive_json())["type"] != "auth_ok":
-            raise RuntimeError("Websocket authentication failed.")
-        for index, message in enumerate(messages, start=1):
-            await ws.send_json({"id": index, **message})
-            while (reply := await ws.receive_json()).get("id") != index:
-                pass
-            if not reply.get("success", True):
-                raise RuntimeError(f"{message['type']}: {reply.get('error')}")
-            result = reply.get("result")
-    return result
-
-
 def _notify_entities(states: object) -> list[str]:
     if not isinstance(states, list):
         return []
-    entities = {
-        entity_id
-        for state in states
-        if isinstance(state, dict)
-        and isinstance((entity_id := state.get("entity_id")), str)
-        and entity_id.startswith("notify.")
-    }
-    return sorted(entities)
+    return sorted(
+        {
+            entity_id
+            for state in states
+            if isinstance(state, dict)
+            and isinstance((entity_id := state.get("entity_id")), str)
+            and entity_id.startswith("notify.")
+        }
+    )
 
 
 async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
-    """Add the integration entry and canonical sample alerts once."""
     headers = {"Authorization": f"Bearer {token}"}
     async with session.get(
         f"{base}/api/config/config_entries/entry?domain=ha_notifications", headers=headers
@@ -201,13 +228,13 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
     fixtures = json.loads((ROOT / "tests" / "backend" / "fixtures" / "alerts.json").read_text())
     alerts = [fixtures["full_feature"], fixtures["configuration"]]
     states = await websocket(base, session, token, {"type": "get_states"})
-    notify_entities = _notify_entities(states)
+    entities = _notify_entities(states)
     for alert in alerts:
         notification = alert["notification"]
         notification.pop("action", None)
         notification.pop("target", None)
-        if notify_entities:
-            notification["target"] = {"entity_id": notify_entities}
+        if entities:
+            notification["target"] = {"entity_id": entities}
         else:
             alert["enabled"] = False
             confirmation = alert.get("confirmation")
@@ -217,7 +244,7 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
                     confirmation_notification.pop("action", None)
                     confirmation_notification.pop("target", None)
     alerts[1]["name"] = "Window left open"
-    if not notify_entities:
+    if not entities:
         print("[dev] No notify entities found; sample alerts are disabled until one is configured.", flush=True)
     await websocket(
         base,
@@ -233,15 +260,99 @@ async def bootstrap(port: int) -> None:
         await wait_for_http(base, session)
         token = TOKEN_FILE.read_text() if TOKEN_FILE.exists() else await onboard(base, session)
         try:
-            # Non-default ports are otherwise staged for confirmation and auto-revert.
             await websocket(base, session, token, {"type": "http/config/promote"})
         except RuntimeError:
             pass
         try:
             await seed(base, session, token)
-        except Exception as error:  # Seeding is a convenience; keep the instance running.
+        except Exception as error:
             print(f"[dev] Seeding sample alerts failed: {error}", flush=True)
     print(f"\n[dev] Ready: http://localhost:{port}/ha_notifications  (no login needed)\n", flush=True)
+
+
+@contextmanager
+def dev_instance():
+    with LOCK_FILE.open("a+") as lock:
+        deadline = time.monotonic() + 45
+        stopped = set()
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                lock.seek(0)
+                owner = lock.read().strip()
+                if owner.isdecimal() and int(owner) not in stopped:
+                    print(f"[dev] Stopping previous dev instance ({owner})...", flush=True)
+                    try:
+                        os.kill(int(owner), signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    stopped.add(int(owner))
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Previous dev instance did not stop; refusing to start another.")
+                time.sleep(0.1)
+        lock.seek(0)
+        lock.truncate()
+        lock.write(str(os.getpid()))
+        lock.flush()
+        try:
+            yield
+        finally:
+            lock.seek(0)
+            lock.truncate()
+            lock.flush()
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def stop_processes(processes: list[subprocess.Popen]) -> None:
+    for process in processes:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for process in processes:
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
+def run_dev(port: int, reset: bool) -> None:
+    processes = []
+
+    def stop(*_: object) -> None:
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+    with dev_instance():
+        try:
+            bundle = prepare_config(port, reset)
+            build_command = [
+                "npx", "esbuild", "frontend/panel.ts", "--bundle", "--format=esm",
+                f"--outfile={bundle}", "--sourcemap", "--log-level=warning",
+            ]
+            processes.append(subprocess.Popen(build_command, cwd=ROOT, start_new_session=True))
+            if processes[-1].wait() != 0:
+                raise RuntimeError("Initial frontend build failed.")
+            processes.append(subprocess.Popen([*build_command, "--watch=forever"], cwd=ROOT, start_new_session=True))
+            processes.append(subprocess.Popen(
+                [sys.executable, "-m", "homeassistant", "-c", str(CONFIG)], cwd=CONFIG, start_new_session=True,
+            ))
+            asyncio.run(bootstrap(port))
+            result = processes[-1].wait()
+            if result:
+                raise RuntimeError(f"Home Assistant exited with status {result}.")
+        finally:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            stop_processes(processes)
 
 
 def main() -> None:
@@ -250,31 +361,7 @@ def main() -> None:
     parser.add_argument("--reset", action="store_true", help="wipe .ha-config first")
     args = parser.parse_args()
 
-    prepare_config(args.port, args.reset)
-    BUNDLE.parent.mkdir(exist_ok=True)
-    (BUNDLE.parent / "panel.js").write_text(LOADER)
-    processes = [
-        subprocess.Popen(
-            ["npx", "esbuild", "frontend/panel.ts", "--bundle", "--format=esm",
-             f"--outfile={BUNDLE}", "--sourcemap", "--watch=forever", "--log-level=warning"],
-            cwd=ROOT,
-        ),
-        subprocess.Popen([sys.executable, "-m", "homeassistant", "-c", str(CONFIG)], cwd=ROOT),
-    ]
-
-    def stop(*_: object) -> None:
-        for process in processes:
-            process.terminate()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
-    try:
-        asyncio.run(bootstrap(args.port))
-    except Exception as error:
-        print(f"[dev] Bootstrap failed: {error}", flush=True)
-    processes[1].wait()
-    stop()
+    run_dev(args.port, args.reset)
 
 
 if __name__ == "__main__":

@@ -3,15 +3,32 @@
     "id": "base_alert",
     "name": "Test alert",
     "enabled": true,
-    "conditions": [],
-    "triggers": [{"trigger": "homeassistant", "event": "start"}],
     "notification": {
       "action": "notify.mobile_app_phone",
       "target": {
-        "entity_id": ["notify.mobile_app_phone"]
+        "entity_id": [
+          "notify.mobile_app_phone"
+        ]
       },
       "data": {
         "message": "Message"
+      }
+    },
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "startup": true,
+        "enabled": true,
+        "items": []
       }
     }
   },
@@ -19,7 +36,6 @@
     "id": "confirmation_alert",
     "name": "Alert",
     "enabled": true,
-    "conditions": [],
     "notification": {
       "action": "notify.mobile_app_phone",
       "data": {
@@ -28,15 +44,38 @@
     },
     "confirmation": {
       "enabled": true,
-      "buttons": [{"id": "confirm", "label": "Confirm"}],
+      "buttons": [
+        {
+          "id": "confirm",
+          "label": "Confirm"
+        }
+      ],
       "reminders": {
         "enabled": true,
-        "interval": {"minutes": 15},
+        "interval": {
+          "minutes": 15
+        },
         "max_attempts": 5,
         "show_attempts": true
       }
     },
-    "triggers": [{"trigger": "homeassistant", "event": "start"}]
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "startup": true,
+        "enabled": true,
+        "items": []
+      }
+    }
   },
   "notification": {
     "id": "notification_alert",
@@ -44,7 +83,9 @@
     "notification": {
       "action": "notify.send_message",
       "target": {
-        "entity_id": ["notify.somebody"]
+        "entity_id": [
+          "notify.somebody"
+        ]
       },
       "data": {
         "title": "Title",
@@ -53,69 +94,86 @@
     },
     "confirmation": {
       "enabled": false
+    },
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "enabled": true,
+        "items": []
+      }
     }
   },
   "configuration": {
     "id": "configuration_alert",
     "name": "Alert",
-    "conditions": [],
     "notification": {
       "action": "notify.mobile_app_phone",
       "data": {
         "message": "Message"
+      }
+    },
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "enabled": true,
+        "items": []
       }
     }
   },
   "persisted": {
     "id": "demo",
     "name": "Demo",
-    "conditions": [],
-    "triggers": [{"trigger": "homeassistant", "event": "start"}],
     "notification": {
       "action": "notify.mobile_app_phone",
       "data": {
         "message": "Check this"
+      }
+    },
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "startup": true,
+        "enabled": true,
+        "items": []
       }
     }
   },
   "full_feature": {
     "id": "full_feature",
     "name": "Full feature",
-    "triggers": [
-      {"trigger": "state", "entity_id": "binary_sensor.door"},
-      {"trigger": "state", "entity_id": "binary_sensor.window"},
-      {"trigger": "state", "entity_id": "sensor.temperature"},
-      {"trigger": "homeassistant", "event": "start"}
-    ],
-    "conditions": [{
-      "condition": "and",
-      "conditions": [
-        {
-          "condition": "or",
-          "conditions": [
-            {
-              "condition": "state",
-              "entity_id": "binary_sensor.door",
-              "state": "on"
-            },
-            {
-              "condition": "numeric_state",
-              "entity_id": "sensor.temperature",
-              "above": 30
-            }
-          ]
-        },
-        {
-          "condition": "state",
-          "entity_id": "binary_sensor.window",
-          "state": "on"
-        }
-      ]
-    }],
     "notification": {
       "action": "notify.mobile_app_phone",
       "target": {
-        "entity_id": ["notify.mobile_app_phone"]
+        "entity_id": [
+          "notify.mobile_app_phone"
+        ]
       },
       "data": {
         "message": "Door open"
@@ -123,10 +181,17 @@
     },
     "confirmation": {
       "enabled": true,
-      "buttons": [{"id": "confirm", "label": "Confirm"}],
+      "buttons": [
+        {
+          "id": "confirm",
+          "label": "Confirm"
+        }
+      ],
       "reminders": {
         "enabled": true,
-        "interval": {"minutes": 15},
+        "interval": {
+          "minutes": 15
+        },
         "max_attempts": 5,
         "show_attempts": true
       },
@@ -147,10 +212,70 @@
     },
     "post_send_actions": {
       "enabled": true,
-      "actions": [{
-        "action": "logbook.log",
-        "data": {"name": "Full feature sent"}
-      }]
+      "actions": [
+        {
+          "action": "logbook.log",
+          "data": {
+            "name": "Full feature sent"
+          }
+        }
+      ]
+    },
+    "monitor": {
+      "automation_mode": "parallel",
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": [
+          {
+            "trigger": "state",
+            "entity_id": "binary_sensor.door"
+          },
+          {
+            "trigger": "state",
+            "entity_id": "binary_sensor.window"
+          },
+          {
+            "trigger": "state",
+            "entity_id": "sensor.temperature"
+          }
+        ]
+      },
+      "conditions": {
+        "startup": true,
+        "enabled": true,
+        "items": [
+          {
+            "condition": "and",
+            "conditions": [
+              {
+                "condition": "or",
+                "conditions": [
+                  {
+                    "condition": "state",
+                    "entity_id": "binary_sensor.door",
+                    "state": "on"
+                  },
+                  {
+                    "condition": "numeric_state",
+                    "entity_id": "sensor.temperature",
+                    "above": 30
+                  }
+                ]
+              },
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.window",
+                "state": "on"
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

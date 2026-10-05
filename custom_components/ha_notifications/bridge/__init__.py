@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+from hashlib import sha256
 from pathlib import Path
 
 from homeassistant.components import panel_custom
@@ -11,8 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import DOMAIN
 
-FRONTEND_URL = f"/{DOMAIN}/frontend"
-PANEL_URL = f"{FRONTEND_URL}/panel.js"
+PANEL_URL = f"/{DOMAIN}/panel.js"
 BRAND_URL = f"/{DOMAIN}/brand"
 _PANEL_REGISTERED: set[int] = set()
 
@@ -34,23 +33,18 @@ async def async_register_panel(hass: HomeAssistant) -> None:
 
     await hass.http.async_register_static_paths(
         [
-            StaticPathConfig(FRONTEND_URL, str(panel_path.parent), cache_headers=False),
+            StaticPathConfig(PANEL_URL, str(panel_path), cache_headers=False),
             StaticPathConfig(BRAND_URL, str(brand_path), cache_headers=False),
         ]
     )
-    # HA's service worker caches by exact URL; the hash makes updates load immediately.
-    version = await hass.async_add_executor_job(_file_hash, panel_path)
+    panel_bytes = await hass.async_add_executor_job(panel_path.read_bytes)
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name="ha-notifications-panel",
         sidebar_title="HA Notifications",
         sidebar_icon="mdi:bell-outline",
         frontend_url_path=DOMAIN,
-        module_url=f"{PANEL_URL}?v={version}",
+        module_url=f"{PANEL_URL}?v={sha256(panel_bytes).hexdigest()[:16]}",
         require_admin=True,
     )
     _PANEL_REGISTERED.add(id(hass))
-
-
-def _file_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]

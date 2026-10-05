@@ -1,6 +1,6 @@
 import { css, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
-import { mdiDeleteOutline, mdiHistory, mdiOpenInNew, mdiStopCircleOutline } from "@mdi/js";
+import { mdiDeleteOutline, mdiHistory, mdiOpenInNew, mdiPencil, mdiStopCircleOutline } from "@mdi/js";
 import type { Alert, AutomationRuntimeStatus, Hass } from "../types.js";
 import { localize } from "../localize.js";
 import { actions, emptyState, type Action } from "../ui.js";
@@ -79,6 +79,8 @@ export const alertListStyles = css`
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    color: var(--primary-text-color);
+    --wa-focus-ring: 2px solid var(--primary-color);
   }
 
   .nc-alert-toggle {
@@ -93,6 +95,23 @@ export const alertListStyles = css`
     display: none;
     align-items: center;
     gap: var(--ha-space-1, 4px);
+  }
+
+  .nc-alert-labelled-actions ha-button[variant="neutral"] {
+    --wa-color-on-quiet: var(--primary-text-color);
+    --wa-color-fill-quiet: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
+  }
+
+  .nc-alert-labelled-actions ha-button[variant="neutral"]::part(base):focus-visible {
+    background-color: var(--wa-color-fill-quiet);
+  }
+
+  .nc-alert-controls ha-button:hover,
+  .nc-alert-controls ha-button:focus-within,
+  .nc-alert-controls ha-icon-overflow-menu:hover,
+  .nc-alert-controls ha-icon-overflow-menu:focus-within {
+    background-color: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
+    border-radius: 4px;
   }
 
   @container (min-width: 1100px) {
@@ -121,6 +140,7 @@ function menuActions(
   const t = (key: string) => localize(hass, key);
   return [
     { label: t("alert.history"), path: mdiHistory, action: () => on.history(alert) },
+    { label: t("alert.edit"), path: mdiPencil, action: () => on.edit(alert) },
     ...(status?.automation_id
       ? [{
           label: t("alert.open_automation"),
@@ -169,7 +189,7 @@ function alertRow(
     <div class="nc-alert-controls" @click=${(event: Event) => event.stopPropagation()} @keydown=${(event: Event) => event.stopPropagation()}>
       ${narrow ? nothing : html`<div class="nc-alert-labelled-actions">
         ${items.map(item => html`<ha-button
-          appearance="plain"
+          appearance="outlined"
           variant=${item.warning ? "danger" : "neutral"}
           size="s"
           @click=${item.action}

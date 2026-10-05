@@ -73,7 +73,6 @@ class YamlView extends LitElement {
             .hass=${this.hass}
             .defaultValue=${this.config}
             .label=${this.t("yaml.aria")}
-            copy-clipboard
             @value-changed=${(event: CustomEvent<{ value: unknown; isValid: boolean }>) => {
               event.stopPropagation();
               this.draft = event.detail.value;

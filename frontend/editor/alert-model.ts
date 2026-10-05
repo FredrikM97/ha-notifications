@@ -1,8 +1,9 @@
-import type { Alert, ConfirmationConfig, NotificationTarget } from "../types.js";
+import type { Alert, ConfirmationConfig, MonitorConfig, NotificationTarget } from "../types.js";
 import { durationToSeconds, serializeAlertDurations } from "../api.js";
 
 export type EditableAlert = Alert & { confirmation: ConfirmationConfig };
-type Trigger = Alert["triggers"][number];
+type HaConfig = Record<string, unknown>;
+type Trigger = MonitorConfig["triggers"]["items"][number];
 
 export interface Duration {
   days: number;
@@ -20,9 +21,12 @@ export function defaultAlert(): Alert {
     enabled: true,
     description: "",
     icon: "mdi:bell-outline",
-    triggers: [],
-    conditions: [],
-    automation_mode: "parallel",
+    monitor: {
+      automation_mode: "parallel",
+      triggers: { enabled: true, items: [] },
+      conditions: { enabled: true, items: [], startup: false, periodic: false, interval: DEFAULT_INTERVAL_SECONDS },
+      inactive: { enabled: false, items: [], clear_notification: false },
+    },
     notification: { target: {}, data: { title: "", message: "" } },
     confirmation: {
       enabled: false,
@@ -56,7 +60,29 @@ export function confirmationNotificationEnabled(
 
 /** Deep copy with every optional block the editor binds to filled in. */
 export function editableAlert(source?: Alert | null): EditableAlert {
-  const alert = JSON.parse(JSON.stringify(source || defaultAlert())) as Alert;
+  const raw = JSON.parse(JSON.stringify(source || defaultAlert())) as Alert & Record<string, unknown>;
+  const alert = raw as Alert;
+  const monitorDefaults = defaultAlert().monitor;
+  const triggers = alert.monitor?.triggers;
+  alert.monitor = {
+    automation_mode: alert.monitor?.automation_mode ?? monitorDefaults.automation_mode,
+    triggers: {
+      ...monitorDefaults.triggers,
+      ...triggers,
+      items: triggers?.items ?? [],
+    },
+    conditions: {
+      ...monitorDefaults.conditions,
+      ...alert.monitor?.conditions,
+      items: alert.monitor?.conditions.items ?? [],
+      interval: alert.monitor?.conditions.interval ?? DEFAULT_INTERVAL_SECONDS,
+    },
+    inactive: {
+      ...monitorDefaults.inactive,
+      ...alert.monitor?.inactive,
+      items: alert.monitor?.inactive?.items ?? [],
+    },
+  };
   const defaults = defaultAlert().confirmation!;
   const confirmation = { ...defaults, ...alert.confirmation };
   const notification = confirmation.notification || defaults.notification;
@@ -73,46 +99,21 @@ export function editableAlert(source?: Alert | null): EditableAlert {
   return { ...alert, confirmation };
 }
 
-// ---- Built-in triggers (startup and periodic checks live in alert.triggers) ----
-
-const isStartup = (trigger: Trigger) =>
-  trigger.trigger === "homeassistant" && trigger.event === "start";
-const isInterval = (trigger: Trigger) => trigger.trigger === "time_pattern";
-const isBuiltIn = (trigger: Trigger) => isStartup(trigger) || isInterval(trigger);
-
-export const hasStartupTrigger = (triggers: Trigger[]) => triggers.some(isStartup);
-export const intervalTrigger = (triggers: Trigger[]) => triggers.find(isInterval);
-export const customTriggers = (triggers: Trigger[]) => triggers.filter((t) => !isBuiltIn(t));
+export const hasStartupTrigger = (monitor: MonitorConfig) => monitor.conditions.startup;
+export const intervalTrigger = (monitor: MonitorConfig) => monitor.conditions.periodic;
+export const intervalSeconds = (monitor: MonitorConfig) => durationToSeconds(monitor.conditions.interval) ?? DEFAULT_INTERVAL_SECONDS;
+export const customTriggers = (monitor: MonitorConfig) => monitor.triggers.items;
 
 export function setTriggers(
-  alert: Alert,
+  monitor: MonitorConfig,
   custom: Trigger[],
   startup: boolean,
   intervalSeconds: number | null,
 ): void {
-  alert.triggers = [
-    ...(startup ? [{ trigger: "homeassistant", event: "start" }] : []),
-    ...(intervalSeconds === null ? [] : [timePattern(intervalSeconds)]),
-    ...custom,
-  ];
-}
-
-export function intervalSeconds(trigger: Trigger | undefined): number {
-  if (!trigger) return DEFAULT_INTERVAL_SECONDS;
-  const step = (value: unknown) => Number(String(value).slice(1));
-  if (typeof trigger.hours === "string") return step(trigger.hours) * 3600;
-  if (trigger.hours === 0 || trigger.hours === "0") return 86400;
-  if (typeof trigger.minutes === "string") return step(trigger.minutes) * 60;
-  if (typeof trigger.seconds === "string") return step(trigger.seconds);
-  return DEFAULT_INTERVAL_SECONDS;
-}
-
-function timePattern(total: number): Trigger {
-  if (!Number.isFinite(total) || total <= 0) return timePattern(DEFAULT_INTERVAL_SECONDS);
-  if (total >= 86400) return { trigger: "time_pattern", hours: 0, minutes: 0, seconds: 0 };
-  if (total >= 3600) return { trigger: "time_pattern", hours: `/${Math.min(23, Math.round(total / 3600))}` };
-  if (total >= 60) return { trigger: "time_pattern", minutes: `/${Math.min(59, Math.round(total / 60))}` };
-  return { trigger: "time_pattern", seconds: `/${total}` };
+  monitor.conditions.startup = startup;
+  monitor.conditions.periodic = intervalSeconds !== null;
+  if (intervalSeconds !== null) monitor.conditions.interval = intervalSeconds;
+  monitor.triggers.items = custom;
 }
 
 // ---- Durations ----
@@ -135,7 +136,12 @@ export const fromDuration = (value: unknown) =>
 // ---- Saving ----
 
 function hasRecipients(target: NotificationTarget): boolean {
-  return Object.values(target).some((values) => Array.isArray(values) && values.length > 0);
+  return Object.values(target).some((values) => {
+    if (typeof values === "string") return values.trim().length > 0;
+    return Array.isArray(values) && values.some(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    );
+  });
 }
 
 /** Turn the edited alert into the canonical payload the backend expects. */
@@ -145,13 +151,7 @@ export function finalizeAlert(
   validate = true,
 ): Alert {
   const alert = JSON.parse(JSON.stringify(draft)) as EditableAlert;
-  const transient = alert as EditableAlert & {
-    condition?: unknown;
-    evaluate?: unknown;
-  };
-  delete transient.runtime;
-  delete transient.condition;
-  delete transient.evaluate;
+  delete alert.runtime;
   const { confirmation, notification } = alert;
   if (validate) {
     if (!alert.name.trim()) throw new Error("Name is required.");

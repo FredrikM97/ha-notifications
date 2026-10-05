@@ -50,8 +50,19 @@ def _duration_seconds(value: ReminderInterval | None) -> float | None:
     return None
 
 
+def _periodic_trigger(interval: ReminderInterval | None) -> dict[str, Any]:
+    seconds = _duration_seconds(interval) or 43200
+    if seconds >= 86400:
+        return {"trigger": "time_pattern", "hours": 0, "minutes": 0, "seconds": 0}
+    if seconds >= 3600:
+        return {"trigger": "time_pattern", "hours": f"/{max(1, min(23, round(seconds / 3600)))}"}
+    if seconds >= 60:
+        return {"trigger": "time_pattern", "minutes": f"/{max(1, min(59, round(seconds / 60)))}"}
+    return {"trigger": "time_pattern", "seconds": f"/{max(1, int(seconds))}"}
+
+
 class NotificationConfig(BaseModel):
-    """The notification shape exposed by the original editor."""
+    """Notification payload and native Home Assistant extensions."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -60,7 +71,6 @@ class NotificationConfig(BaseModel):
     title: str = ""
     message: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
-    editor_options: dict[str, Any] | None = None
 
     @field_validator("action")
     @classmethod
@@ -70,6 +80,16 @@ class NotificationConfig(BaseModel):
         if value.count(".") != 1:
             raise ValueError("notification.action must be a domain.service")
         return value
+
+
+class MobileOptionsConfig(BaseModel):
+    """Editor-only Mobile App settings grouped by platform."""
+
+    model_config = ConfigDict(extra="allow")
+
+    general: dict[str, Any] = Field(default_factory=dict)
+    android: dict[str, Any] = Field(default_factory=dict)
+    ios: dict[str, Any] = Field(default_factory=dict)
 
 
 class ConfirmationButtonConfig(BaseModel):
@@ -143,8 +163,78 @@ class ConfirmationConfig(BaseModel):
     buttons: list[ConfirmationButtonConfig] = Field(default_factory=list)
     notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
-    actions: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
+    actions: list[dict[str, Any]] = Field(default_factory=list)
 
+
+class EnabledFeature(BaseModel):
+    """Common enable switch for independently controlled features."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+
+
+class TriggerOptions(EnabledFeature):
+    """Trigger sources and their behavior, scoped to the monitor feature."""
+
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("items")
+    @classmethod
+    def validate_trigger_items(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if any(not isinstance(trigger, dict) for trigger in value):
+            raise ValueError("monitor.triggers.items entries must be mappings")
+        return value
+
+
+class ConditionOptions(EnabledFeature):
+    """Condition gate and built-in startup/periodic evaluations."""
+
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    startup: bool = False
+    periodic: bool = False
+    interval: ReminderInterval | None = None
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if any(not isinstance(condition, dict) for condition in value):
+            raise ValueError("monitor.conditions.items entries must be mappings")
+        return value
+
+
+class InactiveOptions(BaseModel):
+    """Explicit native triggers that cancel pending confirmation waits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    clear_notification: bool = False
+
+
+class MonitorConfig(BaseModel):
+    """All alert evaluation configuration, grouped by trigger and condition feature."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    triggers: TriggerOptions = Field(default_factory=TriggerOptions)
+    conditions: ConditionOptions = Field(default_factory=ConditionOptions)
+    inactive: InactiveOptions = Field(default_factory=InactiveOptions)
+    automation_mode: Literal["single", "restart", "queued", "parallel"] = "parallel"
+
+    @property
+    def enabled_triggers(self) -> list[dict[str, Any]]:
+        """Return effective HA triggers after applying feature enablement."""
+        triggers = []
+        if self.conditions.enabled:
+            if self.conditions.startup:
+                triggers.append({"trigger": "homeassistant", "event": "start"})
+            if self.conditions.periodic:
+                triggers.append(_periodic_trigger(self.conditions.interval))
+        if self.triggers.enabled:
+            triggers.extend(dict(trigger) for trigger in self.triggers.items)
+        return triggers
 
 class AlertConfig(BaseModel):
     """Canonical persisted configuration for one alert."""
@@ -156,30 +246,13 @@ class AlertConfig(BaseModel):
     enabled: bool = True
     description: str = ""
     icon: str = "mdi:bell-outline"
-    triggers: list[dict[str, Any]] = Field(default_factory=list)
-    conditions: list[dict[str, Any]] = Field(default_factory=list)
-    on_condition_change: bool | None = None
-    automation_mode: Literal["single", "restart", "queued", "parallel"] = "parallel"
-    cancel_on_inactive: bool | None = None
+    monitor: MonitorConfig = Field(default_factory=MonitorConfig)
     notification: NotificationConfig
+    mobile_options: MobileOptionsConfig | None = None
     confirmation: ConfirmationConfig | None = None
     post_send_actions: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None
-
-    @field_validator("triggers")
-    @classmethod
-    def validate_triggers(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if any(not isinstance(trigger, dict) for trigger in value):
-            raise ValueError("triggers entries must be mappings")
-        return value
-
-    @field_validator("conditions")
-    @classmethod
-    def validate_conditions(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if any(not isinstance(condition, dict) for condition in value):
-            raise ValueError("conditions entries must be mappings")
-        return value
 
 
 class Configuration(BaseModel):
@@ -200,19 +273,6 @@ class Configuration(BaseModel):
 
 
 def validate_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Validate and serialize, dropping the retired clear-on-inactive option."""
-    normalized = dict(config)
-    alerts = config.get("alerts")
-    if isinstance(alerts, list):
-        normalized["alerts"] = [
-            {
-                key: value
-                for key, value in alert.items()
-                if key != "clear_on_inactive"
-            }
-            if isinstance(alert, dict)
-            else alert
-            for alert in alerts
-        ]
-    validated = Configuration.model_validate(normalized)
+    """Validate and serialize the canonical nested configuration."""
+    validated = Configuration.model_validate(config)
     return validated.model_dump(mode="python", exclude_none=True)

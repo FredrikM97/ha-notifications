@@ -297,17 +297,17 @@ const styles = css`
   }
 
   .nc-badge.error {
-    background: rgb(244 67 54 / 14%);
+    background: color-mix(in srgb, var(--error-color) 14%, var(--card-background-color));
     color: var(--error-color);
   }
 
   .nc-badge.success {
-    background: rgb(76 175 80 / 14%);
+    background: color-mix(in srgb, var(--success-color) 14%, var(--card-background-color));
     color: var(--success-color);
   }
 
   .nc-badge.info {
-    background: rgb(33 150 243 / 12%);
+    background: color-mix(in srgb, var(--info-color) 12%, var(--card-background-color));
     color: var(--info-color);
   }
 

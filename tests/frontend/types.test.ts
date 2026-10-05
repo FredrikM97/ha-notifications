@@ -1,30 +1,32 @@
-import { describe, expect, it } from "vitest";
-import type { AlertsConfig, CanonicalAlert } from "../../frontend/types.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { defaultAlert } from "../../frontend/editor/alert-model.js";
+import type { Alert, AlertsConfig, MonitorConfig } from "../../frontend/types.js";
 
 const canonicalAlert = {
   id: "door",
   name: "Front door",
   enabled: true,
-  triggers: [{ trigger: "homeassistant", event: "start" }],
-  conditions: [
-    { condition: "and", conditions: [{ condition: "state" }] },
-    { condition: "template", value_template: "{{ is_state(...) }}" },
-    { condition: "device", device_id: "front-door" },
-  ],
+  monitor: {
+    automation_mode: "parallel",
+    triggers: { enabled: true, items: [{ trigger: "homeassistant", event: "start" }] },
+    conditions: {
+      enabled: true,
+      items: [
+        { condition: "and", conditions: [{ condition: "state" }] },
+        { condition: "template", value_template: "{{ is_state(...) }}" },
+        { condition: "device", device_id: "front-door" },
+      ],
+      startup: false,
+      periodic: false,
+    },
+    inactive: { enabled: false, items: [], clear_notification: false },
+  },
   notification: {
     action: "notify.mobile_app_phone",
     target: { entity_id: ["notify.phone"] },
     data: { message: "Open" },
   },
-  recovery: {
-    clear: true,
-    notification: {
-      action: "notify.mobile_app_phone",
-      data: { message: "Closed" },
-    },
-  },
-  automation: { id: "automation.door", ownership: "managed", status: "on" },
-} satisfies CanonicalAlert;
+} satisfies Alert;
 
 const canonicalConfig = {
   version: 1,
@@ -32,6 +34,13 @@ const canonicalConfig = {
 } satisfies AlertsConfig;
 
 describe("canonical frontend configuration types", () => {
+  it("includes explicit inactive configuration and monitor automation mode", () => {
+    expectTypeOf<keyof MonitorConfig>().toEqualTypeOf<"automation_mode" | "triggers" | "conditions" | "inactive">();
+    expectTypeOf<MonitorConfig["automation_mode"]>().toEqualTypeOf<"single" | "restart" | "queued" | "parallel">();
+    const monitor: MonitorConfig = defaultAlert().monitor;
+    expect(monitor).toMatchSnapshot();
+  });
+
   it("snapshots the canonical versioned alert contract", () => {
     expect(canonicalConfig).toMatchSnapshot();
   });

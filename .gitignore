@@ -27,3 +27,4 @@ build/
 !.vscode/
 !.vscode/settings.json
 dist
+ha_notifications.zip

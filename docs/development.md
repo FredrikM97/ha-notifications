@@ -23,6 +23,29 @@ npm run dev -- --reset    # start again from a clean instance
 - The frontend rebuilds on save; reload the page to see changes.
 - State lives in the gitignored `.ha-config/`.
 
+Starting `npm run dev` again stops the previous instance for this repository and
+its child processes. It stages a fresh integration copy under `.ha-config/`;
+generated frontend output never goes into the authored integration. Restart dev
+after backend changes to refresh the staged Python files.
+
+For another port or a clean throwaway instance:
+
+```bash
+npm run dev -- --port 8125
+npm run dev -- --reset
+```
+
+The devcontainer publishes port 8124 on the Docker host. Rebuild the container
+after changing its configuration, then browse to
+`http://<docker-host-LAN-IP>:8124/ha_notifications` from another device. Allow
+TCP 8124 through the host firewall if required; the host port must be free.
+Alternate dev ports require matching port mappings.
+
+The dev configuration bypasses login for private-network clients. Use LAN
+access only on a trusted network; remove the `trusted_networks` auth provider in
+`.ha-config/configuration.yaml` to require login on a shared network. Do not
+expose the dev instance to the internet.
+
 ## Validate
 
 ```bash
@@ -74,6 +97,14 @@ sh scripts/install_local.sh /path/to/home-assistant-config
 
 With no argument the script uses the config directory two levels above the
 repository (the `config/repos/<repository>` layout) or `HA_CONFIG_DIR`.
+The installer copies the complete `build/` integration into the selected
+configuration directory after checking the required build files. It does not
+start or restart Home Assistant; restart the target instance separately.
+
+The integration source is authored under `custom_components/ha_notifications/`.
+The build writes the frontend bundle to `build/frontend/panel.js`. The local
+install script copies that bundle into the installed integration, while the
+HACS packaging script includes it in the release archive.
 
 ## HACS package
 

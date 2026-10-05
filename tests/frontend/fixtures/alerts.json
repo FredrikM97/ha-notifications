@@ -10,11 +10,19 @@
     "id": "door",
     "name": "Front door",
     "enabled": true,
-    "triggers": [{"trigger": "homeassistant", "event": "start"}],
-    "conditions": [{"condition": "template", "value_template": "{{ true }}"}],
     "monitor": {
-      "on_change": true,
-      "startup": false
+      "automation_mode": "parallel",
+      "inactive": {"enabled": false, "items": [], "clear_notification": false},
+      "triggers": {
+        "enabled": true,
+        "items": []
+      },
+      "conditions": {
+        "enabled": true,
+        "items": [{"condition": "template", "value_template": "{{ true }}"}],
+        "startup": true,
+        "periodic": false
+      }
     },
     "notification": {
       "action": "notify.mobile_app_phone",
@@ -45,17 +53,25 @@
     "description": "Notify when the front door stays open.",
     "icon": "mdi:door-open",
     "enabled": true,
-    "triggers": [{"trigger": "state", "entity_id": "binary_sensor.front_door"}],
-    "conditions": [{
-      "condition": "state",
-      "entity_id": "binary_sensor.front_door",
-      "state": "on",
-      "for": "00:05:00"
-    }],
     "monitor": {
-      "on_change": true,
-      "startup": true,
-      "interval": "01:00:00"
+      "automation_mode": "parallel",
+      "inactive": {"enabled": false, "items": [], "clear_notification": false},
+      "triggers": {
+        "enabled": true,
+        "items": [{"trigger": "state", "entity_id": "binary_sensor.front_door"}]
+      },
+      "conditions": {
+        "enabled": true,
+        "items": [{
+          "condition": "state",
+          "entity_id": "binary_sensor.front_door",
+          "state": "on",
+          "for": "00:05:00"
+        }],
+        "startup": true,
+        "periodic": true,
+        "interval": 3600
+      }
     },
     "notification": {
       "action": "notify.mobile_app_phone",

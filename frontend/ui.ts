@@ -269,10 +269,10 @@ export const uiStyles = css`
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    color: var(--error-color, #db4437);
+    color: var(--error-color);
   }
 
   .nc-dot.on {
-    color: var(--success-color, #43a047);
+    color: var(--success-color);
   }
 `;

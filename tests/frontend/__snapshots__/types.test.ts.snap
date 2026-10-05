@@ -1,34 +1,73 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`canonical frontend configuration types > includes explicit inactive configuration and monitor automation mode 1`] = `
+{
+  "automation_mode": "parallel",
+  "conditions": {
+    "enabled": true,
+    "interval": 43200,
+    "items": [],
+    "periodic": false,
+    "startup": false,
+  },
+  "inactive": {
+    "clear_notification": false,
+    "enabled": false,
+    "items": [],
+  },
+  "triggers": {
+    "enabled": true,
+    "items": [],
+  },
+}
+`;
+
 exports[`canonical frontend configuration types > snapshots the canonical versioned alert contract 1`] = `
 {
   "alerts": [
     {
-      "automation": {
-        "id": "automation.door",
-        "ownership": "managed",
-        "status": "on",
-      },
-      "conditions": [
-        {
-          "condition": "and",
-          "conditions": [
+      "enabled": true,
+      "id": "door",
+      "monitor": {
+        "automation_mode": "parallel",
+        "conditions": {
+          "enabled": true,
+          "items": [
             {
-              "condition": "state",
+              "condition": "and",
+              "conditions": [
+                {
+                  "condition": "state",
+                },
+              ],
+            },
+            {
+              "condition": "template",
+              "value_template": "{{ is_state(...) }}",
+            },
+            {
+              "condition": "device",
+              "device_id": "front-door",
+            },
+          ],
+          "periodic": false,
+          "startup": false,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [
+            {
+              "event": "start",
+              "trigger": "homeassistant",
             },
           ],
         },
-        {
-          "condition": "template",
-          "value_template": "{{ is_state(...) }}",
-        },
-        {
-          "condition": "device",
-          "device_id": "front-door",
-        },
-      ],
-      "enabled": true,
-      "id": "door",
+      },
       "name": "Front door",
       "notification": {
         "action": "notify.mobile_app_phone",
@@ -41,21 +80,6 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
           ],
         },
       },
-      "recovery": {
-        "clear": true,
-        "notification": {
-          "action": "notify.mobile_app_phone",
-          "data": {
-            "message": "Closed",
-          },
-        },
-      },
-      "triggers": [
-        {
-          "event": "start",
-          "trigger": "homeassistant",
-        },
-      ],
     },
   ],
   "version": 1,

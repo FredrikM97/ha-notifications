@@ -1,5 +1,7 @@
 """Tests for the canonical configuration contract."""
 
+from copy import deepcopy
+
 import pytest
 from pydantic import ValidationError
 
@@ -7,15 +9,19 @@ from custom_components.ha_notifications import RuntimeData, async_save_config
 from custom_components.ha_notifications.config_flow import HaNotificationsConfigFlow
 from custom_components.ha_notifications.configuration import (
     Configuration,
+    ConfirmationConfig,
+    TriggerOptions,
     validate_config,
 )
 
 
-def test_validate_config_preserves_canonical_monitor_conditions_and_notification() -> None:
+def test_validate_config_accepts_canonical_monitor_object() -> None:
     config = validate_config({"alerts": [{
         "id": "low_water",
-            "triggers": [{"trigger": "state", "entity_id": "sensor.water"}],
-        "conditions": [{"condition": "state", "entity_id": "sensor.water", "state": "low"}],
+        "monitor": {
+            "triggers": {"items": [{"trigger": "state", "entity_id": "sensor.water"}]},
+            "conditions": {"items": [{"condition": "state", "entity_id": "sensor.water", "state": "low"}]},
+        },
         "notification": {
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.phone"]},
@@ -24,109 +30,184 @@ def test_validate_config_preserves_canonical_monitor_conditions_and_notification
     }]})
     alert = config["alerts"][0]
     assert config["version"] == 1
-    assert alert["triggers"] == [{"trigger": "state", "entity_id": "sensor.water"}]
-    assert alert["conditions"][0]["entity_id"] == "sensor.water"
+    assert alert["monitor"]["triggers"]["items"] == [{"trigger": "state", "entity_id": "sensor.water"}]
+    assert alert["monitor"]["conditions"]["items"][0]["entity_id"] == "sensor.water"
     assert alert["notification"]["target"] == {"entity_id": ["notify.phone"]}
-    assert alert["automation_mode"] == "parallel"
-
-
-def test_validate_config_preserves_cancel_on_inactive_opt_in() -> None:
-    config = validate_config({"alerts": [{
-        "id": "quiet_alert",
-        "cancel_on_inactive": True,
-        "notification": {"action": "notify.mobile_app_phone"},
-    }]})
-
-    assert config["alerts"][0]["cancel_on_inactive"] is True
-
-
-def test_validate_config_roundtrips_notification_editor_options(alert_factory) -> None:
-    editor_options = {
-        "fields": {
-            "mobile.color": {"enabled": False, "value": "#ff0000"},
-            "android.channel": {"enabled": False, "value": "Alerts"},
-            "ios.sound": {"enabled": True, "value": {"name": "default", "volume": 0.5}},
-        },
-        "sections": {
-            "android": {"enabled": False, "values": {"channel": "Alerts", "ttl": 0}},
-            "ios": {"enabled": False, "values": {"push": {"sound": None}}},
-        },
+    assert alert["monitor"]["automation_mode"] == "parallel"
+    assert "automation_mode" not in alert["monitor"]["triggers"]
+    assert alert["monitor"]["inactive"] == {
+        "enabled": False, "items": [], "clear_notification": False,
     }
-    raw = {"alerts": [alert_factory(notification={
-        "message": "Low water",
-        "editor_options": editor_options,
-        "notification_native": {"priority": "high"},
-    })]}
-
-    validated = validate_config(raw)
-    notification = Configuration.model_validate(validated).alerts[0].notification
-
-    assert notification.editor_options == editor_options
-    assert notification.__pydantic_extra__ == {"notification_native": {"priority": "high"}}
-    assert validated["alerts"][0]["notification"]["editor_options"] == editor_options
-    assert validate_config(validated) == validated
-    assert raw["alerts"][0]["notification"]["editor_options"] == editor_options
 
 
-@pytest.mark.parametrize("editor_options", [None, {}])
-def test_validate_config_accepts_optional_notification_editor_options(editor_options) -> None:
-    validated = validate_config({"alerts": [{
-        "id": "water",
-        "notification": {"editor_options": editor_options},
-    }]})
+@pytest.mark.parametrize("legacy_value", [False, True])
+def test_validate_config_rejects_retired_cancel_on_inactive_without_mutating_input(
+    legacy_value: bool,
+) -> None:
+    raw = {"alerts": [{
+        "id": "quiet_alert",
+        "monitor": {"cancel_on_inactive": legacy_value},
+        "notification": {"action": "notify.mobile_app_phone"},
+    }]}
+    original = deepcopy(raw)
+    with pytest.raises(ValidationError) as error:
+        validate_config(raw)
 
-    notification = validated["alerts"][0]["notification"]
-    if editor_options is None:
-        assert "editor_options" not in notification
-    else:
-        assert notification["editor_options"] == {}
+    assert [(item["loc"], item["type"]) for item in error.value.errors()] == [
+        (("alerts", 0, "monitor", "cancel_on_inactive"), "extra_forbidden"),
+    ]
+    assert raw == original
 
 
-@pytest.mark.parametrize("editor_options", [False, 1, "invalid", [], [["fields", {}]], {1: {}}])
-def test_validate_config_rejects_unsafe_notification_editor_options(editor_options) -> None:
-    with pytest.raises(ValidationError, match="editor_options"):
+@pytest.mark.parametrize("unknown_field", ["cancel_on_inactive_typo", "clear_on_inactive", "unknown"])
+def test_validate_config_rejects_unknown_monitor_fields(unknown_field: str) -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         validate_config({"alerts": [{
-            "id": "water",
-            "notification": {"editor_options": editor_options},
+            "id": "quiet_alert",
+            "monitor": {unknown_field: True},
+            "notification": {"action": "notify.mobile_app_phone"},
         }]})
 
 
-def test_validate_config_preserves_condition_change_trigger_opt_in() -> None:
+def test_validate_config_preserves_independent_trigger_and_condition_enablement() -> None:
     config = validate_config({"alerts": [{
-        "id": "condition_alert",
-        "on_condition_change": True,
+        "id": "section_flags",
+        "enabled": True,
+        "monitor": {
+            "triggers": {"enabled": False},
+            "conditions": {"enabled": True},
+        },
         "notification": {"action": "notify.mobile_app_phone"},
     }]})
 
-    assert config["alerts"][0]["on_condition_change"] is True
+    alert = config["alerts"][0]
+    assert alert["enabled"] is True
+    assert alert["monitor"]["triggers"]["enabled"] is False
+    assert alert["monitor"]["conditions"]["enabled"] is True
 
 
-def test_validate_config_discards_retired_clear_on_inactive_option() -> None:
+def test_validate_config_preserves_mobile_options_groups() -> None:
+    mobile_options = {
+        "general": {"fields": {"color": {"enabled": False, "value": "#ff0000"}}},
+        "android": {"enabled": False, "values": {"channel": "Alerts", "ttl": 0}},
+        "ios": {"enabled": False, "values": {"push": {"sound": None}}},
+    }
+    validated = validate_config({"alerts": [{
+        "id": "mobile_alert",
+        "mobile_options": mobile_options,
+        "notification": {
+            "notification_native": {"priority": "high"},
+        },
+    }]})
+    alert = Configuration.model_validate(validated).alerts[0]
+
+    assert validated["alerts"][0]["mobile_options"] == mobile_options
+    assert alert.mobile_options is not None
+    assert alert.notification.__pydantic_extra__ == {"notification_native": {"priority": "high"}}
+    assert validate_config(validated) == validated
+
+
+def test_validate_config_does_not_migrate_notification_editor_options() -> None:
     config = validate_config({"alerts": [{
-        "id": "legacy_alert",
-        "clear_on_inactive": True,
-        "notification": {"action": "notify.mobile_app_phone"},
+        "id": "water",
+        "notification": {"editor_options": {"fields": {"mobile.color": {"enabled": True}}}},
     }]})
 
-    assert "clear_on_inactive" not in config["alerts"][0]
+    assert "mobile_options" not in config["alerts"][0]
+
+
+def test_validate_config_rejects_retired_condition_change_setting() -> None:
+    with pytest.raises(ValidationError):
+        validate_config({"alerts": [{
+            "id": "condition_alert",
+            "on_condition_change": True,
+            "notification": {"action": "notify.mobile_app_phone"},
+        }]})
+
+
+def test_validate_config_rejects_retired_clear_on_inactive_option() -> None:
+    with pytest.raises(ValidationError):
+        validate_config({"alerts": [{
+            "id": "legacy_alert",
+            "clear_on_inactive": True,
+            "notification": {"action": "notify.mobile_app_phone"},
+        }]})
 
 
 @pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
 def test_validate_config_accepts_automation_modes(mode: str) -> None:
     config = validate_config({"alerts": [{
         "id": "mode_alert",
-        "automation_mode": mode,
+        "monitor": {"automation_mode": mode},
         "notification": {"action": "notify.mobile_app_phone"},
     }]})
 
-    assert config["alerts"][0]["automation_mode"] == mode
+    assert config["alerts"][0]["monitor"]["automation_mode"] == mode
+
+
+@pytest.mark.parametrize("legacy_mode", ["single", "restart", "queued", "parallel"])
+@pytest.mark.parametrize("top_mode", [None, "queued"])
+def test_validate_config_rejects_nested_mode_without_mutating_input(
+    legacy_mode: str, top_mode: str | None,
+) -> None:
+    monitor = {
+        "triggers": {"automation_mode": legacy_mode, "items": [{
+            "trigger": "state", "entity_id": "binary_sensor.door", "id": "open",
+        }]},
+    }
+    if top_mode is not None:
+        monitor["automation_mode"] = top_mode
+    raw = {"alerts": [{"id": "door", "monitor": monitor, "notification": {}}]}
+    original = deepcopy(raw)
+
+    with pytest.raises(ValidationError) as error:
+        validate_config(raw)
+
+    assert [(item["loc"], item["type"]) for item in error.value.errors()] == [
+        (("alerts", 0, "monitor", "triggers", "automation_mode"), "extra_forbidden"),
+    ]
+    assert raw == original
+
+
+def test_trigger_options_rejects_monitor_owned_mode() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        TriggerOptions.model_validate({"automation_mode": "parallel"})
+
+
+def test_validate_config_preserves_native_inactive_triggers() -> None:
+    inactive = {
+        "enabled": True,
+        "items": [{
+            "trigger": "state", "entity_id": ["binary_sensor.door"],
+            "from": "on", "to": "off", "id": "door_closed",
+            "for": {"seconds": "{{ hold_seconds }}"},
+            "alias": "Door closed", "enabled": "{{ enabled }}",
+        }],
+        "clear_notification": True,
+    }
+    raw = {"alerts": [{"id": "door", "monitor": {"inactive": inactive}, "notification": {}}]}
+    original = deepcopy(raw)
+
+    config = validate_config(raw)
+
+    assert config["alerts"][0]["monitor"]["inactive"] == inactive
+    assert raw == original
+    assert validate_config(config) == config
+
+
+@pytest.mark.parametrize("items", [["not a mapping"], {}, None])
+def test_validate_config_rejects_invalid_inactive_items(items: object) -> None:
+    with pytest.raises(ValidationError):
+        validate_config({"alerts": [{
+            "id": "door", "monitor": {"inactive": {"items": items}}, "notification": {},
+        }]})
 
 
 def test_validate_config_rejects_unknown_automation_mode() -> None:
     with pytest.raises(ValidationError):
         validate_config({"alerts": [{
             "id": "mode_alert",
-            "automation_mode": "restart_and_parallel",
+            "monitor": {"automation_mode": "restart_and_parallel"},
             "notification": {"action": "notify.mobile_app_phone"},
         }]})
 
@@ -158,7 +239,7 @@ def test_validate_config_rejects_invalid_trigger_entries() -> None:
     with pytest.raises(ValidationError):
         validate_config({"alerts": [{
             "id": "low_water",
-            "triggers": ["not a mapping"],
+            "monitor": {"triggers": {"items": ["not a mapping"]}},
             "notification": {"action": "notify.mobile_app_phone"},
         }]})
 
@@ -166,8 +247,7 @@ def test_validate_config_rejects_invalid_trigger_entries() -> None:
 def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
     config = validate_config({"alerts": [{
         "id": "confirm_alert",
-            "triggers": [{"trigger": "homeassistant", "event": "start"}],
-        "conditions": [],
+        "monitor": {"conditions": {"startup": True}},
         "notification": {"action": "notify.mobile_app_phone"},
         "confirmation": {
             "enabled": True,
@@ -180,6 +260,61 @@ def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
     alert = config["alerts"][0]
     assert alert["confirmation"]["buttons"][0]["id"] == "confirm"
     assert alert["post_send_actions"]["actions"][0]["action"] == "logbook.log"
+
+
+@pytest.mark.parametrize("actions", [{}, {"items": []}, {
+    "enabled": True,
+    "items": [{"action": "light.turn_on", "target": {"entity_id": "light.hall"}}],
+}])
+def test_validate_config_rejects_confirmation_actions_wrapper_without_mutating_input(
+    alert_factory, actions: dict[str, object],
+) -> None:
+    raw = {"alerts": [alert_factory(confirmation={"enabled": True, "actions": actions})]}
+    original = deepcopy(raw)
+
+    with pytest.raises(ValidationError) as error:
+        validate_config(raw)
+
+    assert [(item["loc"], item["type"]) for item in error.value.errors()] == [
+        (("alerts", 0, "confirmation", "actions"), "list_type"),
+    ]
+    assert raw == original
+
+
+def test_confirmation_actions_default_to_independent_empty_lists() -> None:
+    confirmation = ConfirmationConfig()
+    other_confirmation = ConfirmationConfig()
+
+    assert confirmation.actions == []
+    assert confirmation.actions is not other_confirmation.actions
+
+
+def test_validate_config_preserves_native_confirmation_action_list(alert_factory) -> None:
+    actions = [{
+        "action": "light.turn_on",
+        "alias": "Turn on the hall light",
+        "enabled": "{{ lights_enabled }}",
+        "continue_on_error": True,
+        "target": {"entity_id": ["light.hall"], "area_id": "hall"},
+        "data": {"brightness": "{{ brightness }}", "transition": 2},
+    }, {
+        "choose": [{
+            "conditions": "{{ notify_again }}",
+            "sequence": [{"action": "logbook.log", "data": {"message": "Confirmed"}}],
+        }],
+        "default": [{"delay": {"seconds": "{{ delay_seconds }}"}}],
+    }]
+    raw = {"alerts": [alert_factory(confirmation={"enabled": True, "actions": actions})]}
+    original = deepcopy(raw)
+
+    validated = validate_config(raw)
+    confirmation = Configuration.model_validate(validated).alerts[0].confirmation
+
+    assert confirmation is not None
+    assert confirmation.actions == actions
+    assert validated["alerts"][0]["confirmation"]["actions"] == actions
+    assert validate_config(validated) == validated
+    assert raw == original
 
 
 def test_validate_config_preserves_confirmation_notification_opt_out() -> None:
@@ -207,7 +342,7 @@ def test_validate_config_rejects_nonpositive_confirmation_attempts() -> None:
     with pytest.raises(ValidationError):
         validate_config({"alerts": [{
             "id": "confirm_alert",
-            "monitor": {"startup": True},
+            "monitor": {"conditions": {"startup": True}},
             "notification": {"action": "notify.mobile_app_phone"},
             "confirmation": {
                 "enabled": True,

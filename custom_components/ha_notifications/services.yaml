@@ -38,13 +38,6 @@ report:
       required: false
       selector:
         object:
-    cancel_on_inactive:
-      name: Cancel on inactive
-      description: Emit a command to cancel confirmation waits after an inactive transition.
-      required: false
-      selector:
-        boolean:
-
 send:
   name: Send notification
   description: Send a notification using HA Notifications.

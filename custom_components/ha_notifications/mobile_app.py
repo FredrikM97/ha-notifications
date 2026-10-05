@@ -44,7 +44,7 @@ def _matching_entries(
         if device is None:
             entry_ids = set()
         else:
-            entry_ids = set(device.config_entries).intersection(mobile_entry_ids)
+            entry_ids = {device.config_entry_id}.intersection(mobile_entry_ids)
         entry_ids.update(
             entry.entry_id
             for entry in mobile_entries

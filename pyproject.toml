@@ -17,7 +17,7 @@ dependencies = [
 all = [
     "pytest==9.0.3",
     "pytest-asyncio==1.4.0",
-    "homeassistant==2026.9.3",
+    "homeassistant==2026.10.0b0",
     "home-assistant-frontend==20260826.7",
     "syrupy==6.0.0",
     "ruff==0.16.8",

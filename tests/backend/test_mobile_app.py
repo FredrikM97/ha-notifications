@@ -54,6 +54,20 @@ def mobile_target(hass: HomeAssistant):
     return create
 
 
+async def test_platform_resolution_does_not_read_deprecated_device_ownership(
+    hass, mobile_target, monkeypatch,
+) -> None:
+    _entry, device, _entity = mobile_target()
+
+    def deprecated_ownership(_device):
+        raise AssertionError("DeviceEntry.config_entries must not be used")
+
+    monkeypatch.setattr(dr.DeviceEntry, "config_entries", property(deprecated_ownership))
+    assert resolve_platforms(hass, {"device_id": device.id}) == {
+        "platforms": ["android"], "unknown": False,
+    }
+
+
 @pytest.mark.parametrize(
     ("os_name", "platforms", "unknown"),
     [

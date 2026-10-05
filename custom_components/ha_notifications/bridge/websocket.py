@@ -296,7 +296,7 @@ class WebsocketDispatcher:
 
         history = history_store(hass, entry)
         entries = await history.async_entries(alert_id)
-        automation_mode = alert.get("automation_mode", "restart")
+        automation_mode = alert.get("monitor", {}).get("automation_mode", "parallel")
         running = _running_activity(entries, {alert_id: automation_mode}).get(
             alert_id,
             False,

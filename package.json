@@ -3,14 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "python3 scripts/dev_ha.py",
     "build": "rm -rf build && cp -R custom_components/ha_notifications/. build/ && esbuild frontend/panel.ts --bundle --format=esm --outfile=build/frontend/panel.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write 'frontend/**/*.ts' 'tests/frontend_smoke.test.ts'",
     "lint:backend": "ruff check custom_components/ha_notifications tests/backend",
     "test": "npm run typecheck && npm run build &&  vitest run",
     "ui:preview": "npm run build && node scripts/ui_preview.mjs",
-    "dev": "python3 scripts/dev_ha.py",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf build",
     "package:hacs": "npm run build && sh scripts/package_hacs.sh"
   },
   "devDependencies": {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
@@ -10,7 +9,6 @@ from homeassistant.components.automation.config import (
     ValidationStatus,
     async_validate_config,
 )
-from homeassistant.const import ENTITY_MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
@@ -21,6 +19,7 @@ from .configuration import (
     ConfirmationNotificationConfig,
     NotificationConfig,
     ReminderConfig,
+    _duration_seconds,
 )
 from .const import (
     COMMAND_CANCEL_RUN,
@@ -35,10 +34,8 @@ class AutomationFragments:
     """Typed intermediate values assembled before rendering native HA data."""
 
     triggers: tuple[dict[str, Any], ...] = ()
-    inactive_triggers: tuple[dict[str, Any], ...] = ()
-    cancel_trigger_ids: tuple[str, ...] = ()
     conditions: tuple[dict[str, Any], ...] = ()
-    active_actions: tuple[dict[str, Any], ...] = ()
+    actions: tuple[dict[str, Any], ...] = ()
 
 
 class AutomationComponent(Protocol):
@@ -64,197 +61,7 @@ class _TriggerComponent:
     order = 10
 
     def compose(self, alert: AlertConfig) -> AutomationFragments:
-        triggers = [dict(trigger) for trigger in alert.triggers]
-        cancel_trigger_ids: list[str] = []
-        inactive_triggers: list[dict[str, Any]] = []
-        if alert.cancel_on_inactive is True:
-            identified_inverses, inverse_ids = _assign_inactive_trigger_ids(
-                triggers,
-                _inverse_binary_state_triggers(tuple(triggers)),
-            )
-            triggers.extend(identified_inverses)
-            cancel_trigger_ids.extend(inverse_ids)
-        change_triggers, template_entity_triggers = _condition_change_triggers(
-            alert.conditions
-        )
-        inactive_triggers.extend(change_triggers)
-        inactive_triggers.extend(template_entity_triggers)
-        if alert.on_condition_change is True:
-            for trigger in change_triggers:
-                if trigger not in triggers:
-                    triggers.append(trigger)
-        return AutomationFragments(
-            triggers=tuple(triggers),
-            inactive_triggers=tuple(inactive_triggers),
-            cancel_trigger_ids=tuple(cancel_trigger_ids),
-        )
-
-
-def _condition_change_triggers(
-    conditions: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Build active and inactive watchers for entity-backed conditions."""
-    template_conditions = _extract_template_conditions(conditions)
-    template_entities = {
-        entity
-        for condition in template_conditions
-        for entity in _extract_template_entities(condition["value_template"])
-    }
-    entities = _extract_condition_entities(conditions)
-    triggers = [
-        {"trigger": "state", "entity_id": entity}
-        for entity in sorted(entities - template_entities)
-    ]
-    triggers.extend(
-        {
-            "trigger": "template",
-            "value_template": condition["value_template"],
-        }
-        for condition in template_conditions
-        if _extract_template_entities(condition["value_template"])
-    )
-    inactive_triggers = [
-        {"trigger": "state", "entity_id": entity}
-        for entity in sorted(template_entities)
-    ]
-    return triggers, inactive_triggers
-
-
-def _extract_condition_entities(condition: Any) -> set[str]:
-    if isinstance(condition, (list, tuple)):
-        return {
-            entity
-            for item in condition
-            for entity in _extract_condition_entities(item)
-        }
-    if not isinstance(condition, dict):
-        return set()
-
-    entities: set[str] = set()
-    entity_ids = condition.get("entity_id")
-    if isinstance(entity_ids, str):
-        entities.add(entity_ids)
-    elif isinstance(entity_ids, list):
-        entities.update(entity for entity in entity_ids if isinstance(entity, str))
-
-    if condition.get("condition") == "template":
-        template = condition.get("value_template")
-        if isinstance(template, str):
-            entities.update(_extract_template_entities(template))
-
-    for value in condition.values():
-        if isinstance(value, (dict, list)):
-            entities.update(_extract_condition_entities(value))
-    return entities - {ENTITY_MATCH_ALL}
-
-
-def _extract_template_entities(template: str) -> set[str]:
-    entities = set(
-        re.findall(
-            r"(?:states|is_state|state_attr|is_state_attr)\s*\(\s*['\"]"
-            r"([a-z0-9_]+\.[a-z0-9_]+)['\"]",
-            template,
-        )
-    )
-    entities.update(
-        f"{domain}.{entity}"
-        for domain, entity in re.findall(
-            r"\bstates\.([a-z0-9_]+)\.([a-z0-9_]+)", template
-        )
-    )
-    return entities - {ENTITY_MATCH_ALL}
-
-
-def _extract_template_conditions(condition: Any) -> list[dict[str, str]]:
-    if isinstance(condition, (list, tuple)):
-        return [
-            template_condition
-            for item in condition
-            for template_condition in _extract_template_conditions(item)
-        ]
-    if not isinstance(condition, dict):
-        return []
-
-    template_conditions = []
-    if (
-        condition.get("condition") == "template"
-        and isinstance(condition.get("value_template"), str)
-    ):
-        template_conditions.append({
-            "value_template": condition["value_template"],
-        })
-    for value in condition.values():
-        if isinstance(value, (dict, list)):
-            template_conditions.extend(_extract_template_conditions(value))
-    return template_conditions
-
-
-def _inverse_binary_state_triggers(
-    triggers: tuple[dict[str, Any], ...],
-) -> tuple[dict[str, Any], ...]:
-    """Mirror binary state edges for condition-inactive detection only."""
-    inverse_triggers: list[dict[str, Any]] = []
-    for trigger in triggers:
-        if trigger.get("trigger") != "state":
-            continue
-        target_state = trigger.get("to")
-        source_state = trigger.get("from")
-        if not isinstance(target_state, str) or target_state not in {"on", "off"}:
-            continue
-        if source_state is not None and (
-            not isinstance(source_state, str)
-            or source_state not in {"on", "off"}
-        ):
-            continue
-
-        inverse = dict(trigger)
-        inverse["to"] = source_state or ("off" if target_state == "on" else "on")
-        if source_state is not None:
-            inverse["from"] = target_state
-        if inverse not in triggers and inverse not in inverse_triggers:
-            inverse_triggers.append(inverse)
-    return tuple(inverse_triggers)
-
-
-def _assign_inactive_trigger_ids(
-    triggers: list[dict[str, Any]],
-    inverse_triggers: tuple[dict[str, Any], ...],
-) -> tuple[tuple[dict[str, Any], ...], tuple[str, ...]]:
-    """Give inferred inverse triggers stable IDs without colliding with user IDs."""
-    used_trigger_ids = {
-        trigger.get("id")
-        for trigger in triggers
-        if isinstance(trigger.get("id"), str)
-    }
-    identified_triggers: list[dict[str, Any]] = []
-    cancel_trigger_ids: list[str] = []
-    for index, inverse in enumerate(inverse_triggers, start=1):
-        source_id = inverse.get("id")
-        entity_id = inverse.get("entity_id")
-        if isinstance(source_id, str) and source_id:
-            identity = source_id
-        elif isinstance(entity_id, str):
-            identity = entity_id.rsplit(".", 1)[-1]
-        elif isinstance(entity_id, list):
-            identity = "_".join(
-                item.rsplit(".", 1)[-1]
-                for item in entity_id
-                if isinstance(item, str) and item
-            )
-        else:
-            identity = str(inverse.get("trigger", "state"))
-        identity = re.sub(r"[^a-zA-Z0-9_]+", "_", identity).strip("_")
-        base_id = f"inactive_{identity or index}"
-        trigger_id = base_id
-        suffix = 2
-        while trigger_id in used_trigger_ids:
-            trigger_id = f"{base_id}_{suffix}"
-            suffix += 1
-        identified = {**inverse, "id": trigger_id}
-        used_trigger_ids.add(trigger_id)
-        cancel_trigger_ids.append(trigger_id)
-        identified_triggers.append(identified)
-    return tuple(identified_triggers), tuple(cancel_trigger_ids)
+        return AutomationFragments(triggers=tuple(alert.monitor.enabled_triggers))
 
 
 class _SendComponent:
@@ -264,7 +71,7 @@ class _SendComponent:
     def compose(self, alert: AlertConfig) -> AutomationFragments:
         steps = _ActionStepBuilder(alert)
         return AutomationFragments(
-            active_actions=(
+            actions=(
                 steps.send(self._confirmation_notification(alert)),
             )
         )
@@ -301,7 +108,7 @@ class _SendComponent:
         reminders = confirmation.reminders
         timeout = getattr(reminders, "timeout", None)
         if reminders.forget_after_enabled and timeout is not None:
-            data["timeout"] = timeout
+            data["timeout"] = _duration_seconds(timeout)
         return notification
 
 
@@ -310,7 +117,9 @@ class _ConditionComponent:
     order = 15
 
     def compose(self, alert: AlertConfig) -> AutomationFragments:
-        return AutomationFragments(conditions=tuple(alert.conditions))
+        condition_options = alert.monitor.conditions
+        conditions = condition_options.items if condition_options.enabled else []
+        return AutomationFragments(conditions=tuple(conditions))
 
 
 class _ActionStepBuilder:
@@ -343,7 +152,6 @@ class _ActionStepBuilder:
         details: dict[str, Any] | None = None,
         flow_id: str = "{{ context.parent_id or context.id }}",
         include_run_id: bool = True,
-        cancel_on_inactive: bool | None = None,
     ) -> dict[str, Any]:
         data: dict[str, Any] = {
             "alert_id": self._alert.id,
@@ -355,8 +163,6 @@ class _ActionStepBuilder:
             data["run_id"] = flow_id
         if message is not None:
             data["message"] = message
-        if cancel_on_inactive is True:
-            data["cancel_on_inactive"] = True
         data["details"] = details if details is not None else {"action": action}
         return self._service("ha_notifications.report", data)
 
@@ -385,7 +191,6 @@ class _ActionStepBuilder:
         *,
         flow_id: str = "{{ context.parent_id or context.id }}",
         include_run_id: bool = True,
-        cancel_on_inactive: bool | None = None,
     ) -> list[dict[str, Any]]:
         return [
             self.report(
@@ -395,7 +200,6 @@ class _ActionStepBuilder:
                 details=details,
                 flow_id=flow_id,
                 include_run_id=include_run_id,
-                cancel_on_inactive=cancel_on_inactive,
             ),
             {"stop": reason},
         ]
@@ -602,7 +406,7 @@ class _ConfirmationComponent:
     def compose(self, alert: AlertConfig) -> AutomationFragments:
         if not alert.confirmation or not alert.confirmation.enabled:
             return AutomationFragments()
-        return AutomationFragments(active_actions=tuple(self._confirmation_actions(alert)))
+        return AutomationFragments(actions=tuple(self._confirmation_actions(alert)))
 
     def _action_components(self) -> tuple[_ConfirmationActionComponent, ...]:
         return tuple(
@@ -721,7 +525,7 @@ class _PostSendComponent:
         steps = _ActionStepBuilder(alert)
         actions = [_copy_native_value(action) for action in post_send.get("actions", [])]
         return AutomationFragments(
-            active_actions=tuple(
+            actions=tuple(
                 item
                 for action in actions
                 for item in steps.recorded_action(action)
@@ -762,24 +566,14 @@ def compose_automation(
     alert = _validated_alert(alert)
     fragments = [component.compose(alert) for component in component_registry(components or ())]
     triggers = tuple(trigger for fragment in fragments for trigger in fragment.triggers)
-    inactive_triggers = tuple(
-        trigger for fragment in fragments for trigger in fragment.inactive_triggers
-    )
-    cancel_trigger_ids = tuple(
-        trigger_id
-        for fragment in fragments
-        for trigger_id in fragment.cancel_trigger_ids
-    )
     conditions = tuple(condition for fragment in fragments for condition in fragment.conditions)
-    active_actions = tuple(action for fragment in fragments for action in fragment.active_actions)
+    actions = tuple(action for fragment in fragments for action in fragment.actions)
     if not triggers:
         raise ValueError(f"alert {alert.id!r} must define at least one evaluation trigger")
     return AutomationFragments(
         triggers=triggers,
-        inactive_triggers=inactive_triggers,
-        cancel_trigger_ids=cancel_trigger_ids,
         conditions=conditions,
-        active_actions=active_actions,
+        actions=actions,
     )
 
 
@@ -788,8 +582,16 @@ async def async_validate_alerts(
     alerts: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Validate generated alert automations with Home Assistant's schema."""
+    def condition_items(alert: dict[str, Any]) -> list[dict[str, Any]]:
+        monitor = alert.get("monitor", {})
+        conditions = monitor.get("conditions", {}) if isinstance(monitor, dict) else {}
+        items = conditions.get("items", []) if isinstance(conditions, dict) else []
+        return items if isinstance(items, list) else []
+
     for alert in alerts:
-        for index, condition in enumerate(alert.get("conditions", [])):
+        monitor = alert.get("monitor", {})
+        condition_options = monitor.get("conditions", {}) if isinstance(monitor, dict) else {}
+        for index, condition in enumerate(condition_options.get("items", [])):
             if condition.get("condition") != "numeric_state":
                 continue
             condition_path = f"Alert {alert['id']!r} conditions[{index}]"
@@ -801,8 +603,7 @@ async def async_validate_alerts(
     generated_alerts = [
         alert
         for alert in alerts
-        if alert.get("triggers")
-        or (alert.get("on_condition_change") and alert.get("conditions"))
+        if _validated_alert(alert).monitor.enabled_triggers
     ]
     generated = [
         (alert, automation)
@@ -814,7 +615,7 @@ async def async_validate_alerts(
     if len(validated["automation"]) != len(document):
         paths = "; ".join(
             f"Alert {alert['id']!r}: "
-            + ", ".join(f"conditions[{index}] ({condition.get('condition', 'unknown')})" for index, condition in enumerate(alert.get("conditions", [])))
+            + ", ".join(f"conditions[{index}] ({condition.get('condition', 'unknown')})" for index, condition in enumerate(condition_items(alert)))
             for alert in generated_alerts
         )
         raise HomeAssistantError(
@@ -827,7 +628,7 @@ async def async_validate_alerts(
             "; condition paths: "
             + ", ".join(
                 f"conditions[{condition_index}] ({condition.get('condition', 'unknown')})"
-                for condition_index, condition in enumerate(alert.get("conditions", []))
+                for condition_index, condition in enumerate(condition_items(alert))
             )
             if item.validation_status == ValidationStatus.FAILED_CONDITIONS
             else ""
@@ -888,7 +689,7 @@ def render_automation(
                 },
             },
         ),
-        *fragments.active_actions,
+        *fragments.actions,
     ]
     if not alert.confirmation or not alert.confirmation.enabled:
         sequence.append(
@@ -903,20 +704,11 @@ def render_automation(
     actions = sequence
     automation_conditions = alert_conditions
     if alert_conditions:
-        active_trigger_count = len(automation_triggers)
-        for trigger in fragments.inactive_triggers:
-            if trigger not in automation_triggers:
-                automation_triggers.append(dict(trigger))
-        _ensure_trigger_ids(automation_triggers)
-        all_trigger_ids = [trigger["id"] for trigger in automation_triggers]
-        active_trigger_ids = list(dict.fromkeys(
-            trigger["id"] for trigger in automation_triggers[:active_trigger_count]
-        ))
-        active_trigger_ids = [
-            trigger_id
-            for trigger_id in active_trigger_ids
-            if trigger_id not in fragments.cancel_trigger_ids
+        trigger_ids = [
+            trigger.get("id", str(index))
+            for index, trigger in enumerate(automation_triggers)
         ]
+        all_trigger_ids = trigger_ids
         all_trigger_condition = {
             "condition": "trigger",
             "id": all_trigger_ids,
@@ -926,8 +718,8 @@ def render_automation(
             "conditions": [
                 *([{
                     "condition": "trigger",
-                    "id": active_trigger_ids,
-                }] if active_trigger_ids else []),
+                    "id": trigger_ids,
+                }] if trigger_ids else []),
                 {
                     "condition": "template",
                     "value_template": (
@@ -944,14 +736,6 @@ def render_automation(
             *_copy_native_value(alert_conditions),
             active_trigger_condition,
         ]
-        if fragments.cancel_trigger_ids:
-            active_conditions.append({
-                "condition": "not",
-                "conditions": [{
-                    "condition": "trigger",
-                    "id": list(fragments.cancel_trigger_ids),
-                }],
-            })
         automation_conditions = [{
             "condition": "or",
             "conditions": [
@@ -969,7 +753,6 @@ def render_automation(
             details={"action": "automation_inactive"},
             flow_id="{{ context.id }}",
             include_run_id=False,
-            cancel_on_inactive=alert.cancel_on_inactive,
         )
         actions = [{
             "choose": [{
@@ -998,33 +781,12 @@ def render_automation(
             }],
             "default": [],
         }]
-    elif fragments.cancel_trigger_ids:
-        cancel_trigger_condition = {
-            "condition": "trigger",
-            "id": list(fragments.cancel_trigger_ids),
-        }
-        inactive_report = steps.report(
-            "inactive",
-            "trigger_inactive",
-            message="Trigger inactive",
-            details={"action": "trigger_inactive"},
-            flow_id="{{ context.id }}",
-            include_run_id=False,
-            cancel_on_inactive=True,
-        )
-        actions = [{
-            "choose": [{
-                "conditions": [cancel_trigger_condition],
-                "sequence": [inactive_report],
-            }],
-            "default": sequence,
-        }]
     return {
         "id": automation_id(alert),
         "alias": f"HA Notifications: {alert.name or alert.id}",
         "description": GENERATED_DESCRIPTION,
         "initial_state": alert.enabled,
-        "mode": "parallel" if alert_conditions else alert.automation_mode,
+        "mode": "parallel" if alert_conditions else alert.monitor.automation_mode,
         "triggers": automation_triggers,
         "conditions": automation_conditions,
         "actions": actions,
@@ -1046,28 +808,42 @@ def generate_automations(
 ) -> list[dict[str, Any]]:
     """Generate the single Home Assistant automation owned by an alert."""
     validated = _validated_alert(alert)
-    return [generate_automation(validated, components)]
-
-
-def _ensure_trigger_ids(triggers: list[dict[str, Any]]) -> None:
-    """Assign stable IDs to triggers needed by conditional action routing."""
-    used_ids = {
-        trigger["id"]
-        for trigger in triggers
-        if isinstance(trigger.get("id"), str) and trigger["id"]
-    }
-    for index, trigger in enumerate(triggers, start=1):
-        trigger_id = trigger.get("id")
-        if isinstance(trigger_id, str) and trigger_id:
-            continue
-        base_id = f"ha_notifications_trigger_{index}"
-        trigger_id = base_id
-        suffix = 2
-        while trigger_id in used_ids:
-            trigger_id = f"{base_id}_{suffix}"
-            suffix += 1
-        trigger["id"] = trigger_id
-        used_ids.add(trigger_id)
+    if not validated.monitor.enabled_triggers:
+        return []
+    generated = [generate_automation(validated, components)]
+    inactive = validated.monitor.inactive
+    if inactive.enabled and inactive.items:
+        steps = _ActionStepBuilder(validated)
+        actions = [
+            steps.report(
+                "inactive", "inactive_trigger", message="Configured inactive trigger fired",
+                include_run_id=False,
+            ),
+            {
+                "action": "ha_notifications.command",
+                "data": {"alert_id": validated.id, "command": COMMAND_CANCEL_RUN},
+            },
+        ]
+        if inactive.clear_notification:
+            actions.append({
+                "action": "ha_notifications.clear",
+                "data": {
+                    "alert_id": validated.id,
+                    "alert_name": validated.name,
+                    **_SEND_COMPONENT.notification_mapping(validated.notification),
+                },
+            })
+        generated.append({
+            "id": f"{automation_id(validated)}_inactive",
+            "alias": f"HA Notifications: {validated.name or validated.id} inactive",
+            "description": GENERATED_DESCRIPTION,
+            "initial_state": validated.enabled,
+            "mode": "queued",
+            "triggers": _copy_native_value(inactive.items),
+            "conditions": [],
+            "actions": actions,
+        })
+    return generated
 
 
 def _validated_alert(alert: AlertConfig | dict[str, Any]) -> AlertConfig:
@@ -1106,10 +882,7 @@ def _follow_up_actions(
             **notification,
             "history_reason": "confirmation_notification",
         })
-    configured_actions = confirmation.actions
-    if isinstance(configured_actions, dict):
-        configured_actions = configured_actions.get("items", [])
-    native_actions = [_copy_native_value(action) for action in configured_actions]
+    native_actions = [_copy_native_value(action) for action in confirmation.actions]
     actions = [notification_action] if notification_action is not None else []
     for action in native_actions:
         actions.extend(steps.recorded_action(action))

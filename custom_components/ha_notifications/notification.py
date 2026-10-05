@@ -10,7 +10,6 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.template import Template
 
 from .const import (
-    COMMAND_CANCEL_RUN,
     DOMAIN,
     EVENT_COMMAND,
     SERVICE_CLEAR,
@@ -131,18 +130,13 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
         kwargs["flow_id"] = flow_id
     history = history_store(hass, _entry(hass))
     if status == "inactive":
-        followed_active = await history.async_record_inactive(
+        await history.async_record_inactive(
             alert_id,
             str(call.data.get("alert_name", alert_id)),
             str(call.data.get("message", "Condition inactive")),
             details,
             **kwargs,
         )
-        if followed_active and call.data.get("cancel_on_inactive") is True:
-            hass.bus.async_fire(
-                EVENT_COMMAND,
-                {"alert_id": alert_id, "command": COMMAND_CANCEL_RUN},
-            )
         return
     await history.async_record(
         alert_id,
@@ -157,7 +151,7 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
 def _parse_notification(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise HomeAssistantError("notification must be a mapping")
-    return {key: value for key, value in payload.items() if key != "editor_options"}
+    return dict(payload)
 
 
 def _target_services(

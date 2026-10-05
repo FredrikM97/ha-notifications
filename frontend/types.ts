@@ -27,15 +27,44 @@ type Duration = string | number | Record<string, number>;
 export type NotificationTarget = HassServiceTarget & { user_id?: string[] };
 
 export interface Notification {
-  editor_options?: {
-    fields?: Record<string, { enabled: boolean; value?: unknown }>;
-    sections?: Record<string, { enabled: boolean; values: Record<string, unknown> }>;
-  };
   action?: string;
   target?: NotificationTarget;
   title?: string;
   message?: string;
   data: Record<string, unknown>;
+}
+
+export interface MobileOptionGroup {
+  enabled?: boolean;
+  values?: Record<string, unknown>;
+  fields?: Record<string, { enabled: boolean; value?: unknown }>;
+}
+
+export interface MobileOptions {
+  general?: MobileOptionGroup;
+  android?: MobileOptionGroup;
+  ios?: MobileOptionGroup;
+}
+
+export interface EnabledFeature {
+  enabled: boolean;
+}
+
+export interface MonitorConfig {
+  automation_mode: "single" | "restart" | "queued" | "parallel";
+  triggers: EnabledFeature & {
+    items: HaConfig[];
+  };
+  conditions: EnabledFeature & {
+    items: HaConfig[];
+    startup: boolean;
+    periodic: boolean;
+    interval?: Duration;
+  };
+  inactive: EnabledFeature & {
+    items: HaConfig[];
+    clear_notification: boolean;
+  };
 }
 
 export interface ConfirmationConfig {
@@ -60,11 +89,8 @@ export interface Alert {
   description?: string;
   icon?: string;
   enabled: boolean;
-  triggers: HaConfig[];
-  conditions: HaConfig[];
-  on_condition_change?: boolean;
-  automation_mode?: "single" | "restart" | "queued" | "parallel";
-  cancel_on_inactive?: boolean;
+  monitor: MonitorConfig;
+  mobile_options?: MobileOptions;
   notification: Notification & { target: NotificationTarget };
   confirmation?: ConfirmationConfig;
   post_send_actions?: { enabled: boolean; actions?: HaConfig[] };
@@ -77,7 +103,7 @@ export interface AlertsConfig {
 }
 
 export interface AutomationRuntimeStatus {
-  status: "managed" | "manual" | "missing" | "disabled" | "conflict";
+  status: "managed" | "missing" | "disabled" | "conflict";
   enabled: boolean;
   mode: string;
   current: number;

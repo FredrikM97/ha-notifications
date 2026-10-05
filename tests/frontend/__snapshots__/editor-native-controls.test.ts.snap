@@ -1,0 +1,653 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`native editor controls > applies declared field widths without leaking layout metadata at viewport 390 1`] = `
+{
+  "android": [
+    {
+      "class": "nc-medium-form",
+      "label": "Notification channel",
+      "schema": [
+        {
+          "name": "channel",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Channel importance",
+      "schema": [
+        {
+          "name": "importance",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "min",
+                "low",
+                "default",
+                "high",
+                "max",
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Keep after tapping",
+      "schema": [
+        {
+          "name": "sticky",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Persistent notification",
+      "schema": [
+        {
+          "name": "persistent",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Alert only once",
+      "schema": [
+        {
+          "name": "alert_once",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Dismiss after",
+      "schema": [
+        {
+          "name": "timeout",
+          "selector": {
+            "number": {
+              "min": 0,
+              "mode": "box",
+              "unit_of_measurement": "s",
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Lock-screen visibility",
+      "schema": [
+        {
+          "name": "visibility",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "public",
+                "private",
+                "secret",
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+  "basic": [
+    {
+      "class": "",
+      "label": "Name",
+      "schema": [
+        {
+          "name": "name",
+          "required": true,
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Description",
+      "schema": [
+        {
+          "name": "description",
+          "selector": {
+            "text": {
+              "multiline": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Icon",
+      "schema": [
+        {
+          "name": "icon",
+          "selector": {
+            "icon": {},
+          },
+        },
+      ],
+    },
+  ],
+  "ios": [
+    {
+      "class": "",
+      "label": "Tap URL",
+      "schema": [
+        {
+          "name": "url",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Interruption level",
+      "schema": [
+        {
+          "name": "interruption-level",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "passive",
+                "active",
+                "time-sensitive",
+                "critical",
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "App badge count",
+      "schema": [
+        {
+          "name": "badge",
+          "selector": {
+            "number": {
+              "min": 0,
+              "mode": "box",
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Foreground presentation",
+      "schema": [
+        {
+          "name": "presentation_options",
+          "selector": {
+            "select": {
+              "multiple": true,
+              "options": [
+                "alert",
+                "badge",
+                "sound",
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+  "mobile": [
+    {
+      "class": "nc-medium-form",
+      "label": "Notification group",
+      "schema": [
+        {
+          "name": "group",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Notification icon",
+      "schema": [
+        {
+          "name": "notification_icon",
+          "selector": {
+            "icon": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Icon image URL",
+      "schema": [
+        {
+          "name": "icon_url",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+  ],
+  "when": [
+    {
+      "class": "nc-compact-form",
+      "label": "Automation mode",
+      "schema": [
+        {
+          "disabled": false,
+          "name": "automation_mode",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                {
+                  "label": "Parallel (run triggers independently)",
+                  "value": "parallel",
+                },
+                {
+                  "label": "Single (ignore new triggers while running)",
+                  "value": "single",
+                },
+                {
+                  "label": "Restart (cancel and start again)",
+                  "value": "restart",
+                },
+                {
+                  "label": "Queued (run triggers in order)",
+                  "value": "queued",
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`native editor controls > applies declared field widths without leaking layout metadata at viewport 1100 1`] = `
+{
+  "android": [
+    {
+      "class": "nc-medium-form",
+      "label": "Notification channel",
+      "schema": [
+        {
+          "name": "channel",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Channel importance",
+      "schema": [
+        {
+          "name": "importance",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "min",
+                "low",
+                "default",
+                "high",
+                "max",
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Keep after tapping",
+      "schema": [
+        {
+          "name": "sticky",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Persistent notification",
+      "schema": [
+        {
+          "name": "persistent",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Alert only once",
+      "schema": [
+        {
+          "name": "alert_once",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Dismiss after",
+      "schema": [
+        {
+          "name": "timeout",
+          "selector": {
+            "number": {
+              "min": 0,
+              "mode": "box",
+              "unit_of_measurement": "s",
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Lock-screen visibility",
+      "schema": [
+        {
+          "name": "visibility",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "public",
+                "private",
+                "secret",
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+  "basic": [
+    {
+      "class": "",
+      "label": "Name",
+      "schema": [
+        {
+          "name": "name",
+          "required": true,
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Description",
+      "schema": [
+        {
+          "name": "description",
+          "selector": {
+            "text": {
+              "multiline": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Icon",
+      "schema": [
+        {
+          "name": "icon",
+          "selector": {
+            "icon": {},
+          },
+        },
+      ],
+    },
+  ],
+  "ios": [
+    {
+      "class": "",
+      "label": "Tap URL",
+      "schema": [
+        {
+          "name": "url",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Interruption level",
+      "schema": [
+        {
+          "name": "interruption-level",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                "passive",
+                "active",
+                "time-sensitive",
+                "critical",
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "App badge count",
+      "schema": [
+        {
+          "name": "badge",
+          "selector": {
+            "number": {
+              "min": 0,
+              "mode": "box",
+            },
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Foreground presentation",
+      "schema": [
+        {
+          "name": "presentation_options",
+          "selector": {
+            "select": {
+              "multiple": true,
+              "options": [
+                "alert",
+                "badge",
+                "sound",
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+  "mobile": [
+    {
+      "class": "nc-medium-form",
+      "label": "Notification group",
+      "schema": [
+        {
+          "name": "group",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "nc-compact-form",
+      "label": "Notification icon",
+      "schema": [
+        {
+          "name": "notification_icon",
+          "selector": {
+            "icon": {},
+          },
+        },
+      ],
+    },
+    {
+      "class": "",
+      "label": "Icon image URL",
+      "schema": [
+        {
+          "name": "icon_url",
+          "selector": {
+            "text": {},
+          },
+        },
+      ],
+    },
+  ],
+  "when": [
+    {
+      "class": "nc-compact-form",
+      "label": "Automation mode",
+      "schema": [
+        {
+          "disabled": false,
+          "name": "automation_mode",
+          "selector": {
+            "select": {
+              "mode": "dropdown",
+              "options": [
+                {
+                  "label": "Parallel (run triggers independently)",
+                  "value": "parallel",
+                },
+                {
+                  "label": "Single (ignore new triggers while running)",
+                  "value": "single",
+                },
+                {
+                  "label": "Restart (cancel and start again)",
+                  "value": "restart",
+                },
+                {
+                  "label": "Queued (run triggers in order)",
+                  "value": "queued",
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification false 1`] = `
+[
+  {
+    "name": "triggers",
+    "selector": {
+      "trigger": {},
+    },
+  },
+  {
+    "name": "clear_notification",
+    "selector": {
+      "boolean": {},
+    },
+  },
+]
+`;
+
+exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification true 1`] = `
+[
+  {
+    "name": "triggers",
+    "selector": {
+      "trigger": {},
+    },
+  },
+  {
+    "name": "clear_notification",
+    "selector": {
+      "boolean": {},
+    },
+  },
+]
+`;
+
+exports[`native editor controls > shows only automation mode under When to run and preserves its native control 1`] = `
+[
+  {
+    "disabled": false,
+    "name": "automation_mode",
+    "selector": {
+      "select": {
+        "mode": "dropdown",
+        "options": [
+          {
+            "label": "Parallel (run triggers independently)",
+            "value": "parallel",
+          },
+          {
+            "label": "Single (ignore new triggers while running)",
+            "value": "single",
+          },
+          {
+            "label": "Restart (cancel and start again)",
+            "value": "restart",
+          },
+          {
+            "label": "Queued (run triggers in order)",
+            "value": "queued",
+          },
+        ],
+      },
+    },
+  },
+]
+`;

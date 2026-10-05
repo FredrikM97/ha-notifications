@@ -111,11 +111,14 @@ version: 1
 alerts:
   - id: freezer_open
     name: Freezer door open
-    triggers:
-      - trigger: state
-        entity_id: binary_sensor.freezer_door
-        to: "on"
-        for: "00:05:00"
+    monitor:
+      triggers:
+        enabled: true
+        items:
+          - trigger: state
+            entity_id: binary_sensor.freezer_door
+            to: "on"
+            for: "00:05:00"
     notification:
       target:
         area_id: [kitchen]
@@ -132,19 +135,20 @@ alerts:
   - id: water_leak
     name: Water leak
     icon: mdi:water-alert
-    automation_mode: parallel
-    # Run when the conditions become true, at startup, and every 30 minutes.
-    on_condition_change: true
-    cancel_on_inactive: true
-    triggers:
-      - trigger: homeassistant
-        event: start
-      - trigger: time_pattern
-        minutes: /30
-    conditions:
-      - condition: state
-        entity_id: binary_sensor.kitchen_leak
-        state: "on"
+    monitor:
+      automation_mode: parallel
+      triggers:
+        enabled: true
+        items: []
+      conditions:
+        enabled: true
+        startup: true
+        periodic: true
+        interval: 1800
+        items:
+          - condition: state
+            entity_id: binary_sensor.kitchen_leak
+            state: "on"
     notification:
       target:
         user_id: [8f2c1d0e4b6a4c4e9a1b2c3d4e5f6a7b]
@@ -190,11 +194,10 @@ alerts:
 | --- | --- |
 | `id` | Lowercase letters, digits, and `_`, starting with a letter. The generated automation is `automation.ha_notifications_<id>`. |
 | `name`, `description`, `icon`, `enabled` | Display and on/off state. |
-| `triggers` | Native Home Assistant triggers. Startup and `time_pattern` triggers act as periodic condition checks. |
-| `conditions` | Native Home Assistant conditions. Give one an `id` to use `condition.<id>` in templates. |
-| `on_condition_change` | Also trigger when entities referenced by the conditions change. |
-| `cancel_on_inactive` | End confirmation waits when the conditions become false. |
-| `automation_mode` | `parallel` (default), `single`, `restart`, or `queued`. |
+| `monitor.automation_mode` | Main automation mode, defaulting to `parallel`. Conditional alerts use `parallel`. |
+| `monitor.triggers` | Custom native Home Assistant triggers. `enabled` controls the feature. |
+| `monitor.inactive` | Explicit cancellation triggers: `enabled` defaults to false, `items` contains native triggers, and `clear_notification` optionally clears the delivered notification. These triggers bypass main alert conditions. |
+| `monitor.conditions` | Native Home Assistant condition items plus built-in startup and periodic evaluations. `enabled` controls condition gating; conditions are evaluated when configured triggers fire. Give a condition an `id` to use `condition.<id>` in templates. |
 | `notification` | `target` (devices, areas, floors, labels, notify entities, users) is resolved to each recipient's notify service. `data` holds `title`, `message`, and any extra service data. `action` is an optional fallback notify action used when the target resolves to nothing. |
 | `confirmation` | `buttons`, `reminders`, a follow-up `notification`, and `actions` to run on confirm. |
 | `post_send_actions` | Actions to run after every send. |

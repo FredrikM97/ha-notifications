@@ -32,47 +32,42 @@ fresh one, `queued` runs triggers sequentially, and `parallel` starts
 independent runs. The default for new or unspecified alerts is `parallel`;
 existing saved mode choices are preserved. Parallel runs do not cancel an
 in-progress confirmation wait when another trigger fires.
-Every configured trigger starts the main generated automation. Optional alert
-conditions are applied as top-level conditions before its actions; with no
+Conditional alerts use `parallel` mode so an inactive evaluation does not
+interrupt an in-progress confirmation wait. The main generated automation
+keeps exactly the enabled configured triggers, including user-supplied IDs and
+`for` durations. Optional alert conditions gate its send actions; with no
 conditions, each configured trigger runs the actions. Startup and time-pattern
 triggers can therefore be used alone for unconditional checks, or combined
 with conditions to gate those checks on current state.
 An explicit Home Assistant `automation.trigger` call with `skip_condition: true`
-bypasses that gate and runs the main actions; it does not trigger the separate
-inactive detector.
+bypasses that gate and runs the main actions; it does not infer an inactive
+transition.
 The built-in Startup trigger runs at Home Assistant startup, and the Repeat
 trigger performs interval checks; custom Home Assistant triggers add other
-event sources. A state trigger targeting `on` or `off` is sufficient for
-event-driven alerts without a duplicate state condition. When conditions are
-configured, the **When conditions change** option derives state triggers from
-referenced entities and template triggers from entity-backed template
-conditions. Static templates need Startup, periodic, or custom event triggers.
-A separate detector watches entity-backed condition changes and checks the
-conditions negated to report inactive, independently of the main automation's
-condition-change trigger option. It also watches referenced entities for
-template conditions. When **Cancel on inactive** under **When to run > Triggers**
-is enabled, inferred reverse edges are added for binary state triggers. When
-Conditions are configured, the condition-inactive detector watches those edges
-and reports inactive only while the conditions are false. Without Conditions,
-the reverse edge is handled by an inactive branch in the main automation; it
-does not resend the alert, and no trigger-inactive automation is generated.
-A configured `for` duration is mirrored on the reverse edge, so both
-transitions use the same debounce period. Event, Startup, and time-pattern
-triggers have no general inverse. The condition-inactive detector is
-independent of the main automation's selected `single`, `restart`, `queued`, or
-`parallel` mode. For conditionless alerts, the inverse branch runs under the
-main automation's selected mode. Inactive is recorded once when the
-alert enters a false-condition period; repeated inactive evaluations are
-deduplicated, so an alert that starts while false still gets one history entry.
-A real active-to-inactive transition also ends confirmation waits as cancelled
-when enabled and removes the alert from the panel's Active view. Initial
-inactive evaluations do not cancel waits. This does not clear a notification
-already delivered to a device; notifications can still be cleared explicitly
-with the `ha_notifications.clear` service.
-The **When to run** setting **Cancel on inactive** controls only
-wait cancellation. Inactive history is still recorded when the setting is off.
-The setting remains available even without configured Conditions and defaults
-to off when missing from a saved alert.
+event sources. Conditions do not create triggers: they are evaluated only when
+a configured custom, Startup, or Repeat trigger fires. For a conditional alert,
+the same triggers also evaluate the conditions negated and report inactive when
+they are false. This condition-evaluation report remains in the main automation
+without cancelling waits or clearing notifications. Conditions are not continuously
+monitored, and no reverse state edge or door-closing watcher is inferred. An
+explicitly configured closing trigger remains a normal main trigger, with its
+original ID and duration; it is not repurposed as a completion handler.
+
+Each alert generates its main automation; without enabled main triggers it
+generates no automations. Automation mode belongs to `monitor.automation_mode`,
+not to individual triggers. Nested mode settings and retired options are rejected.
+The **Inactive** child section under **When to run** optionally defines native
+triggers in `monitor.inactive.items`. When enabled and nonempty, these generate
+a separate queued automation that records inactivity and sends `cancel_run` to
+pending confirmation waits. Its triggers bypass main alert conditions and mode.
+The optional `clear_notification` setting also clears the delivered notification.
+Disabled inactive settings are preserved but do not generate an automation.
+No inverse triggers or automation-completion listeners are inferred.
+Notifications default to the alert ID as their `data.tag`, so providers that
+support tagged replacement update the previous notification for that alert.
+User-supplied tags are preserved. Finishing or stopping a run does not clear a
+delivered notification. Use `ha_notifications.clear` explicitly when needed.
+
 The Active view only includes automations whose live Home Assistant `current`
 run count is nonzero. A last-triggered status or an outstanding notification
 does not by itself mean the automation is active.
@@ -85,11 +80,9 @@ by a stopped run remains delivered; cancelling a run does not clear it.
 ```mermaid
 flowchart TD
     A[Configured trigger fires] --> B{Main automation conditions true?}
-    B -- No --> Z[Main automation does not start]
+    B -- No --> R[Report condition inactive]
     B -- Yes --> C[ha_notifications.send<br/>record notification_sent]
-    A --> X{Detector conditions false?}
-    X -- Yes --> R[Report inactive<br/>cancel matching waits if enabled]
-    X -- No --> Y[No inactive report]
+    R --> Z[Main run finishes]
     C --> D{Post-send actions enabled?}
     D -- Yes --> E[Run configured native actions<br/>report action_executed]
     D -- No --> F{Confirmation enabled?}
@@ -115,8 +108,8 @@ The `ha_notifications.command` service fires an alert-scoped
 `ha_notifications_command` event. The generated confirmation wait currently
 handles `skip_confirmation` by resolving the wait as a timeout, so configured
 reminders and the normal timeout outcome still apply; it does not record a
-confirmation. On an active-to-inactive transition, the integration emits the
-internal `cancel_run` command to cancel matching confirmation waits.
+confirmation. The explicit `cancel_run` command cancels matching confirmation
+waits; inactive history reports do not emit it.
 The panel's Cancel active runs action emits `cancel_run` before stopping the
 automation, so confirmation waits wake immediately and terminate as cancelled.
 The generic command event can be extended with more commands without adding a

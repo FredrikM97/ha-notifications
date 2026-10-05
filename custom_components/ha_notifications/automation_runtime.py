@@ -113,9 +113,6 @@ def automation_status(
     alert: dict[str, Any],
 ) -> str:
     """Return the ownership/status projection for one generated automation."""
-    if alert.get("automation", {}).get("ownership") == "manual":
-        return "manual"
-
     generated = next(
         (item for item in document if item.get("id") == automation_id(alert)),
         None,

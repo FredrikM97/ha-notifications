@@ -27,8 +27,12 @@ interface HelpEntry {
 
 const styles = css`
   ha-top-app-bar-fixed {
-    --app-header-background-color: var(--sidebar-background-color);
-    --app-header-text-color: var(--sidebar-text-color);
+    --app-header-background-color: var(--primary-background-color);
+    --app-header-text-color: var(--primary-text-color);
+  }
+
+  ha-card {
+    color: var(--primary-text-color);
   }
 
   .nc-layout {
@@ -63,6 +67,16 @@ const styles = css`
     --code-mirror-max-height: unset;
   }
 
+  ha-form.nc-compact-form {
+    width: 100%;
+    max-width: 360px;
+  }
+
+  ha-form.nc-medium-form {
+    width: 100%;
+    max-width: 400px;
+  }
+
   .card-header {
     display: flex;
     align-items: center;
@@ -70,12 +84,37 @@ const styles = css`
     padding-bottom: var(--ha-space-6, 24px);
   }
 
-  .card-header h2 {
+  .nc-title-group {
+    display: grid;
     flex: 1;
+    gap: var(--ha-space-1, 4px);
+    min-width: 0;
+  }
+
+  .nc-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
+    min-width: 0;
+  }
+
+  .card-header h2 {
+    flex: 0 1 auto;
     min-width: 0;
     margin: 0;
-    font-size: var(--ha-font-size-xl, 24px);
+    font-size: var(--ha-font-size-l, 20px);
     font-weight: var(--ha-font-weight-normal, 400);
+  }
+
+  .nc-platform-summary {
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+    line-height: 1.4;
+  }
+
+  .card-header > ha-switch {
+    flex: none;
+    margin-inline-start: auto;
   }
 
   .nc-heading {
@@ -230,7 +269,6 @@ class AlertEditor extends LitElement {
             view.dom.style.minHeight = `${minimumHeight}px`;
             if (view.scrollDOM) {
               view.scrollDOM.style.minHeight = contentHeight;
-              view.scrollDOM.style.backgroundColor = "var(--secondary-background-color)";
             }
             if (view.contentDOM) view.contentDOM.style.minHeight = contentHeight;
             const gutter = view.dom.querySelector<HTMLElement>(".cm-gutters");
@@ -286,11 +324,9 @@ class AlertEditor extends LitElement {
         : []),
     ];
     const nav = navMenu(
-      editorSections.map((item) => ({
+      this.navigationSections().map((item) => ({
         key: item.key,
-        label: ["android", "ios"].includes(item.key) && !this.platformLoading && this.platforms.includes(item.key as "android" | "ios")
-          ? `${t(item.title)} (${t("editor.mobile.recipient_match")})`
-          : t(item.title),
+        label: t(item.title),
         child: Boolean(item.parent),
         status: sectionStatus(item, this.state),
       })),
@@ -315,10 +351,14 @@ class AlertEditor extends LitElement {
         <div class="nc-layout ${narrow ? "narrow" : ""}">
           ${narrow ? nav : nothing}
           <ha-card>
-            <div class="card-header"><h2>${section.toggle
-              ? `${t(section.toggle.get(this.state) ? "alert.enabled" : "alert.disabled")}: ${t(section.title)}`
-              : t(section.title)}</h2>${this.sectionHelp(section)}${this.sectionToggle(section)}</div>
-            <div class="card-content">${this.platformStatus(section)}${this.form(section)}</div>
+            <div class="card-header">
+              <div class="nc-title-group">
+                <div class="nc-title-row"><h2>${t(section.title)}</h2>${this.sectionHelp(section)}</div>
+                ${section.key === "recipients" ? this.recipientPlatformSummary() : nothing}
+              </div>
+              ${this.sectionToggle(section)}
+            </div>
+            <div class="card-content">${this.platformNotice(section)}${this.form(section)}</div>
           </ha-card>
           ${narrow ? nothing : nav}
         </div>
@@ -328,9 +368,11 @@ class AlertEditor extends LitElement {
 
   private form(section: EditorSection, field?: SchemaField): TemplateResult {
     const s = this.state;
-    if (section.toggle && !section.toggle.get(s)) return html``;
+    if (this.platformUnavailable(section)) return html``;
+    const disabled = this.sectionDisabled(section);
+    const fields = field ? [field] : section.schema(s);
     if (section.optional && !field) {
-      return html`${this.schema(section).map(item => {
+      return html`${fields.map(item => {
         if ("boolean" in item.selector) return this.form(section, item);
         const enabled = section.optional!.enabled(s, item.name);
         const label = s.localize(section.labels[item.name]);
@@ -339,23 +381,38 @@ class AlertEditor extends LitElement {
         return html`<div class="nc-option">
           <ha-settings-row>
             <span slot="heading" class="nc-heading">${label}${helper && helper !== helperKey ? this.helpButton(label, helper) : nothing}</span>
-            <ha-switch .checked=${enabled} aria-label=${`${s.localize(enabled ? "alert.disable" : "alert.enable")} ${label}`}
+            <ha-switch .checked=${enabled} .disabled=${disabled} aria-label=${`${s.localize(enabled ? "alert.disable" : "alert.enable")} ${label}`}
               @change=${(event: Event) => {
-                section.optional!.set(s, item.name, (event.currentTarget as HTMLInputElement).checked);
+                if (disabled) return;
+                const checked = (event.currentTarget as HTMLInputElement).checked;
+                section.optional!.set(s, item.name, checked);
+                if (checked && ["color", "ledColor", "notification_icon_color"].includes(item.name)
+                  && !section.read(s)[item.name]) {
+                  const color = this.themePrimaryColor();
+                  if (color) section.write(s, { [item.name]: color });
+                }
                 this.changed();
               }}></ha-switch>
           </ha-settings-row>
           ${enabled ? html`<div class="nc-option-input">${["color", "ledColor", "notification_icon_color"].includes(item.name)
-            ? html`<input type="color" aria-label=${`${label} ${s.localize("editor.mobile.picker")}`}
-                .value=${/^#[0-9a-f]{6}$/i.test(String(section.read(s)[item.name])) ? String(section.read(s)[item.name]) : "#03a9f4"}
+            ? html`<input type="color" ?disabled=${disabled} aria-label=${`${label} ${s.localize("editor.mobile.picker")}`}
+                .value=${/^#[0-9a-f]{6}$/i.test(String(section.read(s)[item.name]))
+                  ? String(section.read(s)[item.name])
+                  : this.themePrimaryColor()}
                 @input=${(event: Event) => {
+              if (disabled) return;
                   section.write(s, { [item.name]: (event.currentTarget as HTMLInputElement).value });
                   this.changed();
-                }}>` : nothing}${this.form(section, item)}</div>` : nothing}
+                }}>` : nothing}${["color", "ledColor", "notification_icon_color"].includes(item.name) ? nothing : this.form(section, item)}</div>` : nothing}
         </div>`;
       })}`;
     }
+    if (!field && fields.length > 1 && fields.some(item => item.width)) {
+      return html`${fields.map(item => this.form(section, item))}`;
+    }
+    const width = fields.length === 1 ? fields[0].width : undefined;
     return html`<ha-form
+      class=${width ? `nc-${width}-form` : ""}
       .hass=${s.hass}
       .narrow=${this.layout.narrow}
       .schema=${this.schema(section, field)}
@@ -378,7 +435,10 @@ class AlertEditor extends LitElement {
         );
       }}
       @value-changed=${(event: CustomEvent<{ value: Record<string, unknown> }>) => {
-        section.write(s, field ? { [field.name]: event.detail.value[field.name] } : event.detail.value);
+        if (this.sectionDisabled(section)) return;
+        section.write(s, field
+          ? { ...(section.optional ? {} : section.read(s)), [field.name]: event.detail.value[field.name] }
+          : event.detail.value);
         if (section.key === "recipients") void this.loadPlatforms();
         this.changed();
       }}
@@ -394,6 +454,7 @@ class AlertEditor extends LitElement {
       if (request !== this.platformRequest || !this.isConnected) return;
       this.platforms = result.platforms;
       this.platformUnknown = result.unknown;
+      this.moveFromUnavailablePlatform();
     } catch {
       if (request !== this.platformRequest || !this.isConnected) return;
       this.platforms = [];
@@ -403,6 +464,19 @@ class AlertEditor extends LitElement {
         this.platformLoading = false;
         this.requestUpdate();
       }
+    }
+  }
+
+  private navigationSections(): EditorSection[] {
+    if (this.platformLoading || this.platformUnknown) return editorSections;
+    return editorSections.filter(section =>
+      (section.key !== "android" && section.key !== "ios") || this.platforms.includes(section.key),
+    );
+  }
+
+  private moveFromUnavailablePlatform(): void {
+    if ((this.active.key === "android" || this.active.key === "ios") && this.platformUnavailable(this.active)) {
+      this.active = editorSections.find(section => section.key === "mobile")!;
     }
   }
 
@@ -427,25 +501,50 @@ class AlertEditor extends LitElement {
     return entries.length ? this.helpButton(t(section.title), entries) : nothing;
   }
 
-  private platformStatus(section: EditorSection): TemplateResult | typeof nothing {
-    if (section.key !== "mobile") return nothing;
+  private platformNotice(section: EditorSection): TemplateResult | typeof nothing {
     const t = this.state.localize;
+    if (this.platformUnavailable(section)) {
+      return html`<p class="nc-platform-unavailable" role="status">${t("editor.mobile.no_recipients")}</p>`;
+    }
+    return nothing;
+  }
+
+  private themePrimaryColor(): string {
+    const color = getComputedStyle(this).getPropertyValue("--primary-color").trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : "";
+  }
+
+  private recipientPlatformSummary(): TemplateResult {
+    const t = this.state.localize;
+    if (this.platformLoading) {
+      return html`<span class="nc-platform-summary" role="status">${t("editor.mobile.detecting")}</span>`;
+    }
     const labels = this.platforms.map(platform => t(`editor.mobile.${platform}`));
     if (this.platformUnknown) labels.push(t("editor.mobile.unknown"));
-    return html`<ha-settings-row>
-      <span slot="heading">${t("editor.mobile.platforms")}</span>
-      <span role="status">${this.platformLoading ? t("editor.mobile.detecting") : labels.join(", ")}</span>
-    </ha-settings-row>`;
+    return html`<span class="nc-platform-summary" role="status">${labels.length ? labels.join(", ") : t("editor.mobile.no_platforms")}</span>`;
+  }
+
+  private platformUnavailable(section: EditorSection): boolean {
+    return (section.key === "android" || section.key === "ios")
+      && !this.platformLoading
+      && !this.platformUnknown
+      && !this.platforms.includes(section.key);
   }
 
   private schema(section: EditorSection, field?: SchemaField): SchemaField[] {
-    const schema = field ? [field] : section.schema(this.state);
+    const globallyDisabled = this.sectionDisabled(section);
+    const fields = field ? [field] : section.schema(this.state);
+    const schema = fields.map(({ width, ...item }) => globallyDisabled ? { ...item, disabled: true } : item);
     const cacheKey = field ? `${section.key}.${field.name}` : section.key;
     const key = JSON.stringify(schema);
     const cached = this.schemas.get(cacheKey);
     if (cached?.key === key) return cached.schema;
     this.schemas.set(cacheKey, { key, schema });
     return schema;
+  }
+
+  private sectionDisabled(section: EditorSection): boolean {
+    return Boolean(section.toggle && !section.toggle.get(this.state));
   }
 
   private sectionToggle(section: EditorSection): TemplateResult | typeof nothing {
@@ -491,7 +590,7 @@ class AlertEditor extends LitElement {
     }
     if (this.dialog === "yaml") {
       return html`<ha-dialog open width="large" .headerTitle=${t("editor.common.alert_yaml")} @closed=${this.closeDialog}>
-        <ha-yaml-editor .hass=${this.state.hass} .defaultValue=${this.yaml} read-only copy-clipboard></ha-yaml-editor>
+        <ha-yaml-editor .hass=${this.state.hass} .defaultValue=${this.yaml} read-only></ha-yaml-editor>
       </ha-dialog>`;
     }
     return nothing;

@@ -126,8 +126,8 @@ describe("frontend API transport", () => {
       config: { alerts: Alert[] };
     };
     const savedAlert = saveRequest.config.alerts[0];
-    expect(savedAlert.triggers).toEqual(alert.triggers);
-    expect(savedAlert.conditions).toEqual([{
+    expect(savedAlert.monitor.triggers.items).toEqual(alert.monitor.triggers.items);
+    expect(savedAlert.monitor.conditions.items).toEqual([{
       condition: "state",
       entity_id: "binary_sensor.front_door",
       state: "on",
@@ -151,12 +151,12 @@ describe("frontend API transport", () => {
       config: { alerts: Record<string, unknown>[] };
     };
     expect(validationRequest.config.alerts[0]).toMatchObject({
-      conditions: [{
+      monitor: { conditions: { items: [{
         condition: "state",
         entity_id: "binary_sensor.front_door",
         state: "on",
         for: "00:05:00",
-      }],
+      }] } },
       notification: {
         action: "notify.mobile_app_phone",
         target: {
@@ -188,12 +188,12 @@ describe("frontend API transport", () => {
     };
     const savedAlert = request.config.alerts[0];
     expect(savedAlert).toMatchObject({
-      conditions: [{
+      monitor: { conditions: { items: [{
         condition: "state",
         entity_id: "binary_sensor.front_door",
         state: "on",
         for: "00:05:00",
-      }],
+      }] } },
       notification: {
         action: "notify.mobile_app_phone",
         data: {
@@ -208,7 +208,7 @@ describe("frontend API transport", () => {
         actions: [{ action: "light.turn_on", target: { entity_id: ["light.hall"] } }],
       },
     });
-    expect(savedAlert).toHaveProperty("conditions");
+    expect(savedAlert).toHaveProperty("monitor.conditions.items");
     expect(savedAlert).not.toHaveProperty("runtime");
     expect(savedAlert).toHaveProperty("post_send_actions", {
       enabled: true,

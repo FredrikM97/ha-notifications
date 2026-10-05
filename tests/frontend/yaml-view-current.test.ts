@@ -82,7 +82,7 @@ describe("YAML view", () => {
 
     expect(editor.defaultValue).toEqual(configFixture);
     expect(editor.label).toBe("HA Notifications YAML");
-    expect(editor.hasAttribute("copy-clipboard")).toBe(true);
+    expect(editor.hasAttribute("copy-clipboard")).toBe(false);
   });
 
   it("validates the parsed value and reports the result with HA's snackbar event", async () => {

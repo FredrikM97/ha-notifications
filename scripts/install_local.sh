@@ -3,28 +3,27 @@
 set -eu
 
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-config_dir=$(CDPATH= cd -- "$root_dir/../.." && pwd)
-target_dir="${1:-$config_dir/custom_components/ha_notifications}"
+default_config_dir=$(CDPATH= cd -- "$root_dir/../.." && pwd)
+config_dir="${1:-${HA_CONFIG_DIR:-$default_config_dir}}"
+target_dir="$config_dir/custom_components/ha_notifications"
+build_dir="$root_dir/build"
 
-if [ ! -d "$config_dir/custom_components" ]; then
+if [ ! -d "$config_dir" ]; then
     printf '%s\n' \
-        "Home Assistant custom_components directory not found: $config_dir/custom_components" >&2
+        "Home Assistant config directory not found: $config_dir" >&2
     exit 1
 fi
+
+for required_file in manifest.json __init__.py frontend/panel.js; do
+    if [ ! -f "$build_dir/$required_file" ]; then
+        printf '%s\n' "Build file is missing: $build_dir/$required_file. Run npm run build first." >&2
+        exit 1
+    fi
+done
 
 rm -rf "$target_dir"
 mkdir -p "$target_dir"
 
-cp -R \
-    "$root_dir/custom_components/ha_notifications/." \
-    "$target_dir/"
-
-mkdir -p "$target_dir/frontend"
-
-cp \
-    "$root_dir/build/frontend/panel.js" \
-    "$target_dir/frontend/panel.js"
+cp -R "$build_dir/." "$target_dir/"
 
 printf '%s\n' "Installed to $target_dir"
-
-exec /home/vscode/.local/ha-venv/bin/python -m homeassistant -c "$config_dir"
