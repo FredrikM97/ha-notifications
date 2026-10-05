@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from homeassistant.core import callback
 
 from custom_components.ha_notifications.bridge import (
     BRAND_URL,
@@ -428,7 +429,7 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
         "door", "Door", "waiting", "Waiting for confirmation", flow_id="run-1"
     )
     command_events = []
-    hass.bus.async_listen(EVENT_COMMAND, command_events.append)
+    hass.bus.async_listen(EVENT_COMMAND, callback(lambda event: command_events.append(event)))
 
     async def record_wait_cancellation(event) -> None:
         if event.data.get("command") == COMMAND_CANCEL_RUN:
@@ -448,6 +449,7 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
         hass,
         {"alert_id": "door"},
     )
+    await hass.async_block_till_done()
 
     assert result == {"cancelled": True}
     assert [event.data for event in command_events] == [{
