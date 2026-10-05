@@ -407,17 +407,13 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
     enabled: bool,
     should_reenable: bool,
 ) -> None:
-    from pytest_homeassistant_custom_component.common import (
-        MockConfigEntry,
-        async_mock_service,
-    )
-
     from custom_components.ha_notifications.const import (
         COMMAND_CANCEL_RUN,
         DOMAIN,
         EVENT_COMMAND,
     )
     from custom_components.ha_notifications.history import HistoryStore
+    from tests.backend.conftest import MockConfigEntry, async_mock_service
 
     alert = alert_factory("base", id="door", enabled=enabled)
     entry = MockConfigEntry(
