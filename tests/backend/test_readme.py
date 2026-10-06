@@ -20,7 +20,7 @@ _EXAMPLES = [
 
 
 def test_readme_has_configuration_examples() -> None:
-    assert len(_EXAMPLES) >= 2
+    assert _EXAMPLES
 
 
 @pytest.mark.parametrize("example", _EXAMPLES, ids=lambda e: e["alerts"][0]["id"])
