@@ -169,12 +169,13 @@ describe("native editor controls", () => {
     { key: "inactive", name: "triggers" },
     { key: "postSendActions", name: "actions" },
     { key: "postConfirmationActions", name: "actions" },
-  ])("uses the shared native selector theme in $key", async ({ key, name }) => {
+  ])("does not apply a custom native selector theme in $key", async ({ key, name }) => {
     const { editor } = await mount();
     await selectSection(editor, key);
-    expect(nativeForm(editor, name).classList.contains("nc-native-form")).toBe(true);
+    expect(nativeForm(editor, name).className).toBe("");
     const styles = (editor.constructor as typeof LitElement).styles!.toString();
-    expect(styles).toMatch(/ha-form\.nc-native-form\s*\{\s*color: var\(--secondary-text-color\);/);
+    expect(styles).not.toContain("nc-native-form");
+    expect(nativeForm(editor, name).style.color).toBe("");
     expect(nativeForm(editor, name).style.backgroundColor).toBe("");
   });
 
@@ -893,10 +894,56 @@ describe("native editor controls", () => {
     });
   });
 
-  it("insets expanded native fields without adding padding to collapsed rows", async () => {
+  it.each([
+    { key: "triggers", name: "triggers", tag: "ha-selector-trigger" },
+    { key: "conditions", name: "conditions", tag: "ha-selector-condition" },
+    { key: "postSendActions", name: "actions", tag: "ha-selector-action" },
+  ])("leaves code editors inside $tag untouched on insertion and rerender", async ({ key, name, tag }) => {
+    const { editor } = await mount();
+    await selectSection(editor, key);
+    const formRoot = nativeForm(editor, name).attachShadow({ mode: "open" });
+    const selector = document.createElement(tag);
+    const selectorRoot = selector.attachShadow({ mode: "open" });
+    const codeEditor = document.createElement("ha-code-editor");
+    const dom = document.createElement("div");
+    const scrollDOM = document.createElement("div");
+    const contentDOM = document.createElement("div");
+    const gutter = document.createElement("div");
+    gutter.className = "cm-gutters";
+    dom.append(scrollDOM, contentDOM, gutter);
+    const readView = vi.fn(() => ({ dom, scrollDOM, contentDOM }));
+    const readUpdate = vi.fn(() => Promise.resolve());
+    Object.defineProperties(codeEditor, {
+      codemirror: { get: readView },
+      updateComplete: { get: readUpdate },
+    });
+    selectorRoot.append(codeEditor);
+    formRoot.append(selector);
+
+    const directCodeEditor = document.createElement("ha-code-editor");
+    const directDom = document.createElement("div");
+    Object.assign(directCodeEditor, { codemirror: { dom: directDom } });
+    formRoot.append(directCodeEditor);
+    await vi.waitFor(() => expect(directDom.style.minHeight).toBe("420px"));
+
+    const expectUntouched = () => {
+      expect(readView).not.toHaveBeenCalled();
+      expect(readUpdate).not.toHaveBeenCalled();
+      for (const element of [dom, scrollDOM, contentDOM, gutter]) {
+        expect(element.style.cssText).toBe("");
+      }
+    };
+    expectUntouched();
+    editor.requestUpdate();
+    await settleElement(editor);
+    expectUntouched();
+  });
+
+  it("preserves native panel spacing on insertion, expansion and nested expansion", async () => {
     const { editor } = await mount();
     const form = editor.shadowRoot!.querySelector("ha-form")!;
     const panel = document.createElement("ha-expansion-panel");
+    panel.style.setProperty("--expansion-panel-content-padding", "0");
     form.attachShadow({ mode: "open" }).append(panel);
     const toggle = (expanded: boolean) => panel.dispatchEvent(new CustomEvent("expanded-will-change", {
       detail: { expanded },
@@ -905,7 +952,7 @@ describe("native editor controls", () => {
     }));
 
     toggle(true);
-    expect(panel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("var(--ha-space-6, 24px) var(--ha-space-4, 16px)");
+    expect(panel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("0");
     const nestedPanel = document.createElement("ha-expansion-panel");
     panel.attachShadow({ mode: "open" }).append(nestedPanel);
     nestedPanel.dispatchEvent(new CustomEvent("expanded-will-change", {
@@ -914,7 +961,7 @@ describe("native editor controls", () => {
       composed: true,
     }));
     expect(nestedPanel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("");
-    expect(panel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("var(--ha-space-6, 24px) var(--ha-space-4, 16px)");
+    expect(panel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("0");
     toggle(false);
     expect(panel.style.getPropertyValue("--expansion-panel-content-padding")).toBe("0");
   });

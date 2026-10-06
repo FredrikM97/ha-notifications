@@ -19,6 +19,18 @@ export interface OpenEditorOptions {
 }
 
 const TAG = "ha-notifications-alert-editor";
+const NATIVE_AUTOMATION_CONTROLS = new Set([
+  "ha-selector-trigger", "ha-selector-condition", "ha-selector-action",
+]);
+
+function* sizingElements(root: ParentNode): Generator<HTMLElement> {
+  const walker = document.createTreeWalker(root as Node, NodeFilter.SHOW_ELEMENT, {
+    acceptNode: node => NATIVE_AUTOMATION_CONTROLS.has((node as Element).localName)
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  let element: Node | null;
+  while ((element = walker.nextNode())) yield element as HTMLElement;
+}
 
 interface HelpEntry {
   title?: string;
@@ -65,10 +77,6 @@ const styles = css`
     min-width: 0;
     --code-mirror-height: auto;
     --code-mirror-max-height: unset;
-  }
-
-  ha-form.nc-native-form {
-    color: var(--secondary-text-color);
   }
 
   ha-form.nc-compact-form {
@@ -261,7 +269,7 @@ class AlertEditor extends LitElement {
         observed.add(root);
         this.editorObserver!.observe(root, { childList: true, subtree: true });
       }
-      for (const element of root.querySelectorAll<HTMLElement>("*")) {
+      for (const element of sizingElements(root)) {
         if (element.localName === "ha-code-editor") {
           const view = (element as HTMLElement & {
             codemirror?: { dom: HTMLElement; scrollDOM?: HTMLElement; contentDOM?: HTMLElement };
@@ -290,7 +298,7 @@ class AlertEditor extends LitElement {
         for (let pass = 0; pass < 8 && this.isConnected; pass++) {
           const updates: Promise<unknown>[] = [];
           const collect = (root: ParentNode): void => {
-            for (const element of root.querySelectorAll<HTMLElement>("*")) {
+            for (const element of sizingElements(root)) {
               const update = (element as HTMLElement & { updateComplete?: Promise<unknown> }).updateComplete;
               if (update) updates.push(update);
               if (element.shadowRoot) collect(element.shadowRoot);
@@ -415,9 +423,8 @@ class AlertEditor extends LitElement {
       return html`${fields.map(item => this.form(section, item))}`;
     }
     const width = fields.length === 1 ? fields[0].width : undefined;
-    const native = fields.some(item => ["trigger", "condition", "action"].some(type => type in item.selector));
     return html`<ha-form
-      class=${[width ? `nc-${width}-form` : "", native ? "nc-native-form" : ""].filter(Boolean).join(" ")}
+      class=${width ? `nc-${width}-form` : ""}
       .hass=${s.hass}
       .narrow=${this.layout.narrow}
       .schema=${this.schema(section, field)}
@@ -429,15 +436,6 @@ class AlertEditor extends LitElement {
         if (!key) return undefined;
         const helper = s.localize(key);
         return helper === key ? undefined : helper;
-      }}
-      @expanded-will-change=${(event: CustomEvent<{ expanded: boolean }>) => {
-        const panels = event.composedPath().filter((target): target is HTMLElement =>
-          target instanceof HTMLElement && target.localName === "ha-expansion-panel");
-        if (panels.length !== 1) return;
-        panels[0].style.setProperty(
-          "--expansion-panel-content-padding",
-          event.detail.expanded ? "var(--ha-space-6, 24px) var(--ha-space-4, 16px)" : "0",
-        );
       }}
       @value-changed=${(event: CustomEvent<{ value: Record<string, unknown> }>) => {
         if (this.sectionDisabled(section)) return;
