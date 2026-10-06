@@ -30,6 +30,7 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
     items: Action[];
   };
   expect(menu.narrow).toBe(narrow);
+  expect(menu.items.every(item => item.tooltip === item.label)).toBe(true);
   expect(menu.items.map(item => item.label)).toEqual([
     "View history", "Edit alert", "Open automation", "Cancel active runs", "Delete alert",
   ]);
@@ -67,6 +68,7 @@ it("scopes theme contrast and keyboard focus to native row controls", () => {
   sheet.replaceSync(alertListStyles.cssText);
   const rules = [...sheet.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
   const controls = rules.find(rule => rule.selectorText === ".nc-alert-controls")!;
+  expect(controls.style.gap).toBe("var(--ha-space-2, 8px)");
   expect(controls.style.color).toBe("var(--primary-text-color)");
   expect(controls.style.getPropertyValue("--wa-focus-ring")).toBe("2px solid var(--primary-color)");
   const buttons = rules.find(rule => rule.selectorText === '.nc-alert-labelled-actions ha-button[variant="neutral"]')!;

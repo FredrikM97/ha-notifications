@@ -78,6 +78,7 @@ export const alertListStyles = css`
   .nc-alert-controls {
     display: flex;
     align-items: center;
+    gap: var(--ha-space-2, 8px);
     flex-shrink: 0;
     color: var(--primary-text-color);
     --wa-focus-ring: 2px solid var(--primary-color);

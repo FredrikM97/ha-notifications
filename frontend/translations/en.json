@@ -277,6 +277,9 @@
     "show_all": "Show all history"
   },
   "yaml": {
+    "help": "About the YAML editor",
+    "validate_help": "Check this YAML configuration without saving it",
+    "reload_help": "Reload automations and restore the saved configuration",
     "description": "Advanced editor. Copy this YAML to another system or import a validated configuration into Home Assistant.",
     "copy": "Copy",
     "validate": "Validate",

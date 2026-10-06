@@ -1,11 +1,30 @@
 import { css, html, LitElement, nothing } from "lit";
-import { mdiCheckDecagramOutline, mdiReload } from "@mdi/js";
+import { mdiCheckDecagramOutline, mdiInformationOutline, mdiReload } from "@mdi/js";
 import { errorMessage, getConfig, reload, saveConfig, validateConfig } from "../api.js";
 import type { Hass } from "../types.js";
 import { localize } from "../localize.js";
 import { haButton, NarrowController, notify, toolbar, uiStyles } from "../ui.js";
 
 const styles = css`
+  .nc-yaml-title {
+    display: flex;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
+    min-width: 0;
+    color: var(--primary-text-color);
+  }
+
+  .nc-yaml-title strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: var(--ha-font-size-m, 16px);
+  }
+
+  .nc-yaml-title ha-icon-button {
+    flex-shrink: 0;
+    color: var(--secondary-text-color);
+  }
+
   ha-alert {
     display: block;
     margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0;
@@ -57,10 +76,16 @@ class YamlView extends LitElement {
   protected render() {
     return html`<ha-card>
       ${toolbar(
-        this.t("yaml.description"),
+        html`<div class="nc-yaml-title">
+          <strong>${this.t("yaml.aria")}</strong>
+          <ha-icon-button id="yaml-help" .path=${mdiInformationOutline}
+            .label=${this.t("yaml.help")} aria-describedby="yaml-help-tooltip"
+          ></ha-icon-button>
+          <ha-tooltip id="yaml-help-tooltip" for="yaml-help">${this.t("yaml.description")}</ha-tooltip>
+        </div>`,
         [
-          { label: this.t("yaml.validate"), path: mdiCheckDecagramOutline, action: this.validate, disabled: this.busy },
-          { label: this.t("yaml.reload"), path: mdiReload, action: this.reload, disabled: this.busy },
+          { label: this.t("yaml.validate"), tooltip: this.t("yaml.validate_help"), path: mdiCheckDecagramOutline, action: this.validate, disabled: this.busy },
+          { label: this.t("yaml.reload"), tooltip: this.t("yaml.reload_help"), path: mdiReload, action: this.reload, disabled: this.busy },
         ],
         this.layout.narrow,
         haButton(this.t("yaml.save"), this.save, { disabled: this.busy || !this.valid }),
@@ -72,7 +97,8 @@ class YamlView extends LitElement {
         ? html`<ha-yaml-editor
             .hass=${this.hass}
             .defaultValue=${this.config}
-            .label=${this.t("yaml.aria")}
+            .label=${""}
+            aria-label=${this.t("yaml.aria")}
             @value-changed=${(event: CustomEvent<{ value: unknown; isValid: boolean }>) => {
               event.stopPropagation();
               this.draft = event.detail.value;

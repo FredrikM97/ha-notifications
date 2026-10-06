@@ -16,8 +16,8 @@ and actions, so alerts keep working exactly like automations you wrote by hand.
   edited with Home Assistant's own visual editors.
 - **Flexible recipients** — devices, areas, floors, labels, notify entities, or
   Home Assistant users (resolved to their mobile app devices).
-- **Templated messages** — Jinja templates with alert context and per-condition
-  results.
+- **Templated messages** — Jinja templates use Home Assistant's automation
+  context; confirmation messages also receive confirmation and alert details.
 - **Confirmation** — actionable buttons, reminders until someone responds, an
   optional timeout, a follow-up notification, and actions to run on confirm.
 - **Post-send actions** — run any Home Assistant actions after each send.
@@ -50,7 +50,8 @@ It never touches your own `automations.yaml`.
   cancelling an active run, or deleting.
 - **Active** shows alerts with a run in progress.
 - **History** shows what happened. Search, filter by alert, event type, or
-  severity, and group events by run. Active filters stay visible as chips.
+  severity, and group events by run in collapsible groups with latest-activity
+  timestamps. Active filters stay visible as chips.
 - **YAML** edits the whole configuration at once.
 
 The editor has one section per concern (basic, when to run, triggers,
@@ -76,10 +77,11 @@ message, shared options, other platform settings, and custom YAML fields.
 Disabled values are retained in editor-only configuration, including after
 saving and reopening, and restored when enabled again. Optional settings have
 individual switches with inputs shown only when enabled. Notification, LED,
-and icon colors include a color picker alongside their text input.
+and icon colors are set with a color picker.
 The section menu marks platforms detected among the selected recipients.
 
-Mobile options include grouping, replacement tags, colors, and icons. Android
+Mobile options include grouping, colors, and icons. Replacement tags are
+assigned from the alert ID by default or can be supplied through YAML. Android
 adds channels, channel importance, sticky and persistent notifications,
 lock-screen visibility, timeout, vibration, and LED color. iOS adds subtitle,
 interruption level, sound, badge, icon glyph color, and foreground presentation.
@@ -155,9 +157,7 @@ alerts:
         device_id: [a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6]
       data:
         title: Water leak
-        message: >
-          {% if condition.leak %}Water detected in the kitchen.{% endif %}
-          Attempt {{ attempt }}.
+        message: Water detected in the kitchen.
     confirmation:
       enabled: true
       buttons:
@@ -192,12 +192,12 @@ alerts:
 
 | Key | Description |
 | --- | --- |
-| `id` | Lowercase letters, digits, and `_`, starting with a letter. The generated automation is `automation.ha_notifications_<id>`. |
+| `id` | Lowercase letters, digits, and `_`, starting with a letter. The generated automation has the stable unique ID `ha_notifications_<id>`; Home Assistant assigns its entity ID, which may differ or be renamed. |
 | `name`, `description`, `icon`, `enabled` | Display and on/off state. |
 | `monitor.automation_mode` | Main automation mode, defaulting to `parallel`. Conditional alerts use `parallel`. |
 | `monitor.triggers` | Custom native Home Assistant triggers. `enabled` controls the feature. |
 | `monitor.inactive` | Explicit cancellation triggers: `enabled` defaults to false, `items` contains native triggers, and `clear_notification` optionally clears the delivered notification. These triggers bypass main alert conditions. |
-| `monitor.conditions` | Native Home Assistant condition items plus built-in startup and periodic evaluations. `enabled` controls condition gating; conditions are evaluated when configured triggers fire. Give a condition an `id` to use `condition.<id>` in templates. |
+| `monitor.conditions` | Native Home Assistant condition items plus built-in startup and periodic evaluations. `enabled` controls condition gating; conditions are evaluated when configured triggers fire. |
 | `notification` | `target` (devices, areas, floors, labels, notify entities, users) is resolved to each recipient's notify service. `data` holds `title`, `message`, and any extra service data. `action` is an optional fallback notify action used when the target resolves to nothing. |
 | `confirmation` | `buttons`, `reminders`, a follow-up `notification`, and `actions` to run on confirm. |
 | `post_send_actions` | Actions to run after every send. |
@@ -206,13 +206,10 @@ Durations accept seconds, `"HH:MM:SS"`, or a mapping such as `{minutes: 15}`.
 
 ### Templates
 
-Message templates are rendered by Home Assistant when the alert runs. Besides
-all normal template helpers, these variables are available:
-
-- `alert_id`, `alert_name`, `alert_active`, `attempt`, `trigger`, `now`
-- `condition.<id>` — result of a condition with that `id`
-- In confirmation follow-ups: `confirmed_by`, `confirmation_response`,
-  `confirmation_response_id`
+Normal message templates are rendered by Home Assistant in the automation's
+template context. HA Notifications does not add general alert or condition
+variables to that context. Confirmation message templates additionally receive
+`confirmed_by`, `user_id`, `alert_id`, and `alert_name`.
 
 ## Services
 

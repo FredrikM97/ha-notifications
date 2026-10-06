@@ -38,11 +38,14 @@ export interface Action {
   action: () => void;
   warning?: boolean;
   disabled?: boolean;
+  tooltip?: string;
 }
 
 /** Icon actions that collapse into HA's ⋮ menu on narrow screens. */
 export function actions(items: Action[], narrow: boolean): TemplateResult {
-  return html`<ha-icon-overflow-menu .items=${items} .narrow=${narrow}></ha-icon-overflow-menu>`;
+  return html`<ha-icon-overflow-menu .items=${items.map(item => ({
+    ...item, tooltip: item.tooltip ?? item.label,
+  }))} .narrow=${narrow}></ha-icon-overflow-menu>`;
 }
 
 /**

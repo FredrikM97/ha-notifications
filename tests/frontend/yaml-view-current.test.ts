@@ -74,6 +74,36 @@ function changeYaml(editor: YamlEditor, value: unknown, isValid = true): void {
 }
 
 describe("YAML view", () => {
+  it("combines the title, help, icon actions and Save in one toolbar", async () => {
+    const view = mountYamlView();
+    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await settleElement(view);
+    const toolbar = view.shadowRoot!.querySelector(".nc-toolbar")!;
+    expect(toolbar.querySelector(".nc-yaml-title strong")?.textContent).toBe("HA Notifications YAML");
+    const help = toolbar.querySelector("#yaml-help") as HTMLElement & { label: string };
+    expect(help.label).toBe("About the YAML editor");
+    expect(help.getAttribute("aria-describedby")).toBe("yaml-help-tooltip");
+    const tooltip = toolbar.querySelector("ha-tooltip")!;
+    expect(tooltip.getAttribute("for")).toBe("yaml-help");
+    expect(tooltip.textContent).toContain("Advanced editor");
+    expect(toolbar.querySelector("ha-icon-overflow-menu")).not.toBeNull();
+    expect(toolbar.querySelector("ha-button")?.textContent?.trim()).toBe("Save YAML");
+    expect(view.shadowRoot!.querySelectorAll(".nc-toolbar")).toHaveLength(1);
+  });
+
+  it("provides descriptive native tooltips for YAML toolbar actions", async () => {
+    const view = mountYamlView();
+    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await settleElement(view);
+    const menu = view.shadowRoot!.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { label: string; tooltip: string }[];
+    };
+    expect(menu.items.map(({ label, tooltip }) => ({ label, tooltip }))).toEqual([
+      { label: "Validate", tooltip: "Check this YAML configuration without saving it" },
+      { label: "Reload", tooltip: "Reload automations and restore the saved configuration" },
+    ]);
+  });
+
   it("loads config into Home Assistant's YAML editor", async () => {
     const view = mountYamlView();
     await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
@@ -81,7 +111,8 @@ describe("YAML view", () => {
     const editor = editorFor(view);
 
     expect(editor.defaultValue).toEqual(configFixture);
-    expect(editor.label).toBe("HA Notifications YAML");
+    expect(editor.label).toBe("");
+    expect(editor.getAttribute("aria-label")).toBe("HA Notifications YAML");
     expect(editor.hasAttribute("copy-clipboard")).toBe(false);
   });
 
