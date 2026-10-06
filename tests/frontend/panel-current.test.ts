@@ -82,6 +82,27 @@ function selectTab(panel: HTMLElement, name: string): void {
 }
 
 describe("panel view", () => {
+  it("opens the native automation editor without hass.navigate", async () => {
+    const original = window.location.href;
+    const originalState = window.history.state;
+    const locationChanged = vi.fn();
+    window.addEventListener("location-changed", locationChanged);
+    try {
+      const panel = mountPanel();
+      await ready(panel);
+      const menu = panel.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+        items: { label: string; action(): void }[];
+      };
+      menu.items.find(item => item.label === "Open automation")!.action();
+      expect(window.location.pathname).toBe(`/config/automation/edit/ha_notifications_${alert.id}`);
+      expect(locationChanged).toHaveBeenCalledOnce();
+      expect((locationChanged.mock.calls[0][0] as CustomEvent).detail).toEqual({ replace: false });
+    } finally {
+      window.removeEventListener("location-changed", locationChanged);
+      window.history.replaceState(originalState, "", original);
+    }
+  });
+
   it("renders alert rows and their runtime status", async () => {
     const panel = mountPanel();
     await ready(panel);

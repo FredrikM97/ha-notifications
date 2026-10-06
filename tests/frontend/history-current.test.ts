@@ -51,7 +51,7 @@ describe("history helpers", () => {
   it("groups events by flow while keeping standalone events separate", () => {
     const second = {
       ...historyFixture[0],
-      event: { ...historyFixture[0].event, event_id: "event_garage_2" },
+      event: { ...historyFixture[0].event, event_id: "event_garage_2", timestamp: "2026-10-06T12:34:56+00:00" },
     };
     expect(groupHistoryEntries([historyFixture[0], second, historyFixture[1]])).toEqual([
       { flowId: "flow_garage", entries: [historyFixture[0], second] },
@@ -154,6 +154,26 @@ describe("history view", () => {
     expect(view.shadowRoot.querySelectorAll(".nc-flow")).toHaveLength(1);
     expect(view.shadowRoot.querySelectorAll(".nc-flow .nc-item")).toHaveLength(2);
     expect(view.shadowRoot.querySelector(".nc-flow > summary")?.textContent).toContain("Flow flow_garage");
+    expect(view.shadowRoot.querySelector(".nc-flow")?.hasAttribute("open")).toBe(false);
+    const time = view.shadowRoot.querySelector(".nc-flow > summary time")!;
+    expect(time.getAttribute("datetime")).toBe(second.event.timestamp);
+    expect(time.textContent).toContain("Latest activity:");
+  });
+
+  it("starts groups collapsed when grouping is enabled from the toolbar", async () => {
+    const view = mountHistory();
+    await settleElement(view);
+    const menu = view.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { action(): void }[];
+    };
+    menu.items[1].action();
+    await settleElement(view);
+    const groups = [...view.shadowRoot.querySelectorAll<HTMLDetailsElement>(".nc-flow")];
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups.every(group => !group.open)).toBe(true);
+    groups[0].open = true;
+    expect(groups[0].open).toBe(true);
+    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!).groupByFlow).toBe(true);
   });
 
   it("shows an alert-scoped empty state and lets the panel return to all history", async () => {

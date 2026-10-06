@@ -218,7 +218,12 @@ class HaNotificationsPanel extends LitElement {
     create: () => void this.openAlertEditor(null),
     edit: (alert) => void this.openAlertEditor(alert),
     history: (alert) => void this.showHistory({ id: alert.id, name: alert.name }),
-    navigate: (path) => this._hass?.navigate?.(path),
+    navigate: (path) => {
+      window.history.pushState({ from: window.location.pathname + window.location.search }, "", path);
+      window.dispatchEvent(new CustomEvent("location-changed", {
+        detail: { replace: false }, bubbles: true, composed: true,
+      }));
+    },
     toggle: (alert) =>
       void this.act(
         () => saveAlert(this._hass, { ...alert, enabled: !alert.enabled }),

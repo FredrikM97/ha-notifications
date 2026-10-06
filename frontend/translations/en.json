@@ -240,6 +240,7 @@
     }
   },
   "history": {
+    "latest_activity": "Latest activity: {{timestamp}}",
     "search": "Search history",
     "for_alert": "History for {{name}}",
     "alert_only": "Showing events for this alert only.",

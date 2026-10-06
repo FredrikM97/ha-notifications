@@ -241,6 +241,7 @@ const styles = css`
 
   .nc-flow > summary {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--ha-space-3, 12px);
     padding: var(--ha-space-3, 12px) 0 var(--ha-space-1, 4px);
     color: var(--secondary-text-color);
@@ -494,7 +495,12 @@ class HistoryView extends LitElement {
   }
 
   private flow(flowId: string, entries: Entry[]): TemplateResult {
-    return html`<details class="nc-flow" open>
+    const latest = entries.reduce<string | undefined>((timestamp, entry) => {
+      const candidate = entry.event?.timestamp;
+      if (!candidate || !Number.isFinite(Date.parse(candidate))) return timestamp;
+      return !timestamp || Date.parse(candidate) > Date.parse(timestamp) ? candidate : timestamp;
+    }, undefined);
+    return html`<details class="nc-flow">
       <summary>
         <span>${this.t("history.flow")} ${shortFlowId(flowId)}</span>
         <span>
@@ -502,6 +508,9 @@ class HistoryView extends LitElement {
             name: entries[0]?.config?.name || this.t("history.unknown_alert"),
           })}
         </span>
+        ${latest ? html`<time datetime=${latest}>${this.t("history.latest_activity", {
+          timestamp: formatLocalDateTime(latest, true, this.hass?.locale),
+        })}</time>` : nothing}
         <span>${this.t("history.flow_events", { count: entries.length })}</span>
       </summary>
       ${entries.map((entry) => this.item(entry, false))}
