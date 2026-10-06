@@ -117,17 +117,16 @@ it("scopes theme contrast and keyboard focus to native row controls", () => {
     background-color: var(--wa-color-fill-quiet);
   }`);
   expect(rules.some(rule => rule.selectorText.includes('variant="danger"'))).toBe(false);
-  const hover = rules.find(rule => rule.selectorText.includes("ha-icon-overflow-menu:hover"))!;
-  expect(hover.selectorText).toContain("ha-button:hover");
-  expect(hover.selectorText).toContain("ha-icon-overflow-menu:focus-within");
-  expect(alertListStyles.cssText).toContain("background-color: color-mix(in srgb, var(--primary-text-color) 12%, transparent);");
+  expect(rules.some(rule => rule.selectorText.includes("ha-icon-overflow-menu:hover"))).toBe(false);
+  expect(rules.some(rule => rule.selectorText.includes("ha-icon-overflow-menu:focus-within"))).toBe(false);
+  expect(rules.some(rule => rule.selectorText.includes("ha-button:focus-within"))).toBe(false);
 });
 
 it.each(["Enter", " "])("opens the row with %s without treating control key events as row activation", key => {
   const alert = draftAlertFixture({ id: "door", name: "Door" });
   const on: AlertHandlers = {
     create: vi.fn(), edit: vi.fn(), toggle: vi.fn(), history: vi.fn(),
-    remove: vi.fn(), cancelRun: vi.fn(), navigate: vi.fn(),
+    remove: vi.fn(), cancelRun: vi.fn(), testAlert: vi.fn(), navigate: vi.fn(),
   };
   const container = renderTemplate(alertList(null, [alert], {}, false, on, false));
   const row = container.querySelector(".nc-alert")!;

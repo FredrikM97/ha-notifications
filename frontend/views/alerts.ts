@@ -108,14 +108,6 @@ export const alertListStyles = css`
     background-color: var(--wa-color-fill-quiet);
   }
 
-  .nc-alert-controls ha-button:hover,
-  .nc-alert-controls ha-button:focus-within,
-  .nc-alert-controls ha-icon-overflow-menu:hover,
-  .nc-alert-controls ha-icon-overflow-menu:focus-within {
-    background-color: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
-    border-radius: 4px;
-  }
-
   @container (min-width: 1100px) {
     .nc-alert-labelled-actions {
       display: flex;
