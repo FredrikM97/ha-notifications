@@ -23,14 +23,11 @@ afterwards to load it. Your own `automations.yaml` is left untouched.
 - **Alerts:** create, edit, enable, or disable alerts; open their automations or
   history, test the saved action flow, and cancel active runs.
 - **Active:** alerts with automation runs currently in progress.
-- **History:** searchable events, optionally grouped into collapsed runs with
-  latest-activity timestamps.
+- **History:** searchable notification and automation events.
 - **YAML:** edit, validate, and save the complete configuration.
 
 Choose when an alert runs, its recipients, and its message. Conditions,
-confirmation, reminders, and Android/iOS options are optional. **Inactive**
-triggers explicitly cancel pending confirmation waits and can also clear the
-notification; no opposite-state triggers are inferred.
+confirmation, reminders, and Android/iOS options are optional.
 
 To use the panel as a dashboard card:
 
@@ -38,45 +35,8 @@ To use the panel as a dashboard card:
 type: custom:ha-notifications-card
 ```
 
-## Configuration Example
-
-The editor and YAML view use the same configuration. Replace the entity and
-recipient target below with your own:
-
-```yaml
-version: 1
-alerts:
-  - id: freezer_open
-    name: Freezer door open
-    monitor:
-      automation_mode: parallel
-      triggers:
-        enabled: true
-        items:
-          - trigger: state
-            entity_id: binary_sensor.freezer_door
-            to: "on"
-            for: "00:05:00"
-    notification:
-      target:
-        area_id: [kitchen]
-      data:
-        title: Freezer
-        message: The freezer door has been open for 5 minutes.
-```
-
-## Good to Know
-
-- Edit alerts, not their generated automations: those are rewritten on save.
-- Conditions are evaluated when configured triggers fire, not continuously.
-- **Test alert** runs saved actions with conditions bypassed. It sends real
-  notifications and executes configured actions; it does not simulate triggers.
-- Notifications use the alert ID as their default tag, allowing supported
-  providers to replace previous notifications. Clearing is explicit, not tied
-  to an automation finishing.
-- Confirmation messages support `{{ confirmed_by }}`, for example
-  `Confirmed by {{ confirmed_by }}`.
-- Pending confirmation waits do not survive a Home Assistant restart.
+Edit alerts rather than their generated automations. **Test alert** sends real
+notifications and executes configured actions; it is not a simulation.
 
 For details, see the [automation flow](docs/automation-flow.md),
 [development guide](docs/development.md), and

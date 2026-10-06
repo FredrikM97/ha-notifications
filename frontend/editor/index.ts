@@ -4,9 +4,9 @@ import { mdiCheckDecagramOutline, mdiClose, mdiCodeBraces, mdiInformationOutline
 import { errorMessage, getMobilePlatforms } from "../api.js";
 import type { Alert, Hass } from "../types.js";
 import { createLocalizer } from "../localize.js";
-import { actions, haButton, NarrowController, navMenu, notify, uiStyles, type Action } from "../ui.js";
+import { actions, haButton, NarrowController, navMenu, notify, toolbar, uiStyles, type Action } from "../ui.js";
 import { editableAlert, finalizeAlert } from "./alert-model.js";
-import { editorSections, sectionStatus, type EditorSection, type EditorState, type SchemaField } from "./sections.js";
+import { editorSections, rootSection, sectionStatus, type EditorSection, type EditorState, type SchemaField } from "./sections.js";
 
 export interface OpenEditorOptions {
   root: ShadowRoot;
@@ -23,10 +23,33 @@ const NATIVE_AUTOMATION_CONTROLS = new Set([
   "ha-selector-trigger", "ha-selector-condition", "ha-selector-action",
 ]);
 
-function* sizingElements(root: ParentNode): Generator<HTMLElement> {
+function isNativeSelector(field: { selector?: Record<string, unknown> }): boolean {
+  return ["trigger", "condition", "action"].some(type => type in (field.selector ?? {}));
+}
+
+function isScalarField(field: SchemaField): boolean {
+  return field.name !== "sound" && (
+    ["text", "icon", "number", "duration"].some(type => type in field.selector)
+    || ("select" in field.selector && !(field.selector.select as { multiple?: boolean }).multiple)
+  );
+}
+
+function isCompactField(field: SchemaField): boolean {
+  return isScalarField(field) && ["number", "duration", "select"].some(type => type in field.selector);
+}
+
+function* sizingElements(
+  root: ParentNode,
+  inspectNative?: (element: HTMLElement) => void,
+): Generator<HTMLElement> {
   const walker = document.createTreeWalker(root as Node, NodeFilter.SHOW_ELEMENT, {
-    acceptNode: node => NATIVE_AUTOMATION_CONTROLS.has((node as Element).localName)
-      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    acceptNode: node => {
+      if (NATIVE_AUTOMATION_CONTROLS.has((node as Element).localName)) {
+        inspectNative?.(node as HTMLElement);
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
   });
   let element: Node | null;
   while ((element = walker.nextNode())) yield element as HTMLElement;
@@ -38,6 +61,17 @@ interface HelpEntry {
 }
 
 const styles = css`
+  :host {
+    --nc-standard-field-width: 400px;
+    --nc-compact-field-width: 360px;
+    --nc-field-width: var(--nc-standard-field-width);
+    --nc-help-width: 32px;
+  }
+
+  .nc-compact {
+    --nc-field-width: var(--nc-compact-field-width);
+  }
+
   ha-top-app-bar-fixed {
     --app-header-background-color: var(--primary-background-color);
     --app-header-text-color: var(--primary-text-color);
@@ -73,20 +107,43 @@ const styles = css`
     min-width: 0;
   }
 
+  ha-card > section {
+    padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px);
+  }
+
+  .card-header .nc-toolbar {
+    width: 100%;
+    padding: 0;
+    border: 0;
+  }
+
+  .card-header .nc-toolbar-start {
+    overflow: visible;
+    white-space: normal;
+    color: var(--primary-text-color);
+  }
+
+  .nc-embedded-title {
+    margin: 0;
+    font-size: var(--ha-font-size-m, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+
+  .nc-embedded {
+    display: grid;
+    gap: var(--ha-space-3, 12px);
+    min-width: 0;
+  }
+
   ha-form {
     min-width: 0;
     --code-mirror-height: auto;
     --code-mirror-max-height: unset;
   }
 
-  ha-form.nc-compact-form {
+  ha-form.nc-field-form {
     width: 100%;
-    max-width: 360px;
-  }
-
-  ha-form.nc-medium-form {
-    width: 100%;
-    max-width: 400px;
+    max-width: var(--nc-field-width);
   }
 
   .card-header {
@@ -133,12 +190,56 @@ const styles = css`
     display: inline-flex;
     align-items: center;
     gap: var(--ha-space-1, 4px);
+    min-width: 0;
+  }
+
+  .nc-heading > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .nc-heading > .nc-help {
+    flex: none;
   }
 
   .nc-help {
     --mdc-icon-button-size: 32px;
     --mdc-icon-size: 20px;
     color: var(--secondary-text-color);
+  }
+
+  .nc-info-dialog {
+    --ha-dialog-width-sm: 420px;
+    --ha-dialog-width-full: calc(100vw - 32px);
+    --ha-dialog-min-height: auto;
+    --ha-dialog-max-height: calc(100dvh - 48px);
+  }
+
+  .nc-native-selector {
+    display: grid;
+    gap: var(--ha-space-2, 8px);
+    min-width: 0;
+  }
+
+  .nc-native-label {
+    font-size: var(--ha-font-size-m, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+    color: var(--secondary-text-color);
+  }
+
+  .nc-field-help {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ha-space-2, 8px);
+    min-width: 0;
+  }
+
+  .nc-field-help > ha-form {
+    flex: 1;
+  }
+
+  .nc-field-help > .nc-help {
+    flex: none;
   }
 
   .nc-help-content {
@@ -168,15 +269,40 @@ const styles = css`
   }
 
   .nc-option {
-    display: grid;
-    gap: var(--ha-space-3, 12px);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ha-space-2, 8px);
     min-width: 0;
+  }
+
+  .nc-option > .nc-heading {
+    flex: 0 1 auto;
+  }
+
+  .nc-option > ha-switch {
+    flex: none;
+    margin-inline-start: auto;
   }
 
   .nc-option-input {
     display: flex;
     align-items: center;
-    gap: var(--ha-space-3, 12px);
+    flex: 1 1 240px;
+    min-width: 0;
+    gap: var(--ha-space-2, 8px);
+  }
+
+  .nc-option-input.nc-field-input {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--nc-help-width);
+    flex: 0 1 calc(var(--nc-field-width) + var(--nc-help-width) + var(--ha-space-2, 8px));
+    width: 100%;
+    max-width: calc(var(--nc-field-width) + var(--nc-help-width) + var(--ha-space-2, 8px));
+  }
+
+  .nc-option-input.nc-color-input {
+    flex: none;
   }
 
   .nc-option-input ha-form {
@@ -194,11 +320,6 @@ const styles = css`
     cursor: pointer;
   }
 
-  ha-settings-row {
-    padding: 0;
-    border-bottom: 1px solid var(--divider-color);
-  }
-
   .nc-dirty {
     margin-inline-end: var(--ha-space-2, 8px);
     color: var(--secondary-text-color);
@@ -213,6 +334,7 @@ class AlertEditor extends LitElement {
   private options!: OpenEditorOptions;
   private state!: EditorState;
   private active = editorSections[0];
+  private localSelections = new Map<string, string>();
   private dirty = false;
   private saving = false;
   private dialog: "discard" | "yaml" | "help" | null = null;
@@ -264,18 +386,44 @@ class AlertEditor extends LitElement {
     this.editorObserver?.disconnect();
     clearTimeout(this.editorSizingTimer);
     const observed = new WeakSet<Node>();
-    const inspect = (root: ParentNode): void => {
+    const observe = (root: ParentNode): void => {
       if (!observed.has(root)) {
         observed.add(root);
         this.editorObserver!.observe(root, { childList: true, subtree: true });
       }
-      for (const element of sizingElements(root)) {
+    };
+    const inspectNativeTrigger = (root: ParentNode): void => {
+      observe(root);
+      for (const element of root.querySelectorAll<HTMLElement>("*")) {
+        if (!element.shadowRoot) continue;
+        if (element.localName === "ha-automation-trigger-editor" &&
+          !element.shadowRoot.querySelector("style[data-nc-trigger-inset]")) {
+          const style = document.createElement("style");
+          style.dataset.ncTriggerInset = "";
+          style.textContent = ".card-content.card:not(.yaml) { padding: var(--ha-space-4, 16px); }";
+          element.shadowRoot.append(style);
+        }
+        inspectNativeTrigger(element.shadowRoot);
+      }
+      if (root instanceof HTMLElement && root.shadowRoot) inspectNativeTrigger(root.shadowRoot);
+    };
+    const inspect = (root: ParentNode): void => {
+      observe(root);
+      for (const element of sizingElements(root, boundary => {
+        if (boundary.localName === "ha-selector-trigger") inspectNativeTrigger(boundary);
+      })) {
         if (element.localName === "ha-code-editor") {
           const view = (element as HTMLElement & {
             codemirror?: { dom: HTMLElement; scrollDOM?: HTMLElement; contentDOM?: HTMLElement };
           }).codemirror;
           if (view) {
-            const messageEditor = this.active.key === "notification" && this.dialog === null;
+            let owner: Element | null = element;
+            while (owner && owner.localName !== "ha-form") {
+              const parent = owner.parentElement;
+              const ownerRoot = owner.getRootNode();
+              owner = parent ?? (ownerRoot instanceof ShadowRoot ? ownerRoot.host : null);
+            }
+            const messageEditor = owner?.getAttribute("data-editor-section") === "notification" && this.dialog === null;
             const minimumHeight = messageEditor ? 320 : this.layout.narrow ? 320 : 420;
             const contentHeight = `${minimumHeight - 40}px`;
             view.dom.style.minHeight = `${minimumHeight}px`;
@@ -328,17 +476,16 @@ class AlertEditor extends LitElement {
   protected render(): TemplateResult {
     const { localize: t, alert } = this.state;
     const narrow = this.layout.narrow;
-    const section = this.active;
+    const root = this.active;
+    const sections = this.localSections();
+    const section = sections.find(item => item.key === this.localSelections.get(root.key)) ?? root;
     const menu: Action[] = [
       { label: t("editor.common.view_yaml"), path: mdiCodeBraces, action: this.showYaml },
-      ...(section.validate
-        ? [{ label: t(section.validate.label), path: mdiCheckDecagramOutline, action: () => this.validate(section) }]
-        : []),
     ];
     const nav = navMenu(
       this.navigationSections().map((item) => ({
         key: item.key,
-        label: t(item.title),
+        label: t(item.parent ? item.localTitle ?? item.title : item.title),
         child: Boolean(item.parent),
         status: sectionStatus(item, this.state),
       })),
@@ -363,14 +510,20 @@ class AlertEditor extends LitElement {
         <div class="nc-layout ${narrow ? "narrow" : ""}">
           ${narrow ? nav : nothing}
           <ha-card>
-            <div class="card-header">
-              <div class="nc-title-group">
-                <div class="nc-title-row"><h2>${t(section.title)}</h2>${this.sectionHelp(section)}</div>
-                ${section.key === "recipients" ? this.recipientPlatformSummary() : nothing}
-              </div>
-              ${this.sectionToggle(section)}
-            </div>
-            <div class="card-content">${this.platformNotice(section)}${this.form(section)}</div>
+            <section>
+              <section data-section=${section.key}>
+                <div class="card-header">${toolbar(html`<div class="nc-title-group">
+                  <div class="nc-title-row">${this.labelWithHelp(t(section.title), this.sectionHelp(section), true)}</div>
+                  ${section.key === "recipients" ? this.recipientPlatformSummary() : nothing}
+                </div>`, section.validate ? [{ label: t(section.validate.label), path: mdiCheckDecagramOutline, action: () => this.validate(section) }] : [],
+                narrow, html`${this.sectionToggle(section)}`)}</div>
+                <div class="card-content">${this.form(section)}${editorSections.filter(item => item.embedded && item.parent === section.key).map(item => html`
+                  <div class="nc-embedded" data-embedded-section=${item.key}>
+                    <div class="nc-embedded-title">${this.labelWithHelp(t(item.title), this.sectionHelp(item))}</div>
+                    ${this.form(item)}
+                  </div>`)}</div>
+              </section>
+            </section>
           </ha-card>
           ${narrow ? nothing : nav}
         </div>
@@ -385,14 +538,34 @@ class AlertEditor extends LitElement {
     const fields = field ? [field] : section.schema(s);
     if (section.optional && !field) {
       return html`${fields.map(item => {
-        if ("boolean" in item.selector) return this.form(section, item);
         const enabled = section.optional!.enabled(s, item.name);
         const label = s.localize(section.labels[item.name]);
         const helperKey = section.helpers?.[item.name];
         const helper = helperKey ? s.localize(helperKey) : undefined;
-        return html`<div class="nc-option">
-          <ha-settings-row>
-            <span slot="heading" class="nc-heading">${label}${helper && helper !== helperKey ? this.helpButton(label, helper) : nothing}</span>
+        if ("boolean" in item.selector) return html`<div class="nc-option nc-option-inline">
+          ${this.labelWithHelp(label, helper && helper !== helperKey ? this.helpButton(label, helper) : nothing)}
+          <ha-switch .checked=${Boolean(section.read(s)[item.name])} .disabled=${disabled}
+            aria-label=${label} @change=${(event: Event) => {
+              if (disabled) return;
+              section.write(s, { [item.name]: (event.currentTarget as HTMLInputElement).checked });
+              this.changed();
+            }}></ha-switch>
+        </div>`;
+        const color = ["color", "ledColor", "notification_icon_color"].includes(item.name);
+        const group = section.key === "mobile" ? "general" : section.key as "android" | "ios";
+        const colorValue = section.read(s)[item.name] ?? s.mobileDrafts?.[group]?.fields?.[item.name]?.value;
+        return html`<div class="nc-option nc-option-inline">
+          <div class="nc-option-input ${color ? "nc-color-input" : isScalarField(item) ? `nc-field-input${isCompactField(item) ? " nc-compact" : ""}` : ""}">${color
+            ? html`<input type="color" ?disabled=${disabled || !enabled} aria-label=${`${label} ${s.localize("editor.mobile.picker")}`}
+                .value=${/^#[0-9a-f]{6}$/i.test(String(colorValue))
+                  ? String(colorValue)
+                  : this.themePrimaryColor()}
+                @input=${(event: Event) => {
+                  if (disabled || !enabled) return;
+                  section.write(s, { [item.name]: (event.currentTarget as HTMLInputElement).value });
+                  this.changed();
+                }}>` : this.form(section, item)}${!color && helper && helper !== helperKey ? this.helpButton(label, helper) : nothing}</div>
+              ${color ? this.labelWithHelp(label, helper && helper !== helperKey ? this.helpButton(label, helper) : nothing) : nothing}
             <ha-switch .checked=${enabled} .disabled=${disabled} aria-label=${`${s.localize(enabled ? "alert.disable" : "alert.enable")} ${label}`}
               @change=${(event: Event) => {
                 if (disabled) return;
@@ -405,33 +578,50 @@ class AlertEditor extends LitElement {
                 }
                 this.changed();
               }}></ha-switch>
-          </ha-settings-row>
-          ${enabled ? html`<div class="nc-option-input">${["color", "ledColor", "notification_icon_color"].includes(item.name)
-            ? html`<input type="color" ?disabled=${disabled} aria-label=${`${label} ${s.localize("editor.mobile.picker")}`}
-                .value=${/^#[0-9a-f]{6}$/i.test(String(section.read(s)[item.name]))
-                  ? String(section.read(s)[item.name])
-                  : this.themePrimaryColor()}
-                @input=${(event: Event) => {
-              if (disabled) return;
-                  section.write(s, { [item.name]: (event.currentTarget as HTMLInputElement).value });
-                  this.changed();
-                }}>` : nothing}${["color", "ledColor", "notification_icon_color"].includes(item.name) ? nothing : this.form(section, item)}</div>` : nothing}
         </div>`;
       })}`;
     }
-    if (!field && fields.length > 1 && fields.some(item => item.width)) {
+    if (!field && fields.length > 1 && (section.helperIcons?.length || fields.some(item => isScalarField(item) || isNativeSelector(item)))) {
       return html`${fields.map(item => this.form(section, item))}`;
     }
-    const width = fields.length === 1 ? fields[0].width : undefined;
-    return html`<ha-form
-      class=${width ? `nc-${width}-form` : ""}
+    const helperField = fields.length === 1 && section.helperIcons?.includes(fields[0].name) ? fields[0] : undefined;
+    if (helperField && "boolean" in helperField.selector) {
+      const label = s.localize(section.labels[helperField.name] ?? helperField.name);
+      const helperKey = section.helpers?.[helperField.name];
+      const helper = helperKey ? s.localize(helperKey) : undefined;
+      const controlDisabled = disabled || Boolean(helperField.disabled);
+      return html`<div class="nc-option nc-option-inline" data-editor-field=${helperField.name}>
+        ${this.labelWithHelp(label, helper && helper !== helperKey ? this.helpButton(label, helper) : nothing)}
+        <ha-switch .checked=${Boolean(section.read(s)[helperField.name])} .disabled=${controlDisabled}
+          aria-label=${label} @change=${(event: Event) => {
+            if (controlDisabled) return;
+            section.write(s, { ...section.read(s), [helperField.name]: (event.currentTarget as HTMLInputElement).checked });
+            this.changed();
+          }}></ha-switch>
+      </div>`;
+    }
+    const scalar = fields.length === 1 && isScalarField(fields[0]);
+    const nativeField = fields.length === 1 && isNativeSelector(fields[0]) ? fields[0] : undefined;
+    const label = nativeField ? s.localize(section.labels[nativeField.name] ?? nativeField.name) : undefined;
+    const values = section.read(s);
+    if (field && section.optional && !section.optional.enabled(s, field.name)) {
+      const group = section.key === "mobile" ? "general" : section.key as "android" | "ios";
+      const retained = s.mobileDrafts?.[group]?.fields?.[field.name]?.value;
+      if (retained !== undefined) values[field.name] = retained;
+    }
+    const form = html`<ha-form
+      data-editor-section=${section.key}
+      class=${scalar ? `nc-field-form${isCompactField(fields[0]) ? " nc-compact" : ""}` : ""}
+      aria-label=${label ?? (fields.length === 1 && fields[0].hideLabel ? s.localize(section.labels[fields[0].name]) : nothing)}
       .hass=${s.hass}
       .narrow=${this.layout.narrow}
       .schema=${this.schema(section, field)}
-      .data=${section.read(s)}
-      .computeLabel=${(field: SchemaField) => s.localize(section.labels[field.name] ?? field.name)}
+      .data=${values}
+      .computeLabel=${(item: SchemaField) => isNativeSelector(item) || fields.find(candidate => candidate.name === item.name)?.hideLabel
+        ? "" : s.localize(section.labels[item.name] ?? item.name)}
       .computeHelper=${(field: SchemaField) => {
-        if (section.optional && !("boolean" in field.selector)) return undefined;
+        if (section.optional || section.helperIcons?.includes(field.name)
+          || fields.find(item => item.name === field.name)?.hideLabel) return undefined;
         const key = section.helpers?.[field.name];
         if (!key) return undefined;
         const helper = s.localize(key);
@@ -439,6 +629,7 @@ class AlertEditor extends LitElement {
       }}
       @value-changed=${(event: CustomEvent<{ value: Record<string, unknown> }>) => {
         if (this.sectionDisabled(section)) return;
+        if (field && section.optional && !("boolean" in field.selector) && !section.optional.enabled(s, field.name)) return;
         section.write(s, field
           ? { ...(section.optional ? {} : section.read(s)), [field.name]: event.detail.value[field.name] }
           : event.detail.value);
@@ -446,6 +637,17 @@ class AlertEditor extends LitElement {
         this.changed();
       }}
     ></ha-form>`;
+    if (nativeField) return html`<div class="nc-native-selector">
+      <div class="nc-native-label" role="heading" aria-level="3">${label}</div>
+      ${form}
+    </div>`;
+    if (field && section.helperIcons?.includes(field.name)) {
+      const helperKey = section.helpers?.[field.name];
+      const helper = helperKey ? s.localize(helperKey) : undefined;
+      const help = helper && helper !== helperKey ? this.helpButton(s.localize(section.labels[field.name]), helper) : nothing;
+      return html`<div class="nc-field-help">${form}${help}</div>`;
+    }
+    return form;
   }
 
   private async loadPlatforms(): Promise<void> {
@@ -457,7 +659,6 @@ class AlertEditor extends LitElement {
       if (request !== this.platformRequest || !this.isConnected) return;
       this.platforms = result.platforms;
       this.platformUnknown = result.unknown;
-      this.moveFromUnavailablePlatform();
     } catch {
       if (request !== this.platformRequest || !this.isConnected) return;
       this.platforms = [];
@@ -471,16 +672,14 @@ class AlertEditor extends LitElement {
   }
 
   private navigationSections(): EditorSection[] {
-    if (this.platformLoading || this.platformUnknown) return editorSections;
-    return editorSections.filter(section =>
-      (section.key !== "android" && section.key !== "ios") || this.platforms.includes(section.key),
-    );
+    return editorSections.filter(section => !section.parent).flatMap(root => [
+      root, ...editorSections.filter(section => section.parent === root.key && !section.embedded),
+    ]).filter(section => !this.platformUnavailable(section));
   }
 
-  private moveFromUnavailablePlatform(): void {
-    if ((this.active.key === "android" || this.active.key === "ios") && this.platformUnavailable(this.active)) {
-      this.active = editorSections.find(section => section.key === "mobile")!;
-    }
+  private localSections(): EditorSection[] {
+    return [this.active, ...editorSections.filter(section => section.parent === this.active.key && !section.embedded)]
+      .filter(section => !this.platformUnavailable(section));
   }
 
   private helpButton(title: string, content: string | HelpEntry[]): TemplateResult {
@@ -494,22 +693,21 @@ class AlertEditor extends LitElement {
       }}></ha-icon-button>`;
   }
 
+  private labelWithHelp(label: string, content: TemplateResult | typeof nothing, sectionHeading = false): TemplateResult {
+    return sectionHeading
+      ? html`<div class="nc-heading"><h2>${label}</h2>${content}</div>`
+      : html`<span class="nc-heading"><span>${label}</span>${content}</span>`;
+  }
+
   private sectionHelp(section: EditorSection): TemplateResult | typeof nothing {
     const t = this.state.localize;
-    const entries = Object.entries(section.helpers ?? {}).flatMap(([name, key]) => {
+    const entries = Object.entries(section.optional ? {} : section.helpers ?? {}).flatMap(([name, key]) => {
+      if (section.helperIcons?.includes(name)) return [];
       const text = t(key);
       return text === key ? [] : [{ title: t(section.labels[name]), text }];
     });
     if (section.toggle?.help) entries.unshift({ title: "", text: t(section.toggle.help) });
     return entries.length ? this.helpButton(t(section.title), entries) : nothing;
-  }
-
-  private platformNotice(section: EditorSection): TemplateResult | typeof nothing {
-    const t = this.state.localize;
-    if (this.platformUnavailable(section)) {
-      return html`<p class="nc-platform-unavailable" role="status">${t("editor.mobile.no_recipients")}</p>`;
-    }
-    return nothing;
   }
 
   private themePrimaryColor(): string {
@@ -531,13 +729,20 @@ class AlertEditor extends LitElement {
     return (section.key === "android" || section.key === "ios")
       && !this.platformLoading
       && !this.platformUnknown
-      && !this.platforms.includes(section.key);
+      && !this.platforms.includes(section.key)
+      && !section.toggle?.get(this.state)
+      && !Object.values(section.read(this.state)).some(value => value !== undefined && value !== null && value !== "")
+      && !Object.values(this.state.mobileDrafts?.[section.key]?.fields ?? {}).some(field => field.value !== undefined);
   }
 
   private schema(section: EditorSection, field?: SchemaField): SchemaField[] {
     const globallyDisabled = this.sectionDisabled(section);
     const fields = field ? [field] : section.schema(this.state);
-    const schema = fields.map(({ width, ...item }) => globallyDisabled ? { ...item, disabled: true } : item);
+    const schema = fields.map(({ hideLabel, ...item }) => {
+      const disabled = globallyDisabled || Boolean(section.optional && !("boolean" in item.selector)
+        && !section.optional.enabled(this.state, item.name));
+      return disabled ? { ...item, disabled: true } : item;
+    });
     const cacheKey = field ? `${section.key}.${field.name}` : section.key;
     const key = JSON.stringify(schema);
     const cached = this.schemas.get(cacheKey);
@@ -568,7 +773,7 @@ class AlertEditor extends LitElement {
   private dialogs(): TemplateResult | typeof nothing {
     const t = this.state.localize;
     if (this.dialog === "help") {
-      return html`<ha-dialog open width="medium" .headerTitle=${this.helpTitle} @closed=${this.closeDialog}>
+      return html`<ha-dialog class="nc-info-dialog" open type="alert" width="small" .headerTitle=${this.helpTitle} @closed=${this.closeDialog}>
         <div class="nc-help-content">${this.helpEntries.map(entry => html`<section class="nc-help-topic">
           ${entry.title ? html`<h3>${entry.title}</h3>` : nothing}
           <p>${entry.text}</p>
@@ -605,7 +810,10 @@ class AlertEditor extends LitElement {
   }
 
   private select = (key: string): void => {
-    this.active = editorSections.find((section) => section.key === key) ?? this.active;
+    const root = rootSection(key);
+    if (!root) return;
+    this.active = root;
+    this.localSelections.set(root.key, key);
     this.requestUpdate();
   };
 

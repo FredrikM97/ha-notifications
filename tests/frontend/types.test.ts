@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { defaultAlert } from "../../frontend/editor/alert-model.js";
-import type { Alert, AlertsConfig, MonitorConfig } from "../../frontend/types.js";
+import type { Alert, AlertsConfig, MonitorConfig, Notification } from "../../frontend/types.js";
 
 const canonicalAlert = {
   id: "door",
@@ -24,7 +24,7 @@ const canonicalAlert = {
   notification: {
     action: "notify.mobile_app_phone",
     target: { entity_id: ["notify.phone"] },
-    data: { message: "Open" },
+    title: "Front door", message: "Open", options: {  },
   },
 } satisfies Alert;
 
@@ -34,6 +34,17 @@ const canonicalConfig = {
 } satisfies AlertsConfig;
 
 describe("canonical frontend configuration types", () => {
+  it("types canonical content and opaque native options", () => {
+    expectTypeOf<keyof Notification>().toEqualTypeOf<"action" | "target" | "title" | "message" | "options">();
+    expectTypeOf<Notification["title"]>().toEqualTypeOf<string>();
+    expectTypeOf<Notification["message"]>().toEqualTypeOf<string>();
+    expectTypeOf<Notification["options"]>().toEqualTypeOf<Record<string, unknown>>();
+    const notification: Notification = {
+      title: "Door", message: "Open", options: { native_extra: ["opaque"], push: { sound: "default" } },
+    };
+    expect(notification.options.native_extra).toEqual(["opaque"]);
+  });
+
   it("includes explicit inactive configuration and monitor automation mode", () => {
     expectTypeOf<keyof MonitorConfig>().toEqualTypeOf<"automation_mode" | "triggers" | "conditions" | "inactive">();
     expectTypeOf<MonitorConfig["automation_mode"]>().toEqualTypeOf<"single" | "restart" | "queued" | "parallel">();

@@ -62,15 +62,16 @@ def _periodic_trigger(interval: ReminderInterval | None) -> dict[str, Any]:
 
 
 class NotificationConfig(BaseModel):
-    """Notification payload and native Home Assistant extensions."""
+    """Canonical destination, content, and opaque native device options."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     action: str | None = None
     target: dict[str, Any] = Field(default_factory=dict)
     title: str = ""
     message: str = ""
-    data: dict[str, Any] = Field(default_factory=dict)
+    use_default_tag: bool = Field(default=True, strict=True)
+    options: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("action")
     @classmethod
@@ -82,16 +83,6 @@ class NotificationConfig(BaseModel):
         return value
 
 
-class MobileOptionsConfig(BaseModel):
-    """Editor-only Mobile App settings grouped by platform."""
-
-    model_config = ConfigDict(extra="allow")
-
-    general: dict[str, Any] = Field(default_factory=dict)
-    android: dict[str, Any] = Field(default_factory=dict)
-    ios: dict[str, Any] = Field(default_factory=dict)
-
-
 class ConfirmationButtonConfig(BaseModel):
     """Known confirmation button fields with extension values preserved."""
 
@@ -101,22 +92,11 @@ class ConfirmationButtonConfig(BaseModel):
     label: str = ""
 
 
-class ConfirmationNotificationConfig(BaseModel):
-    """Known confirmation notification fields with HA payloads opaque."""
+class ConfirmationNotificationConfig(NotificationConfig):
+    """Follow-up content with recipients inherited when not overridden."""
 
-    model_config = ConfigDict(extra="allow")
-
-    enabled: bool | None = None
-    action: str | None = None
+    enabled: bool = False
     target: dict[str, Any] | None = None
-    title: str | None = None
-    message: str | None = None
-    data: dict[str, Any] | None = None
-
-    @model_serializer(mode="plain")
-    def serialize(self) -> dict[str, Any]:
-        values = {key: getattr(self, key) for key in ("enabled", "action", "target", "title", "message", "data") if key in self.model_fields_set}
-        return {**values, **(self.__pydantic_extra__ or {})}
 
 
 class ReminderConfig(BaseModel):
@@ -248,7 +228,6 @@ class AlertConfig(BaseModel):
     icon: str = "mdi:bell-outline"
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
     notification: NotificationConfig
-    mobile_options: MobileOptionsConfig | None = None
     confirmation: ConfirmationConfig | None = None
     post_send_actions: dict[str, Any] | None = None
     created_at: str | None = None

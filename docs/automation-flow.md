@@ -1,5 +1,87 @@
 # Automation Flow
 
+## Notification Payload Shape
+
+Saved alerts contain canonical `title`, `message`, and `options` alongside the
+destination. This also applies to `confirmation.notification`, whose explicit
+`enabled` switch controls follow-up delivery:
+
+```yaml
+notification:
+    target:
+        device_id: [phone_device_id]
+    title: Motion Detected in Backyard
+    message: Someone might be in the backyard.
+    use_default_tag: true
+    options:
+        color: "#2DF56D"
+        persistent: true
+```
+
+After resolving the recipient target, Home Assistant receives the same content
+inside the notify action's outer service-call `data` envelope:
+
+```yaml
+action: notify.mobile_app_phone
+data:
+    title: Motion Detected in Backyard
+    message: Someone might be in the backyard.
+    data:
+        color: "#2DF56D"
+        persistent: true
+        tag: alert_id
+```
+
+Native `{title, message, data: options}` is built only at the transport boundary.
+Device options retain their values, with the alert ID added as the default tag
+only when `use_default_tag` is true (the default). Set it to false at the
+notification level to omit that default and keep separate notifications. A
+custom `options.tag` is always preserved; no random tag is generated.
+Android `subject` and iOS `subtitle` remain native
+device options. Unknown options and template values are not coerced. Presence
+means enabled, absence disabled; root `mobile_options` and enabled-field
+metadata are not persisted. Disabled drafts survive only within the open editor.
+
+Generated `ha_notifications.send` and `clear` use this service contract:
+
+```yaml
+action: ha_notifications.send
+data:
+    alert_id: backyard
+    alert_name: Backyard motion
+    use_default_tag: true
+    flow_id: "{{ context.parent_id or context.id }}"
+    target:
+        device_id: [phone_device_id]
+    payload:
+        title: Motion Detected in Backyard
+        message: Someone might be in the backyard.
+        data:
+            color: "#2DF56D"
+            persistent: true
+```
+
+`action` is an optional service-level destination. `confirmation` and
+`history_reason` are optional integration metadata, as is `use_default_tag`
+(boolean, default true); these never enter `payload` or device options.
+Only `payload` reaches notify. Clear overrides the message with
+`clear_notification` and uses the same tag policy as send. Direct service calls
+must use the same `use_default_tag` and custom tag as the original send. Without
+either the default or a custom tag, clear cannot identify a previous push.
+Android persistent notifications require a tag. Changing the setting does not
+retag an earlier push. Confirmation messages are raw-protected until the send service renders
+`payload.message`; native options are never stripped for rendering. Follow-up
+recipients inherit from the main notification unless explicitly overridden.
+The follow-up's own `use_default_tag` defaults to true independently of the main
+notification; reminders reuse the main notification's value. Both editors expose
+the setting.
+
+Retired notification wrappers and persisted editor metadata are rejected, not
+adapted. Existing stored alerts require an explicit canonical update; nothing
+automatically rewrites or resets the user's config-entry data.
+
+## Generated Automations
+
 The generated automation is assembled from the canonical alert configuration.
 Only enabled features contribute actions to the YAML. The `ha_notifications`
 services record managed delivery, lifecycle events, and native action results
@@ -65,6 +147,7 @@ Disabled inactive settings are preserved but do not generate an automation.
 No inverse triggers or automation-completion listeners are inferred.
 Notifications default to the alert ID as their `data.tag`, so providers that
 support tagged replacement update the previous notification for that alert.
+Set `notification.use_default_tag: false` to omit the managed tag.
 User-supplied tags are preserved. Finishing or stopping a run does not clear a
 delivered notification. Use `ha_notifications.clear` explicitly when needed.
 

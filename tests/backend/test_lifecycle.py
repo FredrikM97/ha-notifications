@@ -326,7 +326,7 @@ async def test_generated_automation_executes_lifecycle_delivery(
     )
     await hass.async_block_till_done()
 
-    expected = [{"message": "Message", "data": {"tag": "base_alert"}}]
+    expected = [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
     assert delivered == (expected if should_deliver else [])
 
 
@@ -368,7 +368,9 @@ async def test_generated_automation_reports_inactive_without_clearing(
         notification={
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.mobile_app_phone"]},
-            "data": {"message": "Door open"},
+            "title": "",
+            "message": "Door open",
+            "options": {},
         },
     )
     entry = MockConfigEntry(
@@ -391,7 +393,7 @@ async def test_generated_automation_reports_inactive_without_clearing(
     hass.states.async_set("binary_sensor.door", "off")
     await hass.async_block_till_done()
 
-    assert delivered == [{"message": "Door open", "data": {"tag": "base_alert"}}]
+    assert delivered == [{"title": "", "message": "Door open", "data": {"tag": "base_alert"}}]
     history = await entry.runtime_data.history.async_entries("base_alert")
     assert [item["event"]["type"] for item in history] == [
         "inactive",
@@ -439,7 +441,7 @@ async def test_generated_automation_executes_startup_trigger(
     await hass.async_block_till_done()
 
     assert delivered == [
-        {"message": "Message", "data": {"tag": "base_alert"}}
+        {"title": "", "message": "Message", "data": {"tag": "base_alert"}}
     ]
 
 
@@ -486,7 +488,7 @@ async def test_generated_automation_executes_interval_trigger(
     await hass.async_block_till_done()
 
     assert delivered == [
-        {"message": "Message", "data": {"tag": "base_alert"}}
+        {"title": "", "message": "Message", "data": {"tag": "base_alert"}}
     ]
 
 
@@ -524,7 +526,9 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
         notification={
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.mobile_app_phone"]},
-            "data": {"message": "Message"},
+            "title": "",
+            "message": "Message",
+            "options": {},
         },
     )
     entry = MockConfigEntry(
@@ -540,7 +544,7 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
     await hass.services.async_call("automation", "reload", blocking=True)
     hass.states.async_set("sensor.temperature", "31")
     await hass.async_block_till_done()
-    assert delivered == [{"message": "Message", "data": {"tag": "base_alert"}}]
+    assert delivered == [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
 
 
 async def test_configured_triggers_run_with_multiple_condition_entities(
@@ -603,8 +607,8 @@ async def test_configured_triggers_run_with_multiple_condition_entities(
     await hass.async_block_till_done()
 
     assert delivered == [
-        {"message": "Message", "data": {"tag": "base_alert"}},
-        {"message": "Message", "data": {"tag": "base_alert"}},
+        {"title": "", "message": "Message", "data": {"tag": "base_alert"}},
+        {"title": "", "message": "Message", "data": {"tag": "base_alert"}},
     ]
 
 
@@ -657,7 +661,7 @@ async def test_generated_automation_deduplicates_repeated_condition_entities(
     await hass.async_block_till_done()
 
     assert delivered == [
-        {"message": "Message", "data": {"tag": "base_alert"}}
+        {"title": "", "message": "Message", "data": {"tag": "base_alert"}}
     ]
 
 
@@ -684,9 +688,7 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
             "state": "on",
         }],
     )
-    full_feature_alert["confirmation"]["notification"]["data"][
-        "message"
-    ] = "Confirmed by {{confirmed_by}}"
+    full_feature_alert["confirmation"]["notification"]["message"] = "Confirmed by {{confirmed_by}}"
     delivered: list[dict[str, object]] = []
     post_send_calls: list[dict[str, object]] = []
     confirmation_calls: list[dict[str, object]] = []
@@ -739,6 +741,7 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
         entry.runtime_data, full_feature_alert["id"], "waiting",
     )
     assert delivered == [{
+        "title": "",
         "message": "Door open",
         "data": {"tag": "full_feature", "actions": [{
             "action": "ha_notifications_full_feature_confirmation_confirm",
@@ -756,6 +759,7 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
     )
     await hass.async_block_till_done()
     assert delivered[-1] == {
+        "title": "",
         "message": "Confirmed by Unknown device",
         "data": {"tag": "full_feature"},
     }
@@ -778,9 +782,7 @@ async def test_full_flow_uses_native_automation(
     monkeypatch,
 ) -> None:
     """Exercise validation, persistence, native execution, and reconciliation."""
-    full_feature_alert["confirmation"]["notification"]["data"][
-        "message"
-    ] = "Confirmed by {{confirmed_by}}"
+    full_feature_alert["confirmation"]["notification"]["message"] = "Confirmed by {{confirmed_by}}"
 
     async def register_panel(_hass: HomeAssistant) -> None:
         return None
@@ -842,6 +844,7 @@ async def test_full_flow_uses_native_automation(
     hass.states.async_set("binary_sensor.window", "on")
     await asyncio.sleep(0)
     assert delivered == [{
+        "title": "",
         "message": "Door open",
         "data": {"tag": "full_feature", "actions": [{
             "action": "ha_notifications_full_feature_confirmation_confirm",
@@ -857,6 +860,7 @@ async def test_full_flow_uses_native_automation(
     await hass.async_block_till_done()
     assert confirmation_execution_order == ["notification", "action"]
     assert delivered[-1] == {
+        "title": "",
         "message": "Confirmed by Unknown device",
         "data": {"tag": "full_feature"},
     }
@@ -1242,7 +1246,7 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
     cleared = has_handler and clear_notification
     assert len(delivered) == (3 if cleared else 2)
     assert [item for item in delivered if item["message"] == "clear_notification"] == (
-        [{"message": "clear_notification", "data": {"tag": alert["id"]}}] if cleared else []
+        [{"title": "", "message": "clear_notification", "data": {"tag": alert["id"]}}] if cleared else []
     )
     assert sum(item["event"]["type"] == "notification_cleared" for item in entries) == int(cleared)
     assert not any(item["event"]["type"] in {"confirmation_completed", "confirmation_timeout"} for item in entries)
@@ -1590,8 +1594,11 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
                 "max_attempts": 2,
             },
             "notification": {
+                "enabled": True,
                 "action": "notify.mobile_app_phone",
-                "data": {"message": "Confirmed"},
+                "title": "",
+                "message": "Confirmed",
+                "options": {},
             },
             "actions": [{"action": "light.turn_on"}],
         },

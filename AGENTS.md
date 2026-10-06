@@ -32,6 +32,11 @@ integration and frontend sources instead. The generated frontend stays in
 `build/` until the local install or HACS packaging step stages it with the
 integration.
 
+Keep `README.md` short and stable: overview, installation, basic usage, the
+dashboard card snippet, and documentation links. Put configuration examples
+and feature-specific details in `docs/`, not in the README; avoid per-feature
+README churn.
+
 ## Validation
 
 Batch validation around coherent changes instead of rerunning checks after

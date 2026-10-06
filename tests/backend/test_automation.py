@@ -127,9 +127,15 @@ def _render_yaml(value: object) -> str:
 
 def _managed_notification(notification: dict[str, Any]) -> dict[str, Any]:
     """Return the selector-driven payload emitted by managed services."""
-    result = dict(notification)
-    result.pop("action", None)
-    return result
+    return {
+        **{key: notification[key] for key in ("action", "target") if notification.get(key)},
+        "use_default_tag": notification.get("use_default_tag", True),
+        "payload": {
+            "title": notification.get("title", ""),
+            "message": notification.get("message", ""),
+            "data": deepcopy(notification.get("options", {})),
+        },
+    }
 
 
 @pytest.fixture
@@ -155,15 +161,14 @@ def automation_alert() -> dict[str, object]:
         "notification": {
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.phone", "notify.tablet"]},
-            "data": {"message": "Low water"},
+            "message": "Low water",
         },
     }
 
 
 def test_generate_automation_uses_explicit_triggers_and_active_branches(automation_alert) -> None:
     generated = generate_automation(automation_alert)
-    notification = dict(automation_alert["notification"])
-    notification.pop("action")
+    notification = _managed_notification(automation_alert["notification"])
     assert generated["conditions"][0]["condition"] == "or"
     assert generated["conditions"][0]["conditions"][0]["conditions"][0] == automation_alert["monitor"]["conditions"]["items"][0]
     assert generated["triggers"] == [
@@ -181,26 +186,15 @@ def test_generate_automation_uses_explicit_triggers_and_active_branches(automati
     }
 
 
-def test_generate_automation_excludes_mobile_options(automation_alert) -> None:
+def test_generate_automation_rejects_persisted_mobile_options(automation_alert) -> None:
     mobile_options = {
         "general": {"fields": {"color": {"enabled": False, "value": "#ff0000"}}},
         "android": {"fields": {"channel": {"enabled": False, "value": "Disabled channel"}}},
         "ios": {"enabled": False, "values": {"sound": "disabled.aiff"}},
     }
     automation_alert["mobile_options"] = mobile_options
-    automation_alert["notification"]["notification_native"] = {"priority": "high"}
-
-    generated = generate_automation(automation_alert)
-    notification = _active_sequence(generated)[0]["data"]
-
-    assert "mobile_options" not in notification
-    assert notification["notification_native"] == {"priority": "high"}
-    assert notification["data"] == {"message": "Low water"}
-    rendered = _render_yaml(generated)
-    assert "mobile_options" not in rendered
-    assert "Disabled channel" not in rendered
-    assert "#ff0000" not in rendered
-    assert "disabled.aiff" not in rendered
+    with pytest.raises(ValidationError, match="mobile_options"):
+        generate_automation(automation_alert)
     assert automation_alert["mobile_options"] == mobile_options
 
 
@@ -398,10 +392,7 @@ async def test_unconditional_alert_has_no_inactive_handler_or_clear(
         "notification": {
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.phone"]},
-            "title": "Button",
-            "message": "Button pressed",
-            "data": {"tag": "button_alert"},
-            "notification_native": {"priority": "high"},
+            "title": "Button", "message": "Button pressed", "options": {"tag": "button_alert"},
         },
     })
 
@@ -948,6 +939,44 @@ def test_inactive_report_does_not_cancel_or_clear_without_explicit_feature(autom
     assert "ha_notifications.clear" not in _render_yaml(generated)
 
 
+@pytest.mark.parametrize("main_tag", [True, False])
+@pytest.mark.parametrize("follow_up_tag", [True, False])
+async def test_generated_tag_metadata_is_independent_for_main_and_follow_up(
+    hass: HomeAssistant, automation_alert, main_tag: bool, follow_up_tag: bool,
+) -> None:
+    automation_alert["notification"]["use_default_tag"] = main_tag
+    automation_alert["notification"]["options"] = {"tag": "main-custom"}
+    automation_alert["monitor"]["inactive"] = {
+        "enabled": True, "clear_notification": True,
+        "items": [{"trigger": "event", "event_type": "inactive"}],
+    }
+    automation_alert["confirmation"] = {
+        "enabled": True,
+        "buttons": [{"id": "confirm", "label": "Done"}],
+        "notification": {
+            "enabled": True, "message": "Done", "use_default_tag": follow_up_tag,
+            "options": {"tag": "follow-up-custom"},
+        },
+        "reminders": {"enabled": True, "max_attempts": 2},
+    }
+    generated = generate_automations(automation_alert)
+    sequence = _active_sequence(generated[0])
+    outcome = next(action for action in sequence if "choose" in action)
+    repeat = next(action["repeat"] for action in outcome["default"] if "repeat" in action)
+    follow_up = next(
+        action for action in outcome["choose"][0]["sequence"]
+        if action.get("action") == "ha_notifications.send"
+    )
+    for action in [sequence[0], repeat["sequence"][0], generated[1]["actions"][2], follow_up]:
+        data = action["data"]
+        is_follow_up = action is follow_up
+        assert data["use_default_tag"] is (follow_up_tag if is_follow_up else main_tag)
+        assert "use_default_tag" not in data["payload"]
+        assert "use_default_tag" not in data["payload"]["data"]
+        assert data["payload"]["data"]["tag"] == ("follow-up-custom" if is_follow_up else "main-custom")
+    assert await async_validate_alerts(hass, [automation_alert]) == generated
+
+
 def test_enabled_reminders_repeat_the_confirmation_notification(automation_alert) -> None:
     generated = generate_automation({
         **automation_alert,
@@ -999,7 +1028,7 @@ def test_reminder_attempt_title_is_opt_in(automation_alert) -> None:
         for action in outcome["default"]
         if "repeat" in action
     )
-    assert repeat["sequence"][0]["data"]["title"] == (
+    assert repeat["sequence"][0]["data"]["payload"]["title"] == (
         "Water alert - Attempt {{ repeat.index + 1 }}/3"
     )
 
@@ -1019,7 +1048,7 @@ def test_forget_after_is_disabled_by_default_and_opt_in(automation_alert, timeou
         **automation_alert,
         "confirmation": base_confirmation,
     }))
-    assert "timeout" not in disabled[0]["data"].get("data", {})
+    assert "timeout" not in disabled[0]["data"]["payload"]["data"]
 
     enabled = _active_sequence(generate_automation({
         **automation_alert,
@@ -1028,13 +1057,13 @@ def test_forget_after_is_disabled_by_default_and_opt_in(automation_alert, timeou
             "reminders": {**base_confirmation["reminders"], "forget_after_enabled": True},
         },
     }))
-    assert enabled[0]["data"]["data"]["timeout"] == 900
+    assert enabled[0]["data"]["payload"]["data"]["timeout"] == 900
 
 
 def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(full_feature_alert) -> None:
     branch = _active_sequence(generate_automation(full_feature_alert))
     assert branch[0]["action"] == "ha_notifications.send"
-    assert branch[0]["data"]["data"]["actions"]
+    assert branch[0]["data"]["payload"]["data"]["actions"]
     wait = next(action for action in branch if "wait_for_trigger" in action)
     assert wait["wait_for_trigger"]
     completion = next(action for action in branch if "choose" in action)
@@ -1119,7 +1148,17 @@ def test_confirmation_notification_opt_in_controls_only_follow_up_send(
         )
     if follow_up_sends:
         assert follow_up.index(follow_up_sends[0]) < action_index
-    assert all("enabled" not in action["data"] for action in follow_up_sends)
+        service_data = follow_up_sends[0]["data"]
+        assert service_data["payload"]["message"] == "{% raw %}Confirmed{% endraw %}"
+        assert service_data["confirmation"] == {
+            "device_id": "{{ wait.trigger.event.data.device_id | default('', true) }}",
+            "user_id": "{{ wait.trigger.event.context.user_id | default('', true) }}",
+        }
+        assert not {"template_message", "confirmation_device_id", "confirmation_user_id"}.intersection(
+            service_data["payload"].get("data", {})
+        )
+        assert service_data["history_reason"] == "confirmation_notification"
+    assert all("enabled" not in action["data"] and "notification" not in action["data"] for action in follow_up_sends)
     assert follow_up[-1] == {"stop": "confirmation completed"}
 
 
@@ -1128,7 +1167,7 @@ def test_confirmation_button_action_is_an_event_identifier(full_feature_alert) -
     send = branch[0]["data"]
     wait = next(action for action in branch if "wait_for_trigger" in action)
 
-    button_action = send["data"]["actions"][0]["action"]
+    button_action = send["payload"]["data"]["actions"][0]["action"]
     event_action = wait["wait_for_trigger"][0]["event_data"]["action"]
 
     assert button_action == event_action
@@ -1151,7 +1190,7 @@ def test_confirmation_button_id_defaults_to_stable_response_identifier(
     send = branch[0]["data"]
     wait = next(action for action in branch if "wait_for_trigger" in action)
 
-    assert send["data"]["actions"][0]["action"].endswith("_response_1")
+    assert send["payload"]["data"]["actions"][0]["action"].endswith("_response_1")
     assert wait["wait_for_trigger"][0]["event_data"]["action"].endswith(
         "_response_1"
     )
@@ -1368,6 +1407,7 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
                 "max_attempts": 2,
             },
             "notification": {
+                "enabled": True,
                 "action": "notify.mobile_app_phone",
                 "message": "Confirmed",
             },
@@ -1537,14 +1577,15 @@ def test_automation_boundary_preserves_persisted_native_extensions() -> None:
         "monitor": {"conditions": {"startup": True}},
         "notification": {
             "action": "notify.mobile_app_phone",
-            "native_notification": {"priority": "high"},
+            "options": {"native_notification": {"priority": "high"}},
         },
         "confirmation": {
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm", "button_native": "value"}],
             "notification": {
+                "enabled": True,
                 "action": "notify.mobile_app_phone",
-                "native_confirmation": {"channel": "alerts"},
+                "options": {"native_confirmation": {"channel": "alerts"}},
             },
             "reminders": {
                 "enabled": True,
@@ -1571,27 +1612,18 @@ def test_automation_boundary_preserves_persisted_native_extensions() -> None:
         for action in generated["actions"]
         if action.get("action") == "ha_notifications.send"
     )
-    assert send_action["data"]["native_notification"] == {
+    assert send_action["data"]["payload"]["data"]["native_notification"] == {
         "priority": "high",
     }
-    assert _active_sequence(generated)[0]["data"] == {
-        "alert_id": alert["id"],
-        "alert_name": alert["name"],
-        "flow_id": "{{ context.parent_id or context.id }}",
-        **_managed_notification(alert["notification"]),
-        "data": {
-            **alert["notification"].get("data", {}),
-            "actions": [{
-                "action": "ha_notifications_extended_confirmation_confirm",
-                "title": "Confirm",
-            }],
-        },
-    }
-    assert validated.notification.__pydantic_extra__ == {
+    assert send_action["data"]["payload"]["data"]["actions"] == [{
+        "action": "ha_notifications_extended_confirmation_confirm", "title": "Confirm",
+    }]
+    assert "notification" not in send_action["data"]
+    assert validated.notification.options == {
         "native_notification": {"priority": "high"},
     }
     assert validated.confirmation is not None
-    assert validated.confirmation.notification.__pydantic_extra__ == {
+    assert validated.confirmation.notification.options == {
         "native_confirmation": {"channel": "alerts"},
     }
     assert validated.confirmation.reminders.__pydantic_extra__ == {
@@ -1615,8 +1647,7 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
         "notification": {
             "action": "notify.mobile_app_phone",
             "target": {"entity_id": ["notify.phone"]},
-            "data": {"nested": {"priority": "high"}},
-            "native_notification": {"channel": {"name": "alerts"}},
+            "options": {"native_notification": {"channel": {"name": "alerts"}}},
         },
         "post_send_actions": {
             "enabled": True,
@@ -1638,7 +1669,7 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
         for action in _active_sequence(generated)
         if action.get("action") == "ha_notifications.send"
     )
-    assert send_action["data"]["native_notification"] == {
+    assert send_action["data"]["payload"]["data"]["native_notification"] == {
         "channel": {"name": "alerts"},
     }
     assert _active_sequence(generated)[-2]["native_action"] == {"preserve": True}
@@ -1692,6 +1723,7 @@ async def test_explicit_inactive_companion_snapshot_and_native_validation(
         assert companion["actions"][2]["data"] == {
             "alert_id": automation_alert["id"],
             "alert_name": automation_alert["name"],
+            "flow_id": "{{ context.parent_id or context.id }}",
             **_managed_notification(automation_alert["notification"]),
         }
     assert _render_yaml(companion) == snapshot

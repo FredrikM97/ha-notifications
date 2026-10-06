@@ -10,9 +10,9 @@
           "notify.mobile_app_phone"
         ]
       },
-      "data": {
-        "message": "Message"
-      }
+      "title": "",
+      "message": "Message",
+      "options": {}
     },
     "monitor": {
       "automation_mode": "parallel",
@@ -38,9 +38,9 @@
     "enabled": true,
     "notification": {
       "action": "notify.mobile_app_phone",
-      "data": {
-        "message": "Message"
-      }
+      "title": "",
+      "message": "Message",
+      "options": {}
     },
     "confirmation": {
       "enabled": true,
@@ -87,10 +87,9 @@
           "notify.somebody"
         ]
       },
-      "data": {
-        "title": "Title",
-        "message": "Message"
-      }
+      "title": "Title",
+      "message": "Message",
+      "options": {}
     },
     "confirmation": {
       "enabled": false
@@ -117,9 +116,9 @@
     "name": "Alert",
     "notification": {
       "action": "notify.mobile_app_phone",
-      "data": {
-        "message": "Message"
-      }
+      "title": "",
+      "message": "Message",
+      "options": {}
     },
     "monitor": {
       "automation_mode": "parallel",
@@ -143,9 +142,9 @@
     "name": "Demo",
     "notification": {
       "action": "notify.mobile_app_phone",
-      "data": {
-        "message": "Check this"
-      }
+      "title": "",
+      "message": "Check this",
+      "options": {}
     },
     "monitor": {
       "automation_mode": "parallel",
@@ -175,9 +174,9 @@
           "notify.mobile_app_phone"
         ]
       },
-      "data": {
-        "message": "Door open"
-      }
+      "title": "",
+      "message": "Door open",
+      "options": {}
     },
     "confirmation": {
       "enabled": true,
@@ -197,9 +196,10 @@
       },
       "notification": {
         "action": "notify.mobile_app_phone",
-        "data": {
-          "message": "Confirmed"
-        }
+        "title": "",
+        "message": "Confirmed",
+        "options": {},
+        "enabled": true
       },
       "actions": [
         {

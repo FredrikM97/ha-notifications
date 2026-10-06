@@ -18,11 +18,12 @@ import {
 type FormData = Record<string, unknown>;
 
 export interface SchemaField {
+  hideLabel?: boolean;
+  default?: string;
   name: string;
   selector: Record<string, unknown>;
   required?: boolean;
   disabled?: boolean;
-  width?: "compact" | "medium";
 }
 
 export interface EditorState {
@@ -31,19 +32,27 @@ export interface EditorState {
   alert: EditableAlert;
   postConfirmationActions: boolean;
   users: { value: string; label: string }[];
+  mobileDrafts?: Record<string, {
+    enabled?: boolean;
+    values?: FormData;
+    fields?: Record<string, { enabled: boolean; value?: unknown }>;
+  }>;
 }
 
 export interface EditorSection {
   key: string;
   /** Translation key for the section title. */
   title: string;
+  localTitle?: string;
   parent?: string;
+  embedded?: boolean;
   schema(state: EditorState): SchemaField[];
   read(state: EditorState): FormData;
   write(state: EditorState, data: FormData): void;
   /** Field label and helper translation keys, by field name. */
   labels: Record<string, string>;
   helpers?: Record<string, string>;
+  helperIcons?: string[];
   optional?: {
     enabled(state: EditorState, name: string): boolean;
     set(state: EditorState, name: string, enabled: boolean): void;
@@ -71,7 +80,7 @@ const MODES = ["parallel", "single", "restart", "queued"];
 const confirmed = (s: EditorState) => Boolean(s.alert.confirmation.enabled);
 
 function notificationData(alert: EditableAlert): FormData {
-  return alert.notification.data;
+  return alert.notification.options;
 }
 
 function mobileOptionsGroup(key: string): "general" | "android" | "ios" {
@@ -92,20 +101,23 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
   const section: EditorSection = {
     key,
     title: `editor.mobile.${key}`,
-    parent: key === "mobile" ? undefined : "mobile",
+    parent: "notification",
+    embedded: key === "mobile",
     labels: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}`])),
     helpers: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}_help`])),
-    schema: ({ alert }) => fields.map(field => {
+    schema: ({ alert, localize }) => fields.map(field => {
       const sound = (notificationData(alert).push as FormData | undefined)?.sound;
       return field.name === "sound" && sound && typeof sound === "object"
         ? { ...field, selector: { object: {} } }
-        : field;
+        : "text" in field.selector
+          ? { ...field, selector: { text: { ...(field.selector.text as Record<string, unknown>), placeholder: localize("editor.mobile.not_set") } } }
+          : field;
     }),
-    read: ({ alert }) => {
+    read: ({ alert, mobileDrafts }) => {
       const data = notificationData(alert);
       const push = data.push as FormData | undefined;
       const group = mobileOptionsGroup(key);
-      const savedSection = alert.mobile_options?.[group];
+      const savedSection = mobileDrafts?.[group];
       const savedValues = savedSection?.enabled === false ? savedSection.values : undefined;
       return Object.fromEntries(names.map(name => [
         name,
@@ -123,17 +135,18 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
         if (Object.keys(push).length) data.push = push;
         else delete data.push;
       }
-      alert.notification.data = data;
+      alert.notification.options = data;
     },
     optional: {
       enabled: (state, name) => {
-        const saved = state.alert.mobile_options?.[mobileOptionsGroup(key)]?.fields?.[name];
-        const value = section.read(state)[name];
-        return saved?.enabled ?? (value !== undefined && value !== null && value !== "");
+        const saved = state.mobileDrafts?.[mobileOptionsGroup(key)]?.fields?.[name];
+        const data = notificationData(state.alert);
+        const target = pushFields.includes(name) ? data.push as FormData | undefined : data;
+        return saved?.enabled ?? Boolean(target && Object.hasOwn(target, name));
       },
       set: (state, name, enabled) => {
-        state.alert.mobile_options ??= { general: {}, android: {}, ios: {} };
-        const group = state.alert.mobile_options[mobileOptionsGroup(key)]!;
+        state.mobileDrafts ??= {};
+        const group = state.mobileDrafts[mobileOptionsGroup(key)] ??= {};
         group.fields ??= {};
         const previous = group.fields[name];
         if (enabled) {
@@ -149,18 +162,17 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
       const data = notificationData(alert);
       const push = data.push as FormData | undefined;
       return names.some(name => {
-        const value = pushFields.includes(name) ? push?.[name] : data[name];
-        return value !== undefined && value !== null && value !== "";
+        return pushFields.includes(name) ? Boolean(push && Object.hasOwn(push, name)) : Object.hasOwn(data, name);
       });
     },
   };
   if (key === "android" || key === "ios") {
     const configured = section.status;
     section.toggle = {
-      get: state => state.alert.mobile_options?.[key]?.enabled ?? Boolean(configured?.(state)),
+      get: state => state.mobileDrafts?.[key]?.enabled ?? Boolean(configured?.(state)),
       set: (state, enabled) => {
-        state.alert.mobile_options ??= { general: {}, android: {}, ios: {} };
-        const mobileOptions = state.alert.mobile_options[key]!;
+        state.mobileDrafts ??= {};
+        const mobileOptions = state.mobileDrafts[key] ??= {};
         if (enabled) {
           const previousValues = mobileOptions.values;
           mobileOptions.enabled = true;
@@ -190,7 +202,7 @@ export const editorSections: EditorSection[] = [
     schema: () => [
       { name: "name", selector: text, required: true },
       { name: "description", selector: multiline },
-      { name: "icon", selector: { icon: {} }, width: "compact" },
+      { name: "icon", selector: { icon: {} } },
     ],
     read: ({ alert }) => ({ name: alert.name, description: alert.description, icon: alert.icon }),
     write: ({ alert }, data) => Object.assign(alert, data),
@@ -198,6 +210,7 @@ export const editorSections: EditorSection[] = [
   {
     key: "when",
     title: "editor.triggers.section",
+    localTitle: "editor.triggers.overview",
     labels: {
       automation_mode: "editor.basic.automation_mode",
     },
@@ -207,7 +220,6 @@ export const editorSections: EditorSection[] = [
     schema: (s) => [
       {
         name: "automation_mode",
-        width: "compact",
         disabled: s.alert.monitor.conditions.items.length > 0,
         selector: {
           select: {
@@ -266,7 +278,7 @@ export const editorSections: EditorSection[] = [
     schema: (s) => [
       { name: "startup", selector: bool },
       { name: "periodic", selector: bool },
-      ...(intervalTrigger(s.alert.monitor) ? [{ name: "interval", selector: duration, width: "compact" as const }] : []),
+      ...(intervalTrigger(s.alert.monitor) ? [{ name: "interval", selector: duration }] : []),
       { name: "conditions", selector: { condition: {} } },
     ],
     read: ({ alert }) => {
@@ -295,14 +307,15 @@ export const editorSections: EditorSection[] = [
     parent: "when",
     labels: { triggers: "editor.triggers.custom", clear_notification: "editor.inactive.clear_notification" },
     helpers: { clear_notification: "editor.inactive.clear_notification_help" },
+    helperIcons: ["clear_notification"],
     toggle: {
       get: ({ alert }) => alert.monitor.inactive.enabled,
       set: ({ alert }, enabled) => (alert.monitor.inactive.enabled = enabled),
       help: "editor.inactive.enable_help",
     },
     schema: () => [
-      { name: "triggers", selector: { trigger: {} } },
       { name: "clear_notification", selector: bool },
+      { name: "triggers", selector: { trigger: {} } },
     ],
     read: ({ alert }) => ({ triggers: alert.monitor.inactive.items, clear_notification: alert.monitor.inactive.clear_notification }),
     write: ({ alert }, data) => {
@@ -333,17 +346,20 @@ export const editorSections: EditorSection[] = [
   {
     key: "notification",
     title: "editor.notification.section",
-    labels: { title: "editor.notification.title", message: "editor.notification.message" },
-    helpers: { message: "editor.notification.template_values_help" },
-    schema: () => [
+    labels: { title: "editor.notification.title", message: "editor.notification.message", use_default_tag: "editor.notification.use_default_tag" },
+    helpers: { message: "editor.notification.template_values_help", use_default_tag: "editor.notification.use_default_tag_help" },
+    helperIcons: ["use_default_tag"],
+    schema: ({ localize }) => [
       { name: "title", selector: text },
-      { name: "message", selector: template },
+      { name: "message", selector: template, hideLabel: true, default: localize("editor.notification.message_placeholder") },
+      { name: "use_default_tag", selector: bool },
     ],
     read: ({ alert }) => ({
-      title: String(alert.notification.data.title ?? ""),
-      message: String(alert.notification.data.message ?? ""),
+      title: alert.notification.title,
+      message: alert.notification.message,
+      use_default_tag: alert.notification.use_default_tag ?? true,
     }),
-    write: ({ alert }, data) => Object.assign(alert.notification.data, data),
+    write: ({ alert }, data) => Object.assign(alert.notification, data),
   },
   {
     key: "postSendActions",
@@ -361,35 +377,36 @@ export const editorSections: EditorSection[] = [
     },
   },
   mobileSection("mobile", [
-    { name: "group", selector: text, width: "medium" },
+    { name: "group", selector: text },
     { name: "color", selector: text },
-    { name: "notification_icon", selector: { icon: {} }, width: "compact" },
+    { name: "notification_icon", selector: { icon: {} } },
     { name: "icon_url", selector: text },
   ]),
   mobileSection("android", [
-    { name: "channel", selector: text, width: "medium" },
-    { name: "importance", selector: dropdown(["min", "low", "default", "high", "max"]), width: "compact" },
+    { name: "channel", selector: text },
+    { name: "importance", selector: dropdown(["min", "low", "default", "high", "max"]) },
     { name: "sticky", selector: bool },
     { name: "persistent", selector: bool },
     { name: "alert_once", selector: bool },
     { name: "clickAction", selector: text },
-    { name: "timeout", selector: { number: { min: 0, mode: "box", unit_of_measurement: "s" } }, width: "compact" },
-    { name: "visibility", selector: dropdown(["public", "private", "secret"]), width: "compact" },
+    { name: "timeout", selector: { number: { min: 0, mode: "box", unit_of_measurement: "s" } } },
+    { name: "visibility", selector: dropdown(["public", "private", "secret"]) },
     { name: "vibrationPattern", selector: text },
     { name: "ledColor", selector: text },
   ]),
   mobileSection("ios", [
     { name: "subtitle", selector: text },
     { name: "url", selector: text },
-    { name: "interruption-level", selector: dropdown(["passive", "active", "time-sensitive", "critical"]), width: "compact" },
+    { name: "interruption-level", selector: dropdown(["passive", "active", "time-sensitive", "critical"]) },
     { name: "sound", selector: text },
-    { name: "badge", selector: { number: { min: 0, mode: "box" } }, width: "compact" },
+    { name: "badge", selector: { number: { min: 0, mode: "box" } } },
     { name: "notification_icon_color", selector: text },
-    { name: "presentation_options", selector: { select: { multiple: true, options: ["alert", "badge", "sound"] } }, width: "compact" },
+    { name: "presentation_options", selector: { select: { multiple: true, options: ["alert", "badge", "sound"] } } },
   ], ["interruption-level", "sound", "badge"]),
   {
     key: "confirmation",
     title: "editor.confirmation.section",
+    localTitle: "editor.confirmation.buttons",
     labels: {
       buttons: "editor.confirmation.button_label",
       forget_after_enabled: "editor.confirmation.enable_timeout",
@@ -412,7 +429,7 @@ export const editorSections: EditorSection[] = [
         },
       },
       { name: "forget_after_enabled", selector: bool },
-      ...(s.alert.confirmation.reminders.forget_after_enabled ? [{ name: "timeout", selector: duration, width: "compact" as const }] : []),
+      ...(s.alert.confirmation.reminders.forget_after_enabled ? [{ name: "timeout", selector: duration }] : []),
     ],
     read: ({ alert: { confirmation } }) => ({
       buttons: confirmation.buttons,
@@ -439,8 +456,8 @@ export const editorSections: EditorSection[] = [
       show_attempts: "editor.confirmation.reminder.show_attempt_count",
     },
     schema: () => [
-      { name: "interval", selector: duration, width: "compact" },
-      { name: "max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } }, width: "compact" },
+      { name: "interval", selector: duration },
+      { name: "max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } } },
       { name: "show_attempts", selector: bool },
     ],
     read: ({ alert: { confirmation } }) => ({
@@ -459,10 +476,15 @@ export const editorSections: EditorSection[] = [
     key: "confirmationNotification",
     title: "editor.confirmation.notification.section",
     parent: "confirmation",
-    labels: { message: "editor.confirmation.message" },
-    schema: () => [{ name: "message", selector: template }],
-    read: ({ alert }) => ({ message: String(alert.confirmation.notification.data.message ?? "") }),
-    write: ({ alert }, data) => (alert.confirmation.notification.data.message = data.message),
+    labels: { message: "editor.confirmation.message", use_default_tag: "editor.notification.use_default_tag" },
+    helpers: { use_default_tag: "editor.notification.use_default_tag_help" },
+    helperIcons: ["use_default_tag"],
+    schema: ({ localize }) => [
+      { name: "message", selector: template, hideLabel: true, default: localize("editor.confirmation.message") },
+      { name: "use_default_tag", selector: bool },
+    ],
+    read: ({ alert }) => ({ message: alert.confirmation.notification.message, use_default_tag: alert.confirmation.notification.use_default_tag ?? true }),
+    write: ({ alert }, data) => Object.assign(alert.confirmation.notification, data),
     toggle: {
       get: ({ alert }) => Boolean(alert.confirmation.notification.enabled),
       set: ({ alert }, enabled) => (alert.confirmation.notification.enabled = enabled),
@@ -489,4 +511,11 @@ export const editorSections: EditorSection[] = [
 
 export function sectionStatus(section: EditorSection, state: EditorState): boolean | undefined {
   return section.status?.(state) ?? section.toggle?.get(state);
+}
+
+export function rootSection(key: string): EditorSection | undefined {
+  const section = editorSections.find(section => section.key === key);
+  if (!section?.parent) return section;
+  const parent = editorSections.find(item => item.key === section.parent);
+  return parent?.parent ? editorSections.find(item => item.key === parent.parent) : parent;
 }

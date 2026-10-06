@@ -71,14 +71,14 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
       "name": "Front door",
       "notification": {
         "action": "notify.mobile_app_phone",
-        "data": {
-          "message": "Open",
-        },
+        "message": "Open",
+        "options": {},
         "target": {
           "entity_id": [
             "notify.phone",
           ],
         },
+        "title": "Front door",
       },
     },
   ],

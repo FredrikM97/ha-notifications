@@ -27,11 +27,11 @@ export function defaultAlert(): Alert {
       conditions: { enabled: true, items: [], startup: false, periodic: false, interval: DEFAULT_INTERVAL_SECONDS },
       inactive: { enabled: false, items: [], clear_notification: false },
     },
-    notification: { target: {}, data: { title: "", message: "" } },
+    notification: { target: {}, title: "", message: "", use_default_tag: true, options: {} },
     confirmation: {
       enabled: false,
       buttons: [{ id: "confirm", label: "Done" }],
-      notification: { enabled: false, data: { message: "" } },
+      notification: { enabled: false, title: "", message: "", use_default_tag: true, options: {} },
       reminders: {
         enabled: true,
         interval: "00:30:00",
@@ -48,20 +48,14 @@ export function defaultAlert(): Alert {
 export function confirmationNotificationEnabled(
   notification: ConfirmationConfig["notification"],
 ): boolean {
-  if (typeof notification.enabled === "boolean") return notification.enabled;
-  return Boolean(
-    notification.action ||
-      notification.target !== undefined ||
-      notification.title !== undefined ||
-      notification.message !== undefined ||
-      notification.data !== undefined,
-  );
+  return notification.enabled === true;
 }
 
 /** Deep copy with every optional block the editor binds to filled in. */
 export function editableAlert(source?: Alert | null): EditableAlert {
   const raw = JSON.parse(JSON.stringify(source || defaultAlert())) as Alert & Record<string, unknown>;
   const alert = raw as Alert;
+  alert.notification.use_default_tag ??= true;
   const monitorDefaults = defaultAlert().monitor;
   const triggers = alert.monitor?.triggers;
   alert.monitor = {
@@ -87,12 +81,10 @@ export function editableAlert(source?: Alert | null): EditableAlert {
   const confirmation = { ...defaults, ...alert.confirmation };
   const notification = confirmation.notification || defaults.notification;
   confirmation.notification = {
+    ...defaults.notification,
     ...notification,
     enabled: confirmationNotificationEnabled(notification),
-    data: {
-      ...notification.data,
-      message: String(notification.data?.message ?? notification.message ?? ""),
-    },
+    options: { ...notification.options },
   };
   confirmation.reminders = { ...defaults.reminders, ...confirmation.reminders };
   confirmation.actions ||= [];
@@ -155,7 +147,7 @@ export function finalizeAlert(
   const { confirmation, notification } = alert;
   if (validate) {
     if (!alert.name.trim()) throw new Error("Name is required.");
-    if (!hasRecipients(notification.target)) {
+    if (!notification.action && !hasRecipients(notification.target)) {
       throw new Error("Select at least one device, area, label, or notification entity in Recipients.");
     }
     if (
@@ -167,9 +159,6 @@ export function finalizeAlert(
   }
   alert.name = alert.name.trim();
   alert.icon = alert.icon?.trim() || "mdi:bell-outline";
-  if (confirmation.notification.enabled && !confirmation.notification.target) {
-    confirmation.notification.target = notification.target;
-  }
   if (!postConfirmationActions) confirmation.actions = [];
   if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.actions?.length) {
     delete alert.post_send_actions;

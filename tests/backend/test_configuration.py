@@ -1,6 +1,7 @@
 """Tests for the canonical configuration contract."""
 
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -10,9 +11,65 @@ from custom_components.ha_notifications.config_flow import HaNotificationsConfig
 from custom_components.ha_notifications.configuration import (
     Configuration,
     ConfirmationConfig,
+    ConfirmationNotificationConfig,
+    NotificationConfig,
     TriggerOptions,
     validate_config,
 )
+
+
+@pytest.mark.parametrize("name", ["base", "confirmation", "notification", "configuration", "persisted", "full_feature"])
+def test_shared_alert_fixtures_use_canonical_configuration(backend_alerts, name: str) -> None:
+    raw = {"alerts": [backend_alerts[name]]}
+    original = deepcopy(raw)
+    validated = validate_config(raw)
+    assert validate_config(validated) == validated
+    assert raw == original
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+@pytest.mark.parametrize("enabled", [None, True, False])
+def test_notification_default_tag_is_metadata_with_a_deterministic_default(model, enabled) -> None:
+    raw = {"options": {"tag": "custom", "native_extra": True}}
+    if enabled is not None:
+        raw["use_default_tag"] = enabled
+    stored = model.model_validate(raw).model_dump(exclude_none=True)
+    assert stored["use_default_tag"] is (True if enabled is None else enabled)
+    assert stored["options"] == raw["options"]
+    assert model.model_validate(stored).model_dump(exclude_none=True) == stored
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+@pytest.mark.parametrize("invalid", ["false", 0, None, {}])
+def test_notification_default_tag_requires_a_boolean(model, invalid) -> None:
+    with pytest.raises(ValidationError, match="valid boolean"):
+        model.model_validate({"use_default_tag": invalid})
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+def test_notification_models_define_canonical_content_fields(model) -> None:
+    assert {"title", "message", "options"} <= model.model_fields.keys()
+    assert "data" not in model.model_fields
+
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
+@pytest.mark.parametrize("content", [{}, {"title": "Title only"}, {"message": ""}])
+def test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message(
+    confirmation: bool, content: dict,
+) -> None:
+    notification = {"action": "notify.mobile_app_phone", **content}
+    alert = {"id": "content_alert", "notification": {}}
+    if confirmation:
+        alert["confirmation"] = {"enabled": True, "notification": notification}
+    else:
+        alert["notification"] = notification
+
+    validated = validate_config({"alerts": [alert]})["alerts"][0]
+    stored = validated["confirmation"] if confirmation else validated
+
+    assert stored["notification"]["message"] == content.get("message", "")
+    assert stored["notification"]["title"] == content.get("title", "")
+    assert stored["notification"]["options"] == {}
 
 
 def test_validate_config_accepts_canonical_monitor_object() -> None:
@@ -86,34 +143,118 @@ def test_validate_config_preserves_independent_trigger_and_condition_enablement(
     assert alert["monitor"]["conditions"]["enabled"] is True
 
 
-def test_validate_config_preserves_mobile_options_groups() -> None:
+def test_validate_config_rejects_persisted_mobile_options_groups() -> None:
     mobile_options = {
         "general": {"fields": {"color": {"enabled": False, "value": "#ff0000"}}},
         "android": {"enabled": False, "values": {"channel": "Alerts", "ttl": 0}},
         "ios": {"enabled": False, "values": {"push": {"sound": None}}},
     }
-    validated = validate_config({"alerts": [{
+    raw = {"alerts": [{
         "id": "mobile_alert",
         "mobile_options": mobile_options,
         "notification": {
-            "notification_native": {"priority": "high"},
+            "options": {"native_extra": {"priority": "high"}},
         },
-    }]})
-    alert = Configuration.model_validate(validated).alerts[0]
+    }]}
+    original = deepcopy(raw)
+    with pytest.raises(ValidationError, match="mobile_options"):
+        validate_config(raw)
+    assert raw == original
 
-    assert validated["alerts"][0]["mobile_options"] == mobile_options
-    assert alert.mobile_options is not None
-    assert alert.notification.__pydantic_extra__ == {"notification_native": {"priority": "high"}}
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
+@pytest.mark.parametrize("content_field", ["title", "message"])
+def test_validate_config_preserves_native_notification_data_without_mutating_input(
+    confirmation: bool, content_field: str,
+) -> None:
+    notification = {
+        "action": "notify.mobile_app_phone",
+        content_field: "Canonical content",
+        "options": {content_field: "Native device content", "color": "#00ff00"},
+    }
+    alert = {"id": "content_alert", "notification": {}}
+    if confirmation:
+        alert["confirmation"] = {"enabled": True, "notification": notification}
+    else:
+        alert["notification"] = notification
+    raw = {"alerts": [alert]}
+    original = deepcopy(raw)
+
+    validated = validate_config(raw)
+    stored = validated["alerts"][0]
+    if confirmation:
+        stored = stored["confirmation"]
+    assert stored["notification"]["options"] == notification["options"]
+    assert stored["notification"][content_field] == "Canonical content"
     assert validate_config(validated) == validated
+    assert raw == original
 
 
-def test_validate_config_does_not_migrate_notification_editor_options() -> None:
-    config = validate_config({"alerts": [{
-        "id": "water",
-        "notification": {"editor_options": {"fields": {"mobile.color": {"enabled": True}}}},
-    }]})
+@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
+@pytest.mark.parametrize("data", ["invalid", 1, False, ["invalid"]])
+def test_validate_config_rejects_non_mapping_notification_options(
+    confirmation: bool, data: Any,
+) -> None:
+    alert = {"id": "content_alert", "notification": {}}
+    notification = {"options": data}
+    if confirmation:
+        alert["confirmation"] = {"notification": notification}
+    else:
+        alert["notification"] = notification
 
-    assert "mobile_options" not in config["alerts"][0]
+    with pytest.raises(ValidationError, match="valid dictionary"):
+        validate_config({"alerts": [alert]})
+
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
+def test_validate_config_preserves_canonical_notification_content_and_native_extras(
+    confirmation: bool,
+) -> None:
+    notification = {
+        "action": "notify.mobile_app_phone",
+        "title": "Canonical title",
+        "message": "Canonical message",
+        "options": {
+            "color": "#00ff00", "subject": "Subject", "subtitle": "Subtitle",
+            "push": {"sound": "default"},
+            "template_message": "Opaque native metadata",
+            "data": {"title": "Device-specific nested title"},
+        },
+    }
+    alert = {"id": "content_alert", "notification": {}}
+    if confirmation:
+        alert["confirmation"] = {"enabled": True, "notification": notification}
+    else:
+        alert["notification"] = notification
+    raw = {"alerts": [alert]}
+    original = deepcopy(raw)
+
+    validated = validate_config(raw)
+    stored = validated["alerts"][0]
+    if confirmation:
+        stored = stored["confirmation"]
+    assert all(stored["notification"][key] == value for key, value in notification.items())
+    assert validate_config(validated) == validated
+    assert raw == original
+
+
+@pytest.mark.parametrize("confirmation", [False, True])
+@pytest.mark.parametrize("retired", [
+    {"data": {"title": "Old", "message": "Old", "data": {"color": "red"}}},
+    {"editor_options": {"fields": {"mobile.color": {"enabled": True}}}},
+    {"general": {"fields": {"color": {"enabled": True}}}},
+])
+def test_validate_config_rejects_retired_notification_shapes(confirmation, retired) -> None:
+    alert = {"id": "water", "notification": {}}
+    if confirmation:
+        alert["confirmation"] = {"notification": retired}
+    else:
+        alert["notification"] = retired
+    raw = {"alerts": [alert]}
+    original = deepcopy(raw)
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        validate_config(raw)
+    assert raw == original
 
 
 def test_validate_config_rejects_retired_condition_change_setting() -> None:
@@ -334,7 +475,10 @@ def test_validate_config_preserves_confirmation_notification_opt_out() -> None:
     assert config["alerts"][0]["confirmation"]["notification"] == {
         "enabled": False,
         "action": "notify.mobile_app_phone",
+        "title": "",
         "message": "Confirmed",
+        "use_default_tag": True,
+        "options": {},
     }
 
 
@@ -392,7 +536,7 @@ def test_configuration_preserves_native_extensions_on_canonical_models() -> None
             "id": "extended_alert",
             "notification": {
                 "action": "notify.mobile_app_phone",
-                "notification_native": {"priority": "high"},
+                "options": {"notification_native": {"priority": "high"}},
             },
             "confirmation": {
                 "enabled": True,
@@ -403,7 +547,7 @@ def test_configuration_preserves_native_extensions_on_canonical_models() -> None
                 }],
                 "notification": {
                     "action": "notify.mobile_app_phone",
-                    "confirmation_native": {"channel": "alerts"},
+                    "options": {"confirmation_native": {"channel": "alerts"}},
                 },
                 "reminders": {
                     "enabled": True,
@@ -415,14 +559,14 @@ def test_configuration_preserves_native_extensions_on_canonical_models() -> None
 
     alert = Configuration.model_validate(raw).alerts[0]
 
-    assert alert.notification.__pydantic_extra__ == {
+    assert alert.notification.options == {
         "notification_native": {"priority": "high"},
     }
     assert alert.confirmation is not None
     assert alert.confirmation.buttons[0].__pydantic_extra__ == {
         "button_native": "value",
     }
-    assert alert.confirmation.notification.__pydantic_extra__ == {
+    assert alert.confirmation.notification.options == {
         "confirmation_native": {"channel": "alerts"},
     }
     assert alert.confirmation.reminders.__pydantic_extra__ == {

@@ -78,17 +78,19 @@ class _SendComponent:
 
     @staticmethod
     def notification_mapping(notification: NotificationConfig) -> dict[str, Any]:
-        """Render typed notification fields without adding default HA keys."""
-        mapping: dict[str, Any] = {}
+        """Build the native notify payload at the generated service boundary."""
+        mapping: dict[str, Any] = {
+            "use_default_tag": notification.use_default_tag,
+            "payload": {
+                "title": notification.title,
+                "message": notification.message,
+                "data": _copy_native_value(notification.options),
+            },
+        }
+        if notification.action:
+            mapping["action"] = notification.action
         if notification.target:
             mapping["target"] = dict(notification.target)
-        if notification.title:
-            mapping["title"] = notification.title
-        if notification.message:
-            mapping["message"] = notification.message
-        if notification.data:
-            mapping["data"] = dict(notification.data)
-        mapping.update(notification.__pydantic_extra__ or {})
         return mapping
 
     def _confirmation_notification(self, alert: AlertConfig) -> dict[str, Any]:
@@ -97,7 +99,7 @@ class _SendComponent:
         confirmation = alert.confirmation
         if not confirmation or not confirmation.enabled:
             return notification
-        data = notification.setdefault("data", {})
+        data = notification["payload"]["data"]
         data["actions"] = [
             {
                 "action": f"ha_notifications_{alert.id}_confirmation_{_confirmation_button_id(button, index)}",
@@ -131,16 +133,27 @@ class _ActionStepBuilder:
     def _service(self, action: str, data: dict[str, Any]) -> dict[str, Any]:
         return {"action": action, "data": data}
 
-    def send(self, notification: dict[str, Any]) -> dict[str, Any]:
+    def send(
+        self,
+        notification: dict[str, Any],
+        *,
+        confirmation: dict[str, Any] | None = None,
+        history_reason: str | None = None,
+    ) -> dict[str, Any]:
         """Build a managed send action with alert and flow metadata."""
+        data: dict[str, Any] = {
+            "alert_id": self._alert.id,
+            "alert_name": self._alert.name,
+            "flow_id": "{{ context.parent_id or context.id }}",
+            **notification,
+        }
+        if confirmation is not None:
+            data["confirmation"] = confirmation
+        if history_reason is not None:
+            data["history_reason"] = history_reason
         return self._service(
             "ha_notifications.send",
-            {
-                "alert_id": self._alert.id,
-                "alert_name": self._alert.name,
-                "flow_id": "{{ context.parent_id or context.id }}",
-                **notification,
-            },
+            data,
         )
 
     def report(
@@ -380,9 +393,10 @@ def _confirmation_attempt_notification(
     max_attempts: int,
 ) -> dict[str, Any]:
     """Add the current retry number to a reminder notification title."""
-    notification = dict(notification)
-    title = notification.get("title") or "Confirmation"
-    notification["title"] = f"{title} - Attempt {{{{ repeat.index + 1 }}}}/{max_attempts}"
+    notification = _copy_native_value(notification)
+    data = notification["payload"]
+    title = data.get("title") or "Confirmation"
+    data["title"] = f"{title} - Attempt {{{{ repeat.index + 1 }}}}/{max_attempts}"
     return notification
 
 
@@ -830,6 +844,7 @@ def generate_automations(
                 "data": {
                     "alert_id": validated.id,
                     "alert_name": validated.name,
+                    "flow_id": "{{ context.parent_id or context.id }}",
                     **_SEND_COMPONENT.notification_mapping(validated.notification),
                 },
             })
@@ -859,29 +874,22 @@ def _follow_up_actions(
     """Convert configured confirmation actions to native HA actions."""
     notification_action: dict[str, Any] | None = None
     notification = confirmation.notification
-    if (
-        notification.enabled is not False
-        and (
-            notification.action
-            or notification.target is not None
-            or notification.title is not None
-            or notification.message is not None
-            or notification.data is not None
-        )
-    ):
-        notification = _confirmation_notification_mapping(notification, alert.notification.target)
-        data = dict(notification.get("data", {}))
-        message = data.pop("message", None)
+    if notification.enabled:
+        notification = _confirmation_notification_mapping(notification, alert.notification)
+        data = notification["payload"]
+        message = data.get("message")
+        confirmation_context = None
         if isinstance(message, str) and message:
-            data["template_message"] = "{% raw %}" + message + "{% endraw %}"
-            data["confirmation_device_id"] = "{{ wait.trigger.event.data.device_id | default('', true) }}"
-            data["confirmation_user_id"] = "{{ wait.trigger.event.context.user_id | default('', true) }}"
-        if data:
-            notification["data"] = data
-        notification_action = steps.send({
-            **notification,
-            "history_reason": "confirmation_notification",
-        })
+            data["message"] = "{% raw %}" + message + "{% endraw %}"
+            confirmation_context = {
+                "device_id": "{{ wait.trigger.event.data.device_id | default('', true) }}",
+                "user_id": "{{ wait.trigger.event.context.user_id | default('', true) }}",
+            }
+        notification_action = steps.send(
+            notification,
+            confirmation=confirmation_context,
+            history_reason="confirmation_notification",
+        )
     native_actions = [_copy_native_value(action) for action in confirmation.actions]
     actions = [notification_action] if notification_action is not None else []
     for action in native_actions:
@@ -891,22 +899,16 @@ def _follow_up_actions(
 
 def _confirmation_notification_mapping(
     notification: ConfirmationNotificationConfig,
-    fallback_target: dict[str, Any] | None = None,
+    fallback: NotificationConfig,
 ) -> dict[str, Any]:
     """Convert a confirmation notification to the managed service payload."""
-    action: dict[str, Any] = {}
-    target = notification.target if notification.target is not None else fallback_target
-    if target:
-        action["target"] = dict(target)
-    data = dict(notification.data or {})
-    if notification.title is not None:
-        data.setdefault("title", notification.title)
-    if notification.message is not None:
-        data.setdefault("message", notification.message)
-    if data:
-        action["data"] = data
-    action.update(notification.__pydantic_extra__ or {})
-    return action
+    mapping = _SEND_COMPONENT.notification_mapping(notification)
+    if notification.target is None and notification.action is None:
+        if fallback.target:
+            mapping["target"] = dict(fallback.target)
+        if fallback.action:
+            mapping["action"] = fallback.action
+    return mapping
 
 
 def _copy_native_value(value: Any) -> Any:

@@ -81,7 +81,7 @@
       "invalid_yaml": "This YAML must be a valid list to use the Home Assistant visual editor. Switch back to YAML mode to edit it."
     },
     "basic": {
-      "section": "Basic",
+      "section": "Basics",
       "name": "Name",
       "alert_name": "Alert name",
       "description": "Description",
@@ -96,7 +96,8 @@
       "mode_parallel": "Parallel (run triggers independently)"
     },
     "triggers": {
-      "section": "When to run",
+      "section": "When",
+      "overview": "Overview",
       "custom": "Triggers",
       "yaml": "Triggers",
       "enable_help": "Controls custom triggers and condition-change checks. When off, these settings are preserved but do not start the alert.",
@@ -117,7 +118,7 @@
       "section": "Inactive",
       "enable_help": "These triggers cancel pending confirmation waits. Disabled settings are preserved.",
       "clear_notification": "Clear notification",
-      "clear_notification_help": "Also clear the alert notification when an inactive trigger fires."
+      "clear_notification_help": "Also clear the alert notification when an inactive trigger fires. Requires the default alert-ID tag or a custom options.tag matching the earlier push."
     },
     "condition": {
       "section": "Condition",
@@ -149,6 +150,8 @@
       "section": "Notification",
       "title": "Title",
       "message": "Message",
+      "use_default_tag": "Replace previous notifications",
+      "use_default_tag_help": "On by default: uses the alert ID as the notification tag so supported providers replace previous notifications and can clear them. Turn off to omit the default tag and keep separate notifications. An explicit options.tag is always preserved. Without the default or a custom tag, clear cannot identify a previous push. Android persistent notifications require a tag. This setting applies only to this notification; the main notification and confirmation follow-up are configured independently.",
       "title_placeholder": "Notification title",
       "message_placeholder": "Notification message",
       "templates_help": "Notification templates and helpers",
@@ -157,13 +160,14 @@
       "condition_text_help": "Add an ID to a condition, then use condition.<id> to show text based on its result.",
       "condition_text_example": "{% if condition.front_door %}Door open{% else %}All clear{% endif %}",
       "template_values_title": "Available values",
-      "template_values_help": "alert_id, alert_name, alert_active, attempt, trigger, now, and condition.<id>.",
+      "template_values_help": "Use standard Home Assistant automation templates, including trigger values when available, state helpers such as states(), state_attr(), and is_state(), and now(). Example: {{ states('sensor.temperature') }}.",
       "ha_templates_title": "Home Assistant templates",
       "ha_templates_help": "State helpers work here too, such as states('sensor.temperature'), state_attr('light.kitchen', 'brightness'), and is_state('binary_sensor.door', 'on').",
       "post_send_actions": "Post-send actions",
       "post_send_help": "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML."
     },
     "mobile": {
+      "not_set": "Not set",
       "mobile": "Mobile options",
       "android": "Android",
       "ios": "iOS / macOS",
@@ -213,6 +217,7 @@
     },
     "confirmation": {
       "section": "Confirmation",
+      "buttons": "Buttons",
       "toggle": "confirmation",
       "message": "Confirmation message",
       "enable_timeout": "Enable confirmation timeout",

@@ -28,21 +28,10 @@ export type NotificationTarget = HassServiceTarget & { user_id?: string[] };
 export interface Notification {
   action?: string;
   target?: NotificationTarget;
-  title?: string;
-  message?: string;
-  data: Record<string, unknown>;
-}
-
-export interface MobileOptionGroup {
-  enabled?: boolean;
-  values?: Record<string, unknown>;
-  fields?: Record<string, { enabled: boolean; value?: unknown }>;
-}
-
-export interface MobileOptions {
-  general?: MobileOptionGroup;
-  android?: MobileOptionGroup;
-  ios?: MobileOptionGroup;
+  title: string;
+  message: string;
+  use_default_tag?: boolean;
+  options: Record<string, unknown>;
 }
 
 export interface EnabledFeature {
@@ -89,7 +78,6 @@ export interface Alert {
   icon?: string;
   enabled: boolean;
   monitor: MonitorConfig;
-  mobile_options?: MobileOptions;
   notification: Notification & { target: NotificationTarget };
   confirmation?: ConfirmationConfig;
   post_send_actions?: { enabled: boolean; actions?: HaConfig[] };

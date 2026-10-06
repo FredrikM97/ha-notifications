@@ -90,7 +90,7 @@ describe("frontend API transport", () => {
       notification: {
         action: "notify.phone",
         target: { entity_id: ["notify.phone"] },
-        data: {},
+        title: "", message: "", options: {  },
       },
     });
     client.sendMessagePromise
@@ -151,10 +151,7 @@ describe("frontend API transport", () => {
         entity_id: ["notify.phone"],
         device_id: ["device_phone"],
       },
-      data: {
-        title: "Front door",
-        message: "The front door is still open.",
-      },
+      title: "Front door", message: "The front door is still open.", options: {  },
     });
     expect(savedAlert.confirmation?.reminders.interval).toBe(1800);
     expect(savedAlert.confirmation?.reminders.timeout).toBe(900);
@@ -208,15 +205,12 @@ describe("frontend API transport", () => {
       }] } },
       notification: {
         action: "notify.mobile_app_phone",
-        data: {
-          title: "Front door",
-          message: "The front door is still open.",
-        },
+        title: "Front door", message: "The front door is still open.", options: {  },
       },
       confirmation: {
         enabled: true,
         buttons: [{ id: "confirm", label: "Close door" }],
-        notification: { action: "notify.mobile_app_phone", data: { message: "Front door closed by {{confirmed_by}}." } },
+        notification: { action: "notify.mobile_app_phone", title: "Front door", message: "Front door closed by {{confirmed_by}}.", options: {  } },
         actions: [{ action: "light.turn_on", target: { entity_id: ["light.hall"] } }],
       },
     });

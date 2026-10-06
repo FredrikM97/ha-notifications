@@ -1,10 +1,50 @@
 import { describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { confirmationNotificationEnabled, editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
+import { confirmationNotificationEnabled, defaultAlert, editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
 import type { Alert, MonitorConfig } from "../../frontend/types.js";
 import { draftAlertFixture } from "./conftest.js";
 
 describe("editable alert model", () => {
+  it("defaults canonical notification text and device options", () => {
+    const alert = defaultAlert();
+    expect(alert.notification).toEqual({ target: {}, title: "", message: "", use_default_tag: true, options: {  } });
+    expect(alert.confirmation?.notification).toEqual({ enabled: false, title: "", message: "", use_default_tag: true, options: {  } });
+  });
+
+  it.each([true, false])("preserves opaque data without using it as notification text with canonical text %s", canonical => {
+    const source = draftAlertFixture({ name: "Door" });
+    source.notification = {
+      target: { entity_id: ["notify.phone"] },
+      title: canonical ? "Door" : "",
+      message: canonical ? "Door open" : "",
+      options: {
+        native_extra: { keep: true },
+        title: "Opaque title", message: "Opaque message", custom: { keep: true },
+      },
+    };
+    source.confirmation!.notification = {
+      enabled: true,
+      title: canonical ? "Confirmed" : "",
+      message: canonical ? "Door closed" : "",
+      options: {
+        native_extra: { keep: true },
+        title: "Opaque confirmation title", message: "Opaque confirmation message", custom: { keep: true },
+      },
+    };
+    const original = structuredClone(source);
+    const draft = editableAlert(source);
+    expect(draft.notification.title).toBe(canonical ? "Door" : "");
+    expect(draft.notification.message).toBe(canonical ? "Door open" : "");
+    expect(draft.confirmation.notification.title).toBe(canonical ? "Confirmed" : "");
+    expect(draft.confirmation.notification.message).toBe(canonical ? "Door closed" : "");
+    const saved = finalizeAlert(draft, false);
+    expect(saved.notification).toEqual({ ...source.notification, use_default_tag: true });
+    expect(saved.confirmation?.notification).toEqual({ ...source.confirmation!.notification, use_default_tag: true });
+    expect(saved.notification).not.toHaveProperty("data");
+    expect(saved.confirmation?.notification).not.toHaveProperty("data");
+    expect(source).toEqual(original);
+  });
+
   it.each([
     { mode: "single", expected: "single" },
     { mode: "restart", expected: "restart" },
@@ -14,7 +54,7 @@ describe("editable alert model", () => {
   ] as { mode?: MonitorConfig["automation_mode"]; expected: MonitorConfig["automation_mode"] }[])(
     "preserves canonical mode $mode with default $expected",
     ({ mode, expected }) => {
-      const source = draftAlertFixture({ name: "Door", notification: { target: { entity_id: ["notify.phone"] }, data: {} } });
+      const source = draftAlertFixture({ name: "Door", notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } } });
       const triggers = [{ trigger: "event", event_type: "door_opened", event_data: { source: "sensor" }, id: "opened", enabled: false }];
       const input = {
         ...source,
@@ -40,7 +80,7 @@ describe("editable alert model", () => {
   );
 
   it.each([true, false])("preserves explicit inactive triggers when enabled is %s without inferring triggers", enabled => {
-    const source = draftAlertFixture({ name: "Door", notification: { target: { entity_id: ["notify.phone"] }, data: {} } });
+    const source = draftAlertFixture({ name: "Door", notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } } });
     source.monitor.conditions.items = [{ condition: "state", entity_id: "binary_sensor.door", state: "on" }];
     source.monitor.inactive = {
       enabled,
@@ -59,10 +99,11 @@ describe("editable alert model", () => {
     }
   });
 
-  it("infers confirmation follow-up state from populated data unless explicitly disabled", () => {
-    expect(confirmationNotificationEnabled({ data: {} })).toBe(true);
-    expect(confirmationNotificationEnabled({ data: { message: "Done" } })).toBe(true);
-    expect(confirmationNotificationEnabled({ enabled: false, data: {} })).toBe(false);
+  it("requires explicit confirmation follow-up enablement", () => {
+    const notification = { message: "Done", title: "", options: {} };
+    expect(confirmationNotificationEnabled(notification)).toBe(false);
+    expect(confirmationNotificationEnabled({ ...notification, enabled: true })).toBe(true);
+    expect(confirmationNotificationEnabled({ ...notification, enabled: false })).toBe(false);
   });
 
   it("fills optional editor blocks without changing native automation data", () => {
@@ -132,7 +173,7 @@ describe("finalizeAlert", () => {
           interval: 12 * 60 * 60,
         },
       },
-      notification: { target: { entity_id: ["notify.phone"] }, data: {} },
+      notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }));
     draft.runtime = { active: true };
 
@@ -147,7 +188,7 @@ describe("finalizeAlert", () => {
   it("keeps confirmation delivery disabled by default and inherits recipients when enabled", () => {
     const disabled = editableAlert(draftAlertFixture({
       name: "Door",
-      notification: { target: { entity_id: ["notify.phone"] }, data: {} },
+      notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }));
     const disabledResult = finalizeAlert(disabled, false);
     expect(disabledResult.confirmation?.notification.enabled).toBe(false);
@@ -155,17 +196,18 @@ describe("finalizeAlert", () => {
 
     const enabled = editableAlert(draftAlertFixture({
       name: "Door",
-      notification: { target: { entity_id: ["notify.phone"] }, data: {} },
+      notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }));
     enabled.confirmation!.notification.enabled = true;
     const enabledResult = finalizeAlert(enabled, false);
-    expect(enabledResult.confirmation?.notification.target).toEqual({ entity_id: ["notify.phone"] });
+    expect(enabledResult.confirmation?.notification.target).toBeUndefined();
+    expect(enabledResult.notification.target).toEqual({ entity_id: ["notify.phone"] });
   });
 
   it("includes confirmation actions only when the section is enabled", () => {
     const draft = editableAlert(draftAlertFixture({
       name: "Door",
-      notification: { target: { entity_id: ["notify.phone"] }, data: {} },
+      notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }));
     draft.confirmation!.actions = [{ action: "light.turn_on" }];
 
@@ -176,7 +218,7 @@ describe("finalizeAlert", () => {
   it("omits empty disabled post-send actions but preserves populated actions", () => {
     const draft = editableAlert(draftAlertFixture({
       name: "Door",
-      notification: { target: { entity_id: ["notify.phone"] }, data: {} },
+      notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
       post_send_actions: { enabled: false, actions: [] },
     }));
     expect(finalizeAlert(draft, false)).not.toHaveProperty("post_send_actions");

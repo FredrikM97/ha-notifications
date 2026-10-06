@@ -130,7 +130,7 @@ async def test_platform_discovery_and_service_delivery_share_target_resolution(
     calls = async_mock_service(hass, "notify", "mobile_app_phone")
 
     await hass.services.async_call(
-        DOMAIN, "send", {"target": target, "message": "Test"}, blocking=True,
+        DOMAIN, "send", {"target": target, "payload": {"message": "Test"}}, blocking=True,
     )
 
     assert len(calls) == 1
@@ -214,7 +214,7 @@ async def test_registration_device_id_fallback_matches_service_delivery(hass) ->
     await async_setup_services(hass)
     calls = async_mock_service(hass, "notify", "mobile_app_phone")
     await hass.services.async_call(
-        DOMAIN, "send", {"target": target, "message": "Test"}, blocking=True,
+        DOMAIN, "send", {"target": target, "payload": {"message": "Test"}}, blocking=True,
     )
     assert len(calls) == 1
 

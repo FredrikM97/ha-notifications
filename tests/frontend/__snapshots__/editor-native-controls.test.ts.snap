@@ -1,22 +1,25 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`native editor controls > applies declared field widths without leaking layout metadata at viewport 390 1`] = `
+exports[`native editor controls > classifies fields with responsive standard and compact presets at viewport 390 1`] = `
 {
   "android": [
     {
-      "class": "nc-medium-form",
+      "class": "nc-field-form",
       "label": "Notification channel",
       "schema": [
         {
           "name": "channel",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Channel importance",
       "schema": [
         {
@@ -35,45 +38,25 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "",
-      "label": "Keep after tapping",
+      "class": "nc-field-form",
+      "label": "Tap URL or action",
       "schema": [
         {
-          "name": "sticky",
+          "name": "clickAction",
           "selector": {
-            "boolean": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "",
-      "label": "Persistent notification",
-      "schema": [
-        {
-          "name": "persistent",
-          "selector": {
-            "boolean": {},
-          },
-        },
-      ],
-    },
-    {
-      "class": "",
-      "label": "Alert only once",
-      "schema": [
-        {
-          "name": "alert_once",
-          "selector": {
-            "boolean": {},
-          },
-        },
-      ],
-    },
-    {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Dismiss after",
       "schema": [
         {
@@ -87,9 +70,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Lock-screen visibility",
       "schema": [
         {
@@ -106,11 +90,27 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
+    },
+    {
+      "class": "nc-field-form",
+      "label": "Channel vibration pattern",
+      "schema": [
+        {
+          "name": "vibrationPattern",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
     },
   ],
   "basic": [
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Name",
       "schema": [
         {
@@ -121,9 +121,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Description",
       "schema": [
         {
@@ -135,9 +136,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form",
       "label": "Icon",
       "schema": [
         {
@@ -147,23 +149,163 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
+    },
+  ],
+  "conditions": [
+    {
+      "class": "",
+      "label": "Check at startup",
+      "schema": [
+        {
+          "name": "startup",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Enable periodic condition checks",
+      "schema": [
+        {
+          "name": "periodic",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Re-evaluate conditions every",
+      "schema": [
+        {
+          "name": "interval",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "",
+      "schema": [
+        {
+          "name": "conditions",
+          "selector": {
+            "condition": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+  ],
+  "confirmation": [
+    {
+      "class": "",
+      "label": "Button text",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "buttons",
+          "selector": {
+            "object": {
+              "description_field": "id",
+              "fields": {
+                "id": {
+                  "label": "Button IDs (optional)",
+                  "selector": {
+                    "text": {},
+                  },
+                },
+                "label": {
+                  "label": "Button text",
+                  "required": true,
+                  "selector": {
+                    "text": {},
+                  },
+                },
+              },
+              "label_field": "label",
+              "multiple": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Enable confirmation timeout",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "forget_after_enabled",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Confirmation timeout",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "timeout",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
     },
   ],
   "ios": [
     {
-      "class": "",
+      "class": "nc-field-form",
+      "label": "Subtitle",
+      "schema": [
+        {
+          "name": "subtitle",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
+    },
+    {
+      "class": "nc-field-form",
       "label": "Tap URL",
       "schema": [
         {
           "name": "url",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Interruption level",
       "schema": [
         {
@@ -181,9 +323,25 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "",
+      "label": "Notification sound",
+      "schema": [
+        {
+          "name": "sound",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input ",
+    },
+    {
+      "class": "nc-field-form nc-compact",
       "label": "App badge count",
       "schema": [
         {
@@ -196,9 +354,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "",
       "label": "Foreground presentation",
       "schema": [
         {
@@ -215,23 +374,27 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input ",
     },
   ],
   "mobile": [
     {
-      "class": "nc-medium-form",
+      "class": "nc-field-form",
       "label": "Notification group",
       "schema": [
         {
           "name": "group",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form",
       "label": "Notification icon",
       "schema": [
         {
@@ -241,23 +404,103 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Icon image URL",
       "schema": [
         {
           "name": "icon_url",
           "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
+    },
+  ],
+  "notification": [
+    {
+      "class": "nc-field-form",
+      "label": "Title",
+      "schema": [
+        {
+          "name": "title",
+          "selector": {
             "text": {},
           },
         },
       ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "",
+      "schema": [
+        {
+          "default": "Notification message",
+          "name": "message",
+          "selector": {
+            "template": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+  ],
+  "reminder": [
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Remind every",
+      "schema": [
+        {
+          "name": "interval",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Maximum reminders",
+      "schema": [
+        {
+          "name": "max_attempts",
+          "selector": {
+            "number": {
+              "max": 20,
+              "min": 1,
+              "mode": "box",
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Show attempt count in notification title",
+      "schema": [
+        {
+          "name": "show_attempts",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
     },
   ],
   "when": [
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Automation mode",
       "schema": [
         {
@@ -288,28 +531,32 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
   ],
 }
 `;
 
-exports[`native editor controls > applies declared field widths without leaking layout metadata at viewport 1100 1`] = `
+exports[`native editor controls > classifies fields with responsive standard and compact presets at viewport 1100 1`] = `
 {
   "android": [
     {
-      "class": "nc-medium-form",
+      "class": "nc-field-form",
       "label": "Notification channel",
       "schema": [
         {
           "name": "channel",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Channel importance",
       "schema": [
         {
@@ -328,45 +575,25 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "",
-      "label": "Keep after tapping",
+      "class": "nc-field-form",
+      "label": "Tap URL or action",
       "schema": [
         {
-          "name": "sticky",
+          "name": "clickAction",
           "selector": {
-            "boolean": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "",
-      "label": "Persistent notification",
-      "schema": [
-        {
-          "name": "persistent",
-          "selector": {
-            "boolean": {},
-          },
-        },
-      ],
-    },
-    {
-      "class": "",
-      "label": "Alert only once",
-      "schema": [
-        {
-          "name": "alert_once",
-          "selector": {
-            "boolean": {},
-          },
-        },
-      ],
-    },
-    {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Dismiss after",
       "schema": [
         {
@@ -380,9 +607,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Lock-screen visibility",
       "schema": [
         {
@@ -399,11 +627,27 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
+    },
+    {
+      "class": "nc-field-form",
+      "label": "Channel vibration pattern",
+      "schema": [
+        {
+          "name": "vibrationPattern",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
     },
   ],
   "basic": [
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Name",
       "schema": [
         {
@@ -414,9 +658,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Description",
       "schema": [
         {
@@ -428,9 +673,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form",
       "label": "Icon",
       "schema": [
         {
@@ -440,23 +686,163 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
+    },
+  ],
+  "conditions": [
+    {
+      "class": "",
+      "label": "Check at startup",
+      "schema": [
+        {
+          "name": "startup",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Enable periodic condition checks",
+      "schema": [
+        {
+          "name": "periodic",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Re-evaluate conditions every",
+      "schema": [
+        {
+          "name": "interval",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "",
+      "schema": [
+        {
+          "name": "conditions",
+          "selector": {
+            "condition": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+  ],
+  "confirmation": [
+    {
+      "class": "",
+      "label": "Button text",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "buttons",
+          "selector": {
+            "object": {
+              "description_field": "id",
+              "fields": {
+                "id": {
+                  "label": "Button IDs (optional)",
+                  "selector": {
+                    "text": {},
+                  },
+                },
+                "label": {
+                  "label": "Button text",
+                  "required": true,
+                  "selector": {
+                    "text": {},
+                  },
+                },
+              },
+              "label_field": "label",
+              "multiple": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Enable confirmation timeout",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "forget_after_enabled",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Confirmation timeout",
+      "schema": [
+        {
+          "disabled": true,
+          "name": "timeout",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
     },
   ],
   "ios": [
     {
-      "class": "",
+      "class": "nc-field-form",
+      "label": "Subtitle",
+      "schema": [
+        {
+          "name": "subtitle",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
+    },
+    {
+      "class": "nc-field-form",
       "label": "Tap URL",
       "schema": [
         {
           "name": "url",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Interruption level",
       "schema": [
         {
@@ -474,9 +860,25 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "",
+      "label": "Notification sound",
+      "schema": [
+        {
+          "name": "sound",
+          "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input ",
+    },
+    {
+      "class": "nc-field-form nc-compact",
       "label": "App badge count",
       "schema": [
         {
@@ -489,9 +891,10 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input nc-compact",
     },
     {
-      "class": "nc-compact-form",
+      "class": "",
       "label": "Foreground presentation",
       "schema": [
         {
@@ -508,23 +911,27 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input ",
     },
   ],
   "mobile": [
     {
-      "class": "nc-medium-form",
+      "class": "nc-field-form",
       "label": "Notification group",
       "schema": [
         {
           "name": "group",
           "selector": {
-            "text": {},
+            "text": {
+              "placeholder": "Not set",
+            },
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form",
       "label": "Notification icon",
       "schema": [
         {
@@ -534,23 +941,103 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": "nc-option-input nc-field-input",
     },
     {
-      "class": "",
+      "class": "nc-field-form",
       "label": "Icon image URL",
       "schema": [
         {
           "name": "icon_url",
           "selector": {
+            "text": {
+              "placeholder": "Not set",
+            },
+          },
+        },
+      ],
+      "wrapper": "nc-option-input nc-field-input",
+    },
+  ],
+  "notification": [
+    {
+      "class": "nc-field-form",
+      "label": "Title",
+      "schema": [
+        {
+          "name": "title",
+          "selector": {
             "text": {},
           },
         },
       ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "",
+      "schema": [
+        {
+          "default": "Notification message",
+          "name": "message",
+          "selector": {
+            "template": {},
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+  ],
+  "reminder": [
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Remind every",
+      "schema": [
+        {
+          "name": "interval",
+          "selector": {
+            "duration": {
+              "enable_day": true,
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "nc-field-form nc-compact",
+      "label": "Maximum reminders",
+      "schema": [
+        {
+          "name": "max_attempts",
+          "selector": {
+            "number": {
+              "max": 20,
+              "min": 1,
+              "mode": "box",
+            },
+          },
+        },
+      ],
+      "wrapper": null,
+    },
+    {
+      "class": "",
+      "label": "Show attempt count in notification title",
+      "schema": [
+        {
+          "name": "show_attempts",
+          "selector": {
+            "boolean": {},
+          },
+        },
+      ],
+      "wrapper": null,
     },
   ],
   "when": [
     {
-      "class": "nc-compact-form",
+      "class": "nc-field-form nc-compact",
       "label": "Automation mode",
       "schema": [
         {
@@ -581,46 +1068,13 @@ exports[`native editor controls > applies declared field widths without leaking 
           },
         },
       ],
+      "wrapper": null,
     },
   ],
 }
 `;
 
-exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification false 1`] = `
-[
-  {
-    "name": "triggers",
-    "selector": {
-      "trigger": {},
-    },
-  },
-  {
-    "name": "clear_notification",
-    "selector": {
-      "boolean": {},
-    },
-  },
-]
-`;
-
-exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification true 1`] = `
-[
-  {
-    "name": "triggers",
-    "selector": {
-      "trigger": {},
-    },
-  },
-  {
-    "name": "clear_notification",
-    "selector": {
-      "boolean": {},
-    },
-  },
-]
-`;
-
-exports[`native editor controls > shows only automation mode under When to run and preserves its native control 1`] = `
+exports[`native editor controls > groups automation mode, triggers, conditions and inactive controls under When 1`] = `
 [
   {
     "disabled": false,
@@ -647,6 +1101,226 @@ exports[`native editor controls > shows only automation mode under When to run a
           },
         ],
       },
+    },
+  },
+]
+`;
+
+exports[`native editor controls > groups automation mode, triggers, conditions and inactive controls under When 2`] = `
+[
+  "Basics",
+  "When",
+  "Triggers",
+  "Conditions",
+  "Inactive",
+  "Recipients",
+  "Notification",
+  "Post-send actions",
+  "Android",
+  "iOS / macOS",
+  "Confirmation",
+  "Reminder policy",
+  "Notify recipients when confirmed",
+  "Post-confirmation actions",
+]
+`;
+
+exports[`native editor controls > keeps alert_once as a direct boolean switch and guards writes when Android is off 1`] = `
+{
+  "description": "Sound and vibration only on the first notification for a tag.",
+  "heading": {
+    "class": "nc-heading",
+    "help": "More information: Alert only once",
+    "text": "Alert only once",
+  },
+  "row": "nc-option nc-option-inline",
+  "switch": {
+    "checked": false,
+    "disabled": true,
+    "label": "Alert only once",
+  },
+}
+`;
+
+exports[`native editor controls > keeps android field help in icons without inline helpers or duplicate section topics 1`] = `
+[
+  {
+    "description": "Android 8+: channel name. Omit to use General. Existing channel settings are controlled on the device.",
+    "label": "Notification channel",
+  },
+  {
+    "description": "Sets initial channel importance. Once created, only lowering importance is supported, unless the user has already changed it.",
+    "label": "Channel importance",
+  },
+  {
+    "description": "Android only. Does not prevent swiping away; use Persistent as well.",
+    "label": "Keep after tapping",
+  },
+  {
+    "description": "Android only; marks the notification as ongoing using this alert's tag. Android 14+ permits individual swipe dismissal while unlocked, but protects it while locked and from Clear all. Enable Sticky too if tapping should not dismiss it. iOS has no equivalent setting.",
+    "label": "Persistent notification",
+  },
+  {
+    "description": "Sound and vibration only on the first notification for a tag.",
+    "label": "Alert only once",
+  },
+  {
+    "description": "Comma-separated milliseconds: off, on, off, on. Applies when creating the channel.",
+    "label": "Channel vibration pattern",
+  },
+  {
+    "description": "Sets the physical notification LED color on supported Android devices, not the on-screen notification color. Applied when the channel is first created; existing channels retain their device settings.",
+    "label": "Channel LED color",
+  },
+]
+`;
+
+exports[`native editor controls > keeps configured confirmation subpanels accessible when confirmation is disabled 1`] = `
+[
+  "Basics",
+  "When",
+  "Triggers",
+  "Conditions",
+  "Inactive",
+  "Recipients",
+  "Notification",
+  "Post-send actions",
+  "Android",
+  "iOS / macOS",
+  "Confirmation",
+  "Reminder policy",
+  "Notify recipients when confirmed",
+  "Post-confirmation actions",
+]
+`;
+
+exports[`native editor controls > keeps ios field help in icons without inline helpers or duplicate section topics 1`] = `
+[
+  {
+    "description": "iOS 15+: passive, active, time-sensitive (can override Focus), or critical (requires critical-alert permission).",
+    "label": "Interruption level",
+  },
+  {
+    "description": "Sound name, default, or none. Structured critical sound settings remain available in YAML.",
+    "label": "Notification sound",
+  },
+  {
+    "description": "Hex color for the Material Design sender icon. Has no effect on an icon image URL.",
+    "label": "Icon glyph color",
+  },
+]
+`;
+
+exports[`native editor controls > keeps mobile field help in icons without inline helpers or duplicate section topics 1`] = `
+[
+  {
+    "description": "Groups notifications on Android and iOS. iOS critical notifications cannot be grouped.",
+    "label": "Notification group",
+  },
+  {
+    "description": "Hex color such as #03A9F4. On Android, sets the notification accent color, typically used for the small icon or header accents, not the entire notification background. Appearance varies by Android version, device, and theme. On iOS, colors the background of a Material Design sender icon.",
+    "label": "Notification color",
+  },
+  {
+    "description": "Android status-bar icon; iOS sender icon (requires a title).",
+    "label": "Notification icon",
+  },
+  {
+    "description": "Public image URL or /local/ path. On iOS, overrides the Material Design icon and requires a title.",
+    "label": "Icon image URL",
+  },
+]
+`;
+
+exports[`native editor controls > keeps persistent as a direct boolean switch and guards writes when Android is off 1`] = `
+{
+  "description": "Android only; marks the notification as ongoing using this alert's tag. Android 14+ permits individual swipe dismissal while unlocked, but protects it while locked and from Clear all. Enable Sticky too if tapping should not dismiss it. iOS has no equivalent setting.",
+  "heading": {
+    "class": "nc-heading",
+    "help": "More information: Persistent notification",
+    "text": "Persistent notification",
+  },
+  "row": "nc-option nc-option-inline",
+  "switch": {
+    "checked": false,
+    "disabled": true,
+    "label": "Persistent notification",
+  },
+}
+`;
+
+exports[`native editor controls > keeps sticky as a direct boolean switch and guards writes when Android is off 1`] = `
+{
+  "description": "Android only. Does not prevent swiping away; use Persistent as well.",
+  "heading": {
+    "class": "nc-heading",
+    "help": "More information: Keep after tapping",
+    "text": "Keep after tapping",
+  },
+  "row": "nc-option nc-option-inline",
+  "switch": {
+    "checked": false,
+    "disabled": true,
+    "label": "Keep after tapping",
+  },
+}
+`;
+
+exports[`native editor controls > offers five root tasks and all children with one selected section at width 390 1`] = `
+[
+  "Basics",
+  "When",
+  "Triggers",
+  "Conditions",
+  "Inactive",
+  "Recipients",
+  "Notification",
+  "Post-send actions",
+  "Android",
+  "iOS / macOS",
+  "Confirmation",
+  "Reminder policy",
+  "Notify recipients when confirmed",
+  "Post-confirmation actions",
+]
+`;
+
+exports[`native editor controls > offers five root tasks and all children with one selected section at width 1100 1`] = `
+[
+  "Basics",
+  "When",
+  "Triggers",
+  "Conditions",
+  "Inactive",
+  "Recipients",
+  "Notification",
+  "Post-send actions",
+  "Android",
+  "iOS / macOS",
+  "Confirmation",
+  "Reminder policy",
+  "Notify recipients when confirmed",
+  "Post-confirmation actions",
+]
+`;
+
+exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification false 1`] = `
+[
+  {
+    "name": "triggers",
+    "selector": {
+      "trigger": {},
+    },
+  },
+]
+`;
+
+exports[`native editor controls > preserves native inactive controls through enablement, save and YAML with clear notification true 1`] = `
+[
+  {
+    "name": "triggers",
+    "selector": {
+      "trigger": {},
     },
   },
 ]

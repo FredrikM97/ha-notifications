@@ -63,12 +63,17 @@
     data:
       alert_id: low_water
       alert_name: Low water
+      flow_id: '{{ context.parent_id or context.id }}'
+      use_default_tag: true
+      payload:
+        title: ''
+        message: Low water
+        data: {}
+      action: notify.mobile_app_phone
       target:
         entity_id:
         - notify.phone
         - notify.tablet
-      data:
-        message: Low water
   '''
 # ---
 # name: test_generate_automation_full_feature_snapshot
@@ -234,14 +239,18 @@
           alert_id: full_feature
           alert_name: Full feature
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Door open
+            data:
+              actions:
+              - action: ha_notifications_full_feature_confirmation_confirm
+                title: Confirm
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.mobile_app_phone
-          data:
-            message: Door open
-            actions:
-            - action: ha_notifications_full_feature_confirmation_confirm
-              title: Confirm
       - action: logbook.log
         data:
           name: Full feature sent
@@ -310,15 +319,17 @@
               alert_id: full_feature
               alert_name: Full feature
               flow_id: '{{ context.parent_id or context.id }}'
-              target:
-                entity_id:
-                - notify.mobile_app_phone
-              data:
-                template_message: '{% raw %}Confirmed{% endraw %}'
-                confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                  true) }}'
-                confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                  true) }}'
+              use_default_tag: true
+              payload:
+                title: ''
+                message: '{% raw %}Confirmed{% endraw %}'
+                data: {}
+              action: notify.mobile_app_phone
+              confirmation:
+                device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
+                  }}'
+                user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
+                  }}'
               history_reason: confirmation_notification
           - action: light.turn_on
             target:
@@ -358,15 +369,18 @@
                 alert_id: full_feature
                 alert_name: Full feature
                 flow_id: '{{ context.parent_id or context.id }}'
+                use_default_tag: true
+                payload:
+                  title: Confirmation - Attempt {{ repeat.index + 1 }}/5
+                  message: Door open
+                  data:
+                    actions:
+                    - action: ha_notifications_full_feature_confirmation_confirm
+                      title: Confirm
+                action: notify.mobile_app_phone
                 target:
                   entity_id:
                   - notify.mobile_app_phone
-                data:
-                  message: Door open
-                  actions:
-                  - action: ha_notifications_full_feature_confirmation_confirm
-                    title: Confirm
-                title: Confirmation - Attempt {{ repeat.index + 1 }}/5
             - action: ha_notifications.report
               data:
                 alert_id: full_feature
@@ -432,15 +446,17 @@
                     alert_id: full_feature
                     alert_name: Full feature
                     flow_id: '{{ context.parent_id or context.id }}'
-                    target:
-                      entity_id:
-                      - notify.mobile_app_phone
-                    data:
-                      template_message: '{% raw %}Confirmed{% endraw %}'
-                      confirmation_device_id: '{{ wait.trigger.event.data.device_id
-                        | default('''', true) }}'
-                      confirmation_user_id: '{{ wait.trigger.event.context.user_id |
-                        default('''', true) }}'
+                    use_default_tag: true
+                    payload:
+                      title: ''
+                      message: '{% raw %}Confirmed{% endraw %}'
+                      data: {}
+                    action: notify.mobile_app_phone
+                    confirmation:
+                      device_id: '{{ wait.trigger.event.data.device_id | default('''',
+                        true) }}'
+                      user_id: '{{ wait.trigger.event.context.user_id | default('''',
+                        true) }}'
                     history_reason: confirmation_notification
                 - action: light.turn_on
                   target:
@@ -597,12 +613,16 @@
           alert_id: matrix_baseline
           alert_name: Low water
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Low water
+            data: {}
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.phone
             - notify.tablet
-          data:
-            message: Low water
       - action: ha_notifications.report
         data:
           alert_id: matrix_baseline
@@ -726,15 +746,19 @@
           alert_id: matrix_confirmation_with_bounded_repeat
           alert_name: Low water
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Low water
+            data:
+              actions:
+              - action: ha_notifications_matrix_confirmation_with_bounded_repeat_confirmation_confirm
+                title: Confirm
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.phone
             - notify.tablet
-          data:
-            message: Low water
-            actions:
-            - action: ha_notifications_matrix_confirmation_with_bounded_repeat_confirmation_confirm
-              title: Confirm
       - action: ha_notifications.report
         data:
           alert_id: matrix_confirmation_with_bounded_repeat
@@ -785,22 +809,6 @@
                   }}'
                 user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
                   }}'
-          - action: ha_notifications.send
-            data:
-              alert_id: matrix_confirmation_with_bounded_repeat
-              alert_name: Low water
-              flow_id: '{{ context.parent_id or context.id }}'
-              target:
-                entity_id:
-                - notify.phone
-                - notify.tablet
-              data:
-                template_message: '{% raw %}Confirmed{% endraw %}'
-                confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                  true) }}'
-                confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                  true) }}'
-              history_reason: confirmation_notification
           - action: light.turn_on
           - action: ha_notifications.report
             data:
@@ -837,15 +845,19 @@
                 alert_id: matrix_confirmation_with_bounded_repeat
                 alert_name: Low water
                 flow_id: '{{ context.parent_id or context.id }}'
+                use_default_tag: true
+                payload:
+                  title: ''
+                  message: Low water
+                  data:
+                    actions:
+                    - action: ha_notifications_matrix_confirmation_with_bounded_repeat_confirmation_confirm
+                      title: Confirm
+                action: notify.mobile_app_phone
                 target:
                   entity_id:
                   - notify.phone
                   - notify.tablet
-                data:
-                  message: Low water
-                  actions:
-                  - action: ha_notifications_matrix_confirmation_with_bounded_repeat_confirmation_confirm
-                    title: Confirm
             - action: ha_notifications.report
               data:
                 alert_id: matrix_confirmation_with_bounded_repeat
@@ -906,22 +918,6 @@
                         true) }}'
                       user_id: '{{ wait.trigger.event.context.user_id | default('''',
                         true) }}'
-                - action: ha_notifications.send
-                  data:
-                    alert_id: matrix_confirmation_with_bounded_repeat
-                    alert_name: Low water
-                    flow_id: '{{ context.parent_id or context.id }}'
-                    target:
-                      entity_id:
-                      - notify.phone
-                      - notify.tablet
-                    data:
-                      template_message: '{% raw %}Confirmed{% endraw %}'
-                      confirmation_device_id: '{{ wait.trigger.event.data.device_id
-                        | default('''', true) }}'
-                      confirmation_user_id: '{{ wait.trigger.event.context.user_id |
-                        default('''', true) }}'
-                    history_reason: confirmation_notification
                 - action: light.turn_on
                 - action: ha_notifications.report
                   data:
@@ -1075,15 +1071,19 @@
           alert_id: matrix_confirmation_without_reminders
           alert_name: Low water
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Low water
+            data:
+              actions:
+              - action: ha_notifications_matrix_confirmation_without_reminders_confirmation_confirm
+                title: Confirm
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.phone
             - notify.tablet
-          data:
-            message: Low water
-            actions:
-            - action: ha_notifications_matrix_confirmation_without_reminders_confirmation_confirm
-              title: Confirm
       - action: ha_notifications.report
         data:
           alert_id: matrix_confirmation_without_reminders
@@ -1134,22 +1134,6 @@
                   }}'
                 user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
                   }}'
-          - action: ha_notifications.send
-            data:
-              alert_id: matrix_confirmation_without_reminders
-              alert_name: Low water
-              flow_id: '{{ context.parent_id or context.id }}'
-              target:
-                entity_id:
-                - notify.phone
-                - notify.tablet
-              data:
-                template_message: '{% raw %}Confirmed{% endraw %}'
-                confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                  true) }}'
-                confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                  true) }}'
-              history_reason: confirmation_notification
           - stop: confirmation completed
         - conditions:
           - condition: template
@@ -1292,12 +1276,16 @@
           alert_id: matrix_disabled_optional_features
           alert_name: Low water
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Low water
+            data: {}
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.phone
             - notify.tablet
-          data:
-            message: Low water
       - action: ha_notifications.report
         data:
           alert_id: matrix_disabled_optional_features
@@ -1421,12 +1409,16 @@
           alert_id: matrix_post_send_enabled
           alert_name: Low water
           flow_id: '{{ context.parent_id or context.id }}'
+          use_default_tag: true
+          payload:
+            title: ''
+            message: Low water
+            data: {}
+          action: notify.mobile_app_phone
           target:
             entity_id:
             - notify.phone
             - notify.tablet
-          data:
-            message: Low water
       - action: logbook.log
       - action: ha_notifications.report
         data:

@@ -38,6 +38,21 @@ renders (`selectConfig()`, the editor's schema cache) or HA rebuilds the control
 
 Keep accessible names and keyboard operation, and handle loading, empty,
 success, and error states. Reuse localization helpers for user-facing text.
+Place boolean field help icons immediately after the label text, not after
+the switch or checkbox or at the end of the row. Reuse the editor's shared
+`labelWithHelp()` template: a `.nc-heading` containing a label-text span followed
+immediately by its info icon. Boolean rows use `.nc-option.nc-option-inline`
+with a separate trailing `ha-switch`, not a `ha-settings-row` heading slot.
+Keep `.nc-heading` inline-flex with a small gap and content-sized children;
+the switch, not the info icon, absorbs the remaining row space. Do not duplicate
+native form labels or manipulate private shadow DOM.
+Section help belongs immediately to the right of the section heading, via
+`sectionHelp()` and the shared label/help template. Never embed section info in
+a code editor or place it beside the editor. Notification template-values help
+belongs beside the Notification `h2`, not beside its message field. Preserve
+other field-specific text helper layouts. Test the visible shared structure:
+label-text span then help icon inside `.nc-heading`, switch outside that label,
+and section-heading help with no duplicate message-field help.
 Do not create a folder for one file or a module with one caller: keep code next
 to its only user and split only when a second real owner appears.
 

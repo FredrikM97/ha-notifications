@@ -12,14 +12,23 @@
     "enabled": true,
     "monitor": {
       "automation_mode": "parallel",
-      "inactive": {"enabled": false, "items": [], "clear_notification": false},
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
       "triggers": {
         "enabled": true,
         "items": []
       },
       "conditions": {
         "enabled": true,
-        "items": [{"condition": "template", "value_template": "{{ true }}"}],
+        "items": [
+          {
+            "condition": "template",
+            "value_template": "{{ true }}"
+          }
+        ],
         "startup": true,
         "periodic": false
       }
@@ -27,22 +36,34 @@
     "notification": {
       "action": "notify.mobile_app_phone",
       "target": {
-        "entity_id": ["notify.phone"]
+        "entity_id": [
+          "notify.phone"
+        ]
       },
-      "data": {"title": "", "message": ""}
+      "title": "",
+      "message": "",
+      "options": {}
     }
   },
   "runtime": {
     "door": {
-      "config": {"id": "door", "name": "Front door"},
-      "state": {"active": true, "flow_id": "flow_door"},
+      "config": {
+        "id": "door",
+        "name": "Front door"
+      },
+      "state": {
+        "active": true,
+        "flow_id": "flow_door"
+      },
       "trace": [
         {
           "event_id": "event-1",
           "timestamp": "2026-09-23T12:57:37.627672+00:00",
           "type": "notification_sent",
           "message": "Notification sent.",
-          "details": {"target": "notify.phone"}
+          "details": {
+            "target": "notify.phone"
+          }
         }
       ]
     }
@@ -55,19 +76,30 @@
     "enabled": true,
     "monitor": {
       "automation_mode": "parallel",
-      "inactive": {"enabled": false, "items": [], "clear_notification": false},
+      "inactive": {
+        "enabled": false,
+        "items": [],
+        "clear_notification": false
+      },
       "triggers": {
         "enabled": true,
-        "items": [{"trigger": "state", "entity_id": "binary_sensor.front_door"}]
+        "items": [
+          {
+            "trigger": "state",
+            "entity_id": "binary_sensor.front_door"
+          }
+        ]
       },
       "conditions": {
         "enabled": true,
-        "items": [{
-          "condition": "state",
-          "entity_id": "binary_sensor.front_door",
-          "state": "on",
-          "for": "00:05:00"
-        }],
+        "items": [
+          {
+            "condition": "state",
+            "entity_id": "binary_sensor.front_door",
+            "state": "on",
+            "for": "00:05:00"
+          }
+        ],
         "startup": true,
         "periodic": true,
         "interval": 3600
@@ -76,17 +108,31 @@
     "notification": {
       "action": "notify.mobile_app_phone",
       "target": {
-        "entity_id": ["notify.phone"],
-        "device_id": ["device_phone"]
+        "entity_id": [
+          "notify.phone"
+        ],
+        "device_id": [
+          "device_phone"
+        ]
       },
-      "data": {"title": "Front door", "message": "The front door is still open."}
+      "title": "Front door",
+      "message": "The front door is still open.",
+      "options": {}
     },
     "confirmation": {
       "enabled": true,
-      "buttons": [{"id": "confirm", "label": "Close door"}],
+      "buttons": [
+        {
+          "id": "confirm",
+          "label": "Close door"
+        }
+      ],
       "notification": {
         "action": "notify.mobile_app_phone",
-        "data": {"message": "Front door closed by {{confirmed_by}}."}
+        "title": "Front door",
+        "message": "Front door closed by {{confirmed_by}}.",
+        "options": {},
+        "enabled": true
       },
       "reminders": {
         "enabled": true,
@@ -94,11 +140,27 @@
         "max_attempts": 3,
         "show_attempts": true
       },
-      "actions": [{"action": "light.turn_on", "target": {"entity_id": ["light.hall"]}}]
+      "actions": [
+        {
+          "action": "light.turn_on",
+          "target": {
+            "entity_id": [
+              "light.hall"
+            ]
+          }
+        }
+      ]
     },
     "post_send_actions": {
       "enabled": true,
-      "actions": [{"action": "logbook.log", "data": {"name": "Front door alert"}}]
+      "actions": [
+        {
+          "action": "logbook.log",
+          "data": {
+            "name": "Front door alert"
+          }
+        }
+      ]
     }
   }
 }

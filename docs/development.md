@@ -46,6 +46,28 @@ access only on a trusted network; remove the `trusted_networks` auth provider in
 `.ha-config/configuration.yaml` to require login on a shared network. Do not
 expose the dev instance to the internet.
 
+## Notification debug logs
+
+The dev instance already enables `custom_components.ha_notifications` debug
+logging. After backend changes, restart dev to load the updated integration.
+Send and clear log the destination action, alert and flow IDs, and the final
+payload immediately before calling the notify service. A separate completion
+line means the service returned successfully, not that a device displayed it.
+
+For an existing Home Assistant, enable logging temporarily in Developer Tools
+with the `logger.set_level` action:
+
+```yaml
+action: logger.set_level
+data:
+  custom_components.ha_notifications.notification: debug
+```
+
+Trigger the alert and inspect `home-assistant.log` in the configuration directory
+(the dev instance uses `.ha-config/home-assistant.log`). Debug payloads include
+notification content and device options; redact them before sharing and set the
+logger back to `warning` when finished.
+
 ## Validate
 
 ```bash
@@ -69,6 +91,19 @@ review changes with:
 ```bash
 python3 -m pytest --snapshot-update
 ```
+
+The mobile delivery integration test runs generated automations through the real
+`mobile_app` and `notify` integrations with Android and iOS registrations:
+
+```bash
+python3 -m pytest tests/backend/test_mobile_delivery.py
+```
+
+Only the outgoing gateway HTTP transport and unrelated sidebar registration are
+stubbed. The test snapshots the gateway request JSON, including message, title,
+device options, push token, registration metadata, and clear-notification tag.
+It does not contact a push provider or physical device, and cannot prove how a
+phone displays a notification or applies its operating-system settings.
 
 ## Project layout
 

@@ -42,44 +42,91 @@ send:
   name: Send notification
   description: Send a notification using HA Notifications.
   fields:
-    target:
-      name: Target
-      description: Optional Home Assistant target.
-      required: false
+    use_default_tag:
+      name: Use alert ID as default tag
+      description: Defaults to true. Add alert_id as the tag only when payload.data.tag is absent. Disable for separate notifications; custom tags are always preserved. Android persistent notifications require a tag.
+      default: true
       selector:
-        target:
-
-    data:
-      name: Data
-      description: Notification data.
-      required: false
+        boolean:
+    payload:
+      name: Payload
+      description: Native notify service payload with title, message, and data containing device options.
+      required: true
       selector:
         object:
-
-clear:
-  name: Clear notification
-  description: Clear a notification using its configured Home Assistant action.
-  fields:
+    target:
+      name: Recipients
+      selector:
+        object:
     action:
-      name: Action
-      description: Home Assistant action used to deliver the notification.
-      required: true
+      name: Notify action
+      selector:
+        text:
+    alert_id:
+      name: Alert ID
+      selector:
+        text:
+    alert_name:
+      name: Alert name
+      selector:
+        text:
+    flow_id:
+      name: Flow ID
+      selector:
+        text:
+    confirmation:
+      name: Confirmation context
+      selector:
+        object:
+    history_reason:
+      name: History reason
       selector:
         text:
 
-    target:
-      name: Target
-      description: Optional Home Assistant target.
-      required: false
+clear:
+  name: Clear notification
+  description: Clear a notification using its configured Home Assistant action. Requires a tag matching the earlier push; without a default or custom tag, a previous push cannot be identified.
+  fields:
+    use_default_tag:
+      name: Use alert ID as default tag
+      description: Defaults to true. Use the same setting as the original send. A custom payload.data.tag is always preserved; disabling without a custom tag cannot identify a previous push.
+      default: true
       selector:
-        target:
-
-    data:
-      name: Data
-      description: Notification data.
-      required: false
+        boolean:
+    payload:
+      name: Payload
+      description: Native notify payload; data contains device options and an optional custom tag. Message is replaced with clear_notification.
+      required: true
       selector:
         object:
+    target:
+      name: Recipients
+      selector:
+        object:
+    action:
+      name: Notify action
+      selector:
+        text:
+    alert_id:
+      name: Alert ID
+      selector:
+        text:
+    alert_name:
+      name: Alert name
+      selector:
+        text:
+    flow_id:
+      name: Flow ID
+      selector:
+        text:
+    confirmation:
+      name: Confirmation context
+      selector:
+        object:
+    history_reason:
+      name: History reason
+      selector:
+        text:
 
 command:
   name: Send alert command

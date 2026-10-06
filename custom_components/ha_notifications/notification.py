@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -20,6 +22,20 @@ from .const import (
 from .history import history_store
 from .mobile_app import resolve_services
 from .targets import resolve_target
+
+_LOGGER = logging.getLogger(__name__)
+
+_DELIVERY_SCHEMA = vol.Schema({
+    vol.Required("payload"): {vol.Optional("data"): dict, vol.Extra: object},
+    vol.Optional("action"): str,
+    vol.Optional("target"): dict,
+    vol.Optional("alert_id"): str,
+    vol.Optional("alert_name"): str,
+    vol.Optional("use_default_tag", default=True): bool,
+    vol.Optional("flow_id"): str,
+    vol.Optional("confirmation"): dict,
+    vol.Optional("history_reason"): str,
+})
 
 
 def _entry(hass: HomeAssistant) -> Any:
@@ -68,30 +84,24 @@ async def _confirmed_by(hass: HomeAssistant, details: dict[str, Any]) -> str:
 
 async def _render_confirmation_message(
     hass: HomeAssistant,
-    notification: dict[str, Any],
+    payload: dict[str, Any],
+    call: ServiceCall,
 ) -> dict[str, Any]:
     """Render deferred confirmation templates in the managed send service."""
-    data = dict(notification.get("data", {}))
-    template_message = data.pop("template_message", None)
-    device_id = data.pop("confirmation_device_id", None)
-    user_id = data.pop("confirmation_user_id", None)
-    if isinstance(template_message, str):
-        details = {"device_id": device_id, "user_id": user_id}
+    confirmation = call.data.get("confirmation")
+    if confirmation is not None:
+        user_id = confirmation.get("user_id")
         variables = {
-            "confirmed_by": await _confirmed_by(hass, details),
+            "confirmed_by": await _confirmed_by(hass, confirmation),
             "user_id": user_id or "",
-            "alert_id": notification.get("alert_id"),
-            "alert_name": notification.get("alert_name"),
+            "alert_id": call.data.get("alert_id"),
+            "alert_name": call.data.get("alert_name"),
         }
-        rendered = Template(template_message, hass).async_render(
+        rendered = Template(payload.get("message", ""), hass).async_render(
             variables, parse_result=False
         )
-        data["message"] = str(rendered)
-    if data:
-        notification["data"] = data
-    else:
-        notification.pop("data", None)
-    return notification
+        payload["message"] = str(rendered)
+    return payload
 
 
 async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
@@ -148,9 +158,9 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
     )
 
 
-def _parse_notification(payload: Any) -> dict[str, Any]:
+def _parse_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise HomeAssistantError("notification must be a mapping")
+        raise HomeAssistantError("payload must be a mapping")
     return dict(payload)
 
 
@@ -165,7 +175,7 @@ def _target_services(
         if isinstance(action, str) and action.count(".") == 1:
             return [action]
         raise HomeAssistantError(
-            f"ha_notifications.{service_name} requires a notification target"
+            f"ha_notifications.{service_name} requires a target or action"
         )
 
     resolution = resolve_target(hass, target)
@@ -187,50 +197,62 @@ def _target_services(
 
 
 def _payload(
-    notification: dict[str, Any], clear: bool, alert_id: str | None
+    native_payload: dict[str, Any], clear: bool, alert_id: str | None,
+    use_default_tag: bool = True,
 ) -> dict[str, Any]:
-    notification_data = dict(notification.get("data", {}))
-    actions = notification_data.pop("actions", None)
-    message = notification.get("message") or notification_data.pop("message", None)
-    title = notification.get("title") or notification_data.pop("title", None)
-    payload: dict[str, Any] = {}
-    if title:
-        payload["title"] = title
-    payload["message"] = "" if message is None else str(message)
-    if notification.get("action") and isinstance(notification.get("target"), dict):
-        payload.update(notification["target"])
-    if alert_id:
+    payload = dict(native_payload)
+    notification_data = dict(payload.get("data", {}))
+    if alert_id and use_default_tag:
         notification_data.setdefault("tag", alert_id)
     if notification_data:
         payload["data"] = notification_data
-    if actions is not None:
-        payload.setdefault("data", {})["actions"] = actions
     if clear:
         payload["message"] = "clear_notification"
     return payload
 
 
 async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
-    notification = _parse_notification(call.data.get("notification", call.data))
-    notification["alert_id"] = call.data.get("alert_id")
-    notification["alert_name"] = call.data.get("alert_name")
-    notification = await _render_confirmation_message(hass, notification)
+    native_payload = _parse_payload(call.data.get("payload"))
+    if not clear:
+        native_payload = await _render_confirmation_message(hass, native_payload, call)
     service_name = SERVICE_CLEAR if clear else SERVICE_SEND
-    services = _target_services(hass, notification, service_name)
-    payload = _payload(notification, clear, call.data.get("alert_id"))
+    services = _target_services(hass, call.data, service_name)
+    payload = _payload(
+        native_payload, clear, call.data.get("alert_id"), call.data["use_default_tag"]
+    )
     for action in services:
         domain, service = action.split(".")
-        await hass.services.async_call(
-            domain,
-            service,
-            service_data=payload,
-            blocking=True,
-            context=call.context,
+        _LOGGER.debug(
+            "Notification %s: action=%s alert_id=%s flow_id=%s payload=%s",
+            service_name,
+            action,
+            call.data.get("alert_id"),
+            call.data.get("flow_id"),
+            payload,
         )
+        try:
+            await hass.services.async_call(
+                domain,
+                service,
+                service_data=payload,
+                blocking=True,
+                context=call.context,
+            )
+        except Exception:
+            _LOGGER.debug(
+                "Notification %s failed: action=%s alert_id=%s payload=%s",
+                service_name,
+                action,
+                call.data.get("alert_id"),
+                payload,
+                exc_info=True,
+            )
+            raise
+        _LOGGER.debug("Notification %s completed: action=%s", service_name, action)
     alert_id = call.data.get("alert_id")
     if isinstance(alert_id, str) and alert_id:
         kwargs = {}
-        flow_id = call.data.get("flow_id") or call.data.get("run_id")
+        flow_id = call.data.get("flow_id")
         if isinstance(flow_id, str) and flow_id:
             kwargs["flow_id"] = flow_id
         details = {"service": services[0] if len(services) == 1 else services}
@@ -275,10 +297,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         )
 
     hass.services.async_register(
-        DOMAIN, SERVICE_SEND, send
+        DOMAIN, SERVICE_SEND, send, schema=_DELIVERY_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR, clear
+        DOMAIN, SERVICE_CLEAR, clear, schema=_DELIVERY_SCHEMA
     )
     hass.services.async_register(DOMAIN, SERVICE_REPORT, report)
     hass.services.async_register(DOMAIN, SERVICE_COMMAND, command)

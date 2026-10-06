@@ -159,14 +159,18 @@ actions:
         alert_id: full_feature
         alert_name: Full feature
         flow_id: '{{ context.parent_id or context.id }}'
+        use_default_tag: true
+        payload:
+          title: ''
+          message: Door open
+          data:
+            actions:
+            - action: ha_notifications_full_feature_confirmation_confirm
+              title: Confirm
+        action: notify.mobile_app_phone
         target:
           entity_id:
           - notify.mobile_app_phone
-        data:
-          message: Door open
-          actions:
-          - action: ha_notifications_full_feature_confirmation_confirm
-            title: Confirm
     - action: logbook.log
       data:
         name: Full feature sent
@@ -235,15 +239,17 @@ actions:
             alert_id: full_feature
             alert_name: Full feature
             flow_id: '{{ context.parent_id or context.id }}'
-            target:
-              entity_id:
-              - notify.mobile_app_phone
-            data:
-              template_message: '{% raw %}Confirmed{% endraw %}'
-              confirmation_device_id: '{{ wait.trigger.event.data.device_id | default('''',
-                true) }}'
-              confirmation_user_id: '{{ wait.trigger.event.context.user_id | default('''',
-                true) }}'
+            use_default_tag: true
+            payload:
+              title: ''
+              message: '{% raw %}Confirmed{% endraw %}'
+              data: {}
+            action: notify.mobile_app_phone
+            confirmation:
+              device_id: '{{ wait.trigger.event.data.device_id | default('''', true)
+                }}'
+              user_id: '{{ wait.trigger.event.context.user_id | default('''', true)
+                }}'
             history_reason: confirmation_notification
         - action: light.turn_on
           target:
@@ -283,15 +289,18 @@ actions:
               alert_id: full_feature
               alert_name: Full feature
               flow_id: '{{ context.parent_id or context.id }}'
+              use_default_tag: true
+              payload:
+                title: Confirmation - Attempt {{ repeat.index + 1 }}/5
+                message: Door open
+                data:
+                  actions:
+                  - action: ha_notifications_full_feature_confirmation_confirm
+                    title: Confirm
+              action: notify.mobile_app_phone
               target:
                 entity_id:
                 - notify.mobile_app_phone
-              data:
-                message: Door open
-                actions:
-                - action: ha_notifications_full_feature_confirmation_confirm
-                  title: Confirm
-              title: Confirmation - Attempt {{ repeat.index + 1 }}/5
           - action: ha_notifications.report
             data:
               alert_id: full_feature
@@ -357,15 +366,17 @@ actions:
                   alert_id: full_feature
                   alert_name: Full feature
                   flow_id: '{{ context.parent_id or context.id }}'
-                  target:
-                    entity_id:
-                    - notify.mobile_app_phone
-                  data:
-                    template_message: '{% raw %}Confirmed{% endraw %}'
-                    confirmation_device_id: '{{ wait.trigger.event.data.device_id
-                      | default('''', true) }}'
-                    confirmation_user_id: '{{ wait.trigger.event.context.user_id |
-                      default('''', true) }}'
+                  use_default_tag: true
+                  payload:
+                    title: ''
+                    message: '{% raw %}Confirmed{% endraw %}'
+                    data: {}
+                  action: notify.mobile_app_phone
+                  confirmation:
+                    device_id: '{{ wait.trigger.event.data.device_id | default('''',
+                      true) }}'
+                    user_id: '{{ wait.trigger.event.context.user_id | default('''',
+                      true) }}'
                   history_reason: confirmation_notification
               - action: light.turn_on
                 target:

@@ -52,6 +52,10 @@ Use HA theme variables (`--primary-text-color`, `--divider-color`,
   by adding a catalog entry. Keep `ha-selector`/`ha-form` config objects
   stable between renders (`selectConfig()`, the editor's schema cache), or HA
   rebuilds the control.
+- Reuse the editor's `labelWithHelp()` for adjacent label/section help.
+  Section info stays beside the heading, never in a code editor; boolean help
+  stays immediately after label text in `.nc-heading`, with the native switch
+  separate in the shared `.nc-option.nc-option-inline` row.
 
 ## Validation
 
