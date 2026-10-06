@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   saveAlert: vi.fn(),
   deleteAlert: vi.fn(),
   cancelRun: vi.fn(),
+  testAlert: vi.fn(),
   validateAlert: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ const alert: Alert = configuredAlertFixture();
 
 afterEach(() => {
   cleanupTestDom();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
@@ -54,10 +56,12 @@ function setupApi(): void {
   api.saveAlert.mockResolvedValue(alert);
   api.deleteAlert.mockResolvedValue({});
   api.cancelRun.mockResolvedValue({ cancelled: true });
+  api.testAlert.mockResolvedValue({ started: true });
   api.validateAlert.mockResolvedValue({});
 }
 
 function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
+  hass: Hass;
   shadowRoot: ShadowRoot;
   updateComplete: Promise<unknown>;
 } {
@@ -65,6 +69,7 @@ function mountPanel(overrides: Partial<Hass> = {}): HTMLElement & {
   return mountCustomElement("ha-notifications-panel", {
     hass: homeAssistantFixture(overrides),
   }) as HTMLElement & {
+    hass: Hass;
     shadowRoot: ShadowRoot;
     updateComplete: Promise<unknown>;
   };
@@ -82,6 +87,54 @@ function selectTab(panel: HTMLElement, name: string): void {
 }
 
 describe("panel view", () => {
+  it.each([false, true])("confirms Test alert before transport with accepted=%s", async accepted => {
+    const confirm = vi.fn().mockReturnValue(accepted);
+    vi.stubGlobal("confirm", confirm);
+    const panel = mountPanel();
+    await ready(panel);
+    const notification = vi.fn();
+    panel.addEventListener("hass-notification", notification);
+    const menu = panel.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { label: string; action(): void }[];
+    };
+
+    menu.items.find(item => item.label === "Test alert")!.action();
+
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      `Test alert "${alert.name}"? This sends REAL notifications and runs configured actions, ignoring conditions. Actual trigger data is unavailable.`,
+    );
+    if (accepted) {
+      await vi.waitFor(() => expect(api.testAlert).toHaveBeenCalledExactlyOnceWith(panel.hass, alert.id));
+      await vi.waitFor(() => expect(notification).toHaveBeenCalledOnce());
+      expect((notification.mock.calls[0][0] as CustomEvent).detail).toEqual({ message: "Alert test started." });
+      await vi.waitFor(() => expect(api.getAlerts).toHaveBeenCalledTimes(2));
+    } else {
+      expect(api.testAlert).not.toHaveBeenCalled();
+      expect(notification).not.toHaveBeenCalled();
+      expect(api.getAlerts).toHaveBeenCalledOnce();
+    }
+    expect(api.saveAlert).not.toHaveBeenCalled();
+    expect(api.loadUsers).not.toHaveBeenCalled();
+  });
+
+  it("reports Test alert errors without a started notification", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    const panel = mountPanel();
+    await ready(panel);
+    api.testAlert.mockRejectedValueOnce(new Error("Automation not found"));
+    const notification = vi.fn();
+    panel.addEventListener("hass-notification", notification);
+    const menu = panel.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { label: string; action(): void }[];
+    };
+
+    menu.items.find(item => item.label === "Test alert")!.action();
+
+    await vi.waitFor(() => expect(notification).toHaveBeenCalledOnce());
+    expect((notification.mock.calls[0][0] as CustomEvent).detail).toEqual({ message: "Error: Automation not found" });
+    expect(api.getAlerts).toHaveBeenCalledOnce();
+  });
+
   it("opens the native automation editor without hass.navigate", async () => {
     const original = window.location.href;
     const originalState = window.history.state;

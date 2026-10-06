@@ -1,12 +1,17 @@
 """Tests for the Home Assistant websocket boundary."""
 
+import asyncio
+import json
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
+import voluptuous as vol
 from homeassistant.core import callback
+from homeassistant.exceptions import Unauthorized
 
 from custom_components.ha_notifications.bridge import (
     BRAND_URL,
@@ -14,6 +19,8 @@ from custom_components.ha_notifications.bridge import (
     async_register_panel,
     websocket,
 )
+from custom_components.ha_notifications.const import DOMAIN
+from tests.backend.conftest import MockConfigEntry, async_mock_service
 
 
 async def _dispatch(
@@ -40,18 +47,109 @@ def test_registers_only_supported_namespaced_commands(
     websocket.register(hass)
     websocket.register(hass)
 
-    assert len(registered) == 9
+    assert len(registered) == 10
     assert {handler._ws_command for handler in registered} == {
         "ha_notifications/get_config",
         "ha_notifications/automation_status",
         "ha_notifications/get_history",
         "ha_notifications/mobile_platforms",
         "ha_notifications/cancel_run",
+        "ha_notifications/test_alert",
         "ha_notifications/validate_config",
         "ha_notifications/save_config",
         "ha_notifications/delete",
         "ha_notifications/reload",
     }
+
+
+async def test_registered_test_alert_route_requires_admin_and_alert_id(
+    hass,
+    alert_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validate route arguments and schedule only the requested alert as an admin."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"version": 1, "alerts": [alert_factory("base"), alert_factory("persisted")]},
+    )
+    entry.add_to_hass(hass)
+    entity_id = "automation.ha_notifications_demo"
+    hass.states.async_set(entity_id, "on")
+    calls = async_mock_service(hass, "automation", "trigger")
+    trigger = AsyncMock(wraps=hass.services.async_call)
+    monkeypatch.setattr(type(hass.services), "async_call", trigger)
+    monkeypatch.setattr(websocket, "_WEBSOCKET_REGISTERED", set())
+    websocket.register(hass)
+    handler, schema = hass.data["websocket_api"]["ha_notifications/test_alert"]
+    msg = schema({"id": 7, "type": "ha_notifications/test_alert", "alert_id": "demo"})
+    result = asyncio.get_running_loop().create_future()
+    admin = await hass.auth.async_create_user("Admin", group_ids=["system-admin"])
+    connection = SimpleNamespace(
+        user=admin,
+        send_result=lambda message_id, response: result.set_result((message_id, response)),
+        send_error=lambda *_args: pytest.fail("testing the saved alert must succeed"),
+    )
+
+    handler(hass, connection, msg)
+    assert await asyncio.wait_for(result, 1) == (7, {"started": True})
+    await hass.async_block_till_done()
+    trigger.assert_awaited_once_with(
+        "automation", "trigger",
+        {"entity_id": entity_id, "skip_condition": True},
+        blocking=False,
+    )
+    assert [dict(call.data) for call in calls] == [{
+        "entity_id": entity_id, "skip_condition": True,
+    }]
+
+    for user in (None, await hass.auth.async_create_user("Non-admin")):
+        connection.user = user
+        with pytest.raises(Unauthorized):
+            handler(hass, connection, msg)
+    assert trigger.await_count == 1
+    for arguments in ({}, {"alert_id": 5}, {"alert_id": ["demo"]}):
+        with pytest.raises(vol.Invalid):
+            schema({"id": 7, "type": "ha_notifications/test_alert", **arguments})
+    routes = json.loads((Path(__file__).parents[1] / "contracts" / "routes.json").read_text())
+    assert "test_alert" in routes["commands"]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "error"),
+    [
+        ("no_entry", "HA Notifications has no config entry"),
+        ("unknown_alert", "unknown alert_id: missing"),
+        ("missing_state", "Save an alert with enabled triggers before testing it"),
+    ],
+)
+async def test_test_alert_errors_do_not_trigger_automation(
+    hass,
+    alert_factory,
+    scenario: str,
+    error: str,
+) -> None:
+    """Return websocket errors rather than start a missing alert or automation."""
+    if scenario != "no_entry":
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={"version": 1, "alerts": [alert_factory("base")]},
+        )
+        entry.add_to_hass(hass)
+    calls = async_mock_service(hass, "automation", "trigger")
+    errors: list[tuple[object, ...]] = []
+    connection = SimpleNamespace(
+        send_result=lambda *_args: pytest.fail("testing a missing alert must fail"),
+        send_error=lambda *args: errors.append(args),
+    )
+    dispatcher = websocket.WebsocketDispatcher()
+    await dispatcher.dispatch(
+        hass, connection,
+        {"id": 9, "alert_id": "missing" if scenario == "unknown_alert" else "base_alert"},
+        dispatcher.test_alert,
+    )
+    await hass.async_block_till_done()
+    assert errors == [(9, websocket.ERROR_CODE, error)]
+    assert calls == []
 
 
 @pytest.mark.asyncio

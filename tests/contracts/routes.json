@@ -4,6 +4,7 @@
     "mobile_platforms",
     "automation_status",
     "get_history",
+    "test_alert",
     "validate_config",
     "save_config",
     "delete",

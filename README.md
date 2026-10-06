@@ -21,7 +21,7 @@ afterwards to load it. Your own `automations.yaml` is left untouched.
 ## Using the Panel
 
 - **Alerts:** create, edit, enable, or disable alerts; open their automations or
-  history and cancel active runs.
+  history, test the saved action flow, and cancel active runs.
 - **Active:** alerts with automation runs currently in progress.
 - **History:** searchable events, optionally grouped into collapsed runs with
   latest-activity timestamps.
@@ -69,6 +69,8 @@ alerts:
 
 - Edit alerts, not their generated automations: those are rewritten on save.
 - Conditions are evaluated when configured triggers fire, not continuously.
+- **Test alert** runs saved actions with conditions bypassed. It sends real
+  notifications and executes configured actions; it does not simulate triggers.
 - Notifications use the alert ID as their default tag, allowing supported
   providers to replace previous notifications. Clearing is explicit, not tied
   to an automation finishing.

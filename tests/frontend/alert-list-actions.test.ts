@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, expect, it, vi } from "vitest";
+import { mdiPlayOutline } from "@mdi/js";
 import { alertList, alertListStyles, type AlertHandlers } from "../../frontend/views/alerts.js";
 import type { Action } from "../../frontend/ui.js";
 import type { AutomationRuntimeStatus } from "../../frontend/types.js";
@@ -12,7 +13,7 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
   const alert = draftAlertFixture({ id: "door", name: "Door" });
   const on: AlertHandlers = {
     create: vi.fn(), edit: vi.fn(), toggle: vi.fn(), history: vi.fn(),
-    remove: vi.fn(), cancelRun: vi.fn(), navigate: vi.fn(),
+    remove: vi.fn(), cancelRun: vi.fn(), testAlert: vi.fn(), navigate: vi.fn(),
   };
   const status: AutomationRuntimeStatus = {
     status: "managed", enabled: true, mode: "parallel", current: 1, automation_id: "door_automation",
@@ -32,16 +33,16 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
   expect(menu.narrow).toBe(narrow);
   expect(menu.items.every(item => item.tooltip === item.label)).toBe(true);
   expect(menu.items.map(item => item.label)).toEqual([
-    "View history", "Edit alert", "Open automation", "Cancel active runs", "Delete alert",
+    "View history", "Edit alert", "Open automation", "Test alert", "Cancel active runs", "Delete alert",
   ]);
   const labelledButtons = [...container.querySelectorAll(".nc-alert-labelled-actions ha-button")];
   if (!narrow) {
     expect(labelledButtons.every(button => button.getAttribute("appearance") === "outlined")).toBe(true);
   }
   expect(labelledButtons.map(button => button.textContent?.trim())).toEqual(narrow ? [] : [
-    "View history", "Edit alert", "Open automation", "Cancel active runs", "Delete alert",
+    "View history", "Edit alert", "Open automation", "Test alert", "Cancel active runs", "Delete alert",
   ]);
-  expect(container.querySelectorAll('.nc-alert-labelled-actions ha-svg-icon[slot="start"]')).toHaveLength(narrow ? 0 : 5);
+  expect(container.querySelectorAll('.nc-alert-labelled-actions ha-svg-icon[slot="start"]')).toHaveLength(narrow ? 0 : 6);
   if (!narrow) {
     labelledButtons[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(on.history).toHaveBeenCalledWith(alert);
@@ -50,6 +51,12 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
     labelledButtons[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(on.edit).toHaveBeenCalledExactlyOnceWith(alert);
     vi.mocked(on.edit).mockClear();
+    labelledButtons[3].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(on.testAlert).toHaveBeenCalledExactlyOnceWith(alert);
+    expect(on.edit).not.toHaveBeenCalled();
+    labelledButtons[3].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(on.edit).not.toHaveBeenCalled();
+    vi.mocked(on.testAlert).mockClear();
   }
   menu.items[0].action();
   expect(on.history).toHaveBeenCalledWith(alert);
@@ -59,8 +66,40 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
   expect(on.edit).toHaveBeenCalledExactlyOnceWith(alert);
   menu.items[2].action();
   expect(on.navigate).toHaveBeenCalledWith("/config/automation/edit/door_automation");
+  expect(menu.items[3].path).toBe(mdiPlayOutline);
   menu.items[3].action();
+  expect(on.testAlert).toHaveBeenCalledExactlyOnceWith(alert);
+  menu.items[4].action();
   expect(on.cancelRun).toHaveBeenCalledExactlyOnceWith(alert);
+});
+
+it.each([
+  { enabled: true, automationId: "door_automation", available: true },
+  { enabled: false, automationId: "door_automation", available: true },
+  { enabled: true, automationId: undefined, available: false },
+  { enabled: false, automationId: undefined, available: false },
+])("offers Test alert only with an automation id: %j", ({ enabled, automationId, available }) => {
+  const alert = draftAlertFixture({ id: "door", enabled });
+  const on: AlertHandlers = {
+    create: vi.fn(), edit: vi.fn(), toggle: vi.fn(), history: vi.fn(),
+    remove: vi.fn(), cancelRun: vi.fn(), testAlert: vi.fn(), navigate: vi.fn(),
+  };
+  const status: AutomationRuntimeStatus = {
+    status: "managed", enabled, current: 0, automation_id: automationId,
+  };
+  const container = renderTemplate(alertList(null, [alert], { door: status }, false, on, false));
+  const menu = container.querySelector("ha-icon-overflow-menu") as HTMLElement & { items: Action[] };
+  expect(menu.items.some(item => item.label === "Test alert")).toBe(available);
+});
+
+it("does not offer Test alert without runtime status", () => {
+  const on: AlertHandlers = {
+    create: vi.fn(), edit: vi.fn(), toggle: vi.fn(), history: vi.fn(),
+    remove: vi.fn(), cancelRun: vi.fn(), testAlert: vi.fn(), navigate: vi.fn(),
+  };
+  const container = renderTemplate(alertList(null, [draftAlertFixture()], {}, false, on, true));
+  const menu = container.querySelector("ha-icon-overflow-menu") as HTMLElement & { items: Action[] };
+  expect(menu.items.some(item => item.label === "Test alert")).toBe(false);
 });
 
 it("scopes theme contrast and keyboard focus to native row controls", () => {

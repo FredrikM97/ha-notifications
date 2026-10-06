@@ -1,6 +1,6 @@
 import { css, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
-import { mdiDeleteOutline, mdiHistory, mdiOpenInNew, mdiPencil, mdiStopCircleOutline } from "@mdi/js";
+import { mdiDeleteOutline, mdiHistory, mdiOpenInNew, mdiPencil, mdiPlayOutline, mdiStopCircleOutline } from "@mdi/js";
 import type { Alert, AutomationRuntimeStatus, Hass } from "../types.js";
 import { localize } from "../localize.js";
 import { actions, emptyState, type Action } from "../ui.js";
@@ -12,6 +12,7 @@ export interface AlertHandlers {
   history(alert: Alert): void;
   remove(alert: Alert): void;
   cancelRun(alert: Alert): void;
+  testAlert(alert: Alert): void;
   navigate(path: string): void;
 }
 
@@ -147,6 +148,10 @@ function menuActions(
           label: t("alert.open_automation"),
           path: mdiOpenInNew,
           action: () => on.navigate(`/config/automation/edit/${encodeURIComponent(status.automation_id!)}`),
+        }, {
+          label: t("alert.test"),
+          path: mdiPlayOutline,
+          action: () => on.testAlert(alert),
         }]
       : []),
     ...(status && status.current > 0

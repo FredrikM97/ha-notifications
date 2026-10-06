@@ -49,6 +49,7 @@ type Command =
   | "mobile_platforms"
   | "automation_status"
   | "cancel_run"
+  | "test_alert"
   | "get_history"
   | "validate_config"
   | "save_config"
@@ -148,6 +149,13 @@ export function cancelRun(
   alertId: string,
 ): Promise<{ cancelled: boolean }> {
   return call(hass, "cancel_run", { alert_id: alertId });
+}
+
+export function testAlert(
+  hass: Hass,
+  alertId: string,
+): Promise<{ started: true }> {
+  return call(hass, "test_alert", { alert_id: alertId });
 }
 
 export async function saveAlert(hass: Hass, alert: Alert): Promise<Alert> {

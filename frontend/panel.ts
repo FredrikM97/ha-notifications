@@ -10,6 +10,7 @@ import {
   getHistory,
   loadUsers,
   saveAlert,
+  testAlert,
   validateAlert,
 } from "./api.js";
 import type { Alert, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
@@ -234,6 +235,10 @@ class HaNotificationsPanel extends LitElement {
         const result = await cancelRun(this._hass, alert.id);
         return this.t(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
       }),
+    testAlert: (alert) => {
+      if (!window.confirm(this.t("alert.confirm_test", { name: alert.name }))) return;
+      void this.act(() => testAlert(this._hass, alert.id), this.t("alert.test_started"));
+    },
     remove: (alert) => {
       if (!window.confirm(`Delete "${alert.name}"?`)) return;
       void this.act(() => deleteAlert(this._hass, alert.id), this.t("panel.alert_deleted"));

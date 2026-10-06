@@ -15,6 +15,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications.automation import automation_id
+from custom_components.ha_notifications.bridge.websocket import WebsocketDispatcher
 from custom_components.ha_notifications.const import (
     AUTOMATION_CATEGORY,
     AUTOMATION_CATEGORY_SCOPE,
@@ -658,6 +659,115 @@ async def test_generated_automation_deduplicates_repeated_condition_entities(
     assert delivered == [
         {"message": "Message", "data": {"tag": "base_alert"}}
     ]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
+    hass: HomeAssistant,
+    full_feature_alert,
+    mock_automation_files,
+    enable_custom_integrations,
+    monkeypatch,
+    enabled: bool,
+) -> None:
+    """Return before confirmation while preserving saved and runtime enablement."""
+    async def register_panel(_hass: HomeAssistant) -> None:
+        return None
+
+    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
+    full_feature_alert["enabled"] = enabled
+    full_feature_alert["monitor"] = _monitor(
+        triggers=[{"trigger": "state", "entity_id": "binary_sensor.door"}],
+        conditions=[{
+            "condition": "state",
+            "entity_id": "binary_sensor.door",
+            "state": "on",
+        }],
+    )
+    full_feature_alert["confirmation"]["notification"]["data"][
+        "message"
+    ] = "Confirmed by {{confirmed_by}}"
+    delivered: list[dict[str, object]] = []
+    post_send_calls: list[dict[str, object]] = []
+    confirmation_calls: list[dict[str, object]] = []
+
+    async def handle_notification(call) -> None:
+        delivered.append(dict(call.data))
+
+    async def handle_post_send(call) -> None:
+        post_send_calls.append(dict(call.data))
+
+    async def handle_confirmation_action(call) -> None:
+        confirmation_calls.append(dict(call.data))
+
+    hass.services.async_register("notify", "mobile_app_phone", handle_notification)
+    hass.services.async_register("logbook", "log", handle_post_send)
+    hass.services.async_register("light", "turn_on", handle_confirmation_action)
+    hass.states.async_set("binary_sensor.door", "off")
+    mock_automation_files["prepare"]()
+    assert await async_setup_component(hass, "automation", {})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        data={"version": 1, "alerts": [full_feature_alert]},
+    )
+    entry.add_to_hass(hass)
+    assert await ha_notifications.async_setup_entry(hass, entry)
+    await hass.async_block_till_done()
+    main = next(
+        state for state in hass.states.async_all("automation")
+        if state.attributes.get("id") == automation_id(full_feature_alert)
+    )
+    expected_state = "on" if enabled else "off"
+    assert main.state == expected_state
+    saved_config = dict(entry.data)
+
+    await hass.services.async_call(
+        "automation", "trigger",
+        {"entity_id": main.entity_id, "skip_condition": False},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert delivered == []
+
+    async with asyncio.timeout(1):
+        result = await WebsocketDispatcher().test_alert(
+            hass, {"alert_id": full_feature_alert["id"]},
+        )
+    assert result == {"started": True}
+    await _wait_for_history_events(
+        entry.runtime_data, full_feature_alert["id"], "waiting",
+    )
+    assert delivered == [{
+        "message": "Door open",
+        "data": {"tag": "full_feature", "actions": [{
+            "action": "ha_notifications_full_feature_confirmation_confirm",
+            "title": "Confirm",
+        }]},
+    }]
+    assert post_send_calls == [{"name": "Full feature sent"}]
+    assert confirmation_calls == []
+    assert hass.states.get(main.entity_id).attributes["current"] == 1
+    assert hass.states.get(main.entity_id).state == expected_state
+
+    hass.bus.async_fire(
+        "mobile_app_notification_action",
+        {"action": delivered[0]["data"]["actions"][0]["action"]},
+    )
+    await hass.async_block_till_done()
+    assert delivered[-1] == {
+        "message": "Confirmed by Unknown device",
+        "data": {"tag": "full_feature"},
+    }
+    assert len(delivered) == 2
+    assert confirmation_calls == [{"entity_id": ["light.hall"]}]
+    assert hass.states.get(main.entity_id).attributes["current"] == 0
+    assert hass.states.get(main.entity_id).state == expected_state
+    assert entry.data == saved_config
+    assert entry.options == {}
+    assert entry.runtime_data.config["alerts"][0]["enabled"] is enabled
+    history = await entry.runtime_data.history.async_entries(full_feature_alert["id"])
+    assert sum(item["event"]["type"] == "confirmation_completed" for item in history) == 1
 
 
 async def test_full_flow_uses_native_automation(

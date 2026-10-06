@@ -280,6 +280,27 @@ class WebsocketDispatcher:
             msg.get("alert_id")
         )
 
+    async def test_alert(
+        self, hass: HomeAssistant, msg: dict[str, Any]
+    ) -> dict[str, bool]:
+        """Schedule the saved alert's actions without checking conditions."""
+        self._require_entry(hass)
+        alert = next(
+            (item for item in _config_for(hass)["alerts"] if item["id"] == msg["alert_id"]),
+            None,
+        )
+        if alert is None:
+            raise ValueError(f"unknown alert_id: {msg['alert_id']}")
+        entity_id = _automation_entity_for(hass, alert)
+        if hass.states.get(entity_id) is None:
+            raise ValueError("Save an alert with enabled triggers before testing it")
+        await hass.services.async_call(
+            "automation", "trigger",
+            {"entity_id": entity_id, "skip_condition": True},
+            blocking=False,
+        )
+        return {"started": True}
+
     async def cancel_run(
         self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> dict[str, bool]:
@@ -451,6 +472,7 @@ def register(hass: HomeAssistant) -> None:
         "automation_status": (dispatcher.automation_status, {}),
         "get_history": (dispatcher.get_history, {vol.Optional("alert_id"): str}),
         "cancel_run": (dispatcher.cancel_run, {vol.Required("alert_id"): str}),
+        "test_alert": (dispatcher.test_alert, {vol.Required("alert_id"): str}),
         "validate_config": (dispatcher.validate_config, {vol.Required("config"): dict}),
         "save_config": (dispatcher.save_config, {vol.Required("config"): dict}),
         "delete": (dispatcher.delete, {vol.Required("alert_id"): str}),
@@ -462,7 +484,7 @@ def register(hass: HomeAssistant) -> None:
             hass,
             _handler(
                 dispatcher, handler, schema,
-                require_admin=command == "mobile_platforms",
+                require_admin=command in {"mobile_platforms", "test_alert"},
             ),
         )
     _WEBSOCKET_REGISTERED.add(id(hass))

@@ -10,6 +10,7 @@ import {
   reload,
   saveAlert,
   saveConfig,
+  testAlert,
   validateAlert,
   validateConfig,
 } from "../../frontend/api.js";
@@ -22,6 +23,17 @@ import {
 } from "./conftest.js";
 
 describe("frontend API transport", () => {
+  it("starts a saved alert test by alert id without trigger data", async () => {
+    const client = createHassClient();
+    client.sendMessagePromise.mockResolvedValueOnce({ started: true });
+
+    await expect(testAlert(client.hass, "door")).resolves.toEqual({ started: true });
+    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+      type: "ha_notifications/test_alert",
+      alert_id: "door",
+    });
+  });
+
   it("cancels active automation runs by alert id", async () => {
     const client = createHassClient();
     client.sendMessagePromise.mockResolvedValueOnce({ cancelled: true });
