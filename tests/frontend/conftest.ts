@@ -3,33 +3,25 @@ import userEvent from "@testing-library/user-event";
 import { render } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert, Hass, RuntimeAlertHistoryEntry } from "../../frontend/types.js";
-import { editableAlert as toEditableAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
-import alertDefaults from "../contracts/alert_defaults.json";
+import { createAlertDraft, editableAlert as toEditableAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
 import alertFixtureData from "./fixtures/alerts.json";
 import fixtureData from "./fixtures/history.json";
 
 export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
 export function createHassClient() {
-  const sendMessagePromise = vi.fn().mockResolvedValue({});
-  const connection = { sendMessagePromise } as unknown as Hass["connection"];
-  const callWS = vi.fn(<Response>(message: Record<string, unknown>): Promise<Response> =>
-    connection.sendMessagePromise<Response>(message));
+  const callWS = vi.fn<Hass["callWS"]>().mockResolvedValue({});
   return {
-    hass: { connection, callWS } as Hass,
-    sendMessagePromise,
+    hass: { callWS } as Hass,
     callWS,
   };
 }
 
 export function homeAssistantFixture(overrides: Partial<Hass> = {}): Hass {
-  const connection = overrides.connection ?? createHassClient().hass.connection;
   return {
     user: { is_admin: true },
     locale: { language: "en", date_format: "YMD", time_format: "24" },
-    connection,
-    callWS: <Response>(message: Record<string, unknown>): Promise<Response> =>
-      connection.sendMessagePromise<Response>(message),
+    callWS: createHassClient().callWS,
     ...overrides,
   } as Hass;
 }
@@ -53,9 +45,10 @@ export function editorAlertFixture(overrides: Partial<Alert> = {}): Alert {
 }
 
 export function draftAlertFixture(overrides: Partial<Alert> = {}): EditableAlert {
-  const alert = structuredClone(alertDefaults) as EditableAlert;
+  const alert = createAlertDraft();
   return {
     ...alert,
+    id: "alert_draft",
     ...overrides,
     notification: {
       ...alert.notification,

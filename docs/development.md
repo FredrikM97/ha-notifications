@@ -68,6 +68,24 @@ Trigger the alert and inspect `home-assistant.log` in the configuration director
 notification content and device options; redact them before sharing and set the
 logger back to `warning` when finished.
 
+## Parallel Features
+
+Use one branch and Git worktree per feature. Branches alone still share the
+current checkout and index; worktrees provide separate files and staging areas.
+Create them from a clean committed base, with feature-specific names:
+
+```bash
+git worktree add -b fix/reminder-message ../nc-reminder-message HEAD
+git worktree add -b refactor/editor-defaults ../nc-editor-defaults HEAD
+```
+
+Open each worktree in its own VS Code window. Commit only that feature's source,
+tests, and necessary documentation there. Merge or cherry-pick its commits when
+ready; do not include unrelated instruction cleanup in a behavior-fix commit.
+For already mixed uncommitted changes, use selective staging (`git add -p`)
+before creating focused commits; switching branches does not separate them.
+Agents must not create branches, stage, or commit without an explicit request.
+
 ## Validate
 
 ```bash

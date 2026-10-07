@@ -12,57 +12,127 @@ from custom_components.ha_notifications import RuntimeData, async_save_config
 from custom_components.ha_notifications.config_flow import HaNotificationsConfigFlow
 from custom_components.ha_notifications.configuration import (
     AlertConfig,
+    ConditionOptions,
     Configuration,
+    ConfirmationButtonConfig,
     ConfirmationConfig,
     ConfirmationNotificationConfig,
     NotificationConfig,
+    ReminderConfig,
     TriggerOptions,
     validate_config,
 )
 
 
-def test_editor_defaults_match_shared_contract_and_are_independent() -> None:
+def test_feature_model_defaults_match_shared_contract_and_are_independent() -> None:
     expected = json.loads((Path(__file__).parents[1] / "contracts" / "alert_defaults.json").read_text())
-    first = AlertConfig.editor_defaults("alert_draft")
-    second = AlertConfig.editor_defaults("alert_draft")
+    assert validate_config({"alerts": [expected]})["alerts"][0] == expected
+    expected["confirmation"]["buttons"] = []
+    first = AlertConfig(id="alert_draft", notification=NotificationConfig(), confirmation=ConfirmationConfig())
+    second = AlertConfig(id="alert_draft", notification=NotificationConfig(), confirmation=ConfirmationConfig())
 
     assert first.model_dump(exclude_none=True) == expected
     assert second.model_dump(exclude_none=True) == expected
     assert validate_config({"alerts": [expected]})["alerts"][0] == expected
 
     first.monitor.triggers.items.append({"trigger": "event", "event_type": "changed"})
+    first.monitor.conditions.items.append({"condition": "template", "value_template": "{{ true }}"})
     first.monitor.conditions.interval = 60
     first.monitor.inactive.items.append({"trigger": "event", "event_type": "inactive"})
     first.notification.target["entity_id"] = ["notify.phone"]
     first.notification.options["push"] = {"sound": "default"}
     assert first.confirmation is not None
-    first.confirmation.buttons[0].label = "Changed"
+    first.confirmation.buttons.append(ConfirmationButtonConfig(id="custom", label="Changed"))
     first.confirmation.notification.options["color"] = "red"
     first.confirmation.reminders.interval = 60
     first.confirmation.actions.append({"action": "light.turn_on"})
 
     assert second.model_dump(exclude_none=True) == expected
-    assert AlertConfig.editor_defaults("alert_draft").model_dump(exclude_none=True) == expected
+    assert AlertConfig(
+        id="alert_draft", notification=NotificationConfig(), confirmation=ConfirmationConfig(),
+    ).model_dump(exclude_none=True) == expected
 
 
-def test_validate_config_minimal_alert_does_not_inherit_editor_overrides() -> None:
+def test_validate_config_minimal_alert_defaults_interval_without_confirmation() -> None:
     alert = validate_config({"alerts": [{"id": "minimal", "notification": {}}]})["alerts"][0]
 
     assert "confirmation" not in alert
-    assert "interval" not in alert["monitor"]["conditions"]
+    assert alert["monitor"]["conditions"]["interval"] == 43200
+
+
+def test_alert_requires_notification_without_defaulting_confirmation() -> None:
+    with pytest.raises(ValidationError, match="notification"):
+        AlertConfig(id="minimal")
+    alert = AlertConfig(id="minimal", notification=NotificationConfig())
+    assert alert.confirmation is None
+    assert "confirmation" not in alert.model_dump(exclude_none=True)
+
+
+def test_reminder_model_serializes_declared_defaults() -> None:
+    reminders = ReminderConfig()
+    assert reminders.model_dump() == {
+        "enabled": True, "interval": 1800, "max_attempts": 5,
+        "show_attempts": False, "forget_after_enabled": False, "timeout": 900,
+    }
+    assert "forget_after_enabled" in ReminderConfig.model_fields
+    assert ReminderConfig.model_validate(reminders.model_dump()) == reminders
+
+
+def test_reminder_model_preserves_explicit_values_and_native_extensions() -> None:
+    raw = {
+        "enabled": False, "interval": {"minutes": 2}, "max_attempts": 2,
+        "show_attempts": True, "forget_after_enabled": True, "timeout": 60,
+        "native_extra": {"value": "preserved"},
+    }
+    reminders = ReminderConfig.model_validate(raw)
+    assert reminders.model_dump() == raw
+    assert ReminderConfig.model_validate(reminders.model_dump()) == reminders
+
+
+@pytest.mark.parametrize("interval", [60, "00:05:00", {"minutes": 5}])
+def test_condition_interval_defaults_and_preserves_explicit_values(interval: object) -> None:
+    assert ConditionOptions().model_dump()["interval"] == 43200
+    assert ConditionOptions.model_validate({"interval": interval}).model_dump()["interval"] == interval
+    with pytest.raises(ValidationError):
+        ConditionOptions.model_validate({"interval": None})
+
+
+@pytest.mark.parametrize("buttons", [[], [{"id": "skip", "label": "Skip", "native_extra": True}]])
+def test_confirmation_buttons_preserve_explicit_values(buttons: list[dict]) -> None:
+    assert ConfirmationConfig().model_dump()["buttons"] == []
+    assert ConfirmationConfig.model_validate({"buttons": buttons}).model_dump()["buttons"] == buttons
+
+
+def test_missing_confirmation_buttons_do_not_create_editor_content() -> None:
+    alert = validate_config({"alerts": [{
+        "id": "minimal", "notification": {}, "confirmation": {"enabled": True},
+    }]})["alerts"][0]
+    assert alert["confirmation"]["buttons"] == []
 
 
 @pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
-def test_validate_config_only_persists_explicit_interval_and_reminder_fields(reminders: dict) -> None:
-    alert = validate_config({"alerts": [{
+@pytest.mark.parametrize("conditions", [{}, {"interval": 60}])
+def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
+    reminders: dict, conditions: dict,
+) -> None:
+    raw = {"alerts": [{
         "id": "minimal",
         "notification": {},
-        "monitor": {"conditions": {"interval": 60}},
-        "confirmation": {"reminders": reminders} if reminders else {},
-    }]})["alerts"][0]
+        "monitor": {"conditions": conditions},
+        "confirmation": {"reminders": reminders},
+    }]}
+    original = deepcopy(raw)
+    validated = validate_config(raw)
+    alert = validated["alerts"][0]
 
-    assert alert["monitor"]["conditions"]["interval"] == 60
-    assert alert["confirmation"]["reminders"] == reminders
+    assert alert["monitor"]["conditions"]["interval"] == conditions.get("interval", 43200)
+    assert alert["confirmation"]["reminders"] == {
+        "enabled": True, "interval": 1800, "max_attempts": 5,
+        "show_attempts": False, "forget_after_enabled": False, "timeout": 900,
+        **reminders,
+    }
+    assert validate_config(validated) == validated
+    assert raw == original
 
 
 @pytest.mark.parametrize("name", ["base", "confirmation", "notification", "configuration", "persisted", "full_feature"])

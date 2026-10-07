@@ -1,4 +1,5 @@
 import { css, html, LitElement, nothing } from "lit";
+import type { TemplateResult } from "lit";
 import { mdiCheckDecagramOutline, mdiInformationOutline, mdiReload } from "@mdi/js";
 import { errorMessage, request } from "../api.js";
 import type { Hass } from "../types.js";
@@ -6,6 +7,17 @@ import { localize } from "../localize.js";
 import { haButton, NarrowController, notify, toolbar, uiStyles } from "../ui.js";
 
 const styles = css`
+  :host {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  ha-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .nc-yaml-title {
     display: flex;
     align-items: center;
@@ -32,21 +44,40 @@ const styles = css`
 
   ha-yaml-editor {
     display: block;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    --code-mirror-height: max(160px, calc(100dvh - 240px));
+    --code-mirror-max-height: max(160px, calc(100dvh - 240px));
     padding: var(--ha-space-2, 8px);
   }
 `;
 class YamlView extends LitElement {
-  static properties = { hass: { attribute: false } };
+  static properties = {
+    hass: { attribute: false },
+    config: { state: true },
+    draft: { state: true },
+    valid: { state: true },
+    dirty: { state: true },
+    busy: { state: true },
+  };
   static styles = [uiStyles, styles];
 
   declare hass: Hass;
   private layout = new NarrowController(this);
-  private config: Record<string, unknown> | null = null;
-  private draft: unknown = null;
-  private valid = true;
-  private busy = false;
+  declare private config: Record<string, unknown> | null;
+  declare private draft: unknown;
+  declare private valid: boolean;
+  declare private busy: boolean;
   /** Unsaved edits; the panel asks before leaving the tab. */
-  dirty = false;
+  declare dirty: boolean;
+
+  constructor() {
+    super();
+    this.config = null;
+    this.setDraft(null, true, false);
+    this.busy = false;
+  }
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -68,7 +99,7 @@ class YamlView extends LitElement {
   };
 
   protected firstUpdated(): void {
-    void this.load();
+    void this.load().catch(error => notify(this, errorMessage(error)));
   }
 
   private t = (key: string) => localize(this.hass, key);
@@ -90,37 +121,43 @@ class YamlView extends LitElement {
         this.layout.narrow,
         haButton(this.t("yaml.save"), this.save, { disabled: this.busy || !this.valid }),
       )}
-      ${this.valid
-        ? nothing
-        : html`<ha-alert alert-type="error">${this.t("yaml.invalid")}</ha-alert>`}
-      ${this.config
-        ? html`<ha-yaml-editor
-            .hass=${this.hass}
-            .defaultValue=${this.config}
-            .label=${""}
-            aria-label=${this.t("yaml.aria")}
-            @value-changed=${(event: CustomEvent<{ value: unknown; isValid: boolean }>) => {
-              event.stopPropagation();
-              this.draft = event.detail.value;
-              this.valid = event.detail.isValid;
-              this.dirty = true;
-              this.requestUpdate();
-            }}
-          ></ha-yaml-editor>`
-        : html``}
+      ${this.renderValidation()}
+      ${this.renderEditor()}
     </ha-card>`;
   }
 
+  private renderValidation(): TemplateResult | typeof nothing {
+    if (this.valid) return nothing;
+    return html`<ha-alert alert-type="error">${this.t("yaml.invalid")}</ha-alert>`;
+  }
+
+  private renderEditor(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    return html`<ha-yaml-editor
+      .hass=${this.hass}
+      .defaultValue=${this.config}
+      .label=${""}
+      aria-label=${this.t("yaml.aria")}
+      @value-changed=${this.editDocument}
+    ></ha-yaml-editor>`;
+  }
+
+  private editDocument = (event: CustomEvent<{ value: unknown; isValid: boolean }>): void => {
+    event.stopPropagation();
+    this.setDraft(event.detail.value, event.detail.isValid);
+  };
+
+  private setDraft(value: unknown, valid: boolean, dirty = true): void {
+    this.draft = value;
+    this.valid = valid;
+    this.dirty = dirty;
+  }
+
   private async load(): Promise<void> {
-    try {
-      this.config = await request<Record<string, unknown>>(this.hass, "get_config");
-      this.draft = this.config;
-      this.valid = true;
-      this.dirty = false;
-      this.requestUpdate();
-    } catch (error) {
-      notify(this, errorMessage(error));
-    }
+    const config = await request<Record<string, unknown>>(this.hass, "get_config");
+    if (!this.isConnected) return;
+    this.config = config;
+    this.setDraft(config, true, false);
   }
 
   private mapping(): Record<string, unknown> {
@@ -132,15 +169,14 @@ class YamlView extends LitElement {
 
   /** Run one busy action at a time and report its outcome. */
   private async run(task: () => Promise<string>): Promise<void> {
+    if (this.busy) return;
     this.busy = true;
-    this.requestUpdate();
     try {
       notify(this, await task());
     } catch (error) {
       notify(this, errorMessage(error));
     } finally {
       this.busy = false;
-      this.requestUpdate();
     }
   }
 
@@ -154,16 +190,16 @@ class YamlView extends LitElement {
     this.run(async () => {
       await request(this.hass, "reload");
       this.config = null;
-      this.requestUpdate();
       await this.load();
       return this.t("yaml.reloaded");
     });
 
   private save = () =>
     this.run(async () => {
-      const result = await request<{ saved: boolean }>(this.hass, "save_config", { config: this.mapping() });
+      const config = this.mapping();
+      const result = await request<{ saved: boolean }>(this.hass, "save_config", { config });
       if (!result.saved) throw new Error(this.t("yaml.not_saved"));
-      this.dirty = false;
+      if (this.draft === config) this.setDraft(config, this.valid, false);
       this.dispatchEvent(new CustomEvent("yaml-saved", { bubbles: true, composed: true }));
       return this.t("yaml.saved");
     });

@@ -1543,12 +1543,16 @@ async def test_false_condition_report_does_not_cancel_pending_confirmation_wait(
     assert main_automation.attributes["current"] == 0
 
 
+@pytest.mark.parametrize("show_attempts", [False, True], ids=["plain", "attempts"])
+@pytest.mark.parametrize("title", ["", "Original title"], ids=["empty_title", "original_title"])
 async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     hass: HomeAssistant,
     alert_factory,
     mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
+    show_attempts: bool,
+    title: str,
 ) -> None:
     """Timeouts repeat reminders finitely and skip response-only actions."""
     async def register_panel(_hass: HomeAssistant) -> None:
@@ -1556,11 +1560,15 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
 
     monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
+    follow_up_delivered: list[dict[str, object]] = []
     post_send_calls: list[dict[str, object]] = []
     confirmation_calls: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
         delivered.append(dict(call.data))
+
+    async def handle_follow_up_notification(call) -> None:
+        follow_up_delivered.append(dict(call.data))
 
     async def handle_post_send(call) -> None:
         post_send_calls.append(dict(call.data))
@@ -1569,6 +1577,7 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
         confirmation_calls.append(dict(call.data))
 
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
+    hass.services.async_register("notify", "mobile_app_follow_up", handle_follow_up_notification)
     hass.services.async_register("logbook", "log", handle_post_send)
     hass.services.async_register("light", "turn_on", handle_confirmation_action)
     mock_automation_files["prepare"]()
@@ -1585,6 +1594,12 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
                 "state": "on",
             }],
         ),
+        notification={
+            "action": "notify.mobile_app_phone",
+            "title": title,
+            "message": "Original main message",
+            "options": {},
+        },
         confirmation={
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
@@ -1592,12 +1607,13 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
                 "enabled": True,
                 "interval": 0.01,
                 "max_attempts": 2,
+                "show_attempts": show_attempts,
             },
             "notification": {
                 "enabled": True,
-                "action": "notify.mobile_app_phone",
-                "title": "",
-                "message": "Confirmed",
+                "action": "notify.mobile_app_follow_up",
+                "title": "Follow-up title",
+                "message": "Follow-up message",
                 "options": {},
             },
             "actions": [{"action": "light.turn_on"}],
@@ -1622,8 +1638,15 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     await hass.async_block_till_done()
 
     assert len(delivered) == 3
-    assert delivered[0]["message"] == "Message"
-    assert all(item.get("message") != "Confirmed" for item in delivered)
+    assert [item["message"] for item in delivered] == ["Original main message"] * 3
+    expected_titles = [title] * 3
+    if show_attempts:
+        expected_titles = [title, *[
+            f"{title} - Attempt {attempt}/2" if title else f"Attempt {attempt}/2"
+            for attempt in (2, 3)
+        ]]
+    assert [item.get("title", "") for item in delivered] == expected_titles
+    assert follow_up_delivered == []
     assert post_send_calls == [{"name": "sent"}]
     assert confirmation_calls == []
     history_entries = await entry.runtime_data.history.async_entries("base_alert")

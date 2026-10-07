@@ -291,7 +291,7 @@ actions:
               flow_id: '{{ context.parent_id or context.id }}'
               use_default_tag: true
               payload:
-                title: Confirmation - Attempt {{ repeat.index + 1 }}/5
+                title: Attempt {{ repeat.index + 1 }}/5
                 message: Door open
                 data:
                   actions:

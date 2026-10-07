@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   emptyHistoryFilters,
   filterHistoryEntries,
@@ -14,6 +14,7 @@ import {
   homeAssistantFixture,
   mountCustomElement,
   settleElement,
+  testUser,
 } from "./conftest.js";
 
 const VIEW_SETTINGS_KEY = "ha_notifications.history_view";
@@ -76,6 +77,92 @@ describe("history helpers", () => {
 });
 
 describe("history view", () => {
+  it("reads both saved view preferences once when constructed", async () => {
+    localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({ groupByFlow: true, showFilters: true }));
+    const read = vi.spyOn(localStorage, "getItem");
+    try {
+      const view = mountHistory();
+      await settleElement(view);
+
+      expect(read.mock.calls.filter(([key]) => key === VIEW_SETTINGS_KEY)).toEqual([[VIEW_SETTINGS_KEY]]);
+      expect(view.shadowRoot.querySelector(".nc-flow")).not.toBeNull();
+      expect(view.shadowRoot.querySelector(".nc-filters")).not.toBeNull();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it("filters while typing without writing view preferences", async () => {
+    const view = mountHistory();
+    await settleElement(view);
+    const search = view.shadowRoot.querySelector("ha-input") as HTMLElement & { value: string };
+    const write = vi.spyOn(localStorage, "setItem");
+    try {
+      for (const value of ["d", "de", "device"]) {
+        search.value = value;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await settleElement(view);
+      }
+      expect(view.shadowRoot.querySelectorAll(".nc-item")).toHaveLength(1);
+      expect(view.shadowRoot.querySelector(".nc-item-title")?.textContent).toContain("Water leak");
+      expect(write).not.toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("keeps both toolbar toggles functional when storing preferences is blocked", async () => {
+    const view = mountHistory();
+    await settleElement(view);
+    const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    });
+    try {
+      const menu = view.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+        items: { action(): void }[];
+      };
+      expect(() => menu.items[0].action()).not.toThrow();
+      await settleElement(view);
+      expect(view.shadowRoot.querySelector(".nc-filters")).not.toBeNull();
+      expect(() => menu.items[1].action()).not.toThrow();
+      await settleElement(view);
+      expect(view.shadowRoot.querySelector(".nc-flow")).not.toBeNull();
+      menu.items[0].action();
+      menu.items[1].action();
+      await settleElement(view);
+      expect(view.shadowRoot.querySelector(".nc-filters")).toBeNull();
+      expect(view.shadowRoot.querySelector(".nc-flow")).toBeNull();
+      expect(view.shadowRoot.querySelectorAll(".nc-item")).toHaveLength(historyFixture.length);
+      expect(write).toHaveBeenCalledTimes(4);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("persists both toolbar preferences for a newly mounted view", async () => {
+    const view = mountHistory();
+    await settleElement(view);
+    const menu = view.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { action(): void }[];
+    };
+    menu.items[0].action();
+    menu.items[1].action();
+    await settleElement(view);
+    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toEqual({ groupByFlow: true, showFilters: true });
+
+    const reopened = mountHistory();
+    await settleElement(reopened);
+    expect(reopened.shadowRoot.querySelector(".nc-flow")).not.toBeNull();
+    expect(reopened.shadowRoot.querySelector(".nc-filters")).not.toBeNull();
+    const reopenedMenu = reopened.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+      items: { action(): void }[];
+    };
+    reopenedMenu.items[0].action();
+    reopenedMenu.items[1].action();
+    await settleElement(reopened);
+    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toEqual({ groupByFlow: false, showFilters: false });
+  });
+
   it("filters visible rows as the search input changes", async () => {
     const view = mountHistory();
     await settleElement(view);
@@ -126,6 +213,44 @@ describe("history view", () => {
     expect(selected).toEqual({ alertId: "garage", alertName: "Garage door" });
   });
 
+  it("renders an unknown alert without an ID as a span rather than a link", async () => {
+    const view = mountHistory([{ ...historyFixture[0], config: undefined }]);
+    await settleElement(view);
+    const selected = vi.fn();
+    view.addEventListener("history-alert-selected", selected);
+    const title = view.shadowRoot.querySelector(".nc-item-title")!;
+    const name = title.querySelector("span")!;
+
+    expect(name.textContent).toBe("Unknown alert");
+    expect(title.querySelector(".nc-link, button, a")).toBeNull();
+    await testUser().click(name);
+    expect(selected).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, {}])("hides the details disclosure for empty details %j", async details => {
+    const entry = { ...historyFixture[0], event: { ...historyFixture[0].event, details } };
+    const view = mountHistory([entry]);
+    await settleElement(view);
+
+    expect(view.shadowRoot.querySelector(".nc-item details")).toBeNull();
+    expect(view.shadowRoot.querySelector(".nc-item pre")).toBeNull();
+  });
+
+  it("expands nonempty details as formatted JSON", async () => {
+    const view = mountHistory([historyFixture[0]]);
+    await settleElement(view);
+    const details = view.shadowRoot.querySelector<HTMLDetailsElement>(".nc-item details")!;
+    const summary = details.querySelector("summary")!;
+
+    expect(details.open).toBe(false);
+    expect(summary.textContent).toBe("Details");
+    await testUser().click(summary);
+    expect(details.open).toBe(true);
+    expect(details.querySelector("pre")?.textContent).toBe(
+      JSON.stringify(historyFixture[0].event.details, null, 2),
+    );
+  });
+
   it("preserves selector configuration identity across filter updates", async () => {
     localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({ showFilters: true }));
     const view = mountHistory();
@@ -153,6 +278,7 @@ describe("history view", () => {
 
     expect(view.shadowRoot.querySelectorAll(".nc-flow")).toHaveLength(1);
     expect(view.shadowRoot.querySelectorAll(".nc-flow .nc-item")).toHaveLength(2);
+    expect(view.shadowRoot.querySelector(".nc-flow .nc-item .nc-flow-id")).toBeNull();
     expect(view.shadowRoot.querySelector(".nc-flow > summary")?.textContent).toContain("Flow flow_garage");
     expect(view.shadowRoot.querySelector(".nc-flow")?.hasAttribute("open")).toBe(false);
     const time = view.shadowRoot.querySelector(".nc-flow > summary time")!;

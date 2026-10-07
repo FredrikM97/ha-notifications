@@ -12,7 +12,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic.functional_serializers import model_serializer
 
 ReminderInterval = int | float | str | dict[str, Any]
 
@@ -104,11 +103,12 @@ class ReminderConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    enabled: bool | None = None
-    interval: ReminderInterval | None = None
-    max_attempts: int | None = Field(default=None, ge=1)
+    enabled: bool = True
+    interval: ReminderInterval = 1800
+    max_attempts: int = Field(default=5, ge=1)
+    show_attempts: bool = False
     forget_after_enabled: bool = False
-    timeout: ReminderInterval | None = None
+    timeout: ReminderInterval = 900
 
     @model_validator(mode="after")
     def validate_forget_after_timeout(self) -> "ReminderConfig":
@@ -117,22 +117,6 @@ class ReminderConfig(BaseModel):
                 "forget_after_enabled requires a positive reminders.timeout"
             )
         return self
-
-    @model_serializer(mode="plain")
-    def serialize(self) -> dict[str, Any]:
-        values = {
-            key: getattr(self, key)
-            for key in (
-                "enabled",
-                "interval",
-                "max_attempts",
-                "forget_after_enabled",
-                "timeout",
-            )
-            if key in self.model_fields_set
-        }
-        return {**values, **(self.__pydantic_extra__ or {})}
-
 
 class ConfirmationConfig(BaseModel):
     """Preserve existing confirmation, reminder, and follow-up fields."""
@@ -173,7 +157,7 @@ class ConditionOptions(EnabledFeature):
     items: list[dict[str, Any]] = Field(default_factory=list)
     startup: bool = False
     periodic: bool = False
-    interval: ReminderInterval | None = None
+    interval: ReminderInterval = 43200
 
     @field_validator("items")
     @classmethod
@@ -232,27 +216,6 @@ class AlertConfig(BaseModel):
     post_send_actions: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None
-
-    @classmethod
-    def editor_defaults(cls, alert_id: str) -> "AlertConfig":
-        """Return a new editor template without changing persisted defaults."""
-        return cls(
-            id=alert_id,
-            monitor=MonitorConfig(conditions=ConditionOptions(interval=43200)),
-            notification=NotificationConfig(),
-            confirmation=ConfirmationConfig(
-                buttons=[ConfirmationButtonConfig(id="confirm", label="Done")],
-                reminders=ReminderConfig(
-                    enabled=True,
-                    interval=1800,
-                    max_attempts=5,
-                    show_attempts=False,
-                    forget_after_enabled=False,
-                    timeout=900,
-                ),
-            ),
-        )
-
 
 class Configuration(BaseModel):
     """Canonical persisted HA Notifications configuration."""

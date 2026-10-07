@@ -371,7 +371,7 @@
                 flow_id: '{{ context.parent_id or context.id }}'
                 use_default_tag: true
                 payload:
-                  title: Confirmation - Attempt {{ repeat.index + 1 }}/5
+                  title: Attempt {{ repeat.index + 1 }}/5
                   message: Door open
                   data:
                     actions:
@@ -1112,8 +1112,7 @@
           event_data:
             alert_id: matrix_confirmation_without_reminders
             command: skip_confirmation
-        timeout:
-          minutes: 15
+        timeout: 1800
         continue_on_timeout: true
       - choose:
         - conditions:

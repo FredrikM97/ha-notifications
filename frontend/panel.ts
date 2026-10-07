@@ -6,7 +6,7 @@ import type { Alert, AlertsConfig, AutomationRuntimeStatus, Hass, RuntimeAlertHi
 import { localize } from "./localize.js";
 import { emptyState, NarrowController, notify, uiStyles } from "./ui.js";
 import { openEditor, updateOpenEditorHass } from "./editor/index.js";
-import { toCanonicalAlert, type EditableAlert } from "./editor/alert-model.js";
+import { toCanonicalAlert } from "./editor/alert-model.js";
 import { alertList, alertListStyles, type AlertHandlers } from "./views/alerts.js";
 import "./views/history.js";
 import "./views/yaml.js";
@@ -49,7 +49,7 @@ class HaNotificationsPanel extends LitElement {
   private history: RuntimeAlertHistoryEntry[] = [];
   private historyAlert: { id: string; name: string } | null = null;
   private editing = false;
-  private refreshing = false;
+  private refreshRequest?: object;
   private timer?: number;
   private users?: Promise<{ value: string; label: string }[]>;
 
@@ -84,35 +84,45 @@ class HaNotificationsPanel extends LitElement {
 
   disconnectedCallback(): void {
     window.clearInterval(this.timer);
+    this.refreshRequest = undefined;
     super.disconnectedCallback();
   }
 
   private t = (key: string, variables?: Record<string, unknown>) => localize(this._hass, key, variables);
 
   async refresh(silent = false): Promise<void> {
-    if (!this._hass?.user?.is_admin || this.refreshing) return;
+    if (!this._hass?.user?.is_admin || !this.isConnected) return;
+    if (silent && this.refreshRequest) return;
     if (silent && (this.editing || this.tab === "yaml")) return;
-    this.refreshing = true;
-    const results = await Promise.allSettled([
-      this.loadAlerts(),
-      request<Record<string, AutomationRuntimeStatus>>(this._hass, "automation_status"),
-      request<RuntimeAlertHistoryEntry[]>(this._hass, "get_history", {
+    const pending = {};
+    this.refreshRequest = pending;
+    const errors: unknown[] = [];
+    async function retainOnError<Value>(request: Promise<Value>, previous: Value): Promise<Value> {
+      try {
+        return await request;
+      } catch (error) {
+        errors.push(error);
+        return previous;
+      }
+    }
+    const [alerts, statuses, history] = await Promise.all([
+      retainOnError(this.loadAlerts(), this.alerts),
+      retainOnError(request<Record<string, AutomationRuntimeStatus>>(this._hass, "automation_status"), this.statuses),
+      retainOnError(request<RuntimeAlertHistoryEntry[]>(this._hass, "get_history", {
         ...(this.historyAlert?.id ? { alert_id: this.historyAlert.id } : {}),
-      }),
+      }), this.history),
     ]);
-    this.refreshing = false;
-    const [alerts, statuses, history] = results;
-    if (alerts.status === "fulfilled") this.alerts = alerts.value;
-    if (statuses.status === "fulfilled") this.statuses = statuses.value;
-    if (history.status === "fulfilled") this.history = history.value;
+    if (this.refreshRequest !== pending || !this.isConnected) return;
+    this.refreshRequest = undefined;
+    this.alerts = alerts;
+    this.statuses = statuses;
+    this.history = history;
     if (this.historyAlert) {
       const alert = this.alerts.find(({ id }) => id === this.historyAlert!.id);
       if (alert) this.historyAlert = { id: alert.id, name: alert.name };
     }
     if (!silent) {
-      for (const result of results) {
-        if (result.status === "rejected") notify(this, errorMessage(result.reason));
-      }
+      for (const error of errors) notify(this, errorMessage(error));
     }
     this.requestUpdate();
   }
@@ -291,13 +301,9 @@ class HaNotificationsPanel extends LitElement {
     const hass = this._hass;
     if (!hass) return;
     let users: { value: string; label: string }[];
-    let defaults: EditableAlert;
     try {
       this.users ??= this.loadUsers();
-      [users, defaults] = await Promise.all([
-        this.users,
-        request<EditableAlert>(hass, "alert_defaults"),
-      ]);
+      users = await this.users;
     } catch (error) {
       this.users = undefined;
       notify(this, errorMessage(error));
@@ -309,7 +315,6 @@ class HaNotificationsPanel extends LitElement {
       root: this.renderRoot as ShadowRoot,
       hass,
       alert,
-      defaults,
       users,
       onValidateAlert: async (draft) => request(this._hass, "validate_config", {
         config: await this.configWithAlert(draft),

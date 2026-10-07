@@ -34,25 +34,26 @@ afterEach(() => {
 
 async function mount(
   loadFragmentTranslation = vi.fn().mockResolvedValue(undefined),
-  sendMessagePromise = vi.fn().mockResolvedValue({ platforms: [], unknown: true }),
+  callWS = vi.fn().mockResolvedValue({ platforms: [], unknown: true }),
   alert = draftAlertFixture(),
+  onSave = vi.fn().mockResolvedValue(undefined),
 ) {
   const root = editorRoot();
-  const onSave = vi.fn().mockResolvedValue(undefined);
+  const onClosed = vi.fn();
   const onValidateAlert = vi.fn().mockResolvedValue(undefined);
   openEditor({
     root,
-    hass: homeAssistantFixture({ loadFragmentTranslation, connection: { sendMessagePromise } as never }),
+    hass: homeAssistantFixture({ loadFragmentTranslation, callWS }),
     alert,
-    defaults: draftAlertFixture(),
     users: [],
     onSave,
+    onClosed,
     onValidateAlert,
   });
   const editor = root.querySelector<LitElement>("ha-notifications-alert-editor")!;
   editor.style.setProperty("--primary-color", "#03a9f4");
   await settleElement(editor);
-  return { editor, alert, onSave, onValidateAlert };
+  return { editor, alert, onSave, onClosed, onValidateAlert };
 }
 
 type NativeForm = HTMLElement & {
@@ -61,6 +62,10 @@ type NativeForm = HTMLElement & {
   computeLabel: (field: { name: string }) => string;
   computeHelper: (field: { name: string }) => string | undefined;
 };
+
+function classTokens(element: Element): string {
+  return Array.from(element.classList).join(" ");
+}
 
 function sectionElement(editor: LitElement, key?: string): HTMLElement {
   return editor.shadowRoot!.querySelector<HTMLElement>(key ? `[data-section="${key}"]` : "[data-section]")!;
@@ -141,7 +146,156 @@ async function changeField(editor: LitElement, name: string, value: unknown): Pr
   await settleElement(editor);
 }
 
+function deferredPlatformDetection() {
+  let resolve!: (value: { platforms: ("android" | "ios")[]; unknown: boolean }) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<{ platforms: ("android" | "ios")[]; unknown: boolean }>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function deferredSave() {
+  let resolve!: () => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function editorButton(editor: LitElement, label: string): HTMLElement {
+  const buttons = [...editor.shadowRoot!.querySelectorAll<HTMLElement>("ha-button")]
+    .filter(button => button.textContent?.trim() === label);
+  expect(buttons).toHaveLength(1);
+  return buttons[0];
+}
+
 describe("native editor controls", () => {
+  it("saves once for two same-turn clicks before the button disables and closes once on success", async () => {
+    const pending = deferredSave();
+    const { editor, onSave, onClosed } = await mount(undefined, undefined, undefined, vi.fn().mockReturnValue(pending.promise));
+    await selectSection(editor, "basic");
+    await changeField(editor, "name", "Door alert");
+    await selectSection(editor, "recipients");
+    await changeField(editor, "target", { entity_id: ["notify.phone"] });
+    const save = editorButton(editor, "Save alert");
+    expect(save.hasAttribute("disabled")).toBe(false);
+    save.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    expect(save.hasAttribute("disabled")).toBe(false);
+    save.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Door alert",
+      notification: expect.objectContaining({ target: { entity_id: ["notify.phone"] } }),
+    }));
+    await editor.updateComplete;
+    expect(editorButton(editor, "Save alert").hasAttribute("disabled")).toBe(true);
+    expect(editor.isConnected).toBe(true);
+    expect(onClosed).not.toHaveBeenCalled();
+    pending.resolve();
+    await pending.promise;
+    await editor.updateComplete;
+    expect(editor.isConnected).toBe(false);
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onClosed).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the draft open with a snackbar after save rejection, re-enables saving and closes on retry", async () => {
+    const failure = deferredSave();
+    const retry = deferredSave();
+    const onSave = vi.fn().mockReturnValueOnce(failure.promise).mockReturnValueOnce(retry.promise);
+    const { editor, onClosed } = await mount(undefined, undefined, undefined, onSave);
+    await selectSection(editor, "basic");
+    await changeField(editor, "name", "Unsaved door alert");
+    await selectSection(editor, "recipients");
+    await changeField(editor, "target", { entity_id: ["notify.phone"] });
+    await selectSection(editor, "basic");
+    const notifications = vi.fn();
+    editor.addEventListener("hass-notification", notifications);
+    await testUser().click(editorButton(editor, "Save alert"));
+    await editor.updateComplete;
+    expect(editorButton(editor, "Save alert").hasAttribute("disabled")).toBe(true);
+    expect(onSave).toHaveBeenCalledOnce();
+    failure.reject(new Error("Save unavailable"));
+    await failure.promise.catch(() => undefined);
+    await editor.updateComplete;
+    expect(editor.isConnected).toBe(true);
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(editorButton(editor, "Save alert").hasAttribute("disabled")).toBe(false);
+    expect(nativeForm(editor, "name").data.name).toBe("Unsaved door alert");
+    expect(editor.shadowRoot!.querySelector(".nc-dirty")!.textContent).not.toBe("");
+    expect(notifications).toHaveBeenCalledOnce();
+    expect((notifications.mock.calls[0][0] as CustomEvent).detail.message).toBe("Save unavailable");
+    await testUser().click(editorButton(editor, "Save alert"));
+    await editor.updateComplete;
+    expect(editorButton(editor, "Save alert").hasAttribute("disabled")).toBe(true);
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onSave.mock.calls[1][0]).toEqual(onSave.mock.calls[0][0]);
+    expect(onClosed).not.toHaveBeenCalled();
+    retry.resolve();
+    await retry.promise;
+    await editor.updateComplete;
+    expect(editor.isConnected).toBe(false);
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onClosed).toHaveBeenCalledOnce();
+    expect(notifications).toHaveBeenCalledOnce();
+  });
+
+  it("renders and closes the YAML preview through reactive dialog updates", async () => {
+    const { editor, onSave, onClosed } = await mount();
+    await changeField(editor, "name", "Preview door alert");
+    const menu = editor.shadowRoot!.querySelector<HTMLElement & {
+      items: { label: string; action: () => void }[];
+    }>('ha-top-app-bar-fixed > div[slot="actionItems"] ha-icon-overflow-menu')!;
+    expect(menu.items).toHaveLength(1);
+    expect(menu.items[0].label).toBe("View alert YAML");
+    menu.items[0].action();
+    await editor.updateComplete;
+    const dialog = editor.shadowRoot!.querySelector("ha-dialog")!;
+    const yaml = dialog.querySelector<HTMLElement & { defaultValue: { name: string } }>("ha-yaml-editor")!;
+    expect(yaml.hasAttribute("read-only")).toBe(true);
+    expect(yaml.defaultValue.name).toBe("Preview door alert");
+    dialog.dispatchEvent(new Event("closed"));
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("ha-dialog")).toBeNull();
+    expect(editor.isConnected).toBe(true);
+    expect(nativeForm(editor, "name").data.name).toBe("Preview door alert");
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClosed).not.toHaveBeenCalled();
+  });
+
+  it.each(["Stay", "closed"])("keeps a dirty draft after %s, then discards it only on confirmation", async dismissal => {
+    const { editor, onSave, onClosed } = await mount();
+    await selectSection(editor, "basic");
+    await changeField(editor, "name", "Dirty door alert");
+    const cancel = editor.shadowRoot!.querySelector<HTMLElement>('ha-icon-button[slot="navigationIcon"]')!;
+    await testUser().click(cancel);
+    await editor.updateComplete;
+    const dialog = editor.shadowRoot!.querySelector("ha-dialog")!;
+    expect(dialog.textContent).toContain("You have unsaved changes. Leave without saving?");
+    expect(editor.isConnected).toBe(true);
+    expect(onClosed).not.toHaveBeenCalled();
+    if (dismissal === "Stay") await testUser().click(editorButton(editor, "Stay"));
+    else dialog.dispatchEvent(new Event("closed"));
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("ha-dialog")).toBeNull();
+    expect(editor.isConnected).toBe(true);
+    expect(nativeForm(editor, "name").data.name).toBe("Dirty door alert");
+    expect(editor.shadowRoot!.querySelector(".nc-dirty")!.textContent).not.toBe("");
+    expect(onClosed).not.toHaveBeenCalled();
+    await testUser().click(cancel);
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("ha-dialog")).not.toBeNull();
+    await testUser().click(editorButton(editor, "Discard changes"));
+    await editor.updateComplete;
+    expect(editor.isConnected).toBe(false);
+    expect(onClosed).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it.each([1100, 390].flatMap(width => [
     { width, key: "inactive", name: "clear_notification", label: "Clear notification" },
     { width, key: "notification", name: "use_default_tag", label: "Replace previous notifications" },
@@ -201,7 +355,7 @@ describe("native editor controls", () => {
     const help = [...sectionElement(editor).querySelectorAll<HTMLElement>("ha-icon-button")]
       .find(button => button.getAttribute("title")?.endsWith(": Replace previous notifications"));
     expect(help).toBeDefined();
-    expect(help!.parentElement!.className).toBe("nc-heading");
+    expect(classTokens(help!.parentElement!)).toBe("nc-heading");
     expect(help!.parentElement!.hasAttribute("slot")).toBe(false);
     expect(help!.previousElementSibling?.tagName).toBe("SPAN");
     expect(help!.previousElementSibling?.textContent).toBe("Replace previous notifications");
@@ -245,9 +399,9 @@ describe("native editor controls", () => {
     const { editor } = await mount();
     await selectSection(editor, "notification");
     for (const name of ["title", "group", "notification_icon", "icon_url"]) {
-      expect(nativeForm(editor, name).className).toBe("nc-field-form");
+      expect(classTokens(nativeForm(editor, name))).toBe("nc-field-form");
     }
-    expect(nativeForm(editor, "message").className).toBe("");
+    expect(classTokens(nativeForm(editor, "message"))).toBe("nc-code-form nc-message-form");
     const styles = (editor.constructor as typeof LitElement).styles!.toString();
     expect(styles).toContain("--nc-standard-field-width: 400px;");
     expect(styles).toMatch(/ha-form\.nc-field-form\s*\{\s*width: 100%;\s*max-width: var\(--nc-field-width\);/);
@@ -469,6 +623,151 @@ describe("native editor controls", () => {
     expect(nativeForm(editor, "actions").data.actions).toEqual(configured);
   });
 
+  it.each([1100, 390])("renders loading then detected platforms without an unrelated update at width %s", async width => {
+    const detection = deferredPlatformDetection();
+    const callWS = vi.fn().mockReturnValue(detection.promise);
+    const { editor } = await mount(undefined, callWS);
+    resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+    await settleElement(editor);
+    await selectSection(editor, "recipients");
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toMatch(/detecting/i);
+    expect(localNavigationKeys(editor)).toEqual(children);
+    detection.resolve({ platforms: ["ios"], unknown: false });
+    await vi.waitFor(() => {
+      expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("iOS / macOS");
+      expect(localNavigationKeys(editor)).not.toContain("android");
+      expect(localNavigationKeys(editor)).toContain("ios");
+    });
+    expect(callWS).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { stale: "success", latest: "success" },
+    { stale: "error", latest: "success" },
+    { stale: "success", latest: "error" },
+    { stale: "error", latest: "error" },
+  ])("keeps the latest target's $latest result after an older $stale result", async ({ stale, latest }) => {
+    const older = deferredPlatformDetection();
+    const newer = deferredPlatformDetection();
+    const callWS = vi.fn()
+      .mockResolvedValueOnce({ platforms: [], unknown: true })
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const { editor } = await mount(undefined, callWS);
+    await selectSection(editor, "recipients");
+    await changeField(editor, "target", { device_id: ["android-phone"] });
+    await changeField(editor, "target", { device_id: ["ios-phone"] });
+    expect(callWS.mock.calls.slice(1).map(([message]) => message.target)).toEqual([
+      { device_id: ["android-phone"] },
+      { device_id: ["ios-phone"] },
+    ]);
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toMatch(/detecting/i);
+    if (latest === "success") newer.resolve({ platforms: ["ios"], unknown: false });
+    else newer.reject(new Error("Latest detection failed"));
+    await vi.waitFor(() => {
+      const summary = editor.shadowRoot!.querySelector('[role="status"]')!.textContent;
+      if (latest === "success") {
+        expect(summary).toBe("iOS / macOS");
+        expect(localNavigationKeys(editor)).not.toContain("android");
+      } else {
+        expect(summary).toMatch(/unknown/i);
+        expect(localNavigationKeys(editor)).toEqual(children);
+      }
+    });
+    const summary = editor.shadowRoot!.querySelector('[role="status"]')!.textContent;
+    const navigation = localNavigationKeys(editor);
+    if (stale === "success") older.resolve({ platforms: ["android"], unknown: false });
+    else older.reject(new Error("Older detection failed"));
+    await older.promise.catch(() => undefined);
+    await settleElement(editor);
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(summary);
+    expect(localNavigationKeys(editor)).toEqual(navigation);
+    expect(callWS).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["success", "error"])("does not request an update for a late %s after removal", async outcome => {
+    const detection = deferredPlatformDetection();
+    const { editor } = await mount(undefined, vi.fn().mockReturnValue(detection.promise));
+    await selectSection(editor, "recipients");
+    const summary = editor.shadowRoot!.querySelector('[role="status"]')!.textContent;
+    const requestUpdate = vi.spyOn(editor, "requestUpdate");
+    cleanupTestDom();
+    await settleElement(editor);
+    requestUpdate.mockClear();
+    expect(editor.isConnected).toBe(false);
+    if (outcome === "success") detection.resolve({ platforms: ["ios"], unknown: false });
+    else detection.reject(new Error("Detection failed after removal"));
+    await detection.promise.catch(() => undefined);
+    await settleElement(editor);
+    expect(requestUpdate).not.toHaveBeenCalled();
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(summary);
+  });
+
+  it.each([1100, 390])("shows all options and unknown on failure, then recovers on target change at width %s", async width => {
+    const failure = deferredPlatformDetection();
+    const recovery = deferredPlatformDetection();
+    const callWS = vi.fn()
+      .mockResolvedValueOnce({ platforms: ["ios"], unknown: false })
+      .mockReturnValueOnce(failure.promise)
+      .mockReturnValueOnce(recovery.promise);
+    const { editor } = await mount(undefined, callWS);
+    resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+    await settleElement(editor);
+    await selectSection(editor, "recipients");
+    expect(localNavigationKeys(editor)).not.toContain("android");
+    await changeField(editor, "target", { device_id: ["unavailable-phone"] });
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toMatch(/detecting/i);
+    expect(localNavigationKeys(editor)).toEqual(children);
+    failure.reject(new Error("Platform detection unavailable"));
+    await vi.waitFor(() => {
+      expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toMatch(/unknown/i);
+      expect(localNavigationKeys(editor)).toEqual(children);
+    });
+    await changeField(editor, "target", { device_id: ["android-phone"] });
+    expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toMatch(/detecting/i);
+    recovery.resolve({ platforms: ["android"], unknown: false });
+    await vi.waitFor(() => {
+      expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("Android");
+      expect(localNavigationKeys(editor)).toContain("android");
+      expect(localNavigationKeys(editor)).not.toContain("ios");
+    });
+    expect(callWS).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["saved", "current"])("retains Android navigation with %s settings after an iOS-only result", async settings => {
+    const detection = deferredPlatformDetection();
+    const alert = draftAlertFixture();
+    if (settings === "saved") alert.notification.options = { channel: "Security" };
+    const { editor } = await mount(undefined, vi.fn().mockReturnValue(detection.promise), alert);
+    await selectSection(editor, "android");
+    if (settings === "current") {
+      const toggle = sectionElement(editor).querySelector<NativeSwitch>(".card-header ha-switch")!;
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event("change"));
+      await settleElement(editor);
+      const option = nativeForm(editor, "channel").closest(".nc-option")!.querySelector<NativeSwitch>("ha-switch")!;
+      option.checked = true;
+      option.dispatchEvent(new Event("change"));
+      await settleElement(editor);
+      await changeField(editor, "channel", "Security");
+      expect(nativeForm(editor, "channel").data.channel).toBe("Security");
+      option.checked = false;
+      option.dispatchEvent(new Event("change"));
+      await settleElement(editor);
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event("change"));
+      await settleElement(editor);
+    }
+    await selectSection(editor, "recipients");
+    detection.resolve({ platforms: ["ios"], unknown: false });
+    await vi.waitFor(() => {
+      expect(editor.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("iOS / macOS");
+      expect(localNavigationKeys(editor)).toContain("android");
+    });
+    await selectSection(editor, "android");
+    expect(nativeForm(editor, "channel").data.channel).toBe("Security");
+  });
+
   it("retains disabled configured Android settings when recipients are detected as iOS only", async () => {
     const { editor } = await mount(undefined, vi.fn().mockResolvedValue({ platforms: ["ios"], unknown: false }));
     const state = (editor as unknown as { state: EditorState }).state;
@@ -486,10 +785,10 @@ describe("native editor controls", () => {
 
   it.each([1100, 390])("falls back to Notification when detection removes the active platform at width %s", async width => {
     let detected!: (value: { platforms: string[]; unknown: boolean }) => void;
-    const sendMessagePromise = vi.fn()
+    const callWS = vi.fn()
       .mockResolvedValueOnce({ platforms: ["android"], unknown: false })
       .mockImplementationOnce(() => new Promise(resolve => { detected = resolve; }));
-    const { editor } = await mount(undefined, sendMessagePromise);
+    const { editor } = await mount(undefined, callWS);
     resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
     await settleElement(editor);
     await selectSection(editor, "recipients");
@@ -655,7 +954,15 @@ describe("native editor controls", () => {
         expect(form.schema).toHaveLength(1);
         const scalar = scalars.includes(form.schema[0].name);
         const compact = scalar && ["number", "duration", "select"].some(type => type in form.schema[0].selector);
-        expect(form.className).toBe(scalar ? `nc-field-form${compact ? " nc-compact" : ""}` : "");
+        let expectedClass = "";
+        if (scalar) {
+          expectedClass = "nc-field-form";
+          if (compact) expectedClass += " nc-compact";
+        } else if ("template" in form.schema[0].selector || "object" in form.schema[0].selector) {
+          expectedClass = "nc-code-form";
+          if (key === "notification" && form.schema[0].name === "message") expectedClass += " nc-message-form";
+        }
+        expect(classTokens(form)).toBe(expectedClass);
         expect(form.data).toMatchObject(section.read(state));
         const wrapper = form.closest(".nc-option-input");
         if (wrapper) {
@@ -671,12 +978,15 @@ describe("native editor controls", () => {
       }
       expect(finalizeAlert(state.alert, state.postConfirmationActions, false)).toEqual(before);
       expect(editor.shadowRoot!.querySelector(".nc-dirty")!.textContent).toBe("");
-      layouts[key] = forms.map(form => ({
-        class: form.className,
-        wrapper: form.closest(".nc-option-input")?.className ?? null,
-        schema: form.schema,
-        label: form.computeLabel(form.schema[0]),
-      }));
+      layouts[key] = forms.map(form => {
+        const wrapper = form.closest(".nc-option-input");
+        return {
+          class: [...form.classList].filter(name => name === "nc-field-form" || name === "nc-compact").join(" "),
+          wrapper: wrapper ? classTokens(wrapper) : null,
+          schema: form.schema,
+          label: form.computeLabel(form.schema[0]),
+        };
+      });
     }
     expect(layouts).toMatchSnapshot();
     const styles = (editor.constructor as typeof LitElement).styles!.toString();
@@ -710,7 +1020,13 @@ describe("native editor controls", () => {
       if (Object.keys(values).length) editorSections.find(section => section.key === key)!.write(state, values);
       await selectSection(editor, key);
       const form = nativeForm(editor, name);
-      expect(form.className).toBe("");
+      let expectedClass = "";
+      if ("template" in form.schema[0].selector || "object" in form.schema[0].selector) {
+        expectedClass = "nc-code-form";
+        if (key === "notification" && name === "message") expectedClass += " nc-message-form";
+      }
+      expect(classTokens(form)).toBe(expectedClass);
+      expect(form.classList.contains("nc-field-form")).toBe(false);
       expect(form.closest(".nc-field-input")).toBeNull();
       expect(form.closest(".nc-compact")).toBeNull();
       expect(form.schema.every(field => !("width" in field))).toBe(true);
@@ -733,8 +1049,8 @@ describe("native editor controls", () => {
     ] as const) {
       const form = nativeForm(editor, name);
       const wrapper = form.parentElement!;
-      expect(wrapper.className).toBe(`nc-option-input nc-field-input${compact ? " nc-compact" : ""}`);
-      expect(form.className).toBe(`nc-field-form${compact ? " nc-compact" : ""}`);
+      expect(classTokens(wrapper)).toBe(`nc-option-input nc-field-input${compact ? " nc-compact" : ""}`);
+      expect(classTokens(form)).toBe(`nc-field-form${compact ? " nc-compact" : ""}`);
       expect(wrapper.firstElementChild).toBe(form);
       expect(wrapper.querySelectorAll(".nc-help")).toHaveLength(hasHelp ? 1 : 0);
       expect([...wrapper.children]).toEqual(hasHelp ? [form, wrapper.querySelector(".nc-help")] : [form]);
@@ -769,7 +1085,7 @@ describe("native editor controls", () => {
     { selector: { select: { options: ["default"] } }, className: "nc-field-form nc-compact" },
     { selector: { select: { multiple: true, options: ["default"] } }, className: "" },
     { selector: { boolean: {} }, className: "" },
-    { selector: { object: {} }, className: "" },
+    { selector: { object: {} }, className: "nc-code-form" },
   ])("derives the preset from selector $selector without leaking layout metadata into HA schemas", async ({ selector, className }) => {
     const { editor } = await mount();
     const section = editorSections.find(section => section.key === "notification")!;
@@ -777,7 +1093,7 @@ describe("native editor controls", () => {
     vi.spyOn(section, "schema").mockReturnValue(schema);
     await selectSection(editor, "notification");
     const form = nativeForm(editor, "title");
-    expect(form.className).toBe(className);
+    expect(classTokens(form)).toBe(className);
     expect(form.schema).toEqual(schema);
     expect(form.schema[0]).not.toHaveProperty("width");
     expect(form.schema[0]).not.toHaveProperty("compact");
@@ -789,7 +1105,11 @@ describe("native editor controls", () => {
     const section = editorSections.find(section => section.key === "notification")!;
     vi.spyOn(section, "schema").mockReturnValue([{ name: "title", selector }]);
     await selectSection(editor, "notification");
-    expect(nativeForm(editor, "title").className).toBe("");
+    const form = nativeForm(editor, "title");
+    let expectedClass = "";
+    if ("object" in selector) expectedClass = "nc-code-form";
+    expect(classTokens(form)).toBe(expectedClass);
+    expect(form.classList.contains("nc-field-form")).toBe(false);
   });
 
   it.each([
@@ -801,7 +1121,7 @@ describe("native editor controls", () => {
   ])("does not apply a custom native selector theme in $key", async ({ key, name }) => {
     const { editor } = await mount();
     await selectSection(editor, key);
-    expect(nativeForm(editor, name).className).toBe("");
+    expect(classTokens(nativeForm(editor, name))).toBe("");
     const styles = (editor.constructor as typeof LitElement).styles!.toString();
     expect(styles).not.toContain("nc-native-form");
     expect(nativeForm(editor, name).style.color).toBe("");
@@ -831,7 +1151,7 @@ describe("native editor controls", () => {
       const form = nativeForm(editor, name);
       const wrapper = form.parentElement!;
       const label = state.localize(section.labels[name]);
-      expect(wrapper.className).toBe("nc-native-selector");
+      expect(classTokens(wrapper)).toBe("nc-native-selector");
       expect(wrapper.querySelectorAll(".nc-native-label")).toHaveLength(1);
       expect(wrapper.querySelector(".nc-native-label")!.textContent).toBe(label);
       expect(wrapper.querySelector(".nc-native-label")!.getAttribute("role")).toBe("heading");
@@ -842,7 +1162,7 @@ describe("native editor controls", () => {
       expect(form.schema[0]).toMatchObject({ name, selector: { [selector]: {} } });
       expect(form.schema[0]).not.toHaveProperty("label");
       expect(form.data).toEqual(section.read(state));
-      expect(form.className).toBe("");
+      expect(classTokens(form)).toBe("");
     }
     expect(finalizeAlert(state.alert, state.postConfirmationActions, false)).toEqual(before);
     const styles = (editor.constructor as typeof LitElement).styles!.toString();
@@ -888,8 +1208,8 @@ describe("native editor controls", () => {
     const option = row.querySelector("ha-switch") as HTMLElement & { checked: boolean; disabled: boolean };
     const help = row.querySelector<HTMLElement>(".nc-help")!;
     const dimensions = () => ({
-      form: form.className,
-      wrapper: form.parentElement!.className,
+      form: classTokens(form),
+      wrapper: classTokens(form.parentElement!),
       formStyle: form.getAttribute("style"),
       wrapperStyle: form.parentElement!.getAttribute("style"),
     });
@@ -994,8 +1314,8 @@ describe("native editor controls", () => {
     expect(control.checked).toBe(Boolean(section.read(state)[name]));
     expect(control.disabled).toBe(true);
     expect({
-      row: row.className,
-      heading: { class: heading.className, text: heading.textContent, help: help.getAttribute("title") },
+      row: classTokens(row),
+      heading: { class: classTokens(heading), text: heading.textContent, help: help.getAttribute("title") },
       switch: { label: control.getAttribute("aria-label"), checked: control.checked, disabled: control.disabled },
       description,
     }).toMatchSnapshot();
@@ -1226,7 +1546,7 @@ describe("native editor controls", () => {
     const row = persistent.closest(".nc-option-inline")!;
     expect(row.querySelector(".nc-option-input, ha-form")).toBeNull();
     expect(row.lastElementChild).toBe(persistent);
-    expect(row.firstElementChild?.className).toBe("nc-heading");
+    expect(classTokens(row.firstElementChild!)).toBe("nc-heading");
     expect(row.querySelectorAll(".nc-help")).toHaveLength(1);
     expect(row.querySelector(".nc-heading > .nc-help")).not.toBeNull();
     expect(sectionElement(editor).querySelector("ha-settings-row")).toBeNull();
@@ -1455,85 +1775,104 @@ describe("native editor controls", () => {
     expect((sectionElement(editor).querySelector(".card-header ha-switch") as HTMLElement & { checked: boolean }).checked).toBe(false);
   });
 
-  it.each([
-    { width: 1100, minimum: 420 },
-    { width: 390, minimum: 320 },
-  ])("gives late-loaded code editors a $minimum px minimum at width $width without capping growth", async ({ width, minimum }) => {
+  it.each([1100, 390].flatMap(width => [
+    { width, key: "confirmationNotification", name: "message", selector: "template" },
+    { width, key: "ios", name: "sound", selector: "object" },
+  ]))("sizes the $selector form through public style hooks in $key at width $width", async ({ width, key, name, selector }) => {
+    const alert = draftAlertFixture();
+    alert.notification.options = { push: { sound: { name: "default", critical: 1, volume: 0.8 } } };
+    const { editor } = await mount(undefined, undefined, alert);
+    resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+    await settleElement(editor);
+    await selectSection(editor, key);
+    const form = nativeForm(editor, name);
+    expect(form.schema[0].selector).toHaveProperty(selector);
+    expect(form.classList.contains("nc-code-form")).toBe(true);
+    expect(form.classList.contains("nc-message-form")).toBe(false);
+    let height = "420px";
+    if (width < 870) height = "320px";
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-height")).toBe(height);
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-max-height")).toBe("unset");
+  });
+
+  it.each([1100, 390])("sizes YAML preview through public style hooks at width %s", async width => {
     const { editor } = await mount();
     resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
     await settleElement(editor);
-    const form = editor.shadowRoot!.querySelector("ha-form")!;
-    const root = form.attachShadow({ mode: "open" });
-    const code = document.createElement("ha-code-editor") as HTMLElement & {
-      codemirror: { dom: HTMLElement; scrollDOM: HTMLElement };
-    };
-    const dom = document.createElement("div");
-    const scrollDOM = document.createElement("div");
-    code.codemirror = { dom, scrollDOM };
-    code.append(dom, scrollDOM);
-    root.append(code);
-    form.append(document.createElement("span"));
-    await vi.waitFor(() => expect(dom.style.minHeight).toBe(`${minimum}px`));
-    expect(scrollDOM.style.minHeight).toBe(`${minimum - 40}px`);
-    expect(dom.style.height).toBe("");
+    const button = [...editor.shadowRoot!.querySelectorAll<HTMLElement>("ha-icon-button")]
+      .find(control => control.title.includes("YAML"));
+    if (button) {
+      await testUser().click(button);
+    } else {
+      const menu = editor.shadowRoot!.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+        items: { label: string; action(): void }[];
+      };
+      menu.items.find(item => item.label.includes("YAML"))!.action();
+    }
+    await settleElement(editor);
+    const preview = editor.shadowRoot!.querySelector<HTMLElement>("ha-yaml-editor")!;
+    expect(preview.classList.contains("nc-yaml-preview")).toBe(true);
+    expect(preview.classList.contains("narrow")).toBe(width < 870);
+    expect(preview.hasAttribute("read-only")).toBe(true);
+    let height = "420px";
+    if (width < 870) height = "320px";
+    expect(getComputedStyle(preview).getPropertyValue("--code-mirror-height")).toBe(height);
+    expect(getComputedStyle(preview).getPropertyValue("--code-mirror-max-height")).toBe("unset");
   });
 
-  it("renders the Notification message as a multiline editing surface rather than a tall panel", async () => {
+  it.each([1100, 390])("sizes the Notification message through public hooks without touching private styles at width %s", async width => {
     const { editor } = await mount();
+    resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+    await settleElement(editor);
     await selectSection(editor, "notification");
     const form = nativeForm(editor, "message");
+    expect(form.classList.contains("nc-code-form")).toBe(true);
+    expect(form.classList.contains("nc-message-form")).toBe(true);
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-height")).toBe("320px");
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-max-height")).toBe("unset");
     const root = form.attachShadow({ mode: "open" });
-    const code = document.createElement("ha-code-editor") as HTMLElement & {
-      codemirror: { dom: HTMLElement; scrollDOM: HTMLElement; contentDOM: HTMLElement };
-    };
+    const code = document.createElement("ha-code-editor");
     const dom = document.createElement("div");
     const scrollDOM = document.createElement("div");
     const contentDOM = document.createElement("div");
     const gutter = document.createElement("div");
     gutter.className = "cm-gutters";
     dom.append(gutter);
+    scrollDOM.style.backgroundColor = "rgb(24, 28, 32)";
     contentDOM.contentEditable = "true";
-    code.codemirror = { dom, scrollDOM, contentDOM };
+    const readView = vi.fn(() => ({ dom, scrollDOM, contentDOM }));
+    const readUpdate = vi.fn(() => Promise.resolve());
+    Object.defineProperties(code, {
+      codemirror: { get: readView },
+      updateComplete: { get: readUpdate },
+    });
     code.append(dom, scrollDOM, contentDOM);
     root.append(code);
     form.append(document.createElement("span"));
-    await vi.waitFor(() => expect(dom.style.minHeight).toBe("320px"));
-    expect(scrollDOM.style.minHeight).toBe("280px");
-    expect(contentDOM.style.minHeight).toBe(scrollDOM.style.minHeight);
-    expect(gutter.style.minHeight).toBe("280px");
-    expect(scrollDOM.style.backgroundColor).toBe("");
-    expect(dom.style.height).toBe("");
-  });
-
-  it("preserves the native theme in Notify recipients when confirmed", async () => {
-    const { editor } = await mount();
-    await selectSection(editor, "confirmationNotification");
-    const form = nativeForm(editor, "message");
-    const root = form.attachShadow({ mode: "open" });
-    const code = document.createElement("ha-code-editor") as HTMLElement & {
-      codemirror: { dom: HTMLElement; scrollDOM: HTMLElement };
+    const expectUntouched = () => {
+      expect(readView).not.toHaveBeenCalled();
+      expect(readUpdate).not.toHaveBeenCalled();
+      for (const element of [dom, contentDOM, gutter]) expect(element.style.cssText).toBe("");
+      expect(scrollDOM.style.cssText).toBe("background-color: rgb(24, 28, 32);");
     };
-    const dom = document.createElement("div");
-    const scrollDOM = document.createElement("div");
-    scrollDOM.style.backgroundColor = "rgb(24, 28, 32)";
-    code.codemirror = { dom, scrollDOM };
-    code.append(dom, scrollDOM);
-    root.append(code);
-    form.append(document.createElement("span"));
-    await vi.waitFor(() => expect(dom.style.minHeight).not.toBe(""));
-    expect(scrollDOM.style.backgroundColor).toBe("rgb(24, 28, 32)");
+    await settleElement(editor);
+    expectUntouched();
+    editor.requestUpdate();
+    await settleElement(editor);
+    expectUntouched();
   });
 
-  it("opens section help with a Description explanation and closes it", async () => {
+  it.each(["Close", "closed"])("opens section help and closes it via %s using reactive dialog updates", async dismissal => {
     const { editor } = await mount();
     const help = editor.shadowRoot!.querySelector('ha-icon-button[title="More information: Basics"]')!;
     await testUser().click(help);
-    await settleElement(editor);
+    await editor.updateComplete;
     expect(editor.shadowRoot!.querySelector("ha-dialog")!.textContent).toContain("not included in notifications");
     expect(editor.shadowRoot!.querySelector("ha-dialog")!.getAttribute("width")).toBe("small");
     expect(editor.shadowRoot!.querySelector(".nc-help-topic h3")!.textContent).toBe("Description");
-    await testUser().click(editor.shadowRoot!.querySelector("ha-dialog ha-button")!);
-    await settleElement(editor);
+    if (dismissal === "Close") await testUser().click(editorButton(editor, "Close"));
+    else editor.shadowRoot!.querySelector("ha-dialog")!.dispatchEvent(new Event("closed"));
+    await editor.updateComplete;
     expect(editor.shadowRoot!.querySelector("ha-dialog")).toBeNull();
     const form = editor.shadowRoot!.querySelector("ha-form") as HTMLElement & { computeHelper: (field: { name: string }) => string };
     expect(form.computeHelper({ name: "description" })).toContain("optional note");
@@ -1546,7 +1885,7 @@ describe("native editor controls", () => {
     await testUser().click(editor.shadowRoot!.querySelector('[title="More information: Basics"]')!);
     await settleElement(editor);
     const dialog = editor.shadowRoot!.querySelector("ha-dialog")!;
-    expect(dialog.className).toBe("nc-info-dialog");
+    expect(classTokens(dialog)).toBe("nc-info-dialog");
     expect(dialog.getAttribute("type")).toBe("alert");
     expect(dialog.getAttribute("width")).toBe("small");
     expect(dialog.hasAttribute("fullscreen")).toBe(false);
@@ -1838,7 +2177,7 @@ describe("native editor controls", () => {
       .some(form => form.schema.some(field => field.name === "ledColor"))).toBe(false);
     expect(picker.closest(".nc-option-input")!.querySelector("ha-form")).toBeNull();
     await changeField(editor, "timeout", 0);
-    expect(nativeForm(editor, "timeout").className).toBe("nc-field-form nc-compact");
+    expect(classTokens(nativeForm(editor, "timeout"))).toBe("nc-field-form nc-compact");
     expect(state.alert.notification.options!).toMatchObject({ persistent, ledColor: "#12ab34", timeout: 0 });
 
     const finalized = finalizeAlert(state.alert, false);
@@ -1869,20 +2208,19 @@ describe("native editor controls", () => {
       enabled: true, interval: { minutes: 7 }, max_attempts: 4, show_attempts: true,
     });
     await selectSection(editor, "confirmation");
-    expect(nativeForm(editor, "buttons").schema.map(field => field.name)).toEqual(["buttons", "forget_after_enabled"]);
+    expect(nativeForm(editor, "buttons").schema.map(field => field.name)).toEqual(["buttons"]);
+    expect(nativeForm(editor, "forget_after_enabled").schema.map(field => field.name)).toEqual(["forget_after_enabled"]);
     expect([...editor.shadowRoot!.querySelectorAll<NativeForm>("ha-form")]
       .some(form => form.schema.some(field => field.name === "timeout"))).toBe(false);
-    nativeForm(editor, "forget_after_enabled").dispatchEvent(new CustomEvent("value-changed", {
-      detail: { value: { buttons, forget_after_enabled: true } },
-    }));
-    await settleElement(editor);
+    await changeField(editor, "buttons", buttons);
+    await changeField(editor, "forget_after_enabled", true);
 
     const timeout = nativeForm(editor, "timeout");
     expect(timeout.schema).toEqual([{ name: "timeout", selector: { duration: { enable_day: true } } }]);
     expect(timeout.computeLabel({ name: "timeout" })).toBe("Confirmation timeout");
-    expect(timeout.className).toBe("nc-field-form nc-compact");
+    expect(classTokens(timeout)).toBe("nc-field-form nc-compact");
     expect(nativeForm(editor, "buttons").schema.map(field => field.name)).toEqual(["buttons"]);
-    expect(nativeForm(editor, "buttons").className).toBe("");
+    expect(classTokens(nativeForm(editor, "buttons"))).toBe("nc-code-form");
     await changeField(editor, "timeout", { minutes: 12 });
     expect(state.alert.confirmation).toMatchObject({
       enabled: true, buttons,
@@ -1902,7 +2240,7 @@ describe("native editor controls", () => {
     section.write(state, { buttons: updatedButtons, forget_after_enabled: false });
     expect(state.alert.confirmation.reminders.timeout).toEqual({ days: 0, hours: 0, minutes: 12, seconds: 0 });
     await changeField(editor, "forget_after_enabled", true);
-    expect(nativeForm(editor, "timeout").className).toBe("nc-field-form nc-compact");
+    expect(classTokens(nativeForm(editor, "timeout"))).toBe("nc-field-form nc-compact");
     expect(nativeForm(editor, "timeout").data.timeout).toEqual({ days: 0, hours: 0, minutes: 12, seconds: 0 });
   });
 
@@ -1919,9 +2257,9 @@ describe("native editor controls", () => {
     const interval = nativeForm(editor, "interval");
     expect(interval.schema).toEqual([{ name: "interval", selector: { duration: { enable_day: true } } }]);
     expect(interval.computeLabel({ name: "interval" })).toBe("Remind every");
-    expect(interval.className).toBe("nc-field-form nc-compact");
-    expect(nativeForm(editor, "max_attempts").className).toBe("nc-field-form nc-compact");
-    expect(nativeForm(editor, "show_attempts").className).toBe("");
+    expect(classTokens(interval)).toBe("nc-field-form nc-compact");
+    expect(classTokens(nativeForm(editor, "max_attempts"))).toBe("nc-field-form nc-compact");
+    expect(classTokens(nativeForm(editor, "show_attempts"))).toBe("");
     expect(sectionForms(editor)
       .map(form => form.schema.map(field => field.name))).toEqual([["interval"], ["max_attempts"], ["show_attempts"]]);
     await changeField(editor, "interval", { minutes: 3 });
@@ -2096,8 +2434,8 @@ describe("native editor controls", () => {
     { platforms: ["ios"], unknown: false, label: "iOS / macOS" },
     { platforms: ["android", "ios"], unknown: true, label: "Android, iOS / macOS, Unknown" },
   ])("shows detected recipient platforms: $label", async ({ platforms, unknown, label }) => {
-    const sendMessagePromise = vi.fn().mockResolvedValue({ platforms, unknown });
-    const { editor } = await mount(undefined, sendMessagePromise);
+    const callWS = vi.fn().mockResolvedValue({ platforms, unknown });
+    const { editor } = await mount(undefined, callWS);
     await selectSection(editor, "recipients");
     expect(sectionElement(editor).querySelector('[role="status"]')?.textContent).toBe(label);
     expect(editor.shadowRoot!.textContent).not.toContain("Recipient platforms");
@@ -2106,11 +2444,11 @@ describe("native editor controls", () => {
       expect(sectionElement(editor, platform)).toBeNull();
       expect(editor.shadowRoot!.textContent).not.toContain("recipients selected");
     }
-    expect(sendMessagePromise).toHaveBeenCalledWith({ type: "ha_notifications/mobile_platforms", target: {} });
+    expect(callWS).toHaveBeenCalledWith({ type: "ha_notifications/mobile_platforms", target: {} });
     const form = nativeForm(editor, "target");
     form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { target: { device_id: ["phone"] } } } }));
     await settleElement(editor);
-    expect(sendMessagePromise).toHaveBeenLastCalledWith({ type: "ha_notifications/mobile_platforms", target: { device_id: ["phone"] } });
+    expect(callWS).toHaveBeenLastCalledWith({ type: "ha_notifications/mobile_platforms", target: { device_id: ["phone"] } });
     await selectSection(editor, "mobile");
     expect(sectionElement(editor).querySelector('[role="status"]')).toBeNull();
     expect(localNavigationKeys(editor).includes("android")).toBe(unknown || platforms.includes("android"));
@@ -2131,9 +2469,9 @@ describe("native editor controls", () => {
     { key: "android", title: "Android" },
     { key: "ios", title: "iOS / macOS" },
   ])("hides unconfigured unavailable $title local navigation", async ({ key }) => {
-    const sendMessagePromise = vi.fn().mockResolvedValue({ platforms: [], unknown: false });
-    const { editor } = await mount(undefined, sendMessagePromise);
-    await vi.waitFor(() => expect(sendMessagePromise).toHaveBeenCalledOnce());
+    const callWS = vi.fn().mockResolvedValue({ platforms: [], unknown: false });
+    const { editor } = await mount(undefined, callWS);
+    await vi.waitFor(() => expect(callWS).toHaveBeenCalledOnce());
     await selectSection(editor, "mobile");
     expect(localNavigationKeys(editor)).not.toContain(key);
     expect(sectionElement(editor, key)).toBeNull();
@@ -2165,7 +2503,11 @@ describe("native editor controls", () => {
   ])("leaves code editors inside $tag untouched on insertion and rerender", async ({ key, name, tag }) => {
     const { editor } = await mount();
     await selectSection(editor, key);
-    const formRoot = nativeForm(editor, name).attachShadow({ mode: "open" });
+    const form = nativeForm(editor, name);
+    expect(form.classList.contains("nc-code-form")).toBe(false);
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-height")).toBe("auto");
+    expect(getComputedStyle(form).getPropertyValue("--code-mirror-max-height")).toBe("unset");
+    const formRoot = form.attachShadow({ mode: "open" });
     const selector = document.createElement(tag);
     const selectorRoot = selector.attachShadow({ mode: "open" });
     const codeEditor = document.createElement("ha-code-editor");
@@ -2186,14 +2528,16 @@ describe("native editor controls", () => {
 
     const directCodeEditor = document.createElement("ha-code-editor");
     const directDom = document.createElement("div");
-    Object.assign(directCodeEditor, { codemirror: { dom: directDom } });
+    const readDirectView = vi.fn(() => ({ dom: directDom }));
+    Object.defineProperty(directCodeEditor, "codemirror", { get: readDirectView });
     formRoot.append(directCodeEditor);
-    await vi.waitFor(() => expect(directDom.style.minHeight).toBe("420px"));
+    await settleElement(editor);
 
     const expectUntouched = () => {
       expect(readView).not.toHaveBeenCalled();
       expect(readUpdate).not.toHaveBeenCalled();
-      for (const element of [dom, scrollDOM, contentDOM, gutter]) {
+      expect(readDirectView).not.toHaveBeenCalled();
+      for (const element of [dom, scrollDOM, contentDOM, gutter, directDom]) {
         expect(element.style.cssText).toBe("");
       }
     };

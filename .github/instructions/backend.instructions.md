@@ -1,13 +1,16 @@
 ---
-description: "Backend-specific boundaries for HA Notifications Python integration files."
+description: "Use when changing HA Notifications Python configuration, runtime, automation, services, or websocket contracts."
 applyTo: "custom_components/ha_notifications/**/*.py, tests/backend/**/*.py"
 ---
 
-Keep persistent configuration separate from `ConfigEntry.runtime_data`, and
-preserve native Home Assistant trigger, condition, template, and action data.
-Use existing integration modules and canonical backend fixtures; do not
-reintroduce removed architecture or invent frontend-visible contracts.
-
-For test, fixture, snapshot, config-entry, service, automation, or integration
-behavior work, load the shared `testing` and `testing-backend` skills. Use a
-focused pytest command before broader validation.
+`ConfigEntry.data`/`options` persist configuration; `ConfigEntry.runtime_data`
+(`RuntimeData` in `domain.py`) owns runtime state. Do not mix them.
+Nested Pydantic feature models in `configuration.py` own runtime defaults;
+frontend owns editor draft initialization. Do not add a backend defaults endpoint.
+Preserve native HA trigger, condition, template, action, and extra fields
+through validation/rendering; generated automations derive from canonical alerts.
+Use existing integration modules; establish frontend-visible contracts across
+both owners and `tests/contracts/`, not ad hoc response shapes.
+For owners, nearest tests, and pytest/ruff/gate commands, use the root table.
+For backend test work, load `testing` and `testing-backend`; use real HA core
+fixtures in `tests/backend/conftest.py` before pure units or local stubs.

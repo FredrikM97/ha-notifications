@@ -9,6 +9,7 @@ import {
   createHassClient,
   draftAlertFixture,
   editorAlertFixture,
+  historyFixture,
   homeAssistantFixture,
   mountCustomElement,
   settleElement,
@@ -27,12 +28,12 @@ await import("../../frontend/panel.js");
 
 const alert: Alert = configuredAlertFixture();
 const client = createHassClient();
-const sendMessagePromise = client.sendMessagePromise;
 
 type Panel = HTMLElement & {
   hass: Hass;
   shadowRoot: ShadowRoot;
   updateComplete: Promise<unknown>;
+  requestUpdate(): void;
   refresh(silent?: boolean): Promise<void>;
 };
 
@@ -40,7 +41,7 @@ type Message = { type: string; config?: AlertsConfig; alert_id?: string };
 
 function messages(endpoint: string): Message[] {
   const type = endpoint.includes("/") ? endpoint : `ha_notifications/${endpoint}`;
-  return sendMessagePromise.mock.calls
+  return client.callWS.mock.calls
     .map(([message]) => message as Message)
     .filter(message => message.type === type);
 }
@@ -64,12 +65,12 @@ function mountPanel(overrides: Partial<Hass> = {}, responses: Record<string, unk
     },
     "ha_notifications/get_history": [],
     "config/auth/list": [],
-    "ha_notifications/alert_defaults": draftAlertFixture(),
+    "ha_notifications/mobile_platforms": { platforms: [], unknown: true },
     "ha_notifications/cancel_run": { cancelled: true },
     "ha_notifications/test_alert": { started: true },
     "ha_notifications/validate_config": { valid: true },
   };
-  sendMessagePromise.mockImplementation(async (message: Message) => {
+  client.callWS.mockImplementation(async (message) => {
     if (Object.prototype.hasOwnProperty.call(responses, message.type)) return responses[message.type];
     if (message.type === "ha_notifications/save_config") {
       responses["ha_notifications/get_config"] = message.config;
@@ -79,7 +80,7 @@ function mountPanel(overrides: Partial<Hass> = {}, responses: Record<string, unk
     throw new Error(`Unexpected transport request: ${message.type}`);
   });
   return mountCustomElement("ha-notifications-panel", {
-    hass: homeAssistantFixture({ connection: client.hass.connection, ...overrides }),
+    hass: homeAssistantFixture({ callWS: client.callWS, ...overrides }),
   }) as Panel;
 }
 
@@ -116,6 +117,226 @@ function selectTab(panel: HTMLElement, name: string): void {
     new CustomEvent("wa-tab-show", { detail: { name } }),
   );
 }
+
+function deferred<Response>() {
+  let resolve!: (value: Response) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<Response>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+type DeferredRequest = ReturnType<typeof deferred<unknown>> & {
+  message: Record<string, unknown>;
+};
+
+function deferRefreshTransport(): DeferredRequest[] {
+  const requests: DeferredRequest[] = [];
+  client.callWS.mockImplementation(<Response>(message: Record<string, unknown>): Promise<Response> => {
+    const pending = deferred<unknown>();
+    requests.push({ message, ...pending });
+    return pending.promise as Promise<Response>;
+  });
+  return requests;
+}
+
+function completeRefresh(
+  requests: DeferredRequest[],
+  refreshedAlert = alert,
+  current = 0,
+  historySource = "Current history",
+): void {
+  expect(requests.map(request => request.message.type)).toEqual([
+    "ha_notifications/get_config",
+    "ha_notifications/automation_status",
+    "ha_notifications/get_history",
+  ]);
+  requests[0].resolve({ version: 1, alerts: [refreshedAlert] });
+  requests[1].resolve({
+    [refreshedAlert.id]: { status: "managed", enabled: true, mode: "parallel", current },
+  });
+  requests[2].resolve([{
+    ...historyFixture[0],
+    config: { id: refreshedAlert.id, name: refreshedAlert.name },
+    event: { ...historyFixture[0].event, details: { source: historySource } },
+  }]);
+}
+
+async function historyRoot(panel: Panel): Promise<ShadowRoot> {
+  selectTab(panel, "history");
+  await settleElement(panel);
+  const view = panel.shadowRoot.querySelector<HTMLElement>("ha-notifications-history-view")!;
+  await settleElement(view);
+  return view.shadowRoot!;
+}
+
+describe("panel refresh lifecycle", () => {
+  it("keeps the latest explicit configuration, status, and history when older responses arrive last", async () => {
+    const panel = mountPanel();
+    await ready(panel);
+    const requests = deferRefreshTransport();
+    const older = panel.refresh();
+    const latest = panel.refresh();
+    expect(requests).toHaveLength(6);
+    const updated = configuredAlertFixture({ name: "Latest alert" });
+
+    completeRefresh(requests.slice(3), updated, 2, "Latest history");
+    await latest;
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(updated.name);
+    expect(panel.shadowRoot.querySelector(".nc-alert-secondary")?.textContent).toContain("2 active runs");
+    expect((await historyRoot(panel)).textContent).toContain("Latest history");
+
+    completeRefresh(requests.slice(0, 3), configuredAlertFixture({ name: "Older alert" }), 7, "Older history");
+    await older;
+    expect((await historyRoot(panel)).textContent).toContain("Latest history");
+    expect((await historyRoot(panel)).textContent).not.toContain("Older history");
+    selectTab(panel, "alerts");
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(updated.name);
+    expect(panel.shadowRoot.querySelector(".nc-alert-secondary")?.textContent).toContain("2 active runs");
+  });
+
+  it("starts alert-specific history from a visible link while an all-alert refresh is pending", async () => {
+    const panel = mountPanel({}, {
+      "ha_notifications/get_history": [{ ...historyFixture[0], config: { id: alert.id, name: alert.name } }],
+    });
+    await ready(panel);
+    const root = await historyRoot(panel);
+    const requests = deferRefreshTransport();
+    const older = panel.refresh();
+
+    await testUser().click(root.querySelector<HTMLButtonElement>(".nc-link")!);
+
+    expect(requests).toHaveLength(6);
+    expect(requests[2].message).toEqual({ type: "ha_notifications/get_history" });
+    expect(requests[5].message).toEqual({ type: "ha_notifications/get_history", alert_id: alert.id });
+    completeRefresh(requests.slice(3), alert, 0, "Selected alert history");
+    await vi.waitFor(() => expect(root.textContent).toContain("Selected alert history"));
+
+    completeRefresh(requests.slice(0, 3), configuredAlertFixture({ name: "Stale name" }), 4, "All-alert stale history");
+    await older;
+    await settleElement(panel);
+    await settleElement(panel.shadowRoot.querySelector<HTMLElement>("ha-notifications-history-view")!);
+    expect(root.textContent).toContain("Selected alert history");
+    expect(root.textContent).toContain(alert.name);
+    expect(root.textContent).not.toContain("All-alert stale history");
+    expect(root.textContent).not.toContain("Stale name");
+  });
+
+  it("does not toast stale failures or let them clear a newer pending refresh", async () => {
+    const panel = mountPanel();
+    await ready(panel);
+    const notification = vi.fn();
+    panel.addEventListener("hass-notification", notification);
+    const requests = deferRefreshTransport();
+    const older = panel.refresh();
+    const latest = panel.refresh();
+
+    requests.slice(0, 3).forEach(request => request.reject(new Error(`Stale ${request.message.type}`)));
+    await older;
+    await panel.refresh(true);
+    expect(requests).toHaveLength(6);
+    expect(notification).not.toHaveBeenCalled();
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(alert.name);
+
+    completeRefresh(requests.slice(3), configuredAlertFixture({ name: "Recovered alert" }));
+    await latest;
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe("Recovered alert");
+    expect(notification).not.toHaveBeenCalled();
+  });
+
+  it.each(["fulfilled", "rejected"] as const)("ignores %s results after removal without scheduling updates or notifications", async outcome => {
+    const clearInterval = vi.spyOn(window, "clearInterval");
+    try {
+      const panel = mountPanel();
+      await ready(panel);
+      const requests = deferRefreshTransport();
+      const pending = panel.refresh();
+      const notification = vi.fn();
+      panel.addEventListener("hass-notification", notification);
+      panel.remove();
+      expect(clearInterval).toHaveBeenCalledOnce();
+      const update = vi.spyOn(panel, "requestUpdate");
+      try {
+        await panel.refresh();
+        await panel.refresh(true);
+        expect(requests).toHaveLength(3);
+        if (outcome === "fulfilled") {
+          completeRefresh(requests, configuredAlertFixture({ name: "Detached alert" }), 3);
+        } else {
+          requests.forEach(request => request.reject(new Error("Disconnected failure")));
+        }
+        await pending;
+        await settleElement(panel);
+
+        expect(update).not.toHaveBeenCalled();
+        expect(notification).not.toHaveBeenCalled();
+        expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(alert.name);
+        expect(panel.shadowRoot.querySelector(".nc-alert-secondary")?.textContent).toContain("Idle");
+      } finally {
+        update.mockRestore();
+      }
+    } finally {
+      clearInterval.mockRestore();
+    }
+  });
+
+  it("reconnects without the old pending blocker and ignores pre-disconnect results", async () => {
+    const panel = mountPanel();
+    await ready(panel);
+    const requests = deferRefreshTransport();
+    const older = panel.refresh();
+    panel.remove();
+    await panel.refresh(true);
+    expect(requests).toHaveLength(3);
+
+    document.body.append(panel);
+    expect(requests).toHaveLength(6);
+    completeRefresh(requests.slice(3), configuredAlertFixture({ name: "Reconnected alert" }), 2, "Reconnected history");
+    await vi.waitFor(() => expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe("Reconnected alert"));
+
+    completeRefresh(requests.slice(0, 3), configuredAlertFixture({ name: "Before disconnect" }), 8, "Before disconnect history");
+    await older;
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe("Reconnected alert");
+    expect(panel.shadowRoot.querySelector(".nc-alert-secondary")?.textContent).toContain("2 active runs");
+    const root = await historyRoot(panel);
+    expect(root.textContent).toContain("Reconnected history");
+    expect(root.textContent).not.toContain("Before disconnect history");
+
+    const next = panel.refresh(true);
+    expect(requests).toHaveLength(9);
+    completeRefresh(requests.slice(6));
+    await next;
+  });
+
+  it("deduplicates silent refreshes and hass updates while pending, then allows another silent refresh", async () => {
+    const panel = mountPanel();
+    await ready(panel);
+    const requests = deferRefreshTransport();
+    const pending = panel.refresh(true);
+
+    await panel.refresh(true);
+    panel.hass = homeAssistantFixture({ callWS: client.callWS });
+    await panel.refresh(true);
+    expect(requests).toHaveLength(3);
+    completeRefresh(requests, configuredAlertFixture({ name: "Silent alert" }));
+    await pending;
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe("Silent alert");
+
+    const next = panel.refresh(true);
+    expect(requests).toHaveLength(6);
+    completeRefresh(requests.slice(3));
+    await next;
+    await settleElement(panel);
+    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(alert.name);
+  });
+});
 
 describe("panel view", () => {
   it.each([false, true])("confirms Test alert before transport with accepted=%s", async accepted => {
@@ -154,7 +375,7 @@ describe("panel view", () => {
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
     const panel = mountPanel();
     await ready(panel);
-    sendMessagePromise.mockRejectedValueOnce(new Error("Automation not found"));
+    client.callWS.mockRejectedValueOnce(new Error("Automation not found"));
     const notification = vi.fn();
     panel.addEventListener("hass-notification", notification);
     const menu = panel.shadowRoot.querySelector("ha-icon-overflow-menu") as HTMLElement & {
@@ -231,33 +452,50 @@ describe("panel view", () => {
     ).toBe(true));
   });
 
-  it.each([false, true])("loads users and fresh backend defaults before opening an editor with create=%s", async create => {
+  it.each([false, true])("loads only users before initializing the local editor with create=%s", async create => {
     const panel = mountPanel();
     await ready(panel);
 
     expect(messages("alert_defaults")).toHaveLength(0);
+    client.callWS.mockClear();
     const options = await openPanelEditor(panel, create);
 
     expect(messages("config/auth/list")).toEqual([{ type: "config/auth/list" }]);
-    expect(messages("alert_defaults")).toEqual([{ type: "ha_notifications/alert_defaults" }]);
-    expect(options.defaults).toEqual(draftAlertFixture());
+    expect(messages("alert_defaults")).toHaveLength(0);
+    expect(client.callWS.mock.calls.map(([message]) => message)).toEqual([
+      { type: "config/auth/list" },
+      { type: "ha_notifications/mobile_platforms", target: create ? {} : alert.notification.target },
+    ]);
+    const openingOrder = editor.openEditor.mock.invocationCallOrder[0];
+    expect(client.callWS.mock.invocationCallOrder[0]).toBeLessThan(openingOrder);
+    expect(client.callWS.mock.invocationCallOrder[1]).toBeGreaterThan(openingOrder);
+    expect(options).not.toHaveProperty("defaults");
     expect(options.alert).toEqual(create ? null : alert);
     const host = panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
       state: { alert: Alert };
     };
-    expect(host.state.alert.id).toBe(create ? "alert_draft" : alert.id);
+    if (create) {
+      expect(host.state.alert.id).toMatch(/^alert_[0-9a-f]{32}$/);
+      expect({ ...host.state.alert, id: "alert_draft" }).toEqual(draftAlertFixture());
+    } else {
+      expect(host.state.alert.id).toBe(alert.id);
+      expect(host.state.alert).toMatchObject(alert);
+      expect(host.state.alert.monitor.conditions.interval).toBe(draftAlertFixture().monitor.conditions.interval);
+      expect(host.state.alert.monitor).not.toBe(alert.monitor);
+      expect(host.state.alert.notification).not.toBe(alert.notification);
+    }
   });
 
-  it.each([false, true].flatMap(create => ["ha_notifications/alert_defaults", "config/auth/list"].map(endpoint => ({ create, endpoint }))))(
-    "notifies without opening on $endpoint failure with create=$create and retries successfully",
-    async ({ create, endpoint }) => {
+  it.each([false, true])(
+    "notifies without opening on user load failure with create=%s and retries successfully",
+    async create => {
       const panel = mountPanel();
       await ready(panel);
       const notification = vi.fn();
       panel.addEventListener("hass-notification", notification);
-      const transport = sendMessagePromise.getMockImplementation()!;
-      sendMessagePromise.mockImplementation(async (message: Message) => {
-        if (message.type === endpoint) throw new Error("Unavailable");
+      const transport = client.callWS.getMockImplementation()!;
+      client.callWS.mockImplementation(async (message) => {
+        if (message.type === "config/auth/list") throw new Error("Unavailable");
         return transport(message);
       });
       const target = panel.shadowRoot.querySelector<HTMLElement>(
@@ -267,25 +505,23 @@ describe("panel view", () => {
       await testUser().click(target);
       await vi.waitFor(() => expect(notification).toHaveBeenCalledOnce());
       expect((notification.mock.calls[0][0] as CustomEvent).detail).toEqual({
-        message: `${endpoint}: Unavailable`,
+        message: "config/auth/list: Unavailable",
       });
       expect(editor.openEditor).not.toHaveBeenCalled();
       expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull();
       expect(panel.shadowRoot.querySelector("ha-top-app-bar-fixed")!.hasAttribute("hidden")).toBe(false);
 
-      sendMessagePromise.mockImplementation(transport);
+      client.callWS.mockImplementation(transport);
       const options = await openPanelEditor(panel, create);
-      expect(options.defaults).toEqual(draftAlertFixture());
       expect(options.alert).toEqual(create ? null : alert);
-      expect(messages("alert_defaults")).toHaveLength(2);
+      expect(messages("alert_defaults")).toHaveLength(0);
       expect(messages("config/auth/list")).toHaveLength(2);
       expect(notification).toHaveBeenCalledOnce();
     },
   );
 
-  it("uses a fresh server draft id for every opening while reusing cached users", async () => {
+  it("uses a fresh local draft id for every opening while reusing cached users", async () => {
     const responses: Record<string, unknown> = {
-      "ha_notifications/alert_defaults": draftAlertFixture({ id: "server_first" }),
       "config/auth/list": [{ id: "operator", name: "Operator" }],
     };
     const panel = mountPanel({}, responses);
@@ -294,21 +530,25 @@ describe("panel view", () => {
     const editorHost = () => panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
       state: { alert: Alert };
     };
-    expect(editorHost().state.alert.id).toBe("server_first");
+    const firstDraft = editorHost().state.alert;
+    const firstId = firstDraft.id;
+    expect(firstId).toMatch(/^alert_[0-9a-f]{32}$/);
+    firstDraft.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
     await testUser().click(editorHost().shadowRoot!.querySelector<HTMLElement>('ha-icon-button[slot="navigationIcon"]')!);
     await vi.waitFor(() => expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull());
     await vi.waitFor(() => expect(messages("get_config")).toHaveLength(2));
-    responses["ha_notifications/alert_defaults"] = draftAlertFixture({ id: "server_second" });
 
     const second = await openPanelEditor(panel, true);
 
-    expect(second.defaults.id).toBe("server_second");
-    expect(editorHost().state.alert.id).toBe("server_second");
-    expect(first.defaults.id).toBe("server_first");
+    const secondDraft = editorHost().state.alert;
+    expect(secondDraft.id).toMatch(/^alert_[0-9a-f]{32}$/);
+    expect(secondDraft.id).not.toBe(firstId);
+    expect({ ...secondDraft, id: "alert_draft" }).toEqual(draftAlertFixture());
+    expect(firstDraft.id).toBe(firstId);
     expect(second.users).toEqual(first.users);
     expect(second.users).toEqual([{ value: "operator", label: "Operator" }]);
     expect(messages("config/auth/list")).toHaveLength(1);
-    expect(messages("alert_defaults")).toHaveLength(2);
+    expect(messages("alert_defaults")).toHaveLength(0);
   });
 
   it("switches between History and YAML views", async () => {
@@ -330,7 +570,7 @@ describe("panel view", () => {
     await settleElement(panel);
 
     expect(panel.shadowRoot.querySelector(".nc-empty")?.textContent).toContain("administrator");
-    expect(sendMessagePromise).not.toHaveBeenCalled();
+    expect(client.callWS).not.toHaveBeenCalled();
   });
 
   it("registers the Lovelace card contract", () => {
@@ -406,13 +646,13 @@ describe("panel configuration workflows", () => {
     await ready(panel);
     const options = await openPanelEditor(panel, true);
     const draft = editorAlertFixture({ id: id as string });
-    sendMessagePromise.mockClear();
+    client.callWS.mockClear();
 
     await expect(options.onSave(draft)).rejects.toThrow(
       "ha_notifications/save_config: alert.id is required.",
     );
 
-    expect(sendMessagePromise).not.toHaveBeenCalled();
+    expect(client.callWS).not.toHaveBeenCalled();
   });
 
   it("reports a missing saved alert without announcing success", async () => {

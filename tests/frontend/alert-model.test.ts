@@ -1,16 +1,51 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parse, stringify } from "yaml";
-import { editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
+import { createAlertDraft, editableAlert, finalizeAlert, toCanonicalAlert } from "../../frontend/editor/alert-model.js";
 import type { Alert, MonitorConfig } from "../../frontend/types.js";
+import alertDefaults from "../contracts/alert_defaults.json";
 import { draftAlertFixture } from "./conftest.js";
 
 describe("editable alert model", () => {
-  it.each([null, undefined])("clones backend-owned defaults for source %s", source => {
-    const defaults = draftAlertFixture({ id: "server_draft" });
+  it("serializes frontend draft defaults with the canonical schema-parity fixture", () => {
+    const draft = createAlertDraft();
+    expect(JSON.parse(JSON.stringify({ ...draft, id: alertDefaults.id }))).toEqual(alertDefaults);
+  });
+
+  it("generates fresh UUID ids and independent nested defaults", () => {
+    const first = createAlertDraft();
+    const second = createAlertDraft();
+    const originalSecond = structuredClone(second);
+    expect(first.id).toMatch(/^alert_[0-9a-f]{32}$/);
+    expect(second.id).toMatch(/^alert_[0-9a-f]{32}$/);
+    expect(first.id).not.toBe(second.id);
+    first.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
+    first.monitor.conditions.items.push({ condition: "template", value_template: "{{ true }}" });
+    first.monitor.inactive.items.push({ trigger: "event", event_type: "closed" });
+    first.notification.target.entity_id = ["notify.phone"];
+    first.notification.options.changed = true;
+    first.confirmation.buttons[0].label = "Changed";
+    first.confirmation.notification.options.changed = true;
+    first.confirmation.reminders.interval = 0;
+    first.confirmation.actions.push({ action: "light.turn_on" });
+    expect(second).toEqual(originalSecond);
+  });
+
+  it.each([null, undefined])("creates local defaults without injection for source %s", source => {
+    const first = editableAlert(source);
+    const second = editableAlert(source);
+    expect(first.id).toMatch(/^alert_[0-9a-f]{32}$/);
+    expect(first.id).not.toBe(second.id);
+    expect({ ...first, id: "alert_draft" }).toEqual(draftAlertFixture());
+    first.confirmation.buttons[0].label = "Changed";
+    expect(second.confirmation.buttons[0].label).toBe("Done");
+  });
+
+  it.each([null, undefined])("clones test-injected defaults for source %s", source => {
+    const defaults = draftAlertFixture({ id: "test_draft" });
     const original = structuredClone(defaults);
     const alert = editableAlert(source, defaults);
     expect(alert).toEqual(defaults);
-    expect(alert.id).toBe("server_draft");
+    expect(alert.id).toBe("test_draft");
     expect(alert.confirmation.reminders.interval).toBe(1800);
     expect(alert.confirmation.reminders.timeout).toBe(900);
     alert.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
@@ -21,7 +56,7 @@ describe("editable alert model", () => {
 
   it("merges nested defaults without replacing false, zero, or user-owned native values", () => {
     const defaults = draftAlertFixture();
-    defaults.notification.title = "Server title";
+    defaults.notification.title = "Injected title";
     defaults.confirmation.notification.enabled = true;
     defaults.confirmation.reminders.show_attempts = true;
     const source = {
@@ -204,6 +239,61 @@ describe("editable alert model", () => {
 });
 
 describe("finalizeAlert", () => {
+  it("clones once while normalizing durations and isolating the successful payload", () => {
+    const draft = draftAlertFixture({ name: "  Door  " });
+    draft.notification.target = { entity_id: ["notify.phone"] };
+    draft.monitor.triggers.items = [{ trigger: "state", entity_id: "binary_sensor.door", for: { seconds: 0 }, native: { enabled: false } }];
+    draft.notification.options = { ttl: 0, native: { enabled: false } };
+    draft.confirmation.reminders.interval = { minutes: 7 };
+    draft.confirmation.reminders.timeout = "00:02:00";
+    draft.confirmation.actions = [{ action: "light.turn_on" }];
+    draft.runtime = { active: true };
+    const original = structuredClone(draft);
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      const saved = finalizeAlert(draft, false);
+      expect(clone).toHaveBeenCalledExactlyOnceWith(draft);
+      expect(draft).toEqual(original);
+      expect(saved).not.toBe(draft);
+      expect(saved.name).toBe("Door");
+      expect(saved).not.toHaveProperty("runtime");
+      expect(saved.confirmation!.actions).toEqual([]);
+      expect(saved.confirmation!.reminders.interval).toBe(420);
+      expect(saved.confirmation!.reminders.timeout).toBe(120);
+      expect(JSON.parse(JSON.stringify(saved.monitor))).toEqual(original.monitor);
+      expect(saved.notification.options).toEqual(original.notification.options);
+      saved.monitor.triggers.items[0].event_type = "changed";
+      saved.notification.target.entity_id!.push("notify.other");
+      (saved.notification.options.native as { enabled: boolean }).enabled = true;
+      saved.confirmation!.buttons[0].label = "Changed";
+      expect(draft).toEqual(original);
+    } finally {
+      clone.mockRestore();
+    }
+  });
+
+  it.each(["recipients", "duration"])("clones once and leaves the draft unchanged on %s failure", failure => {
+    const draft = draftAlertFixture({ name: "  Door  " });
+    draft.confirmation.reminders.interval = { minutes: 7 };
+    draft.confirmation.actions = [{ action: "light.turn_on" }];
+    draft.runtime = { active: true };
+    let message = /Select at least one device/;
+    if (failure === "duration") {
+      draft.notification.target = { entity_id: ["notify.phone"] };
+      draft.confirmation.reminders.timeout = "invalid";
+      message = /Confirmation timeout must be a valid duration/;
+    }
+    const original = structuredClone(draft);
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      expect(() => finalizeAlert(draft, false)).toThrow(message);
+      expect(clone).toHaveBeenCalledExactlyOnceWith(draft);
+      expect(draft).toEqual(original);
+    } finally {
+      clone.mockRestore();
+    }
+  });
+
   it("validates recipients and allows incomplete YAML preview drafts", () => {
     const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
 
@@ -301,5 +391,41 @@ describe("finalizeAlert", () => {
       enabled: false,
       actions: [{ action: "light.turn_on" }],
     });
+  });
+});
+
+describe("toCanonicalAlert", () => {
+  it("returns an independent clone without mutating duration or native JSON values", () => {
+    const alert = draftAlertFixture();
+    alert.confirmation.reminders.interval = { minutes: 7 };
+    alert.confirmation.reminders.timeout = "00:02:00";
+    alert.monitor.triggers.items = [{ trigger: "state", for: { seconds: 0 }, enabled: false }];
+    alert.notification.options = { native: { enabled: false }, ttl: 0 };
+    alert.runtime = { current: 2 };
+    const original = structuredClone(alert);
+
+    const serialized = toCanonicalAlert(alert);
+
+    expect(serialized).not.toBe(alert);
+    expect(serialized).not.toHaveProperty("runtime");
+    expect(serialized.confirmation!.reminders.interval).toBe(420);
+    expect(serialized.confirmation!.reminders.timeout).toBe(120);
+    expect(JSON.parse(JSON.stringify(serialized.monitor))).toEqual(original.monitor);
+    expect(serialized.notification.options).toEqual(original.notification.options);
+    expect(alert).toEqual(original);
+    serialized.monitor.triggers.items[0].enabled = true;
+    (serialized.notification.options.native as { enabled: boolean }).enabled = true;
+    serialized.confirmation!.buttons[0].label = "Changed";
+    expect(alert).toEqual(original);
+  });
+
+  it("leaves the input unchanged when normalization fails after a valid interval", () => {
+    const alert = draftAlertFixture();
+    alert.confirmation.reminders.interval = { minutes: 7 };
+    alert.confirmation.reminders.timeout = "invalid";
+    const original = structuredClone(alert);
+
+    expect(() => toCanonicalAlert(alert)).toThrow(/Confirmation timeout must be a valid duration/);
+    expect(alert).toEqual(original);
   });
 });

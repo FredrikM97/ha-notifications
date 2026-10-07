@@ -22,10 +22,9 @@ export function durationToSeconds(value: DurationValue | undefined): number | un
   return undefined;
 }
 
-export function serializeAlertDurations(alert: Alert): Alert {
-  const result = JSON.parse(JSON.stringify(alert)) as Alert;
-  const reminders = result.confirmation?.reminders;
-  if (!reminders) return result;
+function normalizeAlertDurations(alert: Alert): Alert {
+  const reminders = alert.confirmation?.reminders;
+  if (!reminders) return alert;
   for (const [key, label] of [
     ["interval", "Confirmation reminder interval"],
     ["timeout", "Confirmation timeout"],
@@ -35,11 +34,11 @@ export function serializeAlertDurations(alert: Alert): Alert {
     if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
     reminders[key] = seconds;
   }
-  return result;
+  return alert;
 }
 
 export function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
-  const { runtime: _runtime, ...canonical } = serializeAlertDurations(alert);
+  const { runtime: _runtime, ...canonical } = normalizeAlertDurations(structuredClone(alert));
   return canonical as AlertsConfig["alerts"][number];
 }
 
@@ -54,7 +53,7 @@ export interface Duration {
 }
 
 /** Deep copy with every optional block the editor binds to filled in. */
-export function editableAlert(source: Alert | null | undefined, defaults: EditableAlert): EditableAlert {
+export function editableAlert(source: Alert | null | undefined, defaults = createAlertDraft()): EditableAlert {
   return structuredClone({
     ...defaults,
     ...source,
@@ -73,6 +72,37 @@ export function editableAlert(source: Alert | null | undefined, defaults: Editab
       reminders: { ...defaults.confirmation.reminders, ...source?.confirmation?.reminders },
     },
   });
+}
+
+export function createAlertDraft(): EditableAlert {
+  return {
+    id: `alert_${crypto.randomUUID().replaceAll("-", "")}`,
+    name: "",
+    enabled: true,
+    description: "",
+    icon: "mdi:bell-outline",
+    monitor: {
+      automation_mode: "parallel",
+      triggers: { enabled: true, items: [] },
+      conditions: { enabled: true, items: [], startup: false, periodic: false, interval: 43200 },
+      inactive: { enabled: false, items: [], clear_notification: false },
+    },
+    notification: { target: {}, title: "", message: "", use_default_tag: true, options: {} },
+    confirmation: {
+      enabled: false,
+      buttons: [{ id: "confirm", label: "Done" }],
+      notification: { enabled: false, title: "", message: "", use_default_tag: true, options: {} },
+      reminders: {
+        enabled: true,
+        interval: 1800,
+        max_attempts: 5,
+        show_attempts: false,
+        forget_after_enabled: false,
+        timeout: 900,
+      },
+      actions: [],
+    },
+  };
 }
 
 // ---- Durations ----
@@ -109,7 +139,7 @@ export function finalizeAlert(
   postConfirmationActions: boolean,
   validate = true,
 ): Alert {
-  const alert = JSON.parse(JSON.stringify(draft)) as EditableAlert;
+  const alert = structuredClone(draft);
   delete alert.runtime;
   const { confirmation, notification } = alert;
   if (validate) {
@@ -131,5 +161,5 @@ export function finalizeAlert(
   if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.actions?.length) {
     delete alert.post_send_actions;
   }
-  return serializeAlertDurations(alert);
+  return normalizeAlertDurations(alert);
 }

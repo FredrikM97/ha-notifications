@@ -1,7 +1,6 @@
 {
   "commands": [
     "get_config",
-    "alert_defaults",
     "mobile_platforms",
     "automation_status",
     "get_history",

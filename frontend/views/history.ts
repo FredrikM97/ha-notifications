@@ -367,11 +367,14 @@ class HistoryView extends LitElement {
 
   private layout = new NarrowController(this);
   private filters = emptyHistoryFilters();
-  private groupByFlow = Boolean(savedViewSettings().groupByFlow);
-  private showFilters = Boolean(savedViewSettings().showFilters);
+  private groupByFlow: boolean;
+  private showFilters: boolean;
 
   constructor() {
     super();
+    const settings = savedViewSettings();
+    this.groupByFlow = Boolean(settings.groupByFlow);
+    this.showFilters = Boolean(settings.showFilters);
     this.history = [];
     this.alerts = [];
     this.alertName = null;
@@ -529,10 +532,35 @@ class HistoryView extends LitElement {
   }
 
   private item(entry: Entry, showFlow = true): TemplateResult {
+    return html`<div class="nc-item">
+      <div class="nc-item-title">
+        ${this.alertLink(entry)}
+        <span class="nc-badge ${historySeverity(entry.event?.type)}">${formatType(entry.event?.type)}</span>
+        ${this.flowLabel(entry, showFlow)}
+      </div>
+      <div class="nc-muted">${this.itemSummary(entry)}</div>
+      ${this.itemDetails(entry.event?.details)}
+    </div>`;
+  }
+
+  private alertLink(entry: Entry): TemplateResult {
+    const name = entry.config?.name || this.t("history.unknown_alert");
+    const alertId = entry.config?.id;
+    if (!alertId) return html`<span>${name}</span>`;
+    return html`<button class="nc-link"
+      @click=${() => this.emit("history-alert-selected", { alertId, alertName: name })}
+    >${name}</button>`;
+  }
+
+  private flowLabel(entry: Entry, showFlow: boolean): TemplateResult | typeof nothing {
+    if (!showFlow || !entry.event?.flow_id) return nothing;
+    return html`<span class="nc-flow-id">${this.t("history.flow")} ${shortFlowId(entry.event.flow_id)}</span>`;
+  }
+
+  private itemSummary(entry: Entry): string {
     const event = entry.event;
     const details = event?.details;
     const startedBy = historyStartedBySummary(details);
-    const name = entry.config?.name || this.t("history.unknown_alert");
     const secondary = [
       formatLocalDateTime(event?.timestamp, true, this.hass?.locale),
       startedBy ? this.t("history.started_by", { trigger: startedBy }) : "",
@@ -540,29 +568,15 @@ class HistoryView extends LitElement {
         ? this.t("history.reason", { reason: this.t("history.confirmation_notification") })
         : "",
     ].filter(Boolean);
-    return html`<div class="nc-item">
-      <div class="nc-item-title">
-        ${entry.config?.id
-          ? html`<button
-              class="nc-link"
-              @click=${() => this.emit("history-alert-selected", { alertId: entry.config!.id, alertName: name })}
-            >
-              ${name}
-            </button>`
-          : html`<span>${name}</span>`}
-        <span class="nc-badge ${historySeverity(event?.type)}">${formatType(event?.type)}</span>
-        ${showFlow && event?.flow_id
-          ? html`<span class="nc-flow-id">${this.t("history.flow")} ${shortFlowId(event.flow_id)}</span>`
-          : nothing}
-      </div>
-      <div class="nc-muted">${secondary.join(" · ")}</div>
-      ${details && Object.keys(details).length
-        ? html`<details class="nc-muted">
-            <summary>${this.t("history.details")}</summary>
-            <pre>${JSON.stringify(details, null, 2)}</pre>
-          </details>`
-        : nothing}
-    </div>`;
+    return secondary.join(" · ");
+  }
+
+  private itemDetails(details: Record<string, unknown> | undefined): TemplateResult | typeof nothing {
+    if (!details || !Object.keys(details).length) return nothing;
+    return html`<details class="nc-muted">
+      <summary>${this.t("history.details")}</summary>
+      <pre>${JSON.stringify(details, null, 2)}</pre>
+    </details>`;
   }
 
   /** Active select filters as removable chips, visible even while the filter panel is closed. */
@@ -595,15 +609,20 @@ class HistoryView extends LitElement {
 
   private set(mutate: () => void): void {
     mutate();
-    localStorage.setItem(
-      VIEW_SETTINGS_KEY,
-      JSON.stringify({ groupByFlow: this.groupByFlow, showFilters: this.showFilters }),
-    );
     this.requestUpdate();
+    try {
+      localStorage.setItem(
+        VIEW_SETTINGS_KEY,
+        JSON.stringify({ groupByFlow: this.groupByFlow, showFilters: this.showFilters }),
+      );
+    } catch {
+      return;
+    }
   }
 
   private setFilter(key: keyof HistoryFilters, value: string): void {
-    this.set(() => (this.filters = { ...this.filters, [key]: value }));
+    this.filters = { ...this.filters, [key]: value };
+    this.requestUpdate();
   }
 
   private showAll = (): void => this.emit("history-show-all");

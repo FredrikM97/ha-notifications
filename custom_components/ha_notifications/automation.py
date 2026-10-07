@@ -108,9 +108,8 @@ class _SendComponent:
             for index, button in enumerate(confirmation.buttons)
         ]
         reminders = confirmation.reminders
-        timeout = getattr(reminders, "timeout", None)
-        if reminders.forget_after_enabled and timeout is not None:
-            data["timeout"] = _duration_seconds(timeout)
+        if reminders.forget_after_enabled:
+            data["timeout"] = _duration_seconds(reminders.timeout)
         return notification
 
 
@@ -250,9 +249,7 @@ class _ConfirmationWaitComponent:
         confirmation: ConfirmationConfig,
     ) -> _ConfirmationActionFragments:
         timeout = confirmation.reminders.interval
-        if timeout is None:
-            timeout = {"minutes": 15}
-        elif isinstance(timeout, dict):
+        if isinstance(timeout, dict):
             timeout = dict(timeout)
         return _ConfirmationActionFragments(
             wait={
@@ -352,14 +349,13 @@ class _ConfirmationReminderBuilder:
         if reminders is None:
             return None
         reminder_notification = _SEND_COMPONENT._confirmation_notification(alert)
-        if getattr(reminders, "show_attempts", False) is True:
-            reminder_notification = _confirmation_attempt_notification(
-                reminder_notification,
-                reminders.max_attempts if reminders.max_attempts is not None else 5,
-            )
+        if reminders.show_attempts:
+            payload = reminder_notification["payload"]
+            attempt = f"Attempt {{{{ repeat.index + 1 }}}}/{reminders.max_attempts}"
+            payload["title"] = f"{payload['title']} - {attempt}" if payload.get("title") else attempt
         return {
             "repeat": {
-                "count": (reminders.max_attempts if reminders.max_attempts is not None else 5),
+                "count": reminders.max_attempts,
                 "sequence": [
                     steps.send(reminder_notification),
                     steps.report(
@@ -373,31 +369,14 @@ class _ConfirmationReminderBuilder:
                         include_run_id=False,
                     ),
                     steps.report("waiting", "confirmation_waiting", message="Waiting for confirmation"),
-                    _copy_native_value(wait),
+                    wait,
                     {
-                        "choose": [
-                            *[
-                                _copy_native_value(branch)
-                                for branch in outcome_branches
-                            ],
-                        ],
+                        "choose": list(outcome_branches),
                         "default": [],
                     },
                 ],
             },
         }
-
-
-def _confirmation_attempt_notification(
-    notification: dict[str, Any],
-    max_attempts: int,
-) -> dict[str, Any]:
-    """Add the current retry number to a reminder notification title."""
-    notification = _copy_native_value(notification)
-    data = notification["payload"]
-    title = data.get("title") or "Confirmation"
-    data["title"] = f"{title} - Attempt {{{{ repeat.index + 1 }}}}/{max_attempts}"
-    return notification
 
 
 _CONFIRMATION_ACTION_COMPONENTS: tuple[_ConfirmationActionComponent, ...] = (
@@ -614,14 +593,9 @@ async def async_validate_alerts(
             if "for" in condition:
                 raise HomeAssistantError(f"{condition_path} (numeric_state) does not support 'for'; use a state condition when a duration is required.")
 
-    generated_alerts = [
-        alert
-        for alert in alerts
-        if _validated_alert(alert).monitor.enabled_triggers
-    ]
     generated = [
         (alert, automation)
-        for alert in generated_alerts
+        for alert in alerts
         for automation in generate_automations(alert)
     ]
     document = [automation for _alert, automation in generated]
@@ -630,7 +604,7 @@ async def async_validate_alerts(
         paths = "; ".join(
             f"Alert {alert['id']!r}: "
             + ", ".join(f"conditions[{index}] ({condition.get('condition', 'unknown')})" for index, condition in enumerate(condition_items(alert)))
-            for alert in generated_alerts
+            for alert, _automation in generated
         )
         raise HomeAssistantError(
             f"Generated HA Notifications automation failed Home Assistant validation; one or more automations were omitted. Condition paths: {paths or 'none'}"
@@ -713,7 +687,7 @@ def render_automation(
                 details={"action": "automation_completed"},
             )
         )
-    alert_conditions = list(fragments.conditions)
+    alert_conditions = _copy_native_value(list(fragments.conditions))
     automation_triggers = [dict(trigger) for trigger in fragments.triggers]
     actions = sequence
     automation_conditions = alert_conditions
@@ -722,10 +696,9 @@ def render_automation(
             trigger.get("id", str(index))
             for index, trigger in enumerate(automation_triggers)
         ]
-        all_trigger_ids = trigger_ids
         all_trigger_condition = {
             "condition": "trigger",
-            "id": all_trigger_ids,
+            "id": trigger_ids,
         }
         active_trigger_condition = {
             "condition": "or",
@@ -744,10 +717,10 @@ def render_automation(
         }
         not_conditions = {
             "condition": "not",
-            "conditions": _copy_native_value(alert_conditions),
+            "conditions": alert_conditions,
         }
         active_conditions = [
-            *_copy_native_value(alert_conditions),
+            *alert_conditions,
             active_trigger_condition,
         ]
         automation_conditions = [{
@@ -779,7 +752,7 @@ def render_automation(
                         {
                             "condition": "and",
                             "conditions": [
-                                *_copy_native_value(alert_conditions),
+                                *alert_conditions,
                                 active_trigger_condition,
                             ],
                         },
@@ -912,7 +885,7 @@ def _confirmation_notification_mapping(
 
 
 def _copy_native_value(value: Any) -> Any:
-    """Create fresh containers for repeated Home Assistant native values."""
+    """Detach configured native containers from mutable generated output."""
     if isinstance(value, dict):
         return {key: _copy_native_value(item) for key, item in value.items()}
     if isinstance(value, list):

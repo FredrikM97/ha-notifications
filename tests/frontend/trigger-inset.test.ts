@@ -8,7 +8,6 @@ import {
   draftAlertFixture,
   editorRoot,
   homeAssistantFixture,
-  mountCustomElement,
   settleElement,
 } from "./conftest.js";
 
@@ -32,10 +31,9 @@ async function mount(): Promise<LitElement> {
   openEditor({
     root,
     hass: homeAssistantFixture({
-      connection: { sendMessagePromise: vi.fn().mockResolvedValue({ platforms: [], unknown: true }) } as never,
+      callWS: vi.fn().mockResolvedValue({ platforms: [], unknown: true }),
     }),
     alert: draftAlertFixture(),
-    defaults: draftAlertFixture(),
     users: [],
     onSave: vi.fn(),
     onValidateAlert: vi.fn(),
@@ -45,68 +43,66 @@ async function mount(): Promise<LitElement> {
   return editor;
 }
 
-function triggerEditor(): HTMLElement {
-  const trigger = document.createElement("ha-automation-trigger-editor");
-  const root = trigger.attachShadow({ mode: "open" });
+function nativeEditor(kind: string): HTMLElement {
+  const native = document.createElement(`ha-automation-${kind}-editor`);
+  const root = native.attachShadow({ mode: "open" });
   root.innerHTML = '<div class="card-content card"></div><div class="card-content card yaml"></div><div class="card-content sidebar"></div>';
-  return trigger;
+  return native;
 }
 
-function insetStyles(trigger: HTMLElement): HTMLStyleElement[] {
-  return [...trigger.shadowRoot!.querySelectorAll<HTMLStyleElement>("style[data-nc-trigger-inset]")];
-}
-
-describe("native trigger inset", () => {
-  it("insets only trigger cards within this editor and keeps one rule across rerenders", async () => {
+describe("native trigger, condition, and action selector layout ownership", () => {
+  it.each(["trigger", "condition", "action"])("leaves native %s shadow roots and outside instances unchanged across rerenders", async kind => {
     const editor = await mount();
-    const selector = mountCustomElement("ha-selector-trigger");
+    const selector = document.createElement(`ha-selector-${kind}`);
     const root = selector.attachShadow({ mode: "open" });
-    const triggers = [triggerEditor(), triggerEditor()];
-    root.append(...triggers);
+    const natives = [nativeEditor(kind), nativeEditor(kind)];
+    root.append(...natives);
     editor.shadowRoot!.querySelector("ha-form")!.append(selector);
-    const outside = triggerEditor();
+    const outside = nativeEditor(kind);
     document.body.append(outside);
+    const roots = [root, ...natives.map(native => native.shadowRoot!), outside.shadowRoot!];
+    const before = roots.map(root => root.innerHTML);
     await vi.advanceTimersByTimeAsync(100);
 
-    for (const trigger of triggers) {
-      expect(insetStyles(trigger)).toHaveLength(1);
-      expect(insetStyles(trigger)[0].textContent).toBe(
-        ".card-content.card:not(.yaml) { padding: var(--ha-space-4, 16px); }",
-      );
-      const cards = [...trigger.shadowRoot!.querySelectorAll(".card-content")];
-      expect(cards.map(card => card.matches(".card-content.card:not(.yaml)"))).toEqual([true, false, false]);
-    }
-    expect(insetStyles(outside)).toHaveLength(0);
+    expect(roots.map(root => root.innerHTML)).toEqual(before);
     editor.requestUpdate();
     await settleElement(editor);
     await vi.advanceTimersByTimeAsync(100);
-    for (const trigger of triggers) expect(insetStyles(trigger)).toHaveLength(1);
+    expect(roots.map(root => root.innerHTML)).toEqual(before);
   });
 
-  it("discovers late nested shadow roots and subsequently inserted trigger instances", async () => {
+  it.each(["trigger", "condition", "action"])("leaves late nested %s roots and subsequently inserted instances under native ownership", async kind => {
     const editor = await mount();
-    const selector = document.createElement("ha-selector-trigger");
+    const selector = document.createElement(`ha-selector-${kind}`);
     editor.shadowRoot!.querySelector("ha-form")!.append(selector);
     await vi.advanceTimersByTimeAsync(100);
     const wrapper = document.createElement("div");
     selector.attachShadow({ mode: "open" }).append(wrapper);
     await vi.advanceTimersByTimeAsync(100);
-    const trigger = document.createElement("ha-automation-trigger-editor");
-    wrapper.attachShadow({ mode: "open" }).append(trigger);
+    const native = document.createElement(`ha-automation-${kind}-editor`);
+    wrapper.attachShadow({ mode: "open" }).append(native);
     await vi.advanceTimersByTimeAsync(100);
-    trigger.attachShadow({ mode: "open" }).innerHTML = '<div class="card-content card"></div>';
+    native.attachShadow({ mode: "open" }).innerHTML = '<div class="card-content card"></div>';
+    const before = native.shadowRoot!.innerHTML;
     await vi.advanceTimersByTimeAsync(100);
-    expect(insetStyles(trigger)).toHaveLength(1);
+    expect(native.shadowRoot!.innerHTML).toBe(before);
 
     await vi.advanceTimersByTimeAsync(2200);
-    const inserted = triggerEditor();
+    const inserted = nativeEditor(kind);
+    const insertedBefore = inserted.shadowRoot!.innerHTML;
     wrapper.shadowRoot!.append(inserted);
     await vi.advanceTimersByTimeAsync(0);
-    expect(insetStyles(inserted)).toHaveLength(1);
-    expect(insetStyles(trigger)).toHaveLength(1);
+    expect(inserted.shadowRoot!.innerHTML).toBe(insertedBefore);
+    expect(native.shadowRoot!.innerHTML).toBe(before);
+    const roots = [selector.shadowRoot!, wrapper.shadowRoot!, native.shadowRoot!, inserted.shadowRoot!];
+    const beforeRerender = roots.map(root => root.innerHTML);
+    editor.requestUpdate();
+    await settleElement(editor);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(roots.map(root => root.innerHTML)).toEqual(beforeRerender);
   });
 
-  it.each(["trigger", "condition", "action"])("never sizes native %s code editors or styles non-trigger editors", async kind => {
+  it.each(["trigger", "condition", "action"])("never reads or writes native %s code editor internals", async kind => {
     const editor = await mount();
     const selector = document.createElement(`ha-selector-${kind}`);
     const root = selector.attachShadow({ mode: "open" });
@@ -128,7 +124,8 @@ describe("native trigger inset", () => {
     nativeRoot.append(existing, code);
     root.append(native);
     editor.shadowRoot!.querySelector("ha-form")!.append(selector);
-    const before = nativeRoot.innerHTML;
+    const roots = [root, nativeRoot, code.shadowRoot!];
+    const before = roots.map(root => root.innerHTML);
     await vi.advanceTimersByTimeAsync(100);
     editor.requestUpdate();
     await settleElement(editor);
@@ -139,7 +136,31 @@ describe("native trigger inset", () => {
     expect(existing.textContent).toBe(".card-content.card { padding: 16px; }");
     expect(code.shadowRoot!.querySelector("style")).toBeNull();
     expect(root.querySelector("style")).toBeNull();
-    if (kind === "trigger") expect(insetStyles(native)).toHaveLength(1);
-    else expect(nativeRoot.innerHTML).toBe(before);
+    expect(roots.map(root => root.innerHTML)).toEqual(before);
+  });
+
+  it("introduces no scanning observers, tree walkers, or retry timers on render or rerender", async () => {
+    const observer = vi.spyOn(globalThis, "MutationObserver");
+    const walker = vi.spyOn(document, "createTreeWalker");
+    const timeout = vi.spyOn(globalThis, "setTimeout");
+    const interval = vi.spyOn(globalThis, "setInterval");
+    const editor = await mount();
+    const form = editor.shadowRoot!.querySelector("ha-form")!;
+    for (const kind of ["trigger", "condition", "action"]) {
+      const selector = document.createElement(`ha-selector-${kind}`);
+      selector.attachShadow({ mode: "open" }).append(nativeEditor(kind));
+      form.append(selector);
+    }
+    editor.requestUpdate();
+    await settleElement(editor);
+    vi.advanceTimersByTime(2500);
+    await settleElement(editor);
+    editor.remove();
+
+    expect(observer).not.toHaveBeenCalled();
+    expect(walker).not.toHaveBeenCalled();
+    expect(timeout).not.toHaveBeenCalled();
+    expect(interval).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -11,7 +11,9 @@ files and relevant file-scoped instructions.
 
 ## Workflow
 
-- Read only the relevant implementation, contract, nearest test, and guidance.
+- Start at the root routing table's owner and nearest test; follow matching
+  instructions. Reuse evidence already in context; load docs only for unfamiliar
+  contracts/APIs and skills only for the work they govern.
 - Default to autopilot for clear, isolated requests: make small, direct changes
   yourself and carry them through focused validation in the same turn without
   pausing for approval.
@@ -23,17 +25,13 @@ files and relevant file-scoped instructions.
   assumption in the progress update.
 - For multi-step work, create or update a compact actionable item in
   `docs/todo.md` before implementation.
-- Before editing, follow the relevant backend and/or frontend file-scoped
-  instructions. For cross-layer behavior, inspect both sides, the owning data
-  source, the public/API contract, and the nearest tests before settling the
-  behavior contract.
-- For test, fixture, snapshot, or integration behavior work, load the shared
-  `testing` skill and the applicable `testing-backend` and/or
-  `testing-frontend` skill. For cross-layer work, use both domain skills.
+- For cross-layer changes, inspect both owners and their nearest contract/test;
+  do not map unrelated surfaces. Load shared `testing` plus the relevant domain
+  skill when authoring/reviewing tests, fixtures, or snapshots, not for every
+  small implementation change.
 - Implement the change directly across the required layers; do not stop at a
   local patch when the user-visible behavior depends on another layer.
-- Run focused validation for each coherent change and verify the integrated
-  path across all affected layers before completion.
+- Follow the root validation order/commands; verify the affected integrated path.
 
 ## Completion
 

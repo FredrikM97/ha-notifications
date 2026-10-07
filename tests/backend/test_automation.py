@@ -977,7 +977,7 @@ async def test_generated_tag_metadata_is_independent_for_main_and_follow_up(
     assert await async_validate_alerts(hass, [automation_alert]) == generated
 
 
-def test_enabled_reminders_repeat_the_confirmation_notification(automation_alert) -> None:
+def test_enabled_reminders_repeat_the_original_notification(automation_alert) -> None:
     generated = generate_automation({
         **automation_alert,
         "confirmation": {
@@ -998,25 +998,40 @@ def test_enabled_reminders_repeat_the_confirmation_notification(automation_alert
     repeat = next(action["repeat"] for action in timeout_sequence if "repeat" in action)
     assert repeat["count"] == 2
     assert repeat["sequence"][0]["action"] == "ha_notifications.send"
+    assert repeat["sequence"][0]["data"]["payload"]["message"] == automation_alert["notification"]["message"]
+    assert repeat["sequence"][0]["data"]["target"] == automation_alert["notification"]["target"]
     assert any("wait_for_trigger" in action for action in repeat["sequence"])
     assert any("choose" in action for action in repeat["sequence"])
 
 
-def test_reminder_attempt_title_is_opt_in(automation_alert) -> None:
+@pytest.mark.parametrize("show_attempts", [False, True], ids=["plain", "attempts"])
+@pytest.mark.parametrize("title", ["", "Water alert"], ids=["empty_title", "original_title"])
+def test_reminders_preserve_original_content_and_targets_separate_from_follow_up(
+    automation_alert, show_attempts: bool, title: str,
+) -> None:
     generated = generate_automation({
         **automation_alert,
         "notification": {
             **automation_alert["notification"],
-            "title": "Water alert",
+            "title": title,
+            "message": "Original low water message",
+            "options": {"channel": "Main alerts", "push": {"sound": "default"}},
         },
         "confirmation": {
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
-            "notification": {"action": "notify.mobile_app_phone"},
+            "notification": {
+                "enabled": True,
+                "action": "notify.mobile_app_follow_up",
+                "target": {"entity_id": ["notify.follow_up"]},
+                "title": "Follow-up title",
+                "message": "Follow-up confirmation message",
+                "options": {"channel": "Confirmations"},
+            },
             "reminders": {
                 "enabled": True,
                 "max_attempts": 3,
-                "show_attempts": True,
+                "show_attempts": show_attempts,
             },
         },
     })
@@ -1028,9 +1043,32 @@ def test_reminder_attempt_title_is_opt_in(automation_alert) -> None:
         for action in outcome["default"]
         if "repeat" in action
     )
-    assert repeat["sequence"][0]["data"]["payload"]["title"] == (
-        "Water alert - Attempt {{ repeat.index + 1 }}/3"
-    )
+    reminder = repeat["sequence"][0]["data"]
+    expected_title = title
+    if show_attempts:
+        attempt = "Attempt {{ repeat.index + 1 }}/3"
+        expected_title = f"{title} - {attempt}" if title else attempt
+    assert repeat["count"] == 3
+    assert reminder["payload"]["title"] == expected_title
+    assert reminder["payload"]["message"] == "Original low water message"
+    assert reminder["action"] == automation_alert["notification"]["action"]
+    assert reminder["target"] == automation_alert["notification"]["target"]
+    assert reminder["payload"]["data"]["channel"] == "Main alerts"
+    assert reminder["payload"]["data"]["push"] == {"sound": "default"}
+    assert sequence[0]["data"]["payload"]["title"] == title
+    assert sequence[0]["data"]["payload"]["message"] == "Original low water message"
+    for completion in [outcome, next(action for action in repeat["sequence"] if "choose" in action)]:
+        follow_up = next(
+            action["data"] for action in completion["choose"][0]["sequence"]
+            if action.get("action") == "ha_notifications.send"
+        )
+        assert follow_up["action"] == "notify.mobile_app_follow_up"
+        assert follow_up["target"] == {"entity_id": ["notify.follow_up"]}
+        assert follow_up["payload"] == {
+            "title": "Follow-up title",
+            "message": "{% raw %}Follow-up confirmation message{% endraw %}",
+            "data": {"channel": "Confirmations"},
+        }
 
 
 @pytest.mark.parametrize("timeout", [900, "00:15:00", {"minutes": 15}])
@@ -1673,6 +1711,14 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
         "channel": {"name": "alerts"},
     }
     assert _active_sequence(generated)[-2]["native_action"] == {"preserve": True}
+
+    expected = deepcopy(generated)
+    send_action["data"]["payload"]["data"]["native_notification"]["channel"]["name"] = "changed"
+    generated["conditions"][0]["conditions"][0]["conditions"][0]["native_condition"]["nested"].append("changed")
+    _active_sequence(generated)[-2]["native_action"]["preserve"] = False
+
+    assert alert.model_dump(mode="python") == before
+    assert generate_automation(alert) == expected
 
 
 def test_generate_automation_preserves_post_send_actions() -> None:

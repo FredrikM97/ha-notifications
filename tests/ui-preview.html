@@ -46,7 +46,6 @@
       import "/build/frontend/panel.js";
 
       const { alert } = await fetch("/tests/frontend/fixtures/alerts.json").then(response => response.json());
-      const alertDefaults = await fetch("/tests/contracts/alert_defaults.json").then(response => response.json());
 
       const responses = {
         "config/auth/list": [{ id: "user_fred", name: "Fred", is_active: true }],
@@ -61,17 +60,16 @@
           },
         },
         "ha_notifications/get_history": [],
-        "ha_notifications/alert_defaults": alertDefaults,
+        "ha_notifications/mobile_platforms": { platforms: [], unknown: true },
       };
 
-      const connection = {
-        sendMessagePromise: async ({ type }) => structuredClone(responses[type] ?? {}),
-      };
       const hass = {
         user: { is_admin: true },
         locale: { language: "en", date_format: "YMD", time_format: "24" },
-        connection,
-        callWS: message => connection.sendMessagePromise(message),
+        callWS: async ({ type }) => {
+          if (!Object.hasOwn(responses, type)) throw new Error(`Unexpected transport request: ${type}`);
+          return structuredClone(responses[type]);
+        },
       };
 
       document.querySelector("ha-notifications-card").hass = hass;
