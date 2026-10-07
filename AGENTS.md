@@ -39,6 +39,9 @@ README churn.
 
 ## Validation
 
+Finish implementation changes first, then add or update tests and run them.
+Do not interleave test authoring or test runs with unfinished implementation.
+
 Batch validation around coherent changes instead of rerunning checks after
 every small edit. Finish related edits first, then run the narrowest relevant
 checks once for that slice; run the repository gate before handoff. Avoid

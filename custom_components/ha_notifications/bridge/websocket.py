@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
+from uuid import uuid4
 
 import voluptuous as vol
 from homeassistant.components import automation as ha_automation
@@ -19,7 +20,7 @@ from ..automation_runtime import (
     async_reconcile_automations,
     automation_status,
 )
-from ..configuration import validate_config
+from ..configuration import AlertConfig, validate_config
 from ..const import COMMAND_CANCEL_RUN, DOMAIN, EVENT_COMMAND
 from ..history import history_store
 from ..mobile_app import resolve_platforms
@@ -239,6 +240,13 @@ class WebsocketDispatcher:
     ) -> dict[str, Any]:
         return _raw_config_for(hass)
 
+    async def alert_defaults(
+        self, hass: HomeAssistant, _msg: dict[str, Any]
+    ) -> dict[str, Any]:
+        return AlertConfig.editor_defaults(f"alert_{uuid4().hex}").model_dump(
+            mode="python", exclude_none=True
+        )
+
     async def mobile_platforms(
         self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> dict[str, Any]:
@@ -457,6 +465,7 @@ def register(hass: HomeAssistant) -> None:
     dispatcher = WebsocketDispatcher()
     commands = {
         "get_config": (dispatcher.get_config, {}),
+        "alert_defaults": (dispatcher.alert_defaults, {}),
         "mobile_platforms": (
             dispatcher.mobile_platforms,
             {

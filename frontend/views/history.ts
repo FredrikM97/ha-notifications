@@ -5,6 +5,130 @@ import type { Hass, HassLocale, RuntimeAlertHistoryEntry } from "../types.js";
 import { localize } from "../localize.js";
 import { emptyState, haButton, NarrowController, selectConfig, toolbar, uiStyles, type SelectOption } from "../ui.js";
 
+const styles = css`
+  :host {
+    container-type: inline-size;
+  }
+
+  .nc-list {
+    padding: 0 var(--ha-space-4, 16px) var(--ha-space-2, 8px);
+  }
+
+  .nc-muted {
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+
+  .nc-flow > summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ha-space-3, 12px);
+    padding: var(--ha-space-3, 12px) 0 var(--ha-space-1, 4px);
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .nc-flow > summary span:last-child {
+    margin-left: auto;
+  }
+
+  /* Two-line logbook rows: what happened, then when and why. */
+  .nc-item {
+    display: grid;
+    gap: 2px;
+    padding: var(--ha-space-3, 12px) 0;
+    border-bottom: 1px solid var(--divider-color);
+    overflow-wrap: anywhere;
+  }
+
+  .nc-item-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ha-space-2, 8px);
+    min-width: 0;
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+
+  .nc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ha-space-2, 8px);
+    padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0;
+  }
+
+  .nc-link {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--primary-color);
+    cursor: pointer;
+    font-weight: inherit;
+  }
+
+  .nc-badge {
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .nc-badge.error {
+    background: color-mix(in srgb, var(--error-color) 14%, var(--card-background-color));
+    color: var(--error-color);
+  }
+
+  .nc-badge.success {
+    background: color-mix(in srgb, var(--success-color) 14%, var(--card-background-color));
+    color: var(--success-color);
+  }
+
+  .nc-badge.info {
+    background: color-mix(in srgb, var(--info-color) 12%, var(--card-background-color));
+    color: var(--info-color);
+  }
+
+  .nc-badge.muted {
+    background: var(--secondary-background-color);
+    color: var(--secondary-text-color);
+  }
+
+  .nc-flow-id {
+    border: 1px solid var(--divider-color);
+    border-radius: 999px;
+    padding: 2px 7px;
+    color: var(--secondary-text-color);
+    font: 11px monospace;
+  }
+
+  .nc-item details {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+  }
+
+  .nc-item summary {
+    cursor: pointer;
+  }
+
+  .nc-item pre {
+    margin: 6px 0 0;
+    padding: var(--ha-space-2, 8px);
+    border-radius: 6px;
+    background: var(--secondary-background-color);
+    white-space: pre-wrap;
+  }
+
+  .nc-empty-list {
+    padding: var(--ha-space-4, 16px) 0;
+    color: var(--secondary-text-color);
+  }
+
+`;
+
 // ---- Pure helpers (no DOM; unit-testable) ----
 export function emptyHistoryFilters(): HistoryFilters {
   return { search: "", alertId: "", type: "", severity: "" };
@@ -225,130 +349,6 @@ function savedViewSettings(): { groupByFlow?: boolean; showFilters?: boolean } {
   }
 }
 
-const styles = css`
-  :host {
-    container-type: inline-size;
-  }
-
-  .nc-list {
-    padding: 0 var(--ha-space-4, 16px) var(--ha-space-2, 8px);
-  }
-
-  .nc-muted {
-    color: var(--secondary-text-color);
-    font-size: var(--ha-font-size-s, 12px);
-  }
-
-  .nc-flow > summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ha-space-3, 12px);
-    padding: var(--ha-space-3, 12px) 0 var(--ha-space-1, 4px);
-    color: var(--secondary-text-color);
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .nc-flow > summary span:last-child {
-    margin-left: auto;
-  }
-
-  /* Two-line logbook rows: what happened, then when and why. */
-  .nc-item {
-    display: grid;
-    gap: 2px;
-    padding: var(--ha-space-3, 12px) 0;
-    border-bottom: 1px solid var(--divider-color);
-    overflow-wrap: anywhere;
-  }
-
-  .nc-item-title {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ha-space-2, 8px);
-    min-width: 0;
-    font-weight: var(--ha-font-weight-medium, 500);
-  }
-
-  .nc-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ha-space-2, 8px);
-    padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0;
-  }
-
-  .nc-link {
-    border: 0;
-    padding: 0;
-    background: none;
-    color: var(--primary-color);
-    cursor: pointer;
-    font-weight: inherit;
-  }
-
-  .nc-badge {
-    border-radius: 999px;
-    padding: 2px 7px;
-    font-size: 11px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .nc-badge.error {
-    background: color-mix(in srgb, var(--error-color) 14%, var(--card-background-color));
-    color: var(--error-color);
-  }
-
-  .nc-badge.success {
-    background: color-mix(in srgb, var(--success-color) 14%, var(--card-background-color));
-    color: var(--success-color);
-  }
-
-  .nc-badge.info {
-    background: color-mix(in srgb, var(--info-color) 12%, var(--card-background-color));
-    color: var(--info-color);
-  }
-
-  .nc-badge.muted {
-    background: var(--secondary-background-color);
-    color: var(--secondary-text-color);
-  }
-
-  .nc-flow-id {
-    border: 1px solid var(--divider-color);
-    border-radius: 999px;
-    padding: 2px 7px;
-    color: var(--secondary-text-color);
-    font: 11px monospace;
-  }
-
-  .nc-item details {
-    color: var(--secondary-text-color);
-    font-size: 12px;
-  }
-
-  .nc-item summary {
-    cursor: pointer;
-  }
-
-  .nc-item pre {
-    margin: 6px 0 0;
-    padding: var(--ha-space-2, 8px);
-    border-radius: 6px;
-    background: var(--secondary-background-color);
-    white-space: pre-wrap;
-  }
-
-  .nc-empty-list {
-    padding: var(--ha-space-4, 16px) 0;
-    color: var(--secondary-text-color);
-  }
-
-`;
-
 class HistoryView extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -398,15 +398,9 @@ class HistoryView extends LitElement {
     const entries = filterHistoryEntries(this.history, this.filters);
     return html`<ha-card>
       ${this.toolbar()}
-      ${this.alertName ? nothing : this.showFilters ? this.filterControls() : this.chips()}
+      ${this.filterArea()}
       <div class="nc-list">
-      ${entries.length
-        ? this.groupByFlow
-          ? groupHistoryEntries(entries).map((group) =>
-              group.flowId ? this.flow(group.flowId, group.entries) : this.item(group.entries[0]),
-            )
-          : entries.map((entry) => this.item(entry))
-        : html`<div class="nc-empty-list">${this.t("history.no_matches")}</div>`}
+      ${this.historyItems(entries)}
       ${entries.length && entries.length !== this.history.length
         ? html`<div class="nc-muted">
             ${this.t("history.showing", { count: entries.length, total: this.history.length })}
@@ -414,6 +408,23 @@ class HistoryView extends LitElement {
         : nothing}
       </div>
     </ha-card>`;
+  }
+
+  private filterArea(): TemplateResult | typeof nothing {
+    if (this.alertName) return nothing;
+    return this.showFilters ? this.filterControls() : this.chips();
+  }
+
+  private historyItems(entries: Entry[]): TemplateResult | TemplateResult[] {
+    if (!entries.length) {
+      return html`<div class="nc-empty-list">${this.t("history.no_matches")}</div>`;
+    }
+    if (this.groupByFlow) {
+      return groupHistoryEntries(entries).map((group) =>
+        group.flowId ? this.flow(group.flowId, group.entries) : this.item(group.entries[0]),
+      );
+    }
+    return entries.map((entry) => this.item(entry));
   }
 
   private toolbar(): TemplateResult {

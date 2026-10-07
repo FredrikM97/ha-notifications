@@ -4,9 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
 import { mdiCheckCircle, mdiCloseCircle } from "@mdi/js";
 import { navMenu, uiStyles } from "../../frontend/ui.js";
-import { editableAlert } from "../../frontend/editor/alert-model.js";
 import { editorSections, sectionStatus, type EditorState } from "../../frontend/editor/sections.js";
-import { cleanupTestDom, draftAlertFixture, homeAssistantFixture, renderTemplate } from "./conftest.js";
+import { cleanupTestDom, draftAlertFixture, editableAlert, homeAssistantFixture, renderTemplate } from "./conftest.js";
 
 afterEach(cleanupTestDom);
 

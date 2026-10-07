@@ -9,6 +9,8 @@ section UI in `frontend/editor/`, dashboard tab views in `frontend/views/`, and
 panel state/action coordination in `frontend/panel.ts`.
 Prefer Home Assistant native selectors and stable literal types. Do not change
 persisted shape or invent backend contracts without Lead establishing them.
+Use the documented `hass.callWS` interface for websocket requests; keep
+`api.ts` generic and let callers own payload and response types.
 For Home Assistant-specific frontend APIs, consult the official developer
 documentation and prefer supported public interfaces over private internals.
 
@@ -56,7 +58,18 @@ and section-heading help with no duplicate message-field help.
 Do not create a folder for one file or a module with one caller: keep code next
 to its only user and split only when a second real owner appears.
 
-When changing behavior, cover the user-visible contract with focused tests,
+Keep module-level `const styles = css` near the top, before implementation
+functions. Keep Lit templates readable by extracting meaningful rendering
+methods instead of assembling many local template constants. Do not nest
+ternaries: use at most one conditional-expression level, with `if` branches
+or named rendering methods for additional decisions. Access properties
+directly instead of adding getter-only lambdas or one-use variable aliases;
+retain locals when they capture a result, avoid repeated work, or clarify
+nontrivial logic. Configuration defaults belong to backend models; consume
+them rather than duplicating their values in frontend code.
+
+Finish implementation changes before adding or updating tests and running
+them. Then cover the user-visible contract with focused tests,
 including relevant interaction and failure states. Update snapshots only when
 the rendered contract intentionally changes. Run focused Vitest tests first,
 then `npm run typecheck` and `npm run build` for frontend changes; run the

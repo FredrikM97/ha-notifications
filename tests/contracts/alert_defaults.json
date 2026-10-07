@@ -1,0 +1,58 @@
+{
+  "id": "alert_draft",
+  "name": "",
+  "enabled": true,
+  "description": "",
+  "icon": "mdi:bell-outline",
+  "monitor": {
+    "triggers": {
+      "enabled": true,
+      "items": []
+    },
+    "conditions": {
+      "enabled": true,
+      "items": [],
+      "startup": false,
+      "periodic": false,
+      "interval": 43200
+    },
+    "inactive": {
+      "enabled": false,
+      "items": [],
+      "clear_notification": false
+    },
+    "automation_mode": "parallel"
+  },
+  "notification": {
+    "target": {},
+    "title": "",
+    "message": "",
+    "use_default_tag": true,
+    "options": {}
+  },
+  "confirmation": {
+    "enabled": false,
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done"
+      }
+    ],
+    "notification": {
+      "title": "",
+      "message": "",
+      "use_default_tag": true,
+      "options": {},
+      "enabled": false
+    },
+    "reminders": {
+      "enabled": true,
+      "interval": 1800,
+      "max_attempts": 5,
+      "forget_after_enabled": false,
+      "timeout": 900,
+      "show_attempts": false
+    },
+    "actions": []
+  }
+}

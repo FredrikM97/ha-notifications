@@ -338,7 +338,7 @@ exports[`native editor controls > classifies fields with responsive standard and
           },
         },
       ],
-      "wrapper": "nc-option-input ",
+      "wrapper": "nc-option-input",
     },
     {
       "class": "nc-field-form nc-compact",
@@ -374,7 +374,7 @@ exports[`native editor controls > classifies fields with responsive standard and
           },
         },
       ],
-      "wrapper": "nc-option-input ",
+      "wrapper": "nc-option-input",
     },
   ],
   "mobile": [
@@ -875,7 +875,7 @@ exports[`native editor controls > classifies fields with responsive standard and
           },
         },
       ],
-      "wrapper": "nc-option-input ",
+      "wrapper": "nc-option-input",
     },
     {
       "class": "nc-field-form nc-compact",
@@ -911,7 +911,7 @@ exports[`native editor controls > classifies fields with responsive standard and
           },
         },
       ],
-      "wrapper": "nc-option-input ",
+      "wrapper": "nc-option-input",
     },
   ],
   "mobile": [

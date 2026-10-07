@@ -9,7 +9,7 @@ export async function request<Response = unknown>(
 ): Promise<Response> {
   const type = endpoint.includes("/") ? endpoint : `${DOMAIN}/${endpoint}`;
   try {
-    return await hass.connection.sendMessagePromise<Response>({
+    return await hass.callWS<Response>({
       ...payload,
       type,
     });

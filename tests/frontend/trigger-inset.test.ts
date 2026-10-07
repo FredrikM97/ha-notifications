@@ -35,6 +35,7 @@ async function mount(): Promise<LitElement> {
       connection: { sendMessagePromise: vi.fn().mockResolvedValue({ platforms: [], unknown: true }) } as never,
     }),
     alert: draftAlertFixture(),
+    defaults: draftAlertFixture(),
     users: [],
     onSave: vi.fn(),
     onValidateAlert: vi.fn(),

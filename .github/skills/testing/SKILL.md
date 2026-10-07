@@ -45,7 +45,9 @@ payloads aligned with the backend canonical schema.
 
 ## Validation
 
-Run focused tests immediately after a change. For a coherent backend slice run
+Finish implementation changes first, then add or update tests and run focused
+checks. Do not interleave test authoring or test execution with unfinished
+implementation. For a coherent backend slice run
 `python3 -m pytest tests/`; for a coherent frontend slice run `npm run
 typecheck`, focused Vitest tests, `npm run build`, and the relevant full Vitest
 suite. When snapshots change, run the focused test with

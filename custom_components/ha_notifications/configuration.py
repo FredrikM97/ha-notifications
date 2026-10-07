@@ -233,6 +233,26 @@ class AlertConfig(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
 
+    @classmethod
+    def editor_defaults(cls, alert_id: str) -> "AlertConfig":
+        """Return a new editor template without changing persisted defaults."""
+        return cls(
+            id=alert_id,
+            monitor=MonitorConfig(conditions=ConditionOptions(interval=43200)),
+            notification=NotificationConfig(),
+            confirmation=ConfirmationConfig(
+                buttons=[ConfirmationButtonConfig(id="confirm", label="Done")],
+                reminders=ReminderConfig(
+                    enabled=True,
+                    interval=1800,
+                    max_attempts=5,
+                    show_attempts=False,
+                    forget_after_enabled=False,
+                    timeout=900,
+                ),
+            ),
+        )
+
 
 class Configuration(BaseModel):
     """Canonical persisted HA Notifications configuration."""

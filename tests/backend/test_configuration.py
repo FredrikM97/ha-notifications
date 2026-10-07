@@ -1,6 +1,8 @@
 """Tests for the canonical configuration contract."""
 
+import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +11,7 @@ from pydantic import ValidationError
 from custom_components.ha_notifications import RuntimeData, async_save_config
 from custom_components.ha_notifications.config_flow import HaNotificationsConfigFlow
 from custom_components.ha_notifications.configuration import (
+    AlertConfig,
     Configuration,
     ConfirmationConfig,
     ConfirmationNotificationConfig,
@@ -16,6 +19,50 @@ from custom_components.ha_notifications.configuration import (
     TriggerOptions,
     validate_config,
 )
+
+
+def test_editor_defaults_match_shared_contract_and_are_independent() -> None:
+    expected = json.loads((Path(__file__).parents[1] / "contracts" / "alert_defaults.json").read_text())
+    first = AlertConfig.editor_defaults("alert_draft")
+    second = AlertConfig.editor_defaults("alert_draft")
+
+    assert first.model_dump(exclude_none=True) == expected
+    assert second.model_dump(exclude_none=True) == expected
+    assert validate_config({"alerts": [expected]})["alerts"][0] == expected
+
+    first.monitor.triggers.items.append({"trigger": "event", "event_type": "changed"})
+    first.monitor.conditions.interval = 60
+    first.monitor.inactive.items.append({"trigger": "event", "event_type": "inactive"})
+    first.notification.target["entity_id"] = ["notify.phone"]
+    first.notification.options["push"] = {"sound": "default"}
+    assert first.confirmation is not None
+    first.confirmation.buttons[0].label = "Changed"
+    first.confirmation.notification.options["color"] = "red"
+    first.confirmation.reminders.interval = 60
+    first.confirmation.actions.append({"action": "light.turn_on"})
+
+    assert second.model_dump(exclude_none=True) == expected
+    assert AlertConfig.editor_defaults("alert_draft").model_dump(exclude_none=True) == expected
+
+
+def test_validate_config_minimal_alert_does_not_inherit_editor_overrides() -> None:
+    alert = validate_config({"alerts": [{"id": "minimal", "notification": {}}]})["alerts"][0]
+
+    assert "confirmation" not in alert
+    assert "interval" not in alert["monitor"]["conditions"]
+
+
+@pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
+def test_validate_config_only_persists_explicit_interval_and_reminder_fields(reminders: dict) -> None:
+    alert = validate_config({"alerts": [{
+        "id": "minimal",
+        "notification": {},
+        "monitor": {"conditions": {"interval": 60}},
+        "confirmation": {"reminders": reminders} if reminders else {},
+    }]})["alerts"][0]
+
+    assert alert["monitor"]["conditions"]["interval"] == 60
+    assert alert["confirmation"]["reminders"] == reminders
 
 
 @pytest.mark.parametrize("name", ["base", "confirmation", "notification", "configuration", "persisted", "full_feature"])

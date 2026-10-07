@@ -4,11 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { parse, stringify } from "yaml";
 import { openEditor } from "../../frontend/editor/index.js";
-import { editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
+import { finalizeAlert } from "../../frontend/editor/alert-model.js";
 import { editorSections, rootSection, type EditorState } from "../../frontend/editor/sections.js";
 import {
   cleanupTestDom,
   draftAlertFixture,
+  editableAlert,
   editorRoot,
   homeAssistantFixture,
   settleElement,
@@ -43,6 +44,7 @@ async function mount(
     root,
     hass: homeAssistantFixture({ loadFragmentTranslation, connection: { sendMessagePromise } as never }),
     alert,
+    defaults: draftAlertFixture(),
     users: [],
     onSave,
     onValidateAlert,
@@ -388,6 +390,27 @@ describe("native editor controls", () => {
       expect(onValidateAlert).toHaveBeenLastCalledWith(finalizeAlert(state.alert, state.postConfirmationActions, false));
     }
     expect(onValidateAlert).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([undefined, false, true])("requires explicit confirmation follow-up enablement in the visible controls with enabled=%s", async enabled => {
+    const alert = draftAlertFixture();
+    alert.confirmation.notification = { title: "", message: "Done", options: {} };
+    if (enabled !== undefined) alert.confirmation.notification.enabled = enabled;
+    const { editor } = await mount(undefined, undefined, alert);
+    await selectSection(editor, "confirmationNotification");
+    const toggle = sectionElement(editor).querySelector(".card-header ha-switch") as NativeSwitch;
+    const form = nativeForm(editor, "message");
+    expect(toggle.checked).toBe(enabled === true);
+    expect(form.data.message).toBe("Done");
+    expect(Boolean(form.schema[0].disabled)).toBe(enabled !== true);
+    toggle.checked = enabled !== true;
+    toggle.dispatchEvent(new Event("change"));
+    await settleElement(editor);
+    expect(toggle.checked).toBe(enabled !== true);
+    expect(Boolean(form.schema[0].disabled)).toBe(enabled === true);
+    expect(form.data.message).toBe("Done");
+    const state = (editor as unknown as { state: EditorState }).state;
+    expect(finalizeAlert(state.alert, false, false).confirmation!.notification.enabled).toBe(enabled !== true);
   });
 
   it("keeps configured confirmation subpanels accessible when confirmation is disabled", async () => {

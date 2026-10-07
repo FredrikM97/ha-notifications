@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { render } from "lit";
 import type { TemplateResult } from "lit";
 import type { Alert, Hass, RuntimeAlertHistoryEntry } from "../../frontend/types.js";
-import { defaultAlert } from "../../frontend/editor/alert-model.js";
+import { editableAlert as toEditableAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
+import alertDefaults from "../contracts/alert_defaults.json";
 import alertFixtureData from "./fixtures/alerts.json";
 import fixtureData from "./fixtures/history.json";
 
@@ -11,17 +12,24 @@ export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
 export function createHassClient() {
   const sendMessagePromise = vi.fn().mockResolvedValue({});
+  const connection = { sendMessagePromise } as unknown as Hass["connection"];
+  const callWS = vi.fn(<Response>(message: Record<string, unknown>): Promise<Response> =>
+    connection.sendMessagePromise<Response>(message));
   return {
-    hass: { connection: { sendMessagePromise } } as Hass,
+    hass: { connection, callWS } as Hass,
     sendMessagePromise,
+    callWS,
   };
 }
 
 export function homeAssistantFixture(overrides: Partial<Hass> = {}): Hass {
+  const connection = overrides.connection ?? createHassClient().hass.connection;
   return {
     user: { is_admin: true },
     locale: { language: "en", date_format: "YMD", time_format: "24" },
-    connection: { sendMessagePromise: vi.fn() },
+    connection,
+    callWS: <Response>(message: Record<string, unknown>): Promise<Response> =>
+      connection.sendMessagePromise<Response>(message),
     ...overrides,
   } as Hass;
 }
@@ -44,8 +52,8 @@ export function editorAlertFixture(overrides: Partial<Alert> = {}): Alert {
   };
 }
 
-export function draftAlertFixture(overrides: Partial<Alert> = {}): Alert {
-  const alert = defaultAlert();
+export function draftAlertFixture(overrides: Partial<Alert> = {}): EditableAlert {
+  const alert = structuredClone(alertDefaults) as EditableAlert;
   return {
     ...alert,
     ...overrides,
@@ -54,6 +62,10 @@ export function draftAlertFixture(overrides: Partial<Alert> = {}): Alert {
       ...overrides.notification,
     },
   };
+}
+
+export function editableAlert(source: Alert | null | undefined): EditableAlert {
+  return toEditableAlert(source, draftAlertFixture());
 }
 
 export function mountCustomElement<T extends HTMLElement>(

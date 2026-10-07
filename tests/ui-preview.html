@@ -45,36 +45,8 @@
     <script type="module">
       import "/build/frontend/panel.js";
 
-      const alert = {
-        id: "front_door",
-        name: "Front door open",
-        description: "Notify when the front door stays open.",
-        icon: "mdi:door-open",
-        enabled: true,
-        triggers: [
-          {
-            trigger: "state",
-            entity_id: "binary_sensor.front_door",
-            from: "off",
-            state: "on",
-          },
-        ],
-        conditions: [{
-          condition: "state",
-          entity_id: "binary_sensor.front_door",
-          state: "on",
-          for: "00:05:00",
-        }],
-        monitor: { on_change: true, startup: true, interval: "01:00:00" },
-        notification: {
-          action: "notify.mobile_app_phone",
-          target: { entity_id: ["notify.phone"] },
-          data: {
-            title: "Front door",
-            message: "The front door is still open.",
-          },
-        },
-      };
+      const { alert } = await fetch("/tests/frontend/fixtures/alerts.json").then(response => response.json());
+      const alertDefaults = await fetch("/tests/contracts/alert_defaults.json").then(response => response.json());
 
       const responses = {
         "config/auth/list": [{ id: "user_fred", name: "Fred", is_active: true }],
@@ -89,14 +61,17 @@
           },
         },
         "ha_notifications/get_history": [],
+        "ha_notifications/alert_defaults": alertDefaults,
       };
 
+      const connection = {
+        sendMessagePromise: async ({ type }) => structuredClone(responses[type] ?? {}),
+      };
       const hass = {
         user: { is_admin: true },
-        locale: "en-US",
-        connection: {
-          sendMessagePromise: async ({ type }) => responses[type] ?? {},
-        },
+        locale: { language: "en", date_format: "YMD", time_format: "24" },
+        connection,
+        callWS: message => connection.sendMessagePromise(message),
       };
 
       document.querySelector("ha-notifications-card").hass = hass;

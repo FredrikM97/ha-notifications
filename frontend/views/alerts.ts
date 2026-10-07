@@ -153,6 +153,18 @@ function menuActions(
   ];
 }
 
+function labelledActions(items: Action[], narrow: boolean): TemplateResult | typeof nothing {
+  if (narrow) return nothing;
+  return html`<div class="nc-alert-labelled-actions">
+    ${items.map(item => html`<ha-button
+      appearance="outlined"
+      variant=${item.warning ? "danger" : "neutral"}
+      size="s"
+      @click=${item.action}
+    ><ha-svg-icon slot="start" .path=${item.path}></ha-svg-icon>${item.label}</ha-button>`)}
+  </div>`;
+}
+
 function alertRow(
   hass: Hass | null,
   alert: Alert,
@@ -185,14 +197,7 @@ function alertRow(
       </div>
     </div>
     <div class="nc-alert-controls" @click=${(event: Event) => event.stopPropagation()} @keydown=${(event: Event) => event.stopPropagation()}>
-      ${narrow ? nothing : html`<div class="nc-alert-labelled-actions">
-        ${items.map(item => html`<ha-button
-          appearance="outlined"
-          variant=${item.warning ? "danger" : "neutral"}
-          size="s"
-          @click=${item.action}
-        ><ha-svg-icon slot="start" .path=${item.path}></ha-svg-icon>${item.label}</ha-button>`)}
-      </div>`}
+      ${labelledActions(items, narrow)}
       <div class="nc-alert-icon-actions">${actions(items, narrow)}</div>
       <div class="nc-alert-toggle">
         <ha-switch

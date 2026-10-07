@@ -6,7 +6,7 @@ import type { Alert, AlertsConfig, AutomationRuntimeStatus, Hass, RuntimeAlertHi
 import { localize } from "./localize.js";
 import { emptyState, NarrowController, notify, uiStyles } from "./ui.js";
 import { openEditor, updateOpenEditorHass } from "./editor/index.js";
-import { toCanonicalAlert } from "./editor/alert-model.js";
+import { toCanonicalAlert, type EditableAlert } from "./editor/alert-model.js";
 import { alertList, alertListStyles, type AlertHandlers } from "./views/alerts.js";
 import "./views/history.js";
 import "./views/yaml.js";
@@ -207,10 +207,10 @@ class HaNotificationsPanel extends LitElement {
   private async configWithAlert(alert: Alert): Promise<AlertsConfig> {
     const config = await request<AlertsConfig>(this._hass, "get_config");
     const canonical = toCanonicalAlert(alert);
-    const alerts = config.alerts.some(({ id }) => id === alert.id)
-      ? config.alerts.map((existing) => existing.id === alert.id ? canonical : existing)
-      : [...config.alerts, canonical];
-    return { ...config, alerts };
+    if (config.alerts.some(({ id }) => id === alert.id)) {
+      return { ...config, alerts: config.alerts.map((existing) => existing.id === alert.id ? canonical : existing) };
+    }
+    return { ...config, alerts: [...config.alerts, canonical] };
   }
 
   private async saveAlert(alert: Alert): Promise<Alert> {
@@ -291,9 +291,13 @@ class HaNotificationsPanel extends LitElement {
     const hass = this._hass;
     if (!hass) return;
     let users: { value: string; label: string }[];
+    let defaults: EditableAlert;
     try {
       this.users ??= this.loadUsers();
-      users = await this.users;
+      [users, defaults] = await Promise.all([
+        this.users,
+        request<EditableAlert>(hass, "alert_defaults"),
+      ]);
     } catch (error) {
       this.users = undefined;
       notify(this, errorMessage(error));
@@ -305,6 +309,7 @@ class HaNotificationsPanel extends LitElement {
       root: this.renderRoot as ShadowRoot,
       hass,
       alert,
+      defaults,
       users,
       onValidateAlert: async (draft) => request(this._hass, "validate_config", {
         config: await this.configWithAlert(draft),

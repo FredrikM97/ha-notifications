@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { defaultAlert } from "../../frontend/editor/alert-model.js";
-import type { Alert, AlertsConfig, MonitorConfig, Notification } from "../../frontend/types.js";
+import { draftAlertFixture } from "./conftest.js";
+import type { Alert, AlertsConfig, Hass, MonitorConfig, Notification } from "../../frontend/types.js";
 
 const canonicalAlert = {
   id: "door",
@@ -34,8 +34,14 @@ const canonicalConfig = {
 } satisfies AlertsConfig;
 
 describe("canonical frontend configuration types", () => {
+  it("requires the Home Assistant callWS transport", () => {
+    expectTypeOf<Pick<Hass, "callWS">>().toEqualTypeOf<{
+      callWS<Response>(message: Record<string, unknown>): Promise<Response>;
+    }>();
+  });
+
   it("types canonical content and opaque native options", () => {
-    expectTypeOf<keyof Notification>().toEqualTypeOf<"action" | "target" | "title" | "message" | "options">();
+    expectTypeOf<keyof Notification>().toEqualTypeOf<"action" | "target" | "title" | "message" | "use_default_tag" | "options">();
     expectTypeOf<Notification["title"]>().toEqualTypeOf<string>();
     expectTypeOf<Notification["message"]>().toEqualTypeOf<string>();
     expectTypeOf<Notification["options"]>().toEqualTypeOf<Record<string, unknown>>();
@@ -48,7 +54,7 @@ describe("canonical frontend configuration types", () => {
   it("includes explicit inactive configuration and monitor automation mode", () => {
     expectTypeOf<keyof MonitorConfig>().toEqualTypeOf<"automation_mode" | "triggers" | "conditions" | "inactive">();
     expectTypeOf<MonitorConfig["automation_mode"]>().toEqualTypeOf<"single" | "restart" | "queued" | "parallel">();
-    const monitor: MonitorConfig = defaultAlert().monitor;
+    const monitor: MonitorConfig = draftAlertFixture().monitor;
     expect(monitor).toMatchSnapshot();
   });
 

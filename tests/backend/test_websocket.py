@@ -2,11 +2,13 @@
 
 import asyncio
 import json
+from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
 import voluptuous as vol
@@ -19,6 +21,7 @@ from custom_components.ha_notifications.bridge import (
     async_register_panel,
     websocket,
 )
+from custom_components.ha_notifications.configuration import AlertConfig
 from custom_components.ha_notifications.const import DOMAIN
 from tests.backend.conftest import MockConfigEntry, async_mock_service
 
@@ -47,19 +50,64 @@ def test_registers_only_supported_namespaced_commands(
     websocket.register(hass)
     websocket.register(hass)
 
-    assert len(registered) == 10
-    assert {handler._ws_command for handler in registered} == {
-        "ha_notifications/get_config",
-        "ha_notifications/automation_status",
-        "ha_notifications/get_history",
-        "ha_notifications/mobile_platforms",
-        "ha_notifications/cancel_run",
-        "ha_notifications/test_alert",
-        "ha_notifications/validate_config",
-        "ha_notifications/save_config",
-        "ha_notifications/delete",
-        "ha_notifications/reload",
-    }
+    routes = json.loads((Path(__file__).parents[1] / "contracts" / "routes.json").read_text())
+    expected = {f"ha_notifications/{command}" for command in [*routes["commands"], "cancel_run"]}
+    assert len(registered) == len(expected)
+    assert {handler._ws_command for handler in registered} == expected
+
+
+@pytest.mark.parametrize("configured", [False, True], ids=["no_entry", "configured"])
+async def test_alert_defaults_returns_fresh_model_templates_without_persistence(
+    hass,
+    alert_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"version": 1, "alerts": [alert_factory("base")]},
+        options={"version": 1, "alerts": [alert_factory("persisted")]},
+    ) if configured else None
+    if entry is not None:
+        entry.add_to_hass(hass)
+    original_entries = list(hass.config_entries.async_entries(DOMAIN))
+    original = deepcopy((dict(entry.data), dict(entry.options))) if entry is not None else None
+    save = AsyncMock()
+    reconcile = AsyncMock()
+    storage_save = AsyncMock()
+    monkeypatch.setattr("custom_components.ha_notifications.async_save_config", save)
+    monkeypatch.setattr(websocket, "async_reconcile_automations", reconcile)
+    monkeypatch.setattr("homeassistant.helpers.storage.Store.async_save", storage_save)
+    expected = json.loads((Path(__file__).parents[1] / "contracts" / "alert_defaults.json").read_text())
+    results: list[dict[str, Any]] = []
+    connection = SimpleNamespace(
+        send_result=lambda _id, result: results.append(result),
+        send_error=lambda *_args: pytest.fail("alert defaults must not require configuration or storage"),
+    )
+    dispatcher = websocket.WebsocketDispatcher()
+
+    for message_id in (1, 2):
+        await dispatcher.dispatch(hass, connection, {"id": message_id}, dispatcher.alert_defaults)
+    await hass.async_block_till_done()
+
+    assert len(results) == 2
+    assert results[0]["id"] != results[1]["id"]
+    for result in results:
+        assert result["id"].startswith("alert_")
+        generated_uuid = UUID(result["id"].removeprefix("alert_"))
+        assert generated_uuid.version == 4
+        assert result["id"] == f"alert_{generated_uuid.hex}"
+        assert AlertConfig.model_validate(result).id == result["id"]
+        assert result == AlertConfig.editor_defaults(result["id"]).model_dump(exclude_none=True)
+        assert {**result, "id": "alert_draft"} == expected
+    results[0]["confirmation"]["buttons"][0]["label"] = "Changed"
+    assert {**results[1], "id": "alert_draft"} == expected
+    assert hass.config_entries.async_entries(DOMAIN) == original_entries
+    if entry is not None:
+        assert (entry.data, entry.options) == original
+    save.assert_not_called()
+    reconcile.assert_not_called()
+    storage_save.assert_not_called()
 
 
 async def test_registered_test_alert_route_requires_admin_and_alert_id(

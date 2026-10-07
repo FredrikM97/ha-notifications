@@ -1,14 +1,59 @@
 import { describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { confirmationNotificationEnabled, defaultAlert, editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
+import { editableAlert, finalizeAlert } from "../../frontend/editor/alert-model.js";
 import type { Alert, MonitorConfig } from "../../frontend/types.js";
 import { draftAlertFixture } from "./conftest.js";
 
 describe("editable alert model", () => {
-  it("defaults canonical notification text and device options", () => {
-    const alert = defaultAlert();
-    expect(alert.notification).toEqual({ target: {}, title: "", message: "", use_default_tag: true, options: {  } });
-    expect(alert.confirmation?.notification).toEqual({ enabled: false, title: "", message: "", use_default_tag: true, options: {  } });
+  it.each([null, undefined])("clones backend-owned defaults for source %s", source => {
+    const defaults = draftAlertFixture({ id: "server_draft" });
+    const original = structuredClone(defaults);
+    const alert = editableAlert(source, defaults);
+    expect(alert).toEqual(defaults);
+    expect(alert.id).toBe("server_draft");
+    expect(alert.confirmation.reminders.interval).toBe(1800);
+    expect(alert.confirmation.reminders.timeout).toBe(900);
+    alert.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
+    alert.confirmation.buttons[0].label = "Changed";
+    alert.notification.options.changed = true;
+    expect(defaults).toEqual(original);
+  });
+
+  it("merges nested defaults without replacing false, zero, or user-owned native values", () => {
+    const defaults = draftAlertFixture();
+    defaults.notification.title = "Server title";
+    defaults.confirmation.notification.enabled = true;
+    defaults.confirmation.reminders.show_attempts = true;
+    const source = {
+      id: "existing", name: "Door", enabled: false,
+      monitor: {
+        triggers: { enabled: false, items: [{ trigger: "event", event_type: "door_opened", enabled: false }] },
+        conditions: { startup: false, interval: 0 },
+      },
+      notification: { title: "", use_default_tag: false, target: { user_id: ["operator"] }, options: { ttl: 0, native: { enabled: false } } },
+      confirmation: {
+        enabled: false,
+        notification: { enabled: false, message: "User message", use_default_tag: false },
+        reminders: { enabled: false, interval: 0, timeout: 0, max_attempts: 0, show_attempts: false },
+      },
+    } as unknown as Alert;
+    const originalSource = structuredClone(source);
+    const originalDefaults = structuredClone(defaults);
+    const draft = editableAlert(source, defaults);
+    expect(draft.id).toBe("existing");
+    expect(draft.enabled).toBe(false);
+    expect(draft.monitor.triggers).toEqual(source.monitor.triggers);
+    expect(draft.monitor.conditions).toEqual({ ...defaults.monitor.conditions, ...source.monitor.conditions });
+    expect(draft.monitor.inactive).toEqual(defaults.monitor.inactive);
+    expect(draft.notification).toEqual({ ...defaults.notification, ...source.notification });
+    expect(draft.confirmation.notification).toEqual({ ...defaults.confirmation.notification, ...source.confirmation!.notification });
+    expect(draft.confirmation.reminders).toEqual({ ...defaults.confirmation.reminders, ...source.confirmation!.reminders });
+    draft.monitor.triggers.items[0].event_type = "changed";
+    draft.notification.target.user_id!.push("other");
+    (draft.notification.options.native as { enabled: boolean }).enabled = true;
+    draft.confirmation.buttons[0].label = "Changed";
+    expect(source).toEqual(originalSource);
+    expect(defaults).toEqual(originalDefaults);
   });
 
   it.each([true, false])("preserves opaque data without using it as notification text with canonical text %s", canonical => {
@@ -32,7 +77,7 @@ describe("editable alert model", () => {
       },
     };
     const original = structuredClone(source);
-    const draft = editableAlert(source);
+    const draft = editableAlert(source, draftAlertFixture());
     expect(draft.notification.title).toBe(canonical ? "Door" : "");
     expect(draft.notification.message).toBe(canonical ? "Door open" : "");
     expect(draft.confirmation.notification.title).toBe(canonical ? "Confirmed" : "");
@@ -65,7 +110,7 @@ describe("editable alert model", () => {
         },
       };
       const original = structuredClone(input);
-      const draft = editableAlert(input as unknown as Alert);
+      const draft = editableAlert(input as unknown as Alert, draftAlertFixture());
       expect(draft.monitor.automation_mode).toBe(expected);
       expect(draft.monitor.inactive).toEqual({ enabled: false, items: [], clear_notification: false });
       expect(input).toEqual(original);
@@ -87,7 +132,7 @@ describe("editable alert model", () => {
       items: [{ trigger: "state", entity_id: "binary_sensor.door", to: "off", id: "closed", for: { seconds: 5 }, alias: "Door closed", enabled: false, custom: { keep: true } }],
       clear_notification: true,
     };
-    const draft = editableAlert(source);
+    const draft = editableAlert(source, draftAlertFixture());
     expect(draft.monitor.inactive).toEqual(source.monitor.inactive);
     expect(draft.monitor.triggers.items).toEqual([]);
     expect(draft.monitor.inactive).not.toBe(source.monitor.inactive);
@@ -97,13 +142,6 @@ describe("editable alert model", () => {
       expect(saved.monitor.inactive).toEqual(source.monitor.inactive);
       expect(saved.monitor.triggers.items).toEqual([]);
     }
-  });
-
-  it("requires explicit confirmation follow-up enablement", () => {
-    const notification = { message: "Done", title: "", options: {} };
-    expect(confirmationNotificationEnabled(notification)).toBe(false);
-    expect(confirmationNotificationEnabled({ ...notification, enabled: true })).toBe(true);
-    expect(confirmationNotificationEnabled({ ...notification, enabled: false })).toBe(false);
   });
 
   it("fills optional editor blocks without changing native automation data", () => {
@@ -121,18 +159,53 @@ describe("editable alert model", () => {
           interval: 12 * 60 * 60,
         },
       },
-    }));
+    }), draftAlertFixture());
 
     expect(alert.monitor.triggers.items).toEqual(triggers);
     expect(alert.monitor.conditions.items).toEqual(conditions);
     expect(alert.confirmation?.reminders.interval).toBeDefined();
     expect(alert.confirmation?.actions).toEqual([]);
   });
+
+  it("fills absent optional blocks while preserving native actions, conditions, and duration values", () => {
+    const defaults = draftAlertFixture();
+    const source = {
+      id: "native", name: "Native alert", enabled: true,
+      monitor: {
+        triggers: { enabled: true, items: [{ trigger: "state", entity_id: ["binary_sensor.door"], for: { seconds: 0 }, enabled: false }] },
+        conditions: { enabled: true, items: [{ condition: "template", value_template: "{{ true }}" }] },
+      },
+      notification: { action: "notify.custom", title: "{{ trigger.id }}", message: "Native", options: { data: { ttl: 0 } } },
+      confirmation: { reminders: { interval: { minutes: 7 }, timeout: "00:02:00" } },
+      post_send_actions: { enabled: false, actions: [{ action: "light.turn_on", target: { entity_id: "light.hall" }, data: { brightness: 0 } }] },
+    } as unknown as Alert;
+    const original = structuredClone(source);
+
+    const draft = editableAlert(source, defaults);
+
+    expect(draft.monitor.triggers).toEqual(source.monitor.triggers);
+    expect(draft.monitor.conditions.items).toEqual(source.monitor.conditions.items);
+    expect(draft.monitor.conditions.interval).toBe(defaults.monitor.conditions.interval);
+    expect(draft.notification.action).toBe("notify.custom");
+    expect(draft.notification.target).toEqual(defaults.notification.target);
+    expect(draft.notification.options).toEqual(source.notification.options);
+    expect(draft.confirmation.notification).toEqual(defaults.confirmation.notification);
+    expect(draft.confirmation.reminders.interval).toEqual({ minutes: 7 });
+    expect(draft.confirmation.reminders.timeout).toBe("00:02:00");
+    expect(draft.post_send_actions).toEqual(source.post_send_actions);
+    const saved = finalizeAlert(draft, false);
+    expect(saved.confirmation!.reminders.interval).toBe(420);
+    expect(saved.confirmation!.reminders.timeout).toBe(120);
+    expect(saved.monitor.triggers).toEqual(source.monitor.triggers);
+    expect(saved.post_send_actions).toEqual(source.post_send_actions);
+    expect(source).toEqual(original);
+    expect(defaults).toEqual(draftAlertFixture());
+  });
 });
 
 describe("finalizeAlert", () => {
   it("validates recipients and allows incomplete YAML preview drafts", () => {
-    const draft = editableAlert(draftAlertFixture({ name: "Door" }));
+    const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
 
     expect(() => finalizeAlert(draft, false)).toThrow(/Select at least one device/);
     expect(finalizeAlert(draft, false, false).notification.target).toEqual({});
@@ -141,7 +214,7 @@ describe("finalizeAlert", () => {
   it.each(["entity_id", "device_id", "area_id"])(
     "accepts a scalar %s target from the Home Assistant target selector",
     selector => {
-      const draft = editableAlert(draftAlertFixture({ name: "Door" }));
+      const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
       draft.notification.target = { [selector]: `notify.mobile_app_phone` };
 
       expect(finalizeAlert(draft, false).notification.target).toEqual({
@@ -151,7 +224,7 @@ describe("finalizeAlert", () => {
   );
 
   it("does not count empty or whitespace-only recipient values", () => {
-    const draft = editableAlert(draftAlertFixture({ name: "Door" }));
+    const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
     draft.notification.target = { entity_id: ["", "  "] };
 
     expect(() => finalizeAlert(draft, false)).toThrow(/Select at least one device/);
@@ -174,7 +247,7 @@ describe("finalizeAlert", () => {
         },
       },
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
-    }));
+    }), draftAlertFixture());
     draft.runtime = { active: true };
 
     const result = finalizeAlert(draft, false);
@@ -189,7 +262,7 @@ describe("finalizeAlert", () => {
     const disabled = editableAlert(draftAlertFixture({
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
-    }));
+    }), draftAlertFixture());
     const disabledResult = finalizeAlert(disabled, false);
     expect(disabledResult.confirmation?.notification.enabled).toBe(false);
     expect(disabledResult.confirmation?.notification.target).toBeUndefined();
@@ -197,7 +270,7 @@ describe("finalizeAlert", () => {
     const enabled = editableAlert(draftAlertFixture({
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
-    }));
+    }), draftAlertFixture());
     enabled.confirmation!.notification.enabled = true;
     const enabledResult = finalizeAlert(enabled, false);
     expect(enabledResult.confirmation?.notification.target).toBeUndefined();
@@ -208,7 +281,7 @@ describe("finalizeAlert", () => {
     const draft = editableAlert(draftAlertFixture({
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
-    }));
+    }), draftAlertFixture());
     draft.confirmation!.actions = [{ action: "light.turn_on" }];
 
     expect(finalizeAlert(draft, false).confirmation?.actions).toEqual([]);
@@ -220,7 +293,7 @@ describe("finalizeAlert", () => {
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
       post_send_actions: { enabled: false, actions: [] },
-    }));
+    }), draftAlertFixture());
     expect(finalizeAlert(draft, false)).not.toHaveProperty("post_send_actions");
 
     draft.post_send_actions = { enabled: false, actions: [{ action: "light.turn_on" }] };

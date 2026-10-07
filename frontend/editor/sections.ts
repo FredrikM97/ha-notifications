@@ -5,12 +5,7 @@
 import type { Hass } from "../types.js";
 import type { Localize } from "../localize.js";
 import {
-  customTriggers,
   fromDuration,
-  hasStartupTrigger,
-  intervalSeconds,
-  intervalTrigger,
-  setTriggers,
   toDuration,
   type EditableAlert,
 } from "./alert-model.js";
@@ -77,12 +72,6 @@ const actions = { action: {} };
 
 const MODES = ["parallel", "single", "restart", "queued"];
 
-const confirmed = (s: EditorState) => Boolean(s.alert.confirmation.enabled);
-
-function notificationData(alert: EditableAlert): FormData {
-  return alert.notification.options;
-}
-
 function mobileOptionsGroup(key: string): "general" | "android" | "ios" {
   return key === "mobile" ? "general" : key as "android" | "ios";
 }
@@ -106,28 +95,28 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
     labels: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}`])),
     helpers: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}_help`])),
     schema: ({ alert, localize }) => fields.map(field => {
-      const sound = (notificationData(alert).push as FormData | undefined)?.sound;
-      return field.name === "sound" && sound && typeof sound === "object"
-        ? { ...field, selector: { object: {} } }
-        : "text" in field.selector
-          ? { ...field, selector: { text: { ...(field.selector.text as Record<string, unknown>), placeholder: localize("editor.mobile.not_set") } } }
-          : field;
+      const sound = (alert.notification.options.push as FormData | undefined)?.sound;
+      if (field.name === "sound" && sound && typeof sound === "object") {
+        return { ...field, selector: { object: {} } };
+      }
+      if ("text" in field.selector) {
+        return { ...field, selector: { text: { ...(field.selector.text as Record<string, unknown>), placeholder: localize("editor.mobile.not_set") } } };
+      }
+      return field;
     }),
     read: ({ alert, mobileDrafts }) => {
-      const data = notificationData(alert);
+      const data = alert.notification.options;
       const push = data.push as FormData | undefined;
       const group = mobileOptionsGroup(key);
       const savedSection = mobileDrafts?.[group];
       const savedValues = savedSection?.enabled === false ? savedSection.values : undefined;
-      return Object.fromEntries(names.map(name => [
-        name,
-        savedValues
-          ? savedValues[name]
-          : pushFields.includes(name) ? push?.[name] : data[name],
-      ]));
+      return Object.fromEntries(names.map(name => {
+        if (savedValues) return [name, savedValues[name]];
+        return [name, pushFields.includes(name) ? push?.[name] : data[name]];
+      }));
     },
     write: ({ alert }, values) => {
-      const data = { ...notificationData(alert) };
+      const data = { ...alert.notification.options };
       writeOptions(data, values, names.filter(name => !pushFields.includes(name)));
       if (pushFields.length) {
         const push = { ...data.push as FormData | undefined };
@@ -140,7 +129,7 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
     optional: {
       enabled: (state, name) => {
         const saved = state.mobileDrafts?.[mobileOptionsGroup(key)]?.fields?.[name];
-        const data = notificationData(state.alert);
+        const data = state.alert.notification.options;
         const target = pushFields.includes(name) ? data.push as FormData | undefined : data;
         return saved?.enabled ?? Boolean(target && Object.hasOwn(target, name));
       },
@@ -159,7 +148,7 @@ function mobileSection(key: string, fields: SchemaField[], pushFields: string[] 
       },
     },
     status: ({ alert }) => {
-      const data = notificationData(alert);
+      const data = alert.notification.options;
       const push = data.push as FormData | undefined;
       return names.some(name => {
         return pushFields.includes(name) ? Boolean(push && Object.hasOwn(push, name)) : Object.hasOwn(data, name);
@@ -248,14 +237,9 @@ export const editorSections: EditorSection[] = [
       help: "editor.triggers.enable_help",
     },
     schema: () => [{ name: "triggers", selector: { trigger: {} } }],
-    read: ({ alert }) => ({ triggers: customTriggers(alert.monitor) }),
+    read: ({ alert }) => ({ triggers: alert.monitor.triggers.items }),
     write: ({ alert }, data) => {
-      setTriggers(
-        alert.monitor,
-        (data.triggers as EditableAlert["monitor"]["triggers"]["items"]) ?? [],
-        hasStartupTrigger(alert.monitor),
-        intervalTrigger(alert.monitor) ? intervalSeconds(alert.monitor) : null,
-      );
+      alert.monitor.triggers.items = (data.triggers as EditableAlert["monitor"]["triggers"]["items"]) ?? [];
     },
     validate: { label: "editor.common.validate_triggers", success: "panel.triggers_valid" },
   },
@@ -278,26 +262,20 @@ export const editorSections: EditorSection[] = [
     schema: (s) => [
       { name: "startup", selector: bool },
       { name: "periodic", selector: bool },
-      ...(intervalTrigger(s.alert.monitor) ? [{ name: "interval", selector: duration }] : []),
+      ...(s.alert.monitor.conditions.periodic ? [{ name: "interval", selector: duration }] : []),
       { name: "conditions", selector: { condition: {} } },
     ],
-    read: ({ alert }) => {
-      const conditions = alert.monitor.conditions;
-      return {
-        startup: hasStartupTrigger(alert.monitor),
-        periodic: intervalTrigger(alert.monitor),
-        interval: toDuration(intervalSeconds(alert.monitor)),
-        conditions: conditions.items,
-      };
-    },
+    read: ({ alert }) => ({
+      startup: alert.monitor.conditions.startup,
+      periodic: alert.monitor.conditions.periodic,
+      interval: toDuration(alert.monitor.conditions.interval),
+      conditions: alert.monitor.conditions.items,
+    }),
     write: ({ alert }, data) => {
       alert.monitor.conditions.items = (data.conditions as EditableAlert["monitor"]["conditions"]["items"]) ?? [];
-      setTriggers(
-        alert.monitor,
-        customTriggers(alert.monitor),
-        Boolean(data.startup),
-        data.periodic ? fromDuration(data.interval) : null,
-      );
+      alert.monitor.conditions.startup = Boolean(data.startup);
+      alert.monitor.conditions.periodic = Boolean(data.periodic);
+      if (data.periodic) alert.monitor.conditions.interval = fromDuration(data.interval);
     },
     validate: { label: "editor.common.validate_conditions", success: "panel.condition_valid" },
   },
@@ -357,7 +335,7 @@ export const editorSections: EditorSection[] = [
     read: ({ alert }) => ({
       title: alert.notification.title,
       message: alert.notification.message,
-      use_default_tag: alert.notification.use_default_tag ?? true,
+      use_default_tag: alert.notification.use_default_tag,
     }),
     write: ({ alert }, data) => Object.assign(alert.notification, data),
   },
@@ -434,7 +412,7 @@ export const editorSections: EditorSection[] = [
     read: ({ alert: { confirmation } }) => ({
       buttons: confirmation.buttons,
       forget_after_enabled: confirmation.reminders.forget_after_enabled === true,
-      timeout: toDuration(confirmation.reminders.timeout, 900),
+      timeout: toDuration(confirmation.reminders.timeout),
     }),
     write: ({ alert: { confirmation } }, data) => {
       confirmation.buttons = (data.buttons as typeof confirmation.buttons) ?? [];
@@ -442,7 +420,7 @@ export const editorSections: EditorSection[] = [
       if ("timeout" in data) confirmation.reminders.timeout = data.timeout as Record<string, number>;
     },
     toggle: {
-      get: confirmed,
+      get: ({ alert }) => alert.confirmation.enabled,
       set: ({ alert }, enabled) => (alert.confirmation.enabled = enabled),
     },
   },
@@ -461,8 +439,8 @@ export const editorSections: EditorSection[] = [
       { name: "show_attempts", selector: bool },
     ],
     read: ({ alert: { confirmation } }) => ({
-      interval: toDuration(confirmation.reminders.interval, 1800),
-      max_attempts: confirmation.reminders.max_attempts || 5,
+      interval: toDuration(confirmation.reminders.interval),
+      max_attempts: confirmation.reminders.max_attempts,
       show_attempts: confirmation.reminders.show_attempts === true,
     }),
     write: ({ alert: { confirmation } }, data) => Object.assign(confirmation.reminders, data),
@@ -470,7 +448,7 @@ export const editorSections: EditorSection[] = [
       get: ({ alert }) => alert.confirmation.reminders.enabled !== false,
       set: ({ alert }, enabled) => (alert.confirmation.reminders.enabled = enabled),
     },
-    status: (s) => confirmed(s) && s.alert.confirmation.reminders.enabled !== false,
+    status: (s) => s.alert.confirmation.enabled && s.alert.confirmation.reminders.enabled !== false,
   },
   {
     key: "confirmationNotification",
@@ -483,14 +461,14 @@ export const editorSections: EditorSection[] = [
       { name: "message", selector: template, hideLabel: true, default: localize("editor.confirmation.message") },
       { name: "use_default_tag", selector: bool },
     ],
-    read: ({ alert }) => ({ message: alert.confirmation.notification.message, use_default_tag: alert.confirmation.notification.use_default_tag ?? true }),
+    read: ({ alert }) => ({ message: alert.confirmation.notification.message, use_default_tag: alert.confirmation.notification.use_default_tag }),
     write: ({ alert }, data) => Object.assign(alert.confirmation.notification, data),
     toggle: {
       get: ({ alert }) => Boolean(alert.confirmation.notification.enabled),
       set: ({ alert }, enabled) => (alert.confirmation.notification.enabled = enabled),
       help: "editor.confirmation.notification.help",
     },
-    status: (s) => confirmed(s) && Boolean(s.alert.confirmation.notification.enabled),
+    status: (s) => s.alert.confirmation.enabled && Boolean(s.alert.confirmation.notification.enabled),
   },
   {
     key: "postConfirmationActions",
@@ -505,7 +483,7 @@ export const editorSections: EditorSection[] = [
       set: (s, enabled) => (s.postConfirmationActions = enabled),
       help: "editor.confirmation.actions.help",
     },
-    status: (s) => confirmed(s) && s.postConfirmationActions,
+    status: (s) => s.alert.confirmation.enabled && s.postConfirmationActions,
   },
 ];
 

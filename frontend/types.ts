@@ -7,6 +7,7 @@ import type { Connection, HassServiceTarget } from "home-assistant-js-websocket"
 /** The subset of HA's frontend `hass` object this panel uses. */
 export interface Hass {
   connection: Connection;
+  callWS<Response>(message: Record<string, unknown>): Promise<Response>;
   localize?(key: string, variables?: Record<string, unknown>): string;
   loadFragmentTranslation?(fragment: string): Promise<void>;
   locale?: HassLocale;

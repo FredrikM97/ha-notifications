@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Hass } from "../../frontend/types.js";
 import { errorMessage, request } from "../../frontend/api.js";
-import { createHassClient } from "./conftest.js";
+import { createHassClient, homeAssistantFixture } from "./conftest.js";
 
 describe("frontend API transport", () => {
   it("sends a caller-defined endpoint request and protects its message type", async () => {
@@ -9,7 +10,7 @@ describe("frontend API transport", () => {
     const payload = { alert_id: "door", type: "other/command" };
 
     await expect(request(client.hass, "cancel_run", payload)).resolves.toEqual({ cancelled: true });
-    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+    expect(client.callWS).toHaveBeenCalledExactlyOnceWith({
       alert_id: "door",
       type: "ha_notifications/cancel_run",
     });
@@ -19,7 +20,7 @@ describe("frontend API transport", () => {
   it("allows requests without a payload", async () => {
     const client = createHassClient();
     await request(client.hass, "get_history");
-    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+    expect(client.callWS).toHaveBeenCalledExactlyOnceWith({
       type: "ha_notifications/get_history",
     });
   });
@@ -31,7 +32,7 @@ describe("frontend API transport", () => {
     client.sendMessagePromise.mockResolvedValueOnce(response);
 
     expect(await request<typeof response>(client.hass, "search_alerts", payload)).toBe(response);
-    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+    expect(client.callWS).toHaveBeenCalledExactlyOnceWith({
       ...payload,
       type: "ha_notifications/search_alerts",
     });
@@ -42,7 +43,7 @@ describe("frontend API transport", () => {
     client.sendMessagePromise.mockResolvedValueOnce(undefined);
 
     await expect(request(client.hass, "other/action", { enabled: true })).resolves.toBeUndefined();
-    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+    expect(client.callWS).toHaveBeenCalledExactlyOnceWith({
       enabled: true,
       type: "other/action",
     });
@@ -80,5 +81,36 @@ describe("frontend API transport", () => {
     const client = createHassClient();
     client.sendMessagePromise.mockRejectedValueOnce(new Error("Forbidden"));
     await expect(request(client.hass, "config/auth/list")).rejects.toThrow("config/auth/list: Forbidden");
+  });
+
+  it("uses an overridden callWS without accessing the connection transport", async () => {
+    const client = createHassClient();
+    const response = { id: "server_draft" };
+    const callWS = vi.fn().mockResolvedValue(response);
+    const hass = homeAssistantFixture({ connection: client.hass.connection, callWS });
+
+    expect(await request(hass, "alert_defaults")).toBe(response);
+    expect(callWS).toHaveBeenCalledExactlyOnceWith({ type: "ha_notifications/alert_defaults" });
+    expect(client.sendMessagePromise).not.toHaveBeenCalled();
+  });
+
+  it("delegates fixture callWS to the supplied connection", async () => {
+    const client = createHassClient();
+    const response = { valid: true };
+    client.sendMessagePromise.mockResolvedValueOnce(response);
+    const hass = homeAssistantFixture({ connection: client.hass.connection });
+
+    expect(await request(hass, "validate_config", { config: { alerts: [] } })).toBe(response);
+    expect(client.sendMessagePromise).toHaveBeenCalledExactlyOnceWith({
+      type: "ha_notifications/validate_config", config: { alerts: [] },
+    });
+  });
+
+  it("does not fall back to connection transport when callWS is unavailable", async () => {
+    const client = createHassClient();
+    const hass = { connection: client.hass.connection } as Hass;
+
+    await expect(request(hass, "alert_defaults")).rejects.toThrow("ha_notifications/alert_defaults:");
+    expect(client.sendMessagePromise).not.toHaveBeenCalled();
   });
 });

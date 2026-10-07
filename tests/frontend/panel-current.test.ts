@@ -7,6 +7,7 @@ import {
   configuredAlertFixture,
   cleanupTestDom,
   createHassClient,
+  draftAlertFixture,
   editorAlertFixture,
   homeAssistantFixture,
   mountCustomElement,
@@ -63,6 +64,7 @@ function mountPanel(overrides: Partial<Hass> = {}, responses: Record<string, unk
     },
     "ha_notifications/get_history": [],
     "config/auth/list": [],
+    "ha_notifications/alert_defaults": draftAlertFixture(),
     "ha_notifications/cancel_run": { cancelled: true },
     "ha_notifications/test_alert": { started: true },
     "ha_notifications/validate_config": { valid: true },
@@ -100,8 +102,9 @@ async function openPanelEditor(panel: Panel, create = false): Promise<OpenEditor
   const target = panel.shadowRoot.querySelector<HTMLElement>(
     create ? '[slot="actionItems"] ha-icon-button' : ".nc-alert",
   )!;
+  const previousOpenings = editor.openEditor.mock.calls.length;
   await testUser().click(target);
-  await vi.waitFor(() => expect(editor.openEditor).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(editor.openEditor).toHaveBeenCalledTimes(previousOpenings + 1));
   await vi.waitFor(() => expect(
     panel.shadowRoot.querySelector("ha-notifications-alert-editor"),
   ).not.toBeNull());
@@ -228,14 +231,84 @@ describe("panel view", () => {
     ).toBe(true));
   });
 
-  it("loads users and opens the editor from an alert row", async () => {
+  it.each([false, true])("loads users and fresh backend defaults before opening an editor with create=%s", async create => {
     const panel = mountPanel();
     await ready(panel);
 
-    const options = await openPanelEditor(panel);
+    expect(messages("alert_defaults")).toHaveLength(0);
+    const options = await openPanelEditor(panel, create);
 
     expect(messages("config/auth/list")).toEqual([{ type: "config/auth/list" }]);
-    expect(options.alert).toEqual(alert);
+    expect(messages("alert_defaults")).toEqual([{ type: "ha_notifications/alert_defaults" }]);
+    expect(options.defaults).toEqual(draftAlertFixture());
+    expect(options.alert).toEqual(create ? null : alert);
+    const host = panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
+      state: { alert: Alert };
+    };
+    expect(host.state.alert.id).toBe(create ? "alert_draft" : alert.id);
+  });
+
+  it.each([false, true].flatMap(create => ["ha_notifications/alert_defaults", "config/auth/list"].map(endpoint => ({ create, endpoint }))))(
+    "notifies without opening on $endpoint failure with create=$create and retries successfully",
+    async ({ create, endpoint }) => {
+      const panel = mountPanel();
+      await ready(panel);
+      const notification = vi.fn();
+      panel.addEventListener("hass-notification", notification);
+      const transport = sendMessagePromise.getMockImplementation()!;
+      sendMessagePromise.mockImplementation(async (message: Message) => {
+        if (message.type === endpoint) throw new Error("Unavailable");
+        return transport(message);
+      });
+      const target = panel.shadowRoot.querySelector<HTMLElement>(
+        create ? '[slot="actionItems"] ha-icon-button' : ".nc-alert",
+      )!;
+
+      await testUser().click(target);
+      await vi.waitFor(() => expect(notification).toHaveBeenCalledOnce());
+      expect((notification.mock.calls[0][0] as CustomEvent).detail).toEqual({
+        message: `${endpoint}: Unavailable`,
+      });
+      expect(editor.openEditor).not.toHaveBeenCalled();
+      expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull();
+      expect(panel.shadowRoot.querySelector("ha-top-app-bar-fixed")!.hasAttribute("hidden")).toBe(false);
+
+      sendMessagePromise.mockImplementation(transport);
+      const options = await openPanelEditor(panel, create);
+      expect(options.defaults).toEqual(draftAlertFixture());
+      expect(options.alert).toEqual(create ? null : alert);
+      expect(messages("alert_defaults")).toHaveLength(2);
+      expect(messages("config/auth/list")).toHaveLength(2);
+      expect(notification).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("uses a fresh server draft id for every opening while reusing cached users", async () => {
+    const responses: Record<string, unknown> = {
+      "ha_notifications/alert_defaults": draftAlertFixture({ id: "server_first" }),
+      "config/auth/list": [{ id: "operator", name: "Operator" }],
+    };
+    const panel = mountPanel({}, responses);
+    await ready(panel);
+    const first = await openPanelEditor(panel, true);
+    const editorHost = () => panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
+      state: { alert: Alert };
+    };
+    expect(editorHost().state.alert.id).toBe("server_first");
+    await testUser().click(editorHost().shadowRoot!.querySelector<HTMLElement>('ha-icon-button[slot="navigationIcon"]')!);
+    await vi.waitFor(() => expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull());
+    await vi.waitFor(() => expect(messages("get_config")).toHaveLength(2));
+    responses["ha_notifications/alert_defaults"] = draftAlertFixture({ id: "server_second" });
+
+    const second = await openPanelEditor(panel, true);
+
+    expect(second.defaults.id).toBe("server_second");
+    expect(editorHost().state.alert.id).toBe("server_second");
+    expect(first.defaults.id).toBe("server_first");
+    expect(second.users).toEqual(first.users);
+    expect(second.users).toEqual([{ value: "operator", label: "Operator" }]);
+    expect(messages("config/auth/list")).toHaveLength(1);
+    expect(messages("alert_defaults")).toHaveLength(2);
   });
 
   it("switches between History and YAML views", async () => {
