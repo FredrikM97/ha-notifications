@@ -1,5 +1,47 @@
-import type { Alert, ConfirmationConfig, MonitorConfig, NotificationTarget } from "../types.js";
-import { durationToSeconds, serializeAlertDurations } from "../api.js";
+import type { Alert, AlertsConfig, ConfirmationConfig, MonitorConfig, NotificationTarget } from "../types.js";
+
+type DurationValue = string | number | Record<string, number>;
+
+const UNIT_SECONDS: Record<string, number> = { days: 86400, hours: 3600, minutes: 60, seconds: 1 };
+
+export function durationToSeconds(value: DurationValue | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+  if (typeof value === "string") {
+    const parts = value.split(":").map(Number);
+    if (parts.some((part) => !Number.isFinite(part))) return undefined;
+    if (parts.length === 2) parts.unshift(0);
+    if (parts.length !== 3) return undefined;
+    return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  }
+  if (value && typeof value === "object") {
+    return Math.max(
+      0,
+      Object.entries(UNIT_SECONDS).reduce((sum, [unit, factor]) => sum + (Number(value[unit]) || 0) * factor, 0),
+    );
+  }
+  return undefined;
+}
+
+export function serializeAlertDurations(alert: Alert): Alert {
+  const result = JSON.parse(JSON.stringify(alert)) as Alert;
+  const reminders = result.confirmation?.reminders;
+  if (!reminders) return result;
+  for (const [key, label] of [
+    ["interval", "Confirmation reminder interval"],
+    ["timeout", "Confirmation timeout"],
+  ] as const) {
+    if (reminders[key] === undefined) continue;
+    const seconds = durationToSeconds(reminders[key] as DurationValue);
+    if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
+    reminders[key] = seconds;
+  }
+  return result;
+}
+
+export function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
+  const { runtime: _runtime, ...canonical } = serializeAlertDurations(alert);
+  return canonical as AlertsConfig["alerts"][number];
+}
 
 export type EditableAlert = Alert & { confirmation: ConfirmationConfig };
 type HaConfig = Record<string, unknown>;

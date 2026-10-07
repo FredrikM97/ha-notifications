@@ -1,22 +1,12 @@
 import { css, html, LitElement, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { mdiPlus } from "@mdi/js";
-import {
-  cancelRun,
-  deleteAlert,
-  errorMessage,
-  getAlerts,
-  getAutomationStatus,
-  getHistory,
-  loadUsers,
-  saveAlert,
-  testAlert,
-  validateAlert,
-} from "./api.js";
-import type { Alert, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
+import { errorMessage, request } from "./api.js";
+import type { Alert, AlertsConfig, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
 import { localize } from "./localize.js";
 import { emptyState, NarrowController, notify, uiStyles } from "./ui.js";
 import { openEditor, updateOpenEditorHass } from "./editor/index.js";
+import { toCanonicalAlert } from "./editor/alert-model.js";
 import { alertList, alertListStyles, type AlertHandlers } from "./views/alerts.js";
 import "./views/history.js";
 import "./views/yaml.js";
@@ -104,9 +94,11 @@ class HaNotificationsPanel extends LitElement {
     if (silent && (this.editing || this.tab === "yaml")) return;
     this.refreshing = true;
     const results = await Promise.allSettled([
-      getAlerts(this._hass),
-      getAutomationStatus(this._hass),
-      getHistory(this._hass, this.historyAlert?.id),
+      this.loadAlerts(),
+      request<Record<string, AutomationRuntimeStatus>>(this._hass, "automation_status"),
+      request<RuntimeAlertHistoryEntry[]>(this._hass, "get_history", {
+        ...(this.historyAlert?.id ? { alert_id: this.historyAlert.id } : {}),
+      }),
     ]);
     this.refreshing = false;
     const [alerts, statuses, history] = results;
@@ -203,6 +195,56 @@ class HaNotificationsPanel extends LitElement {
     await this.refresh();
   }
 
+  private async loadAlerts(): Promise<Alert[]> {
+    const config = await request(this._hass, "get_config");
+    if (!config || typeof config !== "object" || Array.isArray(config)
+      || !Array.isArray((config as { alerts?: unknown }).alerts)) {
+      throw new Error("ha_notifications/get_config: expected canonical configuration with an alerts array.");
+    }
+    return (config as { alerts: Alert[] }).alerts;
+  }
+
+  private async configWithAlert(alert: Alert): Promise<AlertsConfig> {
+    const config = await request<AlertsConfig>(this._hass, "get_config");
+    const canonical = toCanonicalAlert(alert);
+    const alerts = config.alerts.some(({ id }) => id === alert.id)
+      ? config.alerts.map((existing) => existing.id === alert.id ? canonical : existing)
+      : [...config.alerts, canonical];
+    return { ...config, alerts };
+  }
+
+  private async saveAlert(alert: Alert): Promise<Alert> {
+    if (!alert.id || typeof alert.id !== "string") {
+      throw new Error("ha_notifications/save_config: alert.id is required.");
+    }
+    const config = await this.configWithAlert(alert);
+    const result = await request<{ saved: boolean; config: AlertsConfig }>(this._hass, "save_config", { config });
+    const saved = result.config.alerts.find(({ id }) => id === alert.id);
+    if (!saved) {
+      throw new Error(`ha_notifications/save_config: saved alert ${alert.id} was not returned.`);
+    }
+    return saved as Alert;
+  }
+
+  private async deleteAlert(alertId: string): Promise<unknown> {
+    const config = await request<AlertsConfig>(this._hass, "get_config");
+    if (!config.alerts.some(({ id }) => id === alertId)) {
+      throw new Error(`ha_notifications/save_config: alert ${alertId} was not found.`);
+    }
+    return request(this._hass, "save_config", {
+      config: { ...config, alerts: config.alerts.filter(({ id }) => id !== alertId) },
+    });
+  }
+
+  private async loadUsers(): Promise<{ value: string; label: string }[]> {
+    const users = await request<{
+      id: string; name: string; is_active?: boolean; system_generated?: boolean;
+    }[]>(this._hass, "config/auth/list");
+    return users
+      .filter((user) => user.is_active !== false && !user.system_generated)
+      .map((user) => ({ value: user.id, label: user.name }));
+  }
+
   /** Run an API call, report its outcome, and refresh. */
   private async act(call: () => Promise<unknown>, success?: string): Promise<void> {
     try {
@@ -227,21 +269,21 @@ class HaNotificationsPanel extends LitElement {
     },
     toggle: (alert) =>
       void this.act(
-        () => saveAlert(this._hass, { ...alert, enabled: !alert.enabled }),
+        () => this.saveAlert({ ...alert, enabled: !alert.enabled }),
         alert.enabled ? "Alert disabled." : "Alert enabled.",
       ),
     cancelRun: (alert) =>
       void this.act(async () => {
-        const result = await cancelRun(this._hass, alert.id);
+        const result = await request<{ cancelled: boolean }>(this._hass, "cancel_run", { alert_id: alert.id });
         return this.t(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
       }),
     testAlert: (alert) => {
       if (!window.confirm(this.t("alert.confirm_test", { name: alert.name }))) return;
-      void this.act(() => testAlert(this._hass, alert.id), this.t("alert.test_started"));
+      void this.act(() => request(this._hass, "test_alert", { alert_id: alert.id }), this.t("alert.test_started"));
     },
     remove: (alert) => {
       if (!window.confirm(`Delete "${alert.name}"?`)) return;
-      void this.act(() => deleteAlert(this._hass, alert.id), this.t("panel.alert_deleted"));
+      void this.act(() => this.deleteAlert(alert.id), this.t("panel.alert_deleted"));
     },
   };
 
@@ -250,7 +292,7 @@ class HaNotificationsPanel extends LitElement {
     if (!hass) return;
     let users: { value: string; label: string }[];
     try {
-      this.users ??= loadUsers(hass);
+      this.users ??= this.loadUsers();
       users = await this.users;
     } catch (error) {
       this.users = undefined;
@@ -264,9 +306,11 @@ class HaNotificationsPanel extends LitElement {
       hass,
       alert,
       users,
-      onValidateAlert: (draft) => validateAlert(this._hass, draft),
+      onValidateAlert: async (draft) => request(this._hass, "validate_config", {
+        config: await this.configWithAlert(draft),
+      }),
       onSave: async (draft) => {
-        const saved = await saveAlert(this._hass, draft);
+        const saved = await this.saveAlert(draft);
         notify(this, this.t(alert ? "panel.alert_saved" : "panel.alert_created"));
         return saved;
       },

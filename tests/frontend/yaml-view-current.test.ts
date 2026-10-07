@@ -12,10 +12,7 @@ import {
 
 const api = vi.hoisted(() => ({
   errorMessage: (error: unknown) => String(error),
-  getConfig: vi.fn(),
-  reload: vi.fn(),
-  saveConfig: vi.fn(),
-  validateConfig: vi.fn(),
+  request: vi.fn(),
 }));
 
 vi.mock("../../frontend/api.js", async (importOriginal) => ({
@@ -51,10 +48,11 @@ type YamlEditor = HTMLElement & {
 };
 
 function mountYamlView(): YamlView {
-  api.getConfig.mockResolvedValue(configFixture);
-  api.saveConfig.mockResolvedValue({ saved: true, config: configFixture });
-  api.validateConfig.mockResolvedValue({});
-  api.reload.mockResolvedValue({});
+  api.request.mockImplementation(async (_hass, endpoint, payload) => {
+    if (endpoint === "get_config") return configFixture;
+    if (endpoint === "save_config") return { saved: true, config: payload.config };
+    return {};
+  });
   return mountCustomElement<YamlView>("ha-notifications-yaml-view", {
     hass: homeAssistantFixture(),
   });
@@ -76,7 +74,7 @@ function changeYaml(editor: YamlEditor, value: unknown, isValid = true): void {
 describe("YAML view", () => {
   it("combines the title, help, icon actions and Save in one toolbar", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     await settleElement(view);
     const toolbar = view.shadowRoot!.querySelector(".nc-toolbar")!;
     expect(toolbar.querySelector(".nc-yaml-title strong")?.textContent).toBe("HA Notifications YAML");
@@ -93,7 +91,7 @@ describe("YAML view", () => {
 
   it("provides descriptive native tooltips for YAML toolbar actions", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     await settleElement(view);
     const menu = view.shadowRoot!.querySelector("ha-icon-overflow-menu") as HTMLElement & {
       items: { label: string; tooltip: string }[];
@@ -106,7 +104,7 @@ describe("YAML view", () => {
 
   it("loads config into Home Assistant's YAML editor", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config"));
     await settleElement(view);
     const editor = editorFor(view);
 
@@ -118,7 +116,7 @@ describe("YAML view", () => {
 
   it("validates the parsed value and reports the result with HA's snackbar event", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     const value = { version: 1, alerts: [] };
     changeYaml(editorFor(view), value);
     let notification: unknown;
@@ -131,13 +129,13 @@ describe("YAML view", () => {
 
     await menu.items.find(({ label }) => label === "Validate")!.action();
 
-    expect(api.validateConfig).toHaveBeenCalledWith(view.hass, value);
+    expect(api.request).toHaveBeenCalledWith(view.hass, "validate_config", { config: value });
     await vi.waitFor(() => expect(notification).toEqual({ message: "YAML is valid." }));
   });
 
   it("saves the parsed config and emits yaml-saved", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     const value = { version: 1, alerts: [] };
     changeYaml(editorFor(view), value);
     let saved = false;
@@ -147,13 +145,13 @@ describe("YAML view", () => {
       new Event("click", { bubbles: true, composed: true }),
     );
 
-    await vi.waitFor(() => expect(api.saveConfig).toHaveBeenCalledWith(view.hass, value));
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledWith(view.hass, "save_config", { config: value }));
     await vi.waitFor(() => expect(saved).toBe(true));
   });
 
   it("keeps invalid drafts in the editor and disables Save", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     changeYaml(editorFor(view), "invalid yaml", false);
     await settleElement(view);
 
@@ -164,7 +162,7 @@ describe("YAML view", () => {
 
   it("does not reload or discard YAML when Home Assistant state updates", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.getConfig).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     const editor = editorFor(view);
     const draft = { version: 1, alerts: [{ id: "draft" }] };
     changeYaml(editor, draft);
@@ -172,7 +170,7 @@ describe("YAML view", () => {
     view.hass = homeAssistantFixture();
     await settleElement(view);
 
-    expect(api.getConfig).toHaveBeenCalledOnce();
+    expect(api.request).toHaveBeenCalledOnce();
     expect(editorFor(view)).toBe(editor);
     expect(editor.value).toEqual(draft);
   });

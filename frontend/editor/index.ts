@@ -1,7 +1,7 @@
 import { css, html, LitElement, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { mdiCheckDecagramOutline, mdiClose, mdiCodeBraces, mdiInformationOutline } from "@mdi/js";
-import { errorMessage, getMobilePlatforms } from "../api.js";
+import { errorMessage, request } from "../api.js";
 import type { Alert, Hass } from "../types.js";
 import { createLocalizer } from "../localize.js";
 import { actions, haButton, NarrowController, navMenu, notify, toolbar, uiStyles, type Action } from "../ui.js";
@@ -651,20 +651,22 @@ class AlertEditor extends LitElement {
   }
 
   private async loadPlatforms(): Promise<void> {
-    const request = ++this.platformRequest;
+    const requestId = ++this.platformRequest;
     this.platformLoading = true;
     this.requestUpdate();
     try {
-      const result = await getMobilePlatforms(this.state.hass, this.state.alert.notification.target);
-      if (request !== this.platformRequest || !this.isConnected) return;
+      const result = await request<{ platforms: ("android" | "ios")[]; unknown: boolean }>(
+        this.state.hass, "mobile_platforms", { target: this.state.alert.notification.target },
+      );
+      if (requestId !== this.platformRequest || !this.isConnected) return;
       this.platforms = result.platforms;
       this.platformUnknown = result.unknown;
     } catch {
-      if (request !== this.platformRequest || !this.isConnected) return;
+      if (requestId !== this.platformRequest || !this.isConnected) return;
       this.platforms = [];
       this.platformUnknown = true;
     } finally {
-      if (request === this.platformRequest && this.isConnected) {
+      if (requestId === this.platformRequest && this.isConnected) {
         this.platformLoading = false;
         this.requestUpdate();
       }

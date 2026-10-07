@@ -1,6 +1,6 @@
 import { css, html, LitElement, nothing } from "lit";
 import { mdiCheckDecagramOutline, mdiInformationOutline, mdiReload } from "@mdi/js";
-import { errorMessage, getConfig, reload, saveConfig, validateConfig } from "../api.js";
+import { errorMessage, request } from "../api.js";
 import type { Hass } from "../types.js";
 import { localize } from "../localize.js";
 import { haButton, NarrowController, notify, toolbar, uiStyles } from "../ui.js";
@@ -113,7 +113,7 @@ class YamlView extends LitElement {
 
   private async load(): Promise<void> {
     try {
-      this.config = (await getConfig(this.hass)) as unknown as Record<string, unknown>;
+      this.config = await request<Record<string, unknown>>(this.hass, "get_config");
       this.draft = this.config;
       this.valid = true;
       this.dirty = false;
@@ -146,13 +146,13 @@ class YamlView extends LitElement {
 
   private validate = () =>
     this.run(async () => {
-      await validateConfig(this.hass, this.mapping());
+      await request(this.hass, "validate_config", { config: this.mapping() });
       return this.t("yaml.valid");
     });
 
   private reload = () =>
     this.run(async () => {
-      await reload(this.hass);
+      await request(this.hass, "reload");
       this.config = null;
       this.requestUpdate();
       await this.load();
@@ -161,7 +161,7 @@ class YamlView extends LitElement {
 
   private save = () =>
     this.run(async () => {
-      const result = await saveConfig(this.hass, this.mapping());
+      const result = await request<{ saved: boolean }>(this.hass, "save_config", { config: this.mapping() });
       if (!result.saved) throw new Error(this.t("yaml.not_saved"));
       this.dirty = false;
       this.dispatchEvent(new CustomEvent("yaml-saved", { bubbles: true, composed: true }));
