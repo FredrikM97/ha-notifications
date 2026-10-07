@@ -110,18 +110,19 @@ review changes with:
 python3 -m pytest --snapshot-update
 ```
 
-The mobile delivery integration test runs generated automations through the real
-`mobile_app` and `notify` integrations with Android and iOS registrations:
+The mobile delivery test runs generated automations through real Home Assistant
+core and device registries, using Android and iOS registration metadata and a
+recording `notify` service:
 
 ```bash
 python3 -m pytest tests/backend/test_mobile_delivery.py
 ```
 
-Only the outgoing gateway HTTP transport and unrelated sidebar registration are
-stubbed. The test snapshots the gateway request JSON, including message, title,
-device options, push token, registration metadata, and clear-notification tag.
-It does not contact a push provider or physical device, and cannot prove how a
-phone displays a notification or applies its operating-system settings.
+The notify service and unrelated sidebar registration are stubbed. Snapshots
+cover our outgoing service payload: message, title, native device options, and
+clear-notification tags. This does not load Home Assistant's native `mobile_app`
+integration or verify its push-gateway conversion. It does not contact a push
+provider or physical device, and cannot prove how a phone displays notifications.
 
 ## Project layout
 

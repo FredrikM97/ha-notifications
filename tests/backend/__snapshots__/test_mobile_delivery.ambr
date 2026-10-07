@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: test_generated_alert_reaches_mobile_push_gateway[android-custom-tag-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[android-custom-tag-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -19,13 +19,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -46,18 +39,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[android-custom-tag-no-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[android-custom-tag-no-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -77,13 +63,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -104,18 +83,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[android-no-custom-tag-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[android-no-custom-tag-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -135,13 +107,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -162,18 +127,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[android-no-custom-tag-no-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[android-no-custom-tag-no-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -191,13 +149,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -216,18 +167,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '16',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[ios-custom-tag-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[ios-custom-tag-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -247,13 +191,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -274,18 +211,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[ios-custom-tag-no-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[ios-custom-tag-no-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -305,13 +235,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -332,18 +255,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[ios-no-custom-tag-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[ios-no-custom-tag-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -363,13 +279,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -390,18 +299,11 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })
 # ---
-# name: test_generated_alert_reaches_mobile_push_gateway[ios-no-custom-tag-no-default-tag]
+# name: test_generated_alert_reaches_mobile_notify_service[ios-no-custom-tag-no-default-tag]
   dict({
     'cleared': dict({
       'data': dict({
@@ -419,13 +321,6 @@
         'timeout': 900,
       }),
       'message': 'clear_notification',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
     'sent': dict({
@@ -444,13 +339,6 @@
         'timeout': 900,
       }),
       'message': 'testtest',
-      'push_token': 'test-push-token',
-      'registration_info': dict({
-        'app_id': 'io.homeassistant.test',
-        'app_version': '2026.10',
-        'os_version': '26',
-        'webhook_id': 'test-phone-webhook',
-      }),
       'title': 'TEst text test',
     }),
   })

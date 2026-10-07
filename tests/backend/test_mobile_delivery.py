@@ -1,43 +1,32 @@
-"""Generated alerts delivered through Home Assistant's real Mobile App integration."""
+"""Generated alerts delivered to registry-resolved Mobile App notify services."""
 
 from copy import deepcopy
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from homeassistant.components.mobile_app import notify as mobile_notify
-from homeassistant.components.mobile_app.const import DATA_DEVICES
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry
 from homeassistant.setup import async_setup_component
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications.automation import automation_id
 from custom_components.ha_notifications.const import DOMAIN
-from tests.backend.conftest import MockConfigEntry
+from tests.backend.conftest import MockConfigEntry, async_mock_service
 
 
 @pytest.fixture(
     params=[("Android", "Samsung", "16"), ("iOS", "Apple", "26")],
     ids=["android", "ios"],
 )
-async def push_phone(hass: HomeAssistant, monkeypatch, request: pytest.FixtureRequest):
+async def notify_phone(hass: HomeAssistant, request: pytest.FixtureRequest):
     os_name, manufacturer, os_version = request.param
-    response = SimpleNamespace(status=200, json=AsyncMock(return_value={}))
-    post = AsyncMock(return_value=response)
-    session = SimpleNamespace(post=post)
-    monkeypatch.setattr(mobile_notify, "async_get_clientsession", lambda _hass: session)
-    user = await hass.auth.async_create_user("Push test user", local_only=True)
-    assert await async_setup_component(hass, "mobile_app", {})
+    user = await hass.auth.async_create_user("Notify test user", local_only=True)
     entry = MockConfigEntry(
         domain="mobile_app",
         title="Test Phone",
         data={
             "app_id": "io.homeassistant.test",
             "app_version": "2026.10",
-            "app_data": {
-                "push_token": "test-push-token",
-                "push_url": "https://push.example.test/send",
-            },
             "device_id": "test-phone",
             "device_name": "Test Phone",
             "manufacturer": manufacturer,
@@ -50,18 +39,23 @@ async def push_phone(hass: HomeAssistant, monkeypatch, request: pytest.FixtureRe
         },
     )
     entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    assert hass.services.has_service("notify", "mobile_app_test_phone")
-    device = hass.data["mobile_app"][DATA_DEVICES]["test-phone-webhook"]
-    return device, post
+    device = device_registry.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={("mobile_app", entry.entry_id)},
+        name="Test Phone",
+        manufacturer=manufacturer,
+        model="Test Phone",
+        sw_version=os_version,
+    )
+    calls = async_mock_service(hass, "notify", "mobile_app_test_phone")
+    return device, calls
 
 
 @pytest.mark.parametrize("use_default_tag", [True, False], ids=["default-tag", "no-default-tag"])
 @pytest.mark.parametrize("custom_tag", [None, "custom-tag"], ids=["no-custom-tag", "custom-tag"])
-async def test_generated_alert_reaches_mobile_push_gateway(
+async def test_generated_alert_reaches_mobile_notify_service(
     hass: HomeAssistant,
-    push_phone,
+    notify_phone,
     alert_factory,
     mock_automation_files,
     enable_custom_integrations,
@@ -71,7 +65,7 @@ async def test_generated_alert_reaches_mobile_push_gateway(
     custom_tag,
 ) -> None:
     monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
-    device, post = push_phone
+    device, calls = notify_phone
     device_data = {
         "color": "#c7a600",
         "group": "derp",
@@ -116,10 +110,8 @@ async def test_generated_alert_reaches_mobile_push_gateway(
     )
     await hass.async_block_till_done()
 
-    post.assert_awaited_once()
-    request = post.await_args
-    assert request.args == ("https://push.example.test/send",)
-    sent = request.kwargs["json"]
+    assert len(calls) == 1
+    sent = dict(calls[0].data)
     assert sent["message"] == "testtest"
     assert sent["title"] == "TEst text test"
     expected_tag = custom_tag or (alert["id"] if use_default_tag else None)
@@ -146,11 +138,12 @@ async def test_generated_alert_reaches_mobile_push_gateway(
         },
         blocking=True,
     )
-    assert post.await_count == 2
-    cleared = post.await_args.kwargs["json"]
+    assert len(calls) == 2
+    cleared = dict(calls[1].data)
     assert cleared["message"] == "clear_notification"
     assert cleared["data"] == sent["data"]
     if expected_tag is None:
         assert "tag" not in sent["data"]
         assert "tag" not in cleared["data"]
+    assert notification == original
     assert {"sent": sent, "cleared": cleared} == snapshot
