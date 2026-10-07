@@ -30,6 +30,24 @@ describe("editable alert model", () => {
     expect(second).toEqual(originalSecond);
   });
 
+  it("creates and edits alerts when randomUUID is unavailable on an HTTP origin", () => {
+    const getRandomValues = crypto.getRandomValues.bind(crypto);
+    vi.stubGlobal("crypto", { getRandomValues });
+    try {
+      const first = createAlertDraft();
+      const second = editableAlert(null);
+      expect(first.id).toMatch(/^alert_[0-9a-f]{32}$/);
+      expect(second.id).toMatch(/^alert_[0-9a-f]{32}$/);
+      expect(first.id).not.toBe(second.id);
+      const source = draftAlertFixture({ id: "existing", name: "Existing alert" });
+      const edited = editableAlert(source);
+      expect(edited).toEqual(source);
+      expect(edited).not.toBe(source);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it.each([null, undefined])("creates local defaults without injection for source %s", source => {
     const first = editableAlert(source);
     const second = editableAlert(source);

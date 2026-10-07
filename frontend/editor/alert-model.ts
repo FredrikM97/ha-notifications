@@ -75,8 +75,11 @@ export function editableAlert(source: Alert | null | undefined, defaults = creat
 }
 
 export function createAlertDraft(): EditableAlert {
+  const randomId = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replaceAll("-", "")
+    : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
   return {
-    id: `alert_${crypto.randomUUID().replaceAll("-", "")}`,
+    id: `alert_${randomId}`,
     name: "",
     enabled: true,
     description: "",
