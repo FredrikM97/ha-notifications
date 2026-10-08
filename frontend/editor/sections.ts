@@ -63,15 +63,6 @@ export interface EditorSection {
   validate?: { label: string; success: string };
 }
 
-const text = { text: {} };
-const multiline = { text: { multiline: true } };
-const bool = { boolean: {} };
-const duration = { duration: { enable_day: true } };
-const template = { template: {} };
-const actions = { action: {} };
-
-const MODES = ["parallel", "single", "restart", "queued"];
-
 function mobileOptionsGroup(key: string): "general" | "android" | "ios" {
   return key === "mobile" ? "general" : key as "android" | "ios";
 }
@@ -189,8 +180,8 @@ export const editorSections: EditorSection[] = [
     labels: { name: "editor.basic.name", description: "editor.basic.description", icon: "editor.basic.icon" },
     helpers: { description: "editor.basic.description_help" },
     schema: () => [
-      { name: "name", selector: text, required: true },
-      { name: "description", selector: multiline },
+      { name: "name", selector: { text: {} }, required: true },
+      { name: "description", selector: { text: { multiline: true } } },
       { name: "icon", selector: { icon: {} } },
     ],
     read: ({ alert }) => ({ name: alert.name, description: alert.description, icon: alert.icon }),
@@ -213,7 +204,7 @@ export const editorSections: EditorSection[] = [
         selector: {
           select: {
             mode: "dropdown",
-            options: MODES.map((value) => ({ value, label: s.localize(`editor.basic.mode_${value}`) })),
+            options: ["parallel", "single", "restart", "queued"].map((value) => ({ value, label: s.localize(`editor.basic.mode_${value}`) })),
           },
         },
       },
@@ -260,9 +251,9 @@ export const editorSections: EditorSection[] = [
       help: "editor.conditions.enable_help",
     },
     schema: (s) => [
-      { name: "startup", selector: bool },
-      { name: "periodic", selector: bool },
-      ...(s.alert.monitor.conditions.periodic ? [{ name: "interval", selector: duration }] : []),
+      { name: "startup", selector: { boolean: {} } },
+      { name: "periodic", selector: { boolean: {} } },
+      ...(s.alert.monitor.conditions.periodic ? [{ name: "interval", selector: { duration: { enable_day: true } } }] : []),
       { name: "conditions", selector: { condition: {} } },
     ],
     read: ({ alert }) => ({
@@ -292,7 +283,7 @@ export const editorSections: EditorSection[] = [
       help: "editor.inactive.enable_help",
     },
     schema: () => [
-      { name: "clear_notification", selector: bool },
+      { name: "clear_notification", selector: { boolean: {} } },
       { name: "triggers", selector: { trigger: {} } },
     ],
     read: ({ alert }) => ({ triggers: alert.monitor.inactive.items, clear_notification: alert.monitor.inactive.clear_notification }),
@@ -328,9 +319,9 @@ export const editorSections: EditorSection[] = [
     helpers: { message: "editor.notification.template_values_help", use_default_tag: "editor.notification.use_default_tag_help" },
     helperIcons: ["use_default_tag"],
     schema: ({ localize }) => [
-      { name: "title", selector: text },
-      { name: "message", selector: template, hideLabel: true, default: localize("editor.notification.message_placeholder") },
-      { name: "use_default_tag", selector: bool },
+      { name: "title", selector: { text: {} } },
+      { name: "message", selector: { template: {} }, hideLabel: true, default: localize("editor.notification.message_placeholder") },
+      { name: "use_default_tag", selector: { boolean: {} } },
     ],
     read: ({ alert }) => ({
       title: alert.notification.title,
@@ -344,7 +335,7 @@ export const editorSections: EditorSection[] = [
     title: "editor.notification.post_send_actions",
     parent: "notification",
     labels: { actions: "editor.notification.post_send_actions" },
-    schema: () => [{ name: "actions", selector: actions }],
+    schema: () => [{ name: "actions", selector: { action: {} } }],
     read: ({ alert }) => ({ actions: alert.post_send_actions?.actions ?? [] }),
     write: ({ alert }, data) =>
       (alert.post_send_actions = { ...alert.post_send_actions, enabled: Boolean(alert.post_send_actions?.enabled), actions: data.actions as [] }),
@@ -355,30 +346,30 @@ export const editorSections: EditorSection[] = [
     },
   },
   mobileSection("mobile", [
-    { name: "group", selector: text },
-    { name: "color", selector: text },
+    { name: "group", selector: { text: {} } },
+    { name: "color", selector: { text: {} } },
     { name: "notification_icon", selector: { icon: {} } },
-    { name: "icon_url", selector: text },
+    { name: "icon_url", selector: { text: {} } },
   ]),
   mobileSection("android", [
-    { name: "channel", selector: text },
+    { name: "channel", selector: { text: {} } },
     { name: "importance", selector: dropdown(["min", "low", "default", "high", "max"]) },
-    { name: "sticky", selector: bool },
-    { name: "persistent", selector: bool },
-    { name: "alert_once", selector: bool },
-    { name: "clickAction", selector: text },
+    { name: "sticky", selector: { boolean: {} } },
+    { name: "persistent", selector: { boolean: {} } },
+    { name: "alert_once", selector: { boolean: {} } },
+    { name: "clickAction", selector: { text: {} } },
     { name: "timeout", selector: { number: { min: 0, mode: "box", unit_of_measurement: "s" } } },
     { name: "visibility", selector: dropdown(["public", "private", "secret"]) },
-    { name: "vibrationPattern", selector: text },
-    { name: "ledColor", selector: text },
+    { name: "vibrationPattern", selector: { text: {} } },
+    { name: "ledColor", selector: { text: {} } },
   ]),
   mobileSection("ios", [
-    { name: "subtitle", selector: text },
-    { name: "url", selector: text },
+    { name: "subtitle", selector: { text: {} } },
+    { name: "url", selector: { text: {} } },
     { name: "interruption-level", selector: dropdown(["passive", "active", "time-sensitive", "critical"]) },
-    { name: "sound", selector: text },
+    { name: "sound", selector: { text: {} } },
     { name: "badge", selector: { number: { min: 0, mode: "box" } } },
-    { name: "notification_icon_color", selector: text },
+    { name: "notification_icon_color", selector: { text: {} } },
     { name: "presentation_options", selector: { select: { multiple: true, options: ["alert", "badge", "sound"] } } },
   ], ["interruption-level", "sound", "badge"]),
   {
@@ -400,14 +391,14 @@ export const editorSections: EditorSection[] = [
             label_field: "label",
             description_field: "id",
             fields: {
-              label: { label: s.localize("editor.confirmation.button_label"), required: true, selector: text },
-              id: { label: s.localize("editor.confirmation.button_ids"), selector: text },
+              label: { label: s.localize("editor.confirmation.button_label"), required: true, selector: { text: {} } },
+              id: { label: s.localize("editor.confirmation.button_ids"), selector: { text: {} } },
             },
           },
         },
       },
-      { name: "forget_after_enabled", selector: bool },
-      ...(s.alert.confirmation.reminders.forget_after_enabled ? [{ name: "timeout", selector: duration }] : []),
+      { name: "forget_after_enabled", selector: { boolean: {} } },
+      ...(s.alert.confirmation.reminders.forget_after_enabled ? [{ name: "timeout", selector: { duration: { enable_day: true } } }] : []),
     ],
     read: ({ alert: { confirmation } }) => ({
       buttons: confirmation.buttons,
@@ -434,9 +425,9 @@ export const editorSections: EditorSection[] = [
       show_attempts: "editor.confirmation.reminder.show_attempt_count",
     },
     schema: () => [
-      { name: "interval", selector: duration },
+      { name: "interval", selector: { duration: { enable_day: true } } },
       { name: "max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } } },
-      { name: "show_attempts", selector: bool },
+      { name: "show_attempts", selector: { boolean: {} } },
     ],
     read: ({ alert: { confirmation } }) => ({
       interval: toDuration(confirmation.reminders.interval),
@@ -458,8 +449,8 @@ export const editorSections: EditorSection[] = [
     helpers: { use_default_tag: "editor.notification.use_default_tag_help" },
     helperIcons: ["use_default_tag"],
     schema: ({ localize }) => [
-      { name: "message", selector: template, hideLabel: true, default: localize("editor.confirmation.message") },
-      { name: "use_default_tag", selector: bool },
+      { name: "message", selector: { template: {} }, hideLabel: true, default: localize("editor.confirmation.message") },
+      { name: "use_default_tag", selector: { boolean: {} } },
     ],
     read: ({ alert }) => ({ message: alert.confirmation.notification.message, use_default_tag: alert.confirmation.notification.use_default_tag }),
     write: ({ alert }, data) => Object.assign(alert.confirmation.notification, data),
@@ -475,7 +466,7 @@ export const editorSections: EditorSection[] = [
     title: "editor.confirmation.actions.section",
     parent: "confirmation",
     labels: { actions: "editor.confirmation.actions.section" },
-    schema: () => [{ name: "actions", selector: actions }],
+    schema: () => [{ name: "actions", selector: { action: {} } }],
     read: ({ alert }) => ({ actions: alert.confirmation.actions }),
     write: ({ alert }, data) => (alert.confirmation.actions = (data.actions as []) ?? []),
     toggle: {
