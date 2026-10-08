@@ -139,7 +139,7 @@ describe("section data bindings", () => {
     const t = createLocalizer(undefined);
     const alert = draft();
     alert.monitor.conditions.interval.enabled = true;
-    alert.confirmation.reminders.forget_after_enabled = true;
+    alert.confirmation.reminders.forget_after.enabled = true;
     for (const section of editorSections) {
       expect(optionalTranslation(t, `editor.${section.key}.label`), section.key).toBeDefined();
       for (const item of section.fields(alert)) {
@@ -170,7 +170,7 @@ describe("section data bindings", () => {
       expect(isSectionEnabled(alert, findSection(key)), key).toBe(enabled);
     }
     expect(alert.post_send_actions).toEqual({ enabled });
-    expect(alert.confirmation.actions_enabled).toBe(enabled);
+    expect(alert.confirmation.actions).toEqual({ enabled, items: [] });
     expect(alert.confirmation.notification.enabled).toBe(enabled);
     expect(alert.notification.option_controls?.android?.enabled).toBe(enabled);
     expect(alert.notification.option_controls?.ios?.enabled).toBe(enabled);
@@ -180,7 +180,7 @@ describe("section data bindings", () => {
     const alert = draft();
     alert.confirmation.reminders.enabled = true;
     alert.confirmation.notification.enabled = true;
-    alert.confirmation.actions_enabled = true;
+    alert.confirmation.actions.enabled = true;
     const children = ["reminder", "confirmationNotification", "postConfirmationActions"].map(findSection);
     expect(children.map(child => sectionStatus(alert, child))).toEqual([false, false, false]);
     setSectionEnabled(alert, findSection("confirmation"), true);
@@ -279,8 +279,7 @@ describe("section data bindings", () => {
   it("preserves confirmation child flags and values through a disabled save and reopen", () => {
     const alert = draft();
     alert.confirmation.enabled = true;
-    alert.confirmation.actions_enabled = true;
-    alert.confirmation.actions = [{ action: "script.after_confirmation" }];
+    alert.confirmation.actions = { enabled: true, items: [{ action: "script.after_confirmation" }] };
     alert.confirmation.notification.enabled = true;
     const original = structuredClone(alert.confirmation);
     setSectionEnabled(alert, findSection("confirmation"), false);

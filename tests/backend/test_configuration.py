@@ -48,7 +48,8 @@ def test_feature_model_defaults_match_shared_contract_and_are_independent() -> N
     first.confirmation.buttons.append(ConfirmationButtonConfig(id="custom", label="Changed"))
     first.confirmation.notification.options["color"] = "red"
     first.confirmation.reminders.interval = 60
-    first.confirmation.actions.append({"action": "light.turn_on"})
+    first.confirmation.reminders.forget_after.value = 60
+    first.confirmation.actions.items.append({"action": "light.turn_on"})
 
     assert second.model_dump(exclude_none=True) == expected
     assert AlertConfig(
@@ -75,16 +76,16 @@ def test_reminder_model_serializes_declared_defaults() -> None:
     reminders = ReminderConfig()
     assert reminders.model_dump() == {
         "enabled": True, "interval": 1800, "max_attempts": 5,
-        "show_attempts": False, "forget_after_enabled": False, "timeout": 900,
+        "show_attempts": False, "forget_after": {"enabled": False, "value": 900},
     }
-    assert "forget_after_enabled" in ReminderConfig.model_fields
+    assert "forget_after_enabled" not in ReminderConfig.model_fields
     assert ReminderConfig.model_validate(reminders.model_dump()) == reminders
 
 
 def test_reminder_model_preserves_explicit_values_and_native_extensions() -> None:
     raw = {
         "enabled": False, "interval": {"minutes": 2}, "max_attempts": 2,
-        "show_attempts": True, "forget_after_enabled": True, "timeout": 60,
+        "show_attempts": True, "forget_after": {"enabled": True, "value": 60},
         "native_extra": {"value": "preserved"},
     }
     reminders = ReminderConfig.model_validate(raw)
@@ -215,7 +216,7 @@ def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
     }
     assert alert["confirmation"]["reminders"] == {
         "enabled": True, "interval": 1800, "max_attempts": 5,
-        "show_attempts": False, "forget_after_enabled": False, "timeout": 900,
+        "show_attempts": False, "forget_after": {"enabled": False, "value": 900},
         **reminders,
     }
     assert validate_config(validated) == validated
@@ -750,19 +751,16 @@ def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
             "reminders": {"enabled": True, "interval": 15, "max_attempts": 3},
             "follow_up": {"actions": [{"action": "light.turn_on"}]},
         },
-        "post_send_actions": {"enabled": True, "actions": [{"action": "logbook.log"}]},
+        "post_send_actions": {"enabled": True, "items": [{"action": "logbook.log"}]},
     }]})
     alert = config["alerts"][0]
     assert alert["confirmation"]["buttons"][0]["id"] == "confirm"
-    assert alert["post_send_actions"]["actions"][0]["action"] == "logbook.log"
+    assert alert["post_send_actions"]["items"][0]["action"] == "logbook.log"
 
 
-@pytest.mark.parametrize("actions", [{}, {"items": []}, {
-    "enabled": True,
-    "items": [{"action": "light.turn_on", "target": {"entity_id": "light.hall"}}],
-}])
-def test_validate_config_rejects_confirmation_actions_wrapper_without_mutating_input(
-    alert_factory, actions: dict[str, object],
+@pytest.mark.parametrize("actions", [[], [{"action": "light.turn_on"}]])
+def test_validate_config_rejects_flat_confirmation_action_list_without_mutating_input(
+    alert_factory, actions: list[object],
 ) -> None:
     raw = {"alerts": [alert_factory(confirmation={"enabled": True, "actions": actions})]}
     original = deepcopy(raw)
@@ -771,17 +769,17 @@ def test_validate_config_rejects_confirmation_actions_wrapper_without_mutating_i
         validate_config(raw)
 
     assert [(item["loc"], item["type"]) for item in error.value.errors()] == [
-        (("alerts", 0, "confirmation", "actions"), "list_type"),
+        (("alerts", 0, "confirmation", "actions"), "model_type"),
     ]
     assert raw == original
 
 
-def test_confirmation_actions_default_to_independent_empty_lists() -> None:
+def test_confirmation_actions_default_to_independent_disabled_groups() -> None:
     confirmation = ConfirmationConfig()
     other_confirmation = ConfirmationConfig()
 
-    assert confirmation.actions == []
-    assert confirmation.actions is not other_confirmation.actions
+    assert confirmation.actions.model_dump() == {"enabled": False, "items": []}
+    assert confirmation.actions.items is not other_confirmation.actions.items
 
 
 def test_validate_config_preserves_native_confirmation_action_list(alert_factory) -> None:
@@ -799,15 +797,15 @@ def test_validate_config_preserves_native_confirmation_action_list(alert_factory
         }],
         "default": [{"delay": {"seconds": "{{ delay_seconds }}"}}],
     }]
-    raw = {"alerts": [alert_factory(confirmation={"enabled": True, "actions": actions})]}
+    raw = {"alerts": [alert_factory(confirmation={"enabled": True, "actions": {"enabled": True, "items": actions}})]}
     original = deepcopy(raw)
 
     validated = validate_config(raw)
     confirmation = Configuration.model_validate(validated).alerts[0].confirmation
 
     assert confirmation is not None
-    assert confirmation.actions == actions
-    assert validated["alerts"][0]["confirmation"]["actions"] == actions
+    assert confirmation.actions.items == actions
+    assert validated["alerts"][0]["confirmation"]["actions"] == {"enabled": True, "items": actions}
     assert validate_config(validated) == validated
     assert raw == original
 
@@ -854,16 +852,13 @@ def test_validate_config_rejects_nonpositive_confirmation_attempts() -> None:
     [0, "0", "00:00", "00:00:00", {"seconds": 0}],
 )
 def test_validate_config_rejects_zero_forget_after_timeout(timeout: object) -> None:
-    with pytest.raises(ValidationError, match="requires a positive reminders.timeout"):
+    with pytest.raises(ValidationError, match="reminders.forget_after requires a positive value"):
         validate_config({"alerts": [{
             "id": "confirm_alert",
             "notification": {"action": "notify.mobile_app_phone"},
             "confirmation": {
                 "enabled": True,
-                "reminders": {
-                    "forget_after_enabled": True,
-                    "timeout": timeout,
-                },
+                "reminders": {"forget_after": {"enabled": True, "value": timeout}},
             },
         }]})
 
@@ -874,14 +869,11 @@ def test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled() -> N
         "notification": {"action": "notify.mobile_app_phone"},
         "confirmation": {
             "enabled": True,
-            "reminders": {
-                "forget_after_enabled": False,
-                "timeout": 0,
-            },
+            "reminders": {"forget_after": {"enabled": False, "value": 0}},
         },
     }]})
 
-    assert config["alerts"][0]["confirmation"]["reminders"]["timeout"] == 0
+    assert config["alerts"][0]["confirmation"]["reminders"]["forget_after"] == {"enabled": False, "value": 0}
 
 
 def test_configuration_preserves_native_extensions_on_canonical_models() -> None:
@@ -939,12 +931,12 @@ def test_full_feature_configuration_preserves_confirmation_and_post_send_actions
 
     assert alert.model_dump(mode="python", exclude_none=True) == validated["alerts"][0]
     assert alert.confirmation is not None
-    assert alert.confirmation.actions == [{
+    assert alert.confirmation.actions.items == [{
         "action": "light.turn_on",
         "target": {"entity_id": "light.hall"},
     }]
     assert alert.post_send_actions is not None
-    assert alert.post_send_actions["actions"] == [{
+    assert alert.post_send_actions.items == [{
         "action": "logbook.log",
         "data": {"name": "Full feature sent"},
     }]

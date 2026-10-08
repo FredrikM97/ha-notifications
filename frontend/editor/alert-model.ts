@@ -20,17 +20,20 @@ export function durationToSeconds(value: DurationValue | undefined): number | un
   return undefined;
 }
 
+function toSeconds(value: DurationValue, label: string): number {
+  const seconds = durationToSeconds(value);
+  if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
+  return seconds;
+}
+
 function normalizeAlertDurations(alert: Alert): Alert {
   const reminders = alert.confirmation?.reminders;
   if (!reminders) return alert;
-  for (const [key, label] of [
-    ["interval", "Confirmation reminder interval"],
-    ["timeout", "Confirmation timeout"],
-  ] as const) {
-    if (reminders[key] === undefined) continue;
-    const seconds = durationToSeconds(reminders[key] as DurationValue);
-    if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
-    reminders[key] = seconds;
+  if (reminders.interval !== undefined) {
+    reminders.interval = toSeconds(reminders.interval, "Confirmation reminder interval");
+  }
+  if (reminders.forget_after?.value !== undefined) {
+    reminders.forget_after.value = toSeconds(reminders.forget_after.value, "Confirmation timeout");
   }
   return alert;
 }
@@ -53,7 +56,7 @@ export interface Duration {
 
 /** Deep copy with every optional block the editor binds to filled in. */
 export function editableAlert(source: Alert | null | undefined, defaults = createAlertDraft()): EditableAlert {
-  const alert: EditableAlert = structuredClone({
+  return structuredClone({
     ...defaults,
     ...source,
     monitor: {
@@ -72,12 +75,14 @@ export function editableAlert(source: Alert | null | undefined, defaults = creat
       ...defaults.confirmation,
       ...source?.confirmation,
       notification: { ...defaults.confirmation.notification, ...source?.confirmation?.notification },
-      reminders: { ...defaults.confirmation.reminders, ...source?.confirmation?.reminders },
+      reminders: {
+        ...defaults.confirmation.reminders,
+        ...source?.confirmation?.reminders,
+        forget_after: { ...defaults.confirmation.reminders.forget_after, ...source?.confirmation?.reminders?.forget_after },
+      },
+      actions: { ...defaults.confirmation.actions, ...source?.confirmation?.actions },
     },
   });
-  // The backend runs actions unless explicitly disabled; show that as an enabled switch.
-  if (alert.confirmation.actions.length) alert.confirmation.actions_enabled ??= true;
-  return alert;
 }
 
 export function createAlertDraft(): EditableAlert {
@@ -106,10 +111,9 @@ export function createAlertDraft(): EditableAlert {
         interval: 1800,
         max_attempts: 5,
         show_attempts: false,
-        forget_after_enabled: false,
-        timeout: 900,
+        forget_after: { enabled: false, value: 900 },
       },
-      actions: [],
+      actions: { enabled: false, items: [] },
     },
   };
 }
@@ -158,17 +162,15 @@ export function finalizeAlert(draft: EditableAlert, validate = true): Alert {
     if (!notification.action && !hasRecipients(notification.target)) {
       throw new Error("Select at least one device, area, label, or notification entity in Recipients.");
     }
-    if (
-      confirmation.reminders.forget_after_enabled &&
-      (fromDuration(confirmation.reminders.timeout) ?? 0) <= 0
-    ) {
+    const forgetAfter = confirmation.reminders.forget_after;
+    if (forgetAfter.enabled && fromDuration(forgetAfter.value) <= 0) {
       throw new Error("Forget-after duration must be greater than zero.");
     }
   }
   alert.name = alert.name.trim();
   alert.icon = alert.icon?.trim();
   if (!alert.icon) delete alert.icon;
-  if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.actions?.length) {
+  if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.items?.length) {
     delete alert.post_send_actions;
   }
   return normalizeAlertDurations(alert);

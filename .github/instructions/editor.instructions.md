@@ -19,7 +19,12 @@ Large editors (trigger, condition, action, template, object, target) take the
 full row with no visible label (label becomes `aria-label`); their `helper` text
 joins the section `helper` in the heading help dialog, never beside the editor.
 Section help goes immediately right of the section heading.
-Do not duplicate native form labels or manipulate private shadow DOM.
+Do not duplicate native form labels or manipulate private shadow DOM. One exception:
+HA's native editors differ only in that the trigger editor lacks the `.card-content.card`
+inset its condition and action editors have, so `insetNativeEditors()` in
+`frontend/editor/native-editor.ts` adopts that same HA rule on all three after render.
+`NATIVE_EDITOR_KINDS` there is the only list of native editor kinds; derive every
+trigger/condition/action special case from it. No observers, tree walks, timers, or markup changes.
 Section and optional-field enablement use the presentation-only
 `ha-notifications-feature-switch`; it takes enabled/label values and emits
 `enabled-changed`. Boolean value controls remain direct native switches.

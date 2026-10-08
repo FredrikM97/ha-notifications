@@ -971,7 +971,6 @@ async def test_confirmation_response_completes_without_follow_ups(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False, "interval": 60},
         },
     )
@@ -1047,7 +1046,6 @@ async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False, "interval": 60},
         },
     )
@@ -1158,7 +1156,6 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False, "interval": 60},
         },
     )
@@ -1291,7 +1288,6 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {
                 "enabled": False,
                 "interval": 60,
@@ -1387,7 +1383,6 @@ async def test_saving_alert_cancels_active_confirmation_wait(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False, "interval": 60},
         },
     )
@@ -1482,7 +1477,6 @@ async def test_false_condition_report_does_not_cancel_pending_confirmation_wait(
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False, "interval": 60},
         },
     )
@@ -1615,11 +1609,11 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
                 "message": "Follow-up message",
                 "options": {},
             },
-            "actions": [{"action": "light.turn_on"}],
+            "actions": {"enabled": True, "items": [{"action": "light.turn_on"}]},
         },
         post_send_actions={
             "enabled": True,
-            "actions": [{"action": "logbook.log", "data": {"name": "sent"}}],
+            "items": [{"action": "logbook.log", "data": {"name": "sent"}}],
         },
     )
     entry = MockConfigEntry(

@@ -7,9 +7,10 @@ Preserve canonical backend configuration and native HA YAML/extra fields;
 do not invent persisted shapes or API contracts. Keep transient drafts separate.
 Persist configured values and their enablement together. Disabling a field or
 feature must not delete, clear, or move its configured values into session-only
-storage. A feature's enablement flag must live with the feature it controls;
-condition interval checks use `monitor.conditions.interval: { enabled, value }`,
-not a sibling persisted `periodic` flag. Parent disablement preserves child flags.
+storage. A feature's enablement flag must live with the feature it controls:
+`{ enabled, value }` for `conditions.interval` and `reminders.forget_after`,
+`{ enabled, items }` for `confirmation.actions` and `post_send_actions`; never a
+sibling `periodic` or `*_enabled` flag. Parent disablement preserves child flags.
 The frontend reads/writes canonical configuration; the backend decides
 which enabled values contribute to generated actions and outgoing notifications.
 Feature and field enablement must not disable ordinary editor inputs or child

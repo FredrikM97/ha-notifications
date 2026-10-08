@@ -111,9 +111,14 @@ Retired notification wrappers and persisted editor metadata are rejected, not
 adapted. Existing stored alerts require an explicit canonical update; nothing
 automatically rewrites or resets the user's config-entry data.
 
-Post-confirmation actions remain saved in `confirmation.actions` when disabled.
-`confirmation.actions_enabled: false` prevents the backend from generating those
-actions. When the flag is omitted, the configured action list is enabled.
+Features that pair a switch with its value keep both in one group, so disabling
+never discards the configured value:
+
+- `confirmation.reminders.forget_after: { enabled, value }` sets the
+  notification timeout (same shape as `monitor.conditions.interval`).
+- `confirmation.actions: { enabled, items }` and
+  `post_send_actions: { enabled, items }` hold native Home Assistant actions
+  (same shape as `monitor.triggers`); only enabled groups generate actions.
 
 ## Generated Automations
 

@@ -162,4 +162,35 @@ describe("native trigger, condition, and action selector layout ownership", () =
     expect(interval).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it.each([
+    ["triggers", "trigger"],
+    ["conditions", "condition"],
+    ["postSendActions", "action"],
+  ])("gives the native %s editor the same shared content inset", async (section, kind) => {
+    const editor = await mount();
+    (editor as unknown as { selected: string }).selected = section;
+    await settleElement(editor);
+    const form = editor.shadowRoot!.querySelector(`ha-form[data-native-editor="${kind}"]`)!;
+    let host: Element = form;
+    for (const tag of ["ha-selector", `ha-selector-${kind}`, `ha-automation-${kind}`, `ha-automation-${kind}-row`]) {
+      const child = document.createElement(tag);
+      host.attachShadow({ mode: "open" }).append(child);
+      host = child;
+    }
+    const native = nativeEditor(kind);
+    host.attachShadow({ mode: "open" }).append(native);
+    const before = native.shadowRoot!.innerHTML;
+
+    for (let render = 0; render < 2; render++) {
+      editor.requestUpdate();
+      await settleElement(editor);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    const sheets = native.shadowRoot!.adoptedStyleSheets;
+    expect(sheets).toHaveLength(1);
+    expect([...sheets[0].cssRules].map(rule => rule.cssText).join("")).toContain(".card-content.card");
+    expect(native.shadowRoot!.innerHTML).toBe(before);
+  });
 });

@@ -144,23 +144,28 @@
         "interval": "00:30:00",
         "max_attempts": 3,
         "show_attempts": true,
-        "forget_after_enabled": false,
-        "timeout": 900
-      },
-      "actions": [
-        {
-          "action": "light.turn_on",
-          "target": {
-            "entity_id": [
-              "light.hall"
-            ]
-          }
+        "forget_after": {
+          "enabled": false,
+          "value": 900
         }
-      ]
+      },
+      "actions": {
+        "enabled": true,
+        "items": [
+          {
+            "action": "light.turn_on",
+            "target": {
+              "entity_id": [
+                "light.hall"
+              ]
+            }
+          }
+        ]
+      }
     },
     "post_send_actions": {
       "enabled": true,
-      "actions": [
+      "items": [
         {
           "action": "logbook.log",
           "data": {

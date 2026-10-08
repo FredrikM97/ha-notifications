@@ -602,12 +602,12 @@ describe("panel configuration workflows", () => {
     const options = await openPanelEditor(panel);
     const draft = editorAlertFixture({ id: alert.id, runtime: { current: 2 } });
     draft.confirmation!.reminders.interval = { minutes: 30 };
-    draft.confirmation!.reminders.timeout = "00:15:00";
+    draft.confirmation!.reminders.forget_after.value = "00:15:00";
     draft.notification.options = { tag: "{{ trigger.entity_id }}", data: { ttl: 0 } };
     const original = structuredClone(draft);
     const { runtime: _runtime, ...canonical } = structuredClone(draft);
     canonical.confirmation!.reminders.interval = 1800;
-    canonical.confirmation!.reminders.timeout = 900;
+    canonical.confirmation!.reminders.forget_after.value = 900;
 
     if (operation === "save") {
       await expect(options.onSave(draft)).resolves.toEqual(canonical);

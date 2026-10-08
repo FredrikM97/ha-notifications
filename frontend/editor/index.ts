@@ -8,6 +8,7 @@ import { createLocalizer, optionalTranslation, type Localize } from "../localize
 import { actions, haButton, NarrowController, navMenu, notify, toolbar, uiStyles, type Action } from "../ui.js";
 import { editableAlert, finalizeAlert, type EditableAlert } from "./alert-model.js";
 import "./setting-row.js";
+import { insetNativeEditors, nativeEditorKind } from "./native-editor.js";
 import type { EnabledChangedDetail, HelpEntry, HelpRequestDetail } from "./setting-row.js";
 import {
   editorSections, embeddedSections, findSection, hasOptionValues, isFieldEnabled, isSectionEnabled, readField,
@@ -235,7 +236,7 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** Large editors own their whole row; their help moves into the section heading. */
 function isBlockField(field: EditorField): boolean {
-  return ["trigger", "condition", "action", "template", "object", "target"].some(type => type in field.selector);
+  return Boolean(nativeEditorKind(field.selector)) || ["template", "object", "target"].some(type => type in field.selector);
 }
 
 function isWideField(section: EditorSection, field: EditorField): boolean {
@@ -294,6 +295,10 @@ class AlertEditor extends LitElement {
 
   protected willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("hass")) this.localizeText = createLocalizer(this.hass);
+  }
+
+  protected updated(): void {
+    for (const form of this.renderRoot.querySelectorAll<HTMLElement>("ha-form[data-native-editor]")) void insetNativeEditors(form);
   }
 
   protected render(): TemplateResult {
@@ -422,6 +427,7 @@ class AlertEditor extends LitElement {
     return html`<ha-form
       data-editor-section=${section.key}
       class=${classMap({ "nc-code-form": "template" in field.selector })}
+      data-native-editor=${nativeEditorKind(field.selector) ?? nothing}
       aria-label=${block ? label : nothing}
       .hass=${this.hass}
       .narrow=${this.layout.narrow}

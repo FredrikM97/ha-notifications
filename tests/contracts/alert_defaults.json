@@ -51,10 +51,15 @@
       "enabled": true,
       "interval": 1800,
       "max_attempts": 5,
-      "forget_after_enabled": false,
-      "timeout": 900,
-      "show_attempts": false
+      "show_attempts": false,
+      "forget_after": {
+        "enabled": false,
+        "value": 900
+      }
     },
-    "actions": []
+    "actions": {
+      "enabled": false,
+      "items": []
+    }
   }
 }

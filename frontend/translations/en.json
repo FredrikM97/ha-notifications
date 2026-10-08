@@ -252,7 +252,7 @@
           "id": "Button IDs (optional)"
         }
       },
-      "forget_after_enabled": {
+      "forget_after": {
         "label": "Enable confirmation timeout",
         "helper": "Set how long the confirmation notification stays active on recipients' devices. This does not change the reminder interval or maximum reminders."
       },

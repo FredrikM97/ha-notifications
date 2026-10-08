@@ -139,6 +139,30 @@ class ConfirmationNotificationConfig(NotificationConfig):
     target: dict[str, Any] | None = None
 
 
+class ForgetAfterConfig(BaseModel):
+    """Optional notification timeout; disabling keeps the configured duration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, strict=True)
+    value: ReminderInterval = 900
+
+    @model_validator(mode="after")
+    def validate_positive_value(self) -> "ForgetAfterConfig":
+        if self.enabled and (_duration_seconds(self.value) or 0) <= 0:
+            raise ValueError("reminders.forget_after requires a positive value")
+        return self
+
+
+class ActionsConfig(BaseModel):
+    """Native Home Assistant actions with an independent enable switch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, strict=True)
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ReminderConfig(BaseModel):
     """Known confirmation reminder fields with extension values preserved."""
 
@@ -148,16 +172,8 @@ class ReminderConfig(BaseModel):
     interval: ReminderInterval = 1800
     max_attempts: int = Field(default=5, ge=1)
     show_attempts: bool = False
-    forget_after_enabled: bool = False
-    timeout: ReminderInterval = 900
+    forget_after: ForgetAfterConfig = Field(default_factory=ForgetAfterConfig)
 
-    @model_validator(mode="after")
-    def validate_forget_after_timeout(self) -> "ReminderConfig":
-        if self.forget_after_enabled and (_duration_seconds(self.timeout) or 0) <= 0:
-            raise ValueError(
-                "forget_after_enabled requires a positive reminders.timeout"
-            )
-        return self
 
 class ConfirmationConfig(BaseModel):
     """Preserve existing confirmation, reminder, and follow-up fields."""
@@ -168,8 +184,7 @@ class ConfirmationConfig(BaseModel):
     buttons: list[ConfirmationButtonConfig] = Field(default_factory=list)
     notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
-    actions: list[dict[str, Any]] = Field(default_factory=list)
-    actions_enabled: bool | None = Field(default=None, strict=True)
+    actions: ActionsConfig = Field(default_factory=ActionsConfig)
 
 
 class EnabledFeature(BaseModel):
@@ -263,7 +278,7 @@ class AlertConfig(BaseModel):
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
     notification: NotificationConfig
     confirmation: ConfirmationConfig | None = None
-    post_send_actions: dict[str, Any] | None = None
+    post_send_actions: ActionsConfig | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

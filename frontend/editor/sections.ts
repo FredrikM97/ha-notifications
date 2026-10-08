@@ -1,5 +1,6 @@
 import type { NotificationOptionControl, NotificationOptionControls, NotificationTarget } from "../types.js";
 import { fromDuration, toDuration, type EditableAlert } from "./alert-model.js";
+import { nativeEditorKind } from "./native-editor.js";
 
 type Data = Record<string, unknown>;
 type Selector = Record<string, unknown>;
@@ -69,7 +70,7 @@ function unsetOption(alert: EditableAlert, path: string): void {
 }
 
 function isList(selector: Selector): boolean {
-  return ["trigger", "condition", "action"].some(type => type in selector)
+  return Boolean(nativeEditorKind(selector))
     || Boolean((selector.object as { multiple?: boolean } | undefined)?.multiple);
 }
 
@@ -249,7 +250,7 @@ export const editorSections: EditorSection[] = [
     key: "postSendActions",
     parent: "notification",
     toggle: "post_send_actions.enabled",
-    fields: () => [{ name: "actions", path: "post_send_actions.actions", selector: { action: {} } }],
+    fields: () => [{ name: "actions", path: "post_send_actions.items", selector: { action: {} } }],
   },
   {
     key: "mobile",
@@ -312,9 +313,11 @@ export const editorSections: EditorSection[] = [
             fields: { label: { required: true, selector: text }, id: { selector: text } },
           } },
         },
-        { name: "forget_after_enabled", path: "confirmation.reminders.forget_after_enabled", selector: toggle },
+        { name: "forget_after", path: "confirmation.reminders.forget_after.enabled", selector: toggle },
       ];
-      if (reminders.forget_after_enabled) fields.push({ name: "timeout", path: "confirmation.reminders.timeout", selector: duration });
+      if (reminders.forget_after.enabled) {
+        fields.push({ name: "timeout", path: "confirmation.reminders.forget_after.value", selector: duration });
+      }
       return fields;
     },
   },
@@ -340,7 +343,7 @@ export const editorSections: EditorSection[] = [
   {
     key: "postConfirmationActions",
     parent: "confirmation",
-    toggle: "confirmation.actions_enabled",
-    fields: () => [{ name: "actions", path: "confirmation.actions", selector: { action: {} } }],
+    toggle: "confirmation.actions.enabled",
+    fields: () => [{ name: "actions", path: "confirmation.actions.items", selector: { action: {} } }],
   },
 ];

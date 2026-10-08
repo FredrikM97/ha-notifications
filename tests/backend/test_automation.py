@@ -853,7 +853,7 @@ def test_disabled_reminders_keep_confirmation_but_remove_repeat(automation_alert
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_generate_automation_rejects_confirmation_actions_wrapper(
+def test_generate_automation_rejects_flat_confirmation_action_list(
     automation_alert, enabled: bool,
 ) -> None:
     with pytest.raises(ValidationError, match="confirmation.actions"):
@@ -861,7 +861,7 @@ def test_generate_automation_rejects_confirmation_actions_wrapper(
             **automation_alert,
             "confirmation": {
                 "enabled": enabled,
-                "actions": {"items": [{"action": "light.turn_on"}]},
+                "actions": [{"action": "light.turn_on"}],
             },
         })
 
@@ -891,7 +891,7 @@ async def test_confirmation_action_list_preserves_native_fields_and_passes_ha_va
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
             "reminders": {"enabled": False},
-            "actions": actions,
+            "actions": {"enabled": True, "items": actions},
         },
     }
     original = deepcopy(alert)
@@ -920,7 +920,6 @@ def test_confirmation_response_is_terminal_without_follow_up_actions(automation_
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False},
         },
     })
@@ -967,7 +966,6 @@ def test_every_terminal_stop_has_an_adjacent_report(automation_alert) -> None:
             "enabled": True,
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "notification": {"enabled": False},
-            "actions": [],
             "reminders": {"enabled": False},
         },
     })
@@ -1085,20 +1083,18 @@ def test_generated_option_controls_are_independent_for_main_reminders_and_follow
     assert automation_alert == original
 
 
-@pytest.mark.parametrize("enabled", [None, False, True])
+@pytest.mark.parametrize("enabled", [False, True])
 def test_confirmation_action_enablement_preserves_saved_actions(automation_alert, enabled) -> None:
     alert = deepcopy(automation_alert)
     alert["confirmation"] = {
         "enabled": True,
         "buttons": [{"id": "confirm", "label": "Done"}],
-        "actions": [{"action": "script.retained_confirmation_action"}],
+        "actions": {"enabled": enabled, "items": [{"action": "script.retained_confirmation_action"}]},
     }
-    if enabled is not None:
-        alert["confirmation"]["actions_enabled"] = enabled
     canonical = validate_config({"alerts": [alert]})
     original = deepcopy(canonical)
     generated = generate_automation(canonical["alerts"][0])
-    assert ("script.retained_confirmation_action" in yaml.safe_dump(generated)) is (enabled is not False)
+    assert ("script.retained_confirmation_action" in yaml.safe_dump(generated)) is enabled
     assert canonical == original
     assert canonical["alerts"][0]["confirmation"]["actions"] == alert["confirmation"]["actions"]
 
@@ -1113,7 +1109,7 @@ def test_enabled_reminders_repeat_the_original_notification(automation_alert) ->
                 "action": "notify.mobile_app_phone",
                 "message": "Confirmed",
             },
-            "actions": [{"action": "light.turn_on"}],
+            "actions": {"enabled": True, "items": [{"action": "light.turn_on"}]},
             "reminders": {"enabled": True, "interval": 15, "max_attempts": 2},
         },
     })
@@ -1205,7 +1201,7 @@ def test_forget_after_is_disabled_by_default_and_opt_in(automation_alert, timeou
         "notification": {"action": "notify.mobile_app_phone"},
         "reminders": {
             "enabled": True,
-            "timeout": timeout,
+            "forget_after": {"enabled": False, "value": timeout},
         },
     }
     disabled = _active_sequence(generate_automation({
@@ -1218,7 +1214,7 @@ def test_forget_after_is_disabled_by_default_and_opt_in(automation_alert, timeou
         **automation_alert,
         "confirmation": {
             **base_confirmation,
-            "reminders": {**base_confirmation["reminders"], "forget_after_enabled": True},
+            "reminders": {"enabled": True, "forget_after": {"enabled": True, "value": timeout}},
         },
     }))
     assert enabled[0]["data"]["payload"]["data"]["timeout"] == 900
@@ -1290,7 +1286,7 @@ def test_confirmation_notification_opt_in_controls_only_follow_up_send(
                 "action": "notify.mobile_app_phone",
                 "message": "Confirmed",
             },
-            "actions": [{"action": "light.turn_on"}],
+            "actions": {"enabled": True, "items": [{"action": "light.turn_on"}]},
         },
     })
 
@@ -1427,7 +1423,7 @@ def _nested_actions(value: Any) -> list[dict[str, Any]]:
             {
                 "post_send_actions": {
                     "enabled": True,
-                    "actions": [{"action": "logbook.log"}],
+                    "items": [{"action": "logbook.log"}],
                 },
             },
         ),
@@ -1455,7 +1451,7 @@ def _nested_actions(value: Any) -> list[dict[str, Any]]:
                         "action": "notify.mobile_app_phone",
                         "message": "Confirmed",
                     },
-                    "actions": [{"action": "light.turn_on"}],
+                    "actions": {"enabled": True, "items": [{"action": "light.turn_on"}]},
                     "reminders": {
                         "enabled": True,
                         "interval": {"minutes": 1},
@@ -1474,7 +1470,7 @@ def _nested_actions(value: Any) -> list[dict[str, Any]]:
                 },
                 "post_send_actions": {
                     "enabled": False,
-                    "actions": [{"action": "logbook.log"}],
+                    "items": [{"action": "logbook.log"}],
                 },
             },
         ),
@@ -1575,11 +1571,11 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
                 "action": "notify.mobile_app_phone",
                 "message": "Confirmed",
             },
-            "actions": [{"action": "light.turn_on"}],
+            "actions": {"enabled": True, "items": [{"action": "light.turn_on"}]},
         },
         "post_send_actions": {
             "enabled": True,
-            "actions": [{"action": "logbook.log"}],
+            "items": [{"action": "logbook.log"}],
         },
     }
 
@@ -1728,8 +1724,8 @@ def test_post_send_actions_remain_separate_from_confirmation_follow_up(
     branch = _active_sequence(generated)
     completion = next(action for action in branch if "choose" in action)
 
-    assert branch[1] == full_feature_alert["post_send_actions"]["actions"][0]
-    assert full_feature_alert["post_send_actions"]["actions"][0] not in completion[
+    assert branch[1] == full_feature_alert["post_send_actions"]["items"][0]
+    assert full_feature_alert["post_send_actions"]["items"][0] not in completion[
         "choose"
     ][0]["sequence"]
 
@@ -1757,13 +1753,11 @@ def test_automation_boundary_preserves_persisted_native_extensions() -> None:
                 "max_attempts": 2,
                 "reminder_native": True,
             },
-            "actions": [],
             "confirmation_native": "value",
         },
         "post_send_actions": {
             "enabled": True,
-            "actions": [{"action": "light.turn_on"}],
-            "post_send_native": "value",
+            "items": [{"action": "light.turn_on"}],
         },
     }
 
@@ -1815,7 +1809,7 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
         },
         "post_send_actions": {
             "enabled": True,
-            "actions": [{
+            "items": [{
                 "action": "light.turn_on",
                 "data": {"brightness": 128},
                 "native_action": {"preserve": True},
@@ -1852,10 +1846,10 @@ def test_generate_automation_preserves_post_send_actions() -> None:
         "id": "door_open",
         "monitor": {"conditions": {"startup": True}},
         "notification": {"action": "notify.mobile_app_phone"},
-        "post_send_actions": {"enabled": True, "actions": [{"action": "light.turn_on", "target": {"entity_id": "light.hall"}}]},
+        "post_send_actions": {"enabled": True, "items": [{"action": "light.turn_on", "target": {"entity_id": "light.hall"}}]},
     }
     sequence = _active_sequence(generate_automation(alert))
-    assert sequence[-2] == alert["post_send_actions"]["actions"][0]
+    assert sequence[-2] == alert["post_send_actions"]["items"][0]
     assert sequence[-1]["action"] == "ha_notifications.report"
     assert sequence[-1]["data"]["status"] == "action_executed"
 

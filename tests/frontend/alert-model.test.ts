@@ -37,7 +37,7 @@ describe("editable alert model", () => {
     first.confirmation.buttons[0].label = "Changed";
     first.confirmation.notification.options.changed = true;
     first.confirmation.reminders.interval = 0;
-    first.confirmation.actions.push({ action: "light.turn_on" });
+    first.confirmation.actions.items.push({ action: "light.turn_on" });
     expect(second).toEqual(originalSecond);
   });
 
@@ -76,7 +76,7 @@ describe("editable alert model", () => {
     expect(alert).toEqual(defaults);
     expect(alert.id).toBe("test_draft");
     expect(alert.confirmation.reminders.interval).toBe(1800);
-    expect(alert.confirmation.reminders.timeout).toBe(900);
+    expect(alert.confirmation.reminders.forget_after).toEqual({ enabled: false, value: 900 });
     alert.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
     alert.confirmation.buttons[0].label = "Changed";
     alert.notification.options.changed = true;
@@ -98,7 +98,7 @@ describe("editable alert model", () => {
       confirmation: {
         enabled: false,
         notification: { enabled: false, message: "User message", use_default_tag: false },
-        reminders: { enabled: false, interval: 0, timeout: 0, max_attempts: 0, show_attempts: false },
+        reminders: { enabled: false, interval: 0, forget_after: { enabled: false, value: 0 }, max_attempts: 0, show_attempts: false },
       },
     } as unknown as Alert;
     const originalSource = structuredClone(source);
@@ -294,7 +294,7 @@ describe("editable alert model", () => {
     expect(alert.monitor.triggers.items).toEqual(triggers);
     expect(alert.monitor.conditions.items).toEqual(conditions);
     expect(alert.confirmation?.reminders.interval).toBeDefined();
-    expect(alert.confirmation?.actions).toEqual([]);
+    expect(alert.confirmation?.actions).toEqual({ enabled: false, items: [] });
   });
 
   it("fills absent optional blocks while preserving native actions, conditions, and duration values", () => {
@@ -306,8 +306,8 @@ describe("editable alert model", () => {
         conditions: { enabled: true, items: [{ condition: "template", value_template: "{{ true }}" }] },
       },
       notification: { action: "notify.custom", title: "{{ trigger.id }}", message: "Native", options: { data: { ttl: 0 } } },
-      confirmation: { reminders: { interval: { minutes: 7 }, timeout: "00:02:00" } },
-      post_send_actions: { enabled: false, actions: [{ action: "light.turn_on", target: { entity_id: "light.hall" }, data: { brightness: 0 } }] },
+      confirmation: { reminders: { interval: { minutes: 7 }, forget_after: { value: "00:02:00" } } },
+      post_send_actions: { enabled: false, items: [{ action: "light.turn_on", target: { entity_id: "light.hall" }, data: { brightness: 0 } }] },
     } as unknown as Alert;
     const original = structuredClone(source);
 
@@ -321,11 +321,11 @@ describe("editable alert model", () => {
     expect(draft.notification.options).toEqual(source.notification.options);
     expect(draft.confirmation.notification).toEqual(defaults.confirmation.notification);
     expect(draft.confirmation.reminders.interval).toEqual({ minutes: 7 });
-    expect(draft.confirmation.reminders.timeout).toBe("00:02:00");
+    expect(draft.confirmation.reminders.forget_after).toEqual({ enabled: false, value: "00:02:00" });
     expect(draft.post_send_actions).toEqual(source.post_send_actions);
     const saved = finalizeAlert(draft);
     expect(saved.confirmation!.reminders.interval).toBe(420);
-    expect(saved.confirmation!.reminders.timeout).toBe(120);
+    expect(saved.confirmation!.reminders.forget_after.value).toBe(120);
     expect(saved.monitor.triggers).toEqual(source.monitor.triggers);
     expect(saved.post_send_actions).toEqual(source.post_send_actions);
     expect(source).toEqual(original);
@@ -366,8 +366,8 @@ describe("finalizeAlert", () => {
       ios: { enabled: true, fields: { "push.badge": false, "push.sound": false } },
     };
     draft.confirmation.reminders.interval = { minutes: 7 };
-    draft.confirmation.reminders.timeout = "00:02:00";
-    draft.confirmation.actions = [{ action: "light.turn_on" }];
+    draft.confirmation.reminders.forget_after.value = "00:02:00";
+    draft.confirmation.actions.items = [{ action: "light.turn_on" }];
     draft.runtime = { active: true };
     const original = structuredClone(draft);
     const clone = vi.spyOn(globalThis, "structuredClone");
@@ -379,9 +379,8 @@ describe("finalizeAlert", () => {
       expect(saved.name).toBe("Door");
       expect(saved).not.toHaveProperty("runtime");
       expect(saved.confirmation!.actions).toEqual(original.confirmation.actions);
-      expect(saved.confirmation).not.toHaveProperty("actions_enabled");
       expect(saved.confirmation!.reminders.interval).toBe(420);
-      expect(saved.confirmation!.reminders.timeout).toBe(120);
+      expect(saved.confirmation!.reminders.forget_after.value).toBe(120);
       expect(JSON.parse(JSON.stringify(saved.monitor))).toEqual(original.monitor);
       expect(saved.notification.options).toEqual(original.notification.options);
       expect(saved.notification.option_controls).toEqual(original.notification.option_controls);
@@ -400,12 +399,12 @@ describe("finalizeAlert", () => {
   it.each(["recipients", "duration"])("clones once and leaves the draft unchanged on %s failure", failure => {
     const draft = draftAlertFixture({ name: "  Door  " });
     draft.confirmation.reminders.interval = { minutes: 7 };
-    draft.confirmation.actions = [{ action: "light.turn_on" }];
+    draft.confirmation.actions.items = [{ action: "light.turn_on" }];
     draft.runtime = { active: true };
     let message = /Select at least one device/;
     if (failure === "duration") {
       draft.notification.target = { entity_id: ["notify.phone"] };
-      draft.confirmation.reminders.timeout = "invalid";
+      draft.confirmation.reminders.forget_after.value = "invalid";
       message = /Confirmation timeout must be a valid duration/;
     }
     const original = structuredClone(draft);
@@ -496,45 +495,36 @@ describe("finalizeAlert", () => {
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }), draftAlertFixture());
-    draft.confirmation!.actions = [{ action: "light.turn_on" }];
-    draft.confirmation.actions_enabled = enabled;
+    draft.confirmation.actions = { enabled, items: [{ action: "light.turn_on" }] };
 
     const original = structuredClone(draft);
     const saved = finalizeAlert(draft);
-    expect(saved.confirmation?.actions).toEqual([{ action: "light.turn_on" }]);
-    expect(saved.confirmation?.actions_enabled).toBe(enabled);
+    expect(saved.confirmation?.actions).toEqual({ enabled, items: [{ action: "light.turn_on" }] });
     const reopened = editableAlert(saved);
     expect(reopened.confirmation.actions).toEqual(draft.confirmation.actions);
-    expect(reopened.confirmation.actions_enabled).toBe(enabled);
     expect(finalizeAlert(reopened)).toEqual(saved);
     expect(draft).toEqual(original);
   });
 
-  it("shows existing confirmation actions without a flag as enabled, matching the backend", () => {
-    const source = draftAlertFixture({ name: "Door" });
-    source.confirmation.actions = [{ action: "light.turn_on" }];
-    expect(editableAlert(source).confirmation.actions_enabled).toBe(true);
-  });
-
-  it("does not add confirmation action metadata to untouched disabled defaults", () => {
+  it("keeps untouched confirmation actions disabled and empty", () => {
     const draft = editableAlert(draftAlertFixture({ name: "Door" }));
     draft.notification.target = { entity_id: ["notify.phone"] };
     expect(finalizeAlert(draft)).toEqual(draft);
-    expect(finalizeAlert(draft).confirmation).not.toHaveProperty("actions_enabled");
+    expect(finalizeAlert(draft).confirmation!.actions).toEqual({ enabled: false, items: [] });
   });
 
   it("omits empty disabled post-send actions but preserves populated actions", () => {
     const draft = editableAlert(draftAlertFixture({
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
-      post_send_actions: { enabled: false, actions: [] },
+      post_send_actions: { enabled: false, items: [] },
     }), draftAlertFixture());
     expect(finalizeAlert(draft)).not.toHaveProperty("post_send_actions");
 
-    draft.post_send_actions = { enabled: false, actions: [{ action: "light.turn_on" }] };
+    draft.post_send_actions = { enabled: false, items: [{ action: "light.turn_on" }] };
     expect(finalizeAlert(draft).post_send_actions).toEqual({
       enabled: false,
-      actions: [{ action: "light.turn_on" }],
+      items: [{ action: "light.turn_on" }],
     });
   });
 });
@@ -543,7 +533,7 @@ describe("toCanonicalAlert", () => {
   it("returns an independent clone without mutating duration or native JSON values", () => {
     const alert = draftAlertFixture();
     alert.confirmation.reminders.interval = { minutes: 7 };
-    alert.confirmation.reminders.timeout = "00:02:00";
+    alert.confirmation.reminders.forget_after.value = "00:02:00";
     alert.monitor.triggers.items = [{ trigger: "state", for: { seconds: 0 }, enabled: false }];
     alert.notification.options = { native: { enabled: false }, ttl: 0 };
     alert.runtime = { current: 2 };
@@ -554,7 +544,7 @@ describe("toCanonicalAlert", () => {
     expect(serialized).not.toBe(alert);
     expect(serialized).not.toHaveProperty("runtime");
     expect(serialized.confirmation!.reminders.interval).toBe(420);
-    expect(serialized.confirmation!.reminders.timeout).toBe(120);
+    expect(serialized.confirmation!.reminders.forget_after.value).toBe(120);
     expect(JSON.parse(JSON.stringify(serialized.monitor))).toEqual(original.monitor);
     expect(serialized.notification.options).toEqual(original.notification.options);
     expect(alert).toEqual(original);
@@ -567,7 +557,7 @@ describe("toCanonicalAlert", () => {
   it("leaves the input unchanged when normalization fails after a valid interval", () => {
     const alert = draftAlertFixture();
     alert.confirmation.reminders.interval = { minutes: 7 };
-    alert.confirmation.reminders.timeout = "invalid";
+    alert.confirmation.reminders.forget_after.value = "invalid";
     const original = structuredClone(alert);
 
     expect(() => toCanonicalAlert(alert)).toThrow(/Confirmation timeout must be a valid duration/);

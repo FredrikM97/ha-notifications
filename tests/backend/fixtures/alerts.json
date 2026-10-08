@@ -28,7 +28,10 @@
       "conditions": {
         "startup": true,
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": []
       }
     }
@@ -74,7 +77,10 @@
       "conditions": {
         "startup": true,
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": []
       }
     }
@@ -109,7 +115,10 @@
       },
       "conditions": {
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": []
       }
     }
@@ -136,7 +145,10 @@
       },
       "conditions": {
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": []
       }
     }
@@ -164,7 +176,10 @@
       "conditions": {
         "startup": true,
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": []
       }
     }
@@ -206,18 +221,21 @@
         "options": {},
         "enabled": true
       },
-      "actions": [
-        {
-          "action": "light.turn_on",
-          "target": {
-            "entity_id": "light.hall"
+      "actions": {
+        "enabled": true,
+        "items": [
+          {
+            "action": "light.turn_on",
+            "target": {
+              "entity_id": "light.hall"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "post_send_actions": {
       "enabled": true,
-      "actions": [
+      "items": [
         {
           "action": "logbook.log",
           "data": {
@@ -253,7 +271,10 @@
       "conditions": {
         "startup": true,
         "enabled": true,
-        "interval": {"enabled": false, "value": 43200},
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
         "items": [
           {
             "condition": "and",

@@ -102,8 +102,12 @@ export interface ReminderConfig {
   interval: DurationValue;
   max_attempts: number;
   show_attempts: boolean;
-  forget_after_enabled: boolean;
-  timeout: DurationValue;
+  forget_after: IntervalConfig;
+}
+
+export interface ActionsConfig {
+  enabled: boolean;
+  items: HaConfig[];
 }
 
 export interface ConfirmationConfig {
@@ -111,13 +115,7 @@ export interface ConfirmationConfig {
   buttons: ConfirmationButton[];
   notification: Notification;
   reminders: ReminderConfig;
-  actions: HaConfig[];
-  actions_enabled?: boolean;
-}
-
-export interface PostSendActionsConfig {
-  enabled: boolean;
-  actions?: HaConfig[];
+  actions: ActionsConfig;
 }
 
 /** One alert, as stored in the integration's canonical configuration. */
@@ -130,7 +128,7 @@ export interface Alert {
   monitor: MonitorConfig;
   notification: Notification;
   confirmation?: ConfirmationConfig;
-  post_send_actions?: PostSendActionsConfig;
+  post_send_actions?: ActionsConfig;
   runtime?: unknown;
 }
 

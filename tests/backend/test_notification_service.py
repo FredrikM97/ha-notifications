@@ -515,8 +515,7 @@ async def test_send_preserves_mobile_data_from_generated_confirmation_notificati
             "reminders": {
                 "enabled": True,
                 "interval": {"minutes": 5},
-                "forget_after_enabled": False,
-                "timeout": {"minutes": 30},
+                "forget_after": {"enabled": False, "value": {"minutes": 30}},
             },
         },
     )

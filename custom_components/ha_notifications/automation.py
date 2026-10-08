@@ -107,9 +107,9 @@ class _SendComponent:
             }
             for index, button in enumerate(confirmation.buttons)
         ]
-        reminders = confirmation.reminders
-        if reminders.forget_after_enabled:
-            data["timeout"] = _duration_seconds(reminders.timeout)
+        forget_after = confirmation.reminders.forget_after
+        if forget_after.enabled:
+            data["timeout"] = _duration_seconds(forget_after.value)
         return notification
 
 
@@ -513,10 +513,10 @@ class _PostSendComponent:
 
     def compose(self, alert: AlertConfig) -> AutomationFragments:
         post_send = alert.post_send_actions
-        if not post_send or not post_send.get("enabled", False):
+        if not post_send or not post_send.enabled:
             return AutomationFragments()
         steps = _ActionStepBuilder(alert)
-        actions = [_copy_native_value(action) for action in post_send.get("actions", [])]
+        actions = [_copy_native_value(action) for action in post_send.items]
         return AutomationFragments(
             actions=tuple(
                 item
@@ -860,8 +860,8 @@ def _follow_up_actions(
             history_reason="confirmation_notification",
         )
     native_actions = []
-    if confirmation.actions_enabled is not False:
-        native_actions = [_copy_native_value(action) for action in confirmation.actions]
+    if confirmation.actions.enabled:
+        native_actions = [_copy_native_value(action) for action in confirmation.actions.items]
     actions = [notification_action] if notification_action is not None else []
     for action in native_actions:
         actions.extend(steps.recorded_action(action))
