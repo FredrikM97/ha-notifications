@@ -77,6 +77,13 @@ For details, see the [automation flow](docs/automation-flow.md),
   <em>Automation population</em>
 </p>
 
+<p align="center">
+  <img width="20%" alt="image" src="https://github.com/user-attachments/assets/67cc52ea-a7a9-4d18-9b48-d31d1434110a" />
+  <br>
+  <em>Example of generated automation</em>
+</p>
+
+
 
 
 
