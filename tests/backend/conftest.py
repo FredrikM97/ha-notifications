@@ -101,6 +101,11 @@ def backend_alerts() -> dict[str, dict[str, Any]]:
 
 
 @pytest.fixture
+def option_controls_contract() -> dict[str, Any]:
+    return json.loads((Path(__file__).parent.parent / "contracts" / "option_controls.json").read_text())
+
+
+@pytest.fixture
 def alert_factory():
     """Build a canonical alert with focused overrides."""
 

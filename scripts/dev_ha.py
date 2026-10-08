@@ -329,8 +329,9 @@ def run_dev(port: int, reset: bool) -> None:
     def stop(*_: object) -> None:
         raise SystemExit(0)
 
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
+    # Children run in their own sessions, so a closed terminal (SIGHUP) must stop them here.
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, stop)
     with dev_instance():
         try:
             bundle = prepare_config(port, reset)
@@ -350,8 +351,8 @@ def run_dev(port: int, reset: bool) -> None:
             if result:
                 raise RuntimeError(f"Home Assistant exited with status {result}.")
         finally:
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                signal.signal(signum, signal.SIG_IGN)
             stop_processes(processes)
 
 

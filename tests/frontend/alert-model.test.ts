@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { parse, stringify } from "yaml";
 import { createAlertDraft, editableAlert, finalizeAlert, toCanonicalAlert } from "../../frontend/editor/alert-model.js";
-import type { Alert, MonitorConfig } from "../../frontend/types.js";
+import type { Alert, DurationValue, IntervalConfig, MonitorConfig } from "../../frontend/types.js";
 import alertDefaults from "../contracts/alert_defaults.json";
+import optionControls from "../contracts/option_controls.json";
 import { draftAlertFixture } from "./conftest.js";
 
 describe("editable alert model", () => {
+  it("roundtrips disabled values and controls from the shared backend contract", () => {
+    const draft = editableAlert(draftAlertFixture({ name: "Saved settings", notification: optionControls.notification }));
+    const saved = finalizeAlert(draft);
+    expect(saved.notification).toEqual(optionControls.notification);
+    expect(toCanonicalAlert(saved).notification).toEqual(optionControls.notification);
+    expect(parse(stringify(saved)).notification).toEqual(optionControls.notification);
+  });
+
   it("serializes frontend draft defaults with the canonical schema-parity fixture", () => {
     const draft = createAlertDraft();
     expect(JSON.parse(JSON.stringify({ ...draft, id: alertDefaults.id }))).toEqual(alertDefaults);
@@ -20,6 +29,8 @@ describe("editable alert model", () => {
     expect(first.id).not.toBe(second.id);
     first.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
     first.monitor.conditions.items.push({ condition: "template", value_template: "{{ true }}" });
+    first.monitor.conditions.interval.enabled = true;
+    first.monitor.conditions.interval.value = 0;
     first.monitor.inactive.items.push({ trigger: "event", event_type: "closed" });
     first.notification.target.entity_id = ["notify.phone"];
     first.notification.options.changed = true;
@@ -81,7 +92,7 @@ describe("editable alert model", () => {
       id: "existing", name: "Door", enabled: false,
       monitor: {
         triggers: { enabled: false, items: [{ trigger: "event", event_type: "door_opened", enabled: false }] },
-        conditions: { startup: false, interval: 0 },
+        conditions: { startup: false, interval: { enabled: false, value: 0 } },
       },
       notification: { title: "", use_default_tag: false, target: { user_id: ["operator"] }, options: { ttl: 0, native: { enabled: false } } },
       confirmation: {
@@ -107,6 +118,73 @@ describe("editable alert model", () => {
     draft.confirmation.buttons[0].label = "Changed";
     expect(source).toEqual(originalSource);
     expect(defaults).toEqual(originalDefaults);
+  });
+
+  it.each([
+    {},
+    { enabled: true },
+    { enabled: false },
+    { value: 0 },
+    { value: { hours: 2 } },
+    { enabled: false, value: "01:00:00" },
+  ] satisfies Partial<IntervalConfig>[])("merges partial interval defaults without replacing supplied fields %j", interval => {
+    const defaults = draftAlertFixture();
+    defaults.monitor.conditions.interval = { enabled: true, value: 7200 };
+    const source = {
+      ...defaults,
+      monitor: {
+        ...defaults.monitor,
+        conditions: { ...defaults.monitor.conditions, enabled: false, interval },
+      },
+    } as unknown as Alert;
+    const originalSource = structuredClone(source);
+    const originalDefaults = structuredClone(defaults);
+    const draft = editableAlert(source, defaults);
+    expect(draft.monitor.conditions.enabled).toBe(false);
+    expect(draft.monitor.conditions.interval).toEqual({ ...defaults.monitor.conditions.interval, ...interval });
+    expect(draft.monitor.conditions).not.toHaveProperty("periodic");
+    expect(draft.monitor).not.toHaveProperty("periodic");
+    draft.monitor.conditions.interval.enabled = false;
+    draft.monitor.conditions.interval.value = 1;
+    expect(source).toEqual(originalSource);
+    expect(defaults).toEqual(originalDefaults);
+  });
+
+  it.each([0, 480, "00:08:00", { minutes: 8 }] satisfies DurationValue[])(
+    "saves and reopens a disabled interval without normalizing its native value %j",
+    value => {
+      const source = draftAlertFixture({ name: "Door" });
+      source.notification.action = "notify.custom";
+      source.monitor.conditions.interval = { enabled: true, value };
+      const original = structuredClone(source);
+      const draft = editableAlert(source);
+      draft.monitor.conditions.interval.enabled = false;
+      const saved = finalizeAlert(draft);
+      const canonical = toCanonicalAlert(saved);
+      const yamlAlert = parse(stringify(canonical)) as Alert;
+      const reopened = editableAlert(yamlAlert);
+      for (const alert of [saved, canonical, yamlAlert, reopened]) {
+        expect(alert.monitor.conditions.interval).toEqual({ enabled: false, value });
+        expect(alert.monitor.conditions).not.toHaveProperty("periodic");
+        expect(alert.monitor).not.toHaveProperty("periodic");
+      }
+      reopened.monitor.conditions.interval.enabled = true;
+      expect(finalizeAlert(reopened).monitor.conditions.interval).toEqual({ enabled: true, value });
+      expect(source).toEqual(original);
+    },
+  );
+
+  it.each([true, false])("retains child interval enablement %s when the parent conditions are disabled", enabled => {
+    const draft = draftAlertFixture({ name: "Door" });
+    draft.notification.action = "notify.custom";
+    draft.monitor.conditions.interval = { enabled, value: { hours: 2 } };
+    draft.monitor.conditions.enabled = false;
+    const saved = finalizeAlert(draft);
+    const reopened = editableAlert(saved);
+    expect(reopened.monitor.conditions.enabled).toBe(false);
+    expect(reopened.monitor.conditions.interval).toEqual({ enabled, value: { hours: 2 } });
+    reopened.monitor.conditions.enabled = true;
+    expect(finalizeAlert(reopened).monitor.conditions.interval).toEqual({ enabled, value: { hours: 2 } });
   });
 
   it.each([true, false])("preserves opaque data without using it as notification text with canonical text %s", canonical => {
@@ -135,7 +213,7 @@ describe("editable alert model", () => {
     expect(draft.notification.message).toBe(canonical ? "Door open" : "");
     expect(draft.confirmation.notification.title).toBe(canonical ? "Confirmed" : "");
     expect(draft.confirmation.notification.message).toBe(canonical ? "Door closed" : "");
-    const saved = finalizeAlert(draft, false);
+    const saved = finalizeAlert(draft);
     expect(saved.notification).toEqual({ ...source.notification, use_default_tag: true });
     expect(saved.confirmation?.notification).toEqual({ ...source.confirmation!.notification, use_default_tag: true });
     expect(saved.notification).not.toHaveProperty("data");
@@ -168,7 +246,7 @@ describe("editable alert model", () => {
       expect(draft.monitor.inactive).toEqual({ enabled: false, items: [], clear_notification: false });
       expect(input).toEqual(original);
       for (const validate of [true, false]) {
-        const saved = finalizeAlert(draft, false, validate);
+        const saved = finalizeAlert(draft, validate);
         const yamlMonitor = parse(stringify(saved)).monitor;
         expect(yamlMonitor).toEqual(saved.monitor);
         expect(yamlMonitor.automation_mode).toBe(expected);
@@ -190,7 +268,7 @@ describe("editable alert model", () => {
     expect(draft.monitor.triggers.items).toEqual([]);
     expect(draft.monitor.inactive).not.toBe(source.monitor.inactive);
     for (const validate of [true, false]) {
-      const saved = finalizeAlert(draft, false, validate);
+      const saved = finalizeAlert(draft, validate);
       expect(parse(stringify(saved)).monitor).toEqual(saved.monitor);
       expect(saved.monitor.inactive).toEqual(source.monitor.inactive);
       expect(saved.monitor.triggers.items).toEqual([]);
@@ -208,8 +286,7 @@ describe("editable alert model", () => {
           enabled: true,
           items: conditions,
           startup: false,
-          periodic: false,
-          interval: 12 * 60 * 60,
+          interval: { enabled: false, value: 12 * 60 * 60 },
         },
       },
     }), draftAlertFixture());
@@ -238,7 +315,7 @@ describe("editable alert model", () => {
 
     expect(draft.monitor.triggers).toEqual(source.monitor.triggers);
     expect(draft.monitor.conditions.items).toEqual(source.monitor.conditions.items);
-    expect(draft.monitor.conditions.interval).toBe(defaults.monitor.conditions.interval);
+    expect(draft.monitor.conditions.interval).toEqual(defaults.monitor.conditions.interval);
     expect(draft.notification.action).toBe("notify.custom");
     expect(draft.notification.target).toEqual(defaults.notification.target);
     expect(draft.notification.options).toEqual(source.notification.options);
@@ -246,7 +323,7 @@ describe("editable alert model", () => {
     expect(draft.confirmation.reminders.interval).toEqual({ minutes: 7 });
     expect(draft.confirmation.reminders.timeout).toBe("00:02:00");
     expect(draft.post_send_actions).toEqual(source.post_send_actions);
-    const saved = finalizeAlert(draft, false);
+    const saved = finalizeAlert(draft);
     expect(saved.confirmation!.reminders.interval).toBe(420);
     expect(saved.confirmation!.reminders.timeout).toBe(120);
     expect(saved.monitor.triggers).toEqual(source.monitor.triggers);
@@ -257,11 +334,37 @@ describe("editable alert model", () => {
 });
 
 describe("finalizeAlert", () => {
+  it.each(["", "notify", "notify.", "notify.phone.extra", "  notify.phone"])("rejects an invalid notification action %s", action => {
+    const draft = draftAlertFixture({ name: "Door" });
+    draft.notification.action = action;
+    expect(() => finalizeAlert(draft)).toThrow(/domain.service/);
+    delete draft.notification.action;
+    draft.notification.target = { entity_id: ["notify.phone"] };
+    draft.confirmation.notification.action = action;
+    expect(() => finalizeAlert(draft)).toThrow(/domain.service/);
+  });
+
+  it("reports a missing notification target rather than relying on a wrapper type", () => {
+    const draft = draftAlertFixture({ name: "Door" });
+    delete draft.notification.target;
+    expect(() => finalizeAlert(draft)).toThrow(/Select at least one device/);
+    draft.notification.action = "notify.mobile_app_phone";
+    expect(finalizeAlert(draft).notification.action).toBe("notify.mobile_app_phone");
+    expect(finalizeAlert(draft).notification).not.toHaveProperty("target");
+  });
+
   it("clones once while normalizing durations and isolating the successful payload", () => {
     const draft = draftAlertFixture({ name: "  Door  " });
     draft.notification.target = { entity_id: ["notify.phone"] };
     draft.monitor.triggers.items = [{ trigger: "state", entity_id: "binary_sensor.door", for: { seconds: 0 }, native: { enabled: false } }];
-    draft.notification.options = { ttl: 0, native: { enabled: false } };
+    draft.notification.options = {
+      ttl: 0, native: { enabled: false }, sticky: false, timeout: 0,
+      push: { badge: 0, sound: { name: "default", critical: 1, volume: 0.8 }, custom: false },
+    };
+    draft.notification.option_controls = {
+      android: { enabled: false, fields: { sticky: false, timeout: false } },
+      ios: { enabled: true, fields: { "push.badge": false, "push.sound": false } },
+    };
     draft.confirmation.reminders.interval = { minutes: 7 };
     draft.confirmation.reminders.timeout = "00:02:00";
     draft.confirmation.actions = [{ action: "light.turn_on" }];
@@ -269,20 +372,24 @@ describe("finalizeAlert", () => {
     const original = structuredClone(draft);
     const clone = vi.spyOn(globalThis, "structuredClone");
     try {
-      const saved = finalizeAlert(draft, false);
+      const saved = finalizeAlert(draft);
       expect(clone).toHaveBeenCalledExactlyOnceWith(draft);
       expect(draft).toEqual(original);
       expect(saved).not.toBe(draft);
       expect(saved.name).toBe("Door");
       expect(saved).not.toHaveProperty("runtime");
-      expect(saved.confirmation!.actions).toEqual([]);
+      expect(saved.confirmation!.actions).toEqual(original.confirmation.actions);
+      expect(saved.confirmation).not.toHaveProperty("actions_enabled");
       expect(saved.confirmation!.reminders.interval).toBe(420);
       expect(saved.confirmation!.reminders.timeout).toBe(120);
       expect(JSON.parse(JSON.stringify(saved.monitor))).toEqual(original.monitor);
       expect(saved.notification.options).toEqual(original.notification.options);
+      expect(saved.notification.option_controls).toEqual(original.notification.option_controls);
       saved.monitor.triggers.items[0].event_type = "changed";
       saved.notification.target.entity_id!.push("notify.other");
       (saved.notification.options.native as { enabled: boolean }).enabled = true;
+      saved.notification.option_controls!.android!.enabled = true;
+      saved.notification.option_controls!.ios!.fields["push.badge"] = true;
       saved.confirmation!.buttons[0].label = "Changed";
       expect(draft).toEqual(original);
     } finally {
@@ -304,7 +411,7 @@ describe("finalizeAlert", () => {
     const original = structuredClone(draft);
     const clone = vi.spyOn(globalThis, "structuredClone");
     try {
-      expect(() => finalizeAlert(draft, false)).toThrow(message);
+      expect(() => finalizeAlert(draft)).toThrow(message);
       expect(clone).toHaveBeenCalledExactlyOnceWith(draft);
       expect(draft).toEqual(original);
     } finally {
@@ -315,8 +422,8 @@ describe("finalizeAlert", () => {
   it("validates recipients and allows incomplete YAML preview drafts", () => {
     const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
 
-    expect(() => finalizeAlert(draft, false)).toThrow(/Select at least one device/);
-    expect(finalizeAlert(draft, false, false).notification.target).toEqual({});
+    expect(() => finalizeAlert(draft)).toThrow(/Select at least one device/);
+    expect(finalizeAlert(draft, false).notification.target).toEqual({});
   });
 
   it.each(["entity_id", "device_id", "area_id"])(
@@ -325,7 +432,7 @@ describe("finalizeAlert", () => {
       const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
       draft.notification.target = { [selector]: `notify.mobile_app_phone` };
 
-      expect(finalizeAlert(draft, false).notification.target).toEqual({
+      expect(finalizeAlert(draft).notification.target).toEqual({
         [selector]: "notify.mobile_app_phone",
       });
     },
@@ -335,7 +442,7 @@ describe("finalizeAlert", () => {
     const draft = editableAlert(draftAlertFixture({ name: "Door" }), draftAlertFixture());
     draft.notification.target = { entity_id: ["", "  "] };
 
-    expect(() => finalizeAlert(draft, false)).toThrow(/Select at least one device/);
+    expect(() => finalizeAlert(draft)).toThrow(/Select at least one device/);
   });
 
   it("preserves canonical automation data and strips runtime state", () => {
@@ -350,15 +457,14 @@ describe("finalizeAlert", () => {
           enabled: true,
           items: conditions,
           startup: false,
-          periodic: false,
-          interval: 12 * 60 * 60,
+          interval: { enabled: false, value: 12 * 60 * 60 },
         },
       },
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }), draftAlertFixture());
     draft.runtime = { active: true };
 
-    const result = finalizeAlert(draft, false);
+    const result = finalizeAlert(draft);
 
     expect(result.name).toBe("Door open");
     expect(result.monitor.triggers.items).toEqual(triggers);
@@ -371,7 +477,7 @@ describe("finalizeAlert", () => {
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }), draftAlertFixture());
-    const disabledResult = finalizeAlert(disabled, false);
+    const disabledResult = finalizeAlert(disabled);
     expect(disabledResult.confirmation?.notification.enabled).toBe(false);
     expect(disabledResult.confirmation?.notification.target).toBeUndefined();
 
@@ -380,20 +486,41 @@ describe("finalizeAlert", () => {
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }), draftAlertFixture());
     enabled.confirmation!.notification.enabled = true;
-    const enabledResult = finalizeAlert(enabled, false);
+    const enabledResult = finalizeAlert(enabled);
     expect(enabledResult.confirmation?.notification.target).toBeUndefined();
     expect(enabledResult.notification.target).toEqual({ entity_id: ["notify.phone"] });
   });
 
-  it("includes confirmation actions only when the section is enabled", () => {
+  it.each([true, false])("preserves confirmation actions with section enabled=%s", enabled => {
     const draft = editableAlert(draftAlertFixture({
       name: "Door",
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
     }), draftAlertFixture());
     draft.confirmation!.actions = [{ action: "light.turn_on" }];
+    draft.confirmation.actions_enabled = enabled;
 
-    expect(finalizeAlert(draft, false).confirmation?.actions).toEqual([]);
-    expect(finalizeAlert(draft, true).confirmation?.actions).toEqual([{ action: "light.turn_on" }]);
+    const original = structuredClone(draft);
+    const saved = finalizeAlert(draft);
+    expect(saved.confirmation?.actions).toEqual([{ action: "light.turn_on" }]);
+    expect(saved.confirmation?.actions_enabled).toBe(enabled);
+    const reopened = editableAlert(saved);
+    expect(reopened.confirmation.actions).toEqual(draft.confirmation.actions);
+    expect(reopened.confirmation.actions_enabled).toBe(enabled);
+    expect(finalizeAlert(reopened)).toEqual(saved);
+    expect(draft).toEqual(original);
+  });
+
+  it("shows existing confirmation actions without a flag as enabled, matching the backend", () => {
+    const source = draftAlertFixture({ name: "Door" });
+    source.confirmation.actions = [{ action: "light.turn_on" }];
+    expect(editableAlert(source).confirmation.actions_enabled).toBe(true);
+  });
+
+  it("does not add confirmation action metadata to untouched disabled defaults", () => {
+    const draft = editableAlert(draftAlertFixture({ name: "Door" }));
+    draft.notification.target = { entity_id: ["notify.phone"] };
+    expect(finalizeAlert(draft)).toEqual(draft);
+    expect(finalizeAlert(draft).confirmation).not.toHaveProperty("actions_enabled");
   });
 
   it("omits empty disabled post-send actions but preserves populated actions", () => {
@@ -402,10 +529,10 @@ describe("finalizeAlert", () => {
       notification: { target: { entity_id: ["notify.phone"] }, title: "", message: "", options: {  } },
       post_send_actions: { enabled: false, actions: [] },
     }), draftAlertFixture());
-    expect(finalizeAlert(draft, false)).not.toHaveProperty("post_send_actions");
+    expect(finalizeAlert(draft)).not.toHaveProperty("post_send_actions");
 
     draft.post_send_actions = { enabled: false, actions: [{ action: "light.turn_on" }] };
-    expect(finalizeAlert(draft, false).post_send_actions).toEqual({
+    expect(finalizeAlert(draft).post_send_actions).toEqual({
       enabled: false,
       actions: [{ action: "light.turn_on" }],
     });

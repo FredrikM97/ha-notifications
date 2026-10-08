@@ -51,7 +51,6 @@ class HaNotificationsPanel extends LitElement {
   private editing = false;
   private refreshRequest?: object;
   private timer?: number;
-  private users?: Promise<{ value: string; label: string }[]>;
 
   /** The Lovelace card renders without the full-page app bar. */
   protected get isCard(): boolean {
@@ -88,7 +87,7 @@ class HaNotificationsPanel extends LitElement {
     super.disconnectedCallback();
   }
 
-  private t = (key: string, variables?: Record<string, unknown>) => localize(this._hass, key, variables);
+  private localizeText = (key: string, variables?: Record<string, unknown>) => localize(this._hass, key, variables);
 
   async refresh(silent = false): Promise<void> {
     if (!this._hass?.user?.is_admin || !this.isConnected) return;
@@ -129,11 +128,11 @@ class HaNotificationsPanel extends LitElement {
 
   protected render(): TemplateResult {
     if (!this._hass?.user?.is_admin) {
-      return emptyState(this.t("panel.admin_required"), this.t("panel.admin_help"));
+      return emptyState(this.localizeText("panel.admin_required.label"), this.localizeText("panel.admin_required.helper"));
     }
     const narrow = this.layout.narrow;
     const add = html`<ha-icon-button
-      .label=${this.t("panel.add_alert")}
+      .label=${this.localizeText("panel.add_alert")}
       .path=${mdiPlus}
       @click=${this.on.create}
     ></ha-icon-button>`;
@@ -142,7 +141,7 @@ class HaNotificationsPanel extends LitElement {
     >
       ${TABS.map(
         (tab) => html`<ha-tab-group-tab slot="nav" panel=${tab} .active=${tab === this.tab}>
-          ${this.t(`panel.tabs.${tab}`)}
+          ${this.localizeText(`panel.tabs.${tab}`)}
         </ha-tab-group-tab>`,
       )}
     </ha-tab-group>`;
@@ -150,12 +149,12 @@ class HaNotificationsPanel extends LitElement {
 
     if (this.isCard) {
       return html`<ha-card ?hidden=${this.editing}>
-        <div class="nc-card-header"><h1>${this.t("panel.title")}</h1>${add}</div>
+        <div class="nc-card-header"><h1>${this.localizeText("panel.title")}</h1>${add}</div>
         ${tabs}${content}
       </ha-card>`;
     }
     return html`<ha-top-app-bar-fixed .narrow=${narrow} ?hidden=${this.editing}>
-      <div slot="title">${this.t("panel.title")}</div>
+      <div slot="title">${this.localizeText("panel.title")}</div>
       <div slot="actionItems">${add}</div>
       <div slot="subRow">${tabs}</div>
       ${content}
@@ -246,15 +245,6 @@ class HaNotificationsPanel extends LitElement {
     });
   }
 
-  private async loadUsers(): Promise<{ value: string; label: string }[]> {
-    const users = await request<{
-      id: string; name: string; is_active?: boolean; system_generated?: boolean;
-    }[]>(this._hass, "config/auth/list");
-    return users
-      .filter((user) => user.is_active !== false && !user.system_generated)
-      .map((user) => ({ value: user.id, label: user.name }));
-  }
-
   /** Run an API call, report its outcome, and refresh. */
   private async act(call: () => Promise<unknown>, success?: string): Promise<void> {
     try {
@@ -285,43 +275,33 @@ class HaNotificationsPanel extends LitElement {
     cancelRun: (alert) =>
       void this.act(async () => {
         const result = await request<{ cancelled: boolean }>(this._hass, "cancel_run", { alert_id: alert.id });
-        return this.t(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
+        return this.localizeText(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
       }),
     testAlert: (alert) => {
-      if (!window.confirm(this.t("alert.confirm_test", { name: alert.name }))) return;
-      void this.act(() => request(this._hass, "test_alert", { alert_id: alert.id }), this.t("alert.test_started"));
+      if (!window.confirm(this.localizeText("alert.confirm_test", { name: alert.name }))) return;
+      void this.act(() => request(this._hass, "test_alert", { alert_id: alert.id }), this.localizeText("alert.test_started"));
     },
     remove: (alert) => {
       if (!window.confirm(`Delete "${alert.name}"?`)) return;
-      void this.act(() => this.deleteAlert(alert.id), this.t("panel.alert_deleted"));
+      void this.act(() => this.deleteAlert(alert.id), this.localizeText("panel.alert_deleted"));
     },
   };
 
   private async openAlertEditor(alert: Alert | null): Promise<void> {
     const hass = this._hass;
     if (!hass) return;
-    let users: { value: string; label: string }[];
-    try {
-      this.users ??= this.loadUsers();
-      users = await this.users;
-    } catch (error) {
-      this.users = undefined;
-      notify(this, errorMessage(error));
-      return;
-    }
     this.editing = true;
     this.requestUpdate();
     openEditor({
       root: this.renderRoot as ShadowRoot,
       hass,
       alert,
-      users,
       onValidateAlert: async (draft) => request(this._hass, "validate_config", {
         config: await this.configWithAlert(draft),
       }),
       onSave: async (draft) => {
         const saved = await this.saveAlert(draft);
-        notify(this, this.t(alert ? "panel.alert_saved" : "panel.alert_created"));
+        notify(this, this.localizeText(alert ? "panel.alert_saved" : "panel.alert_created"));
         return saved;
       },
       onClosed: () => {

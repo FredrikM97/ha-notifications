@@ -5,9 +5,11 @@ exports[`canonical frontend configuration types > includes explicit inactive con
   "automation_mode": "parallel",
   "conditions": {
     "enabled": true,
-    "interval": 43200,
+    "interval": {
+      "enabled": false,
+      "value": 43200,
+    },
     "items": [],
-    "periodic": false,
     "startup": false,
   },
   "inactive": {
@@ -32,6 +34,10 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
         "automation_mode": "parallel",
         "conditions": {
           "enabled": true,
+          "interval": {
+            "enabled": false,
+            "value": 43200,
+          },
           "items": [
             {
               "condition": "and",
@@ -50,7 +56,6 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
               "device_id": "front-door",
             },
           ],
-          "periodic": false,
           "startup": false,
         },
         "inactive": {

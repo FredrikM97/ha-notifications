@@ -1,0 +1,19 @@
+{
+  "notification": {
+    "target": {"entity_id": ["notify.phone"]},
+    "title": "Saved settings",
+    "message": "Disabled values remain configured",
+    "use_default_tag": true,
+    "options": {
+      "channel": "Security",
+      "sticky": false,
+      "ttl": 0,
+      "push": {"sound": {"name": "default", "critical": 1}, "badge": 0, "custom": "keep"}
+    },
+    "option_controls": {
+      "android": {"enabled": false, "fields": {"channel": true, "sticky": true}},
+      "ios": {"enabled": true, "fields": {"push.sound": false, "push.badge": true}}
+    }
+  },
+  "delivery_options": {"ttl": 0, "push": {"badge": 0, "custom": "keep"}}
+}

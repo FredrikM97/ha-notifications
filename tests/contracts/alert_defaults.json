@@ -13,8 +13,10 @@
       "enabled": true,
       "items": [],
       "startup": false,
-      "periodic": false,
-      "interval": 43200
+      "interval": {
+        "enabled": false,
+        "value": 43200
+      }
     },
     "inactive": {
       "enabled": false,

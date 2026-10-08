@@ -131,25 +131,25 @@ function menuActions(
   status: AutomationRuntimeStatus | undefined,
   on: AlertHandlers,
 ): Action[] {
-  const t = (key: string) => localize(hass, key);
+  const localizeText = (key: string) => localize(hass, key);
   return [
-    { label: t("alert.history"), path: mdiHistory, action: () => on.history(alert) },
-    { label: t("alert.edit"), path: mdiPencil, action: () => on.edit(alert) },
+    { label: localizeText("alert.history"), path: mdiHistory, action: () => on.history(alert) },
+    { label: localizeText("alert.edit"), path: mdiPencil, action: () => on.edit(alert) },
     ...(status?.automation_id
       ? [{
-          label: t("alert.open_automation"),
+          label: localizeText("alert.open_automation"),
           path: mdiOpenInNew,
           action: () => on.navigate(`/config/automation/edit/${encodeURIComponent(status.automation_id!)}`),
         }, {
-          label: t("alert.test"),
+          label: localizeText("alert.test"),
           path: mdiPlayOutline,
           action: () => on.testAlert(alert),
         }]
       : []),
     ...(status && status.current > 0
-      ? [{ label: t("alert.cancel_run"), path: mdiStopCircleOutline, action: () => on.cancelRun(alert), warning: true }]
+      ? [{ label: localizeText("alert.cancel_run"), path: mdiStopCircleOutline, action: () => on.cancelRun(alert), warning: true }]
       : []),
-    { label: t("alert.delete"), path: mdiDeleteOutline, action: () => on.remove(alert), warning: true },
+    { label: localizeText("alert.delete"), path: mdiDeleteOutline, action: () => on.remove(alert), warning: true },
   ];
 }
 

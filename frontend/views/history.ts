@@ -384,17 +384,17 @@ class HistoryView extends LitElement {
     if (changed.has("alertName")) this.filters = emptyHistoryFilters();
   }
 
-  private t = (key: string, variables?: Record<string, unknown>, fallback?: string) =>
+  private localizeText = (key: string, variables?: Record<string, unknown>, fallback?: string) =>
     localize(this.hass, key, variables, fallback);
 
   protected render(): TemplateResult {
     if (!this.history.length) {
       return emptyState(
         this.alertName
-          ? this.t("history.no_activity_for", { name: this.alertName })
-          : this.t("history.no_activity"),
-        this.t("history.activity_help"),
-        this.alertName ? { label: this.t("history.show_all"), run: this.showAll } : undefined,
+          ? this.localizeText("history.no_activity_for", { name: this.alertName })
+          : this.localizeText("history.no_activity.label"),
+        this.localizeText("history.no_activity.helper"),
+        this.alertName ? { label: this.localizeText("history.show_all"), run: this.showAll } : undefined,
       );
     }
 
@@ -406,7 +406,7 @@ class HistoryView extends LitElement {
       ${this.historyItems(entries)}
       ${entries.length && entries.length !== this.history.length
         ? html`<div class="nc-muted">
-            ${this.t("history.showing", { count: entries.length, total: this.history.length })}
+            ${this.localizeText("history.showing", { count: entries.length, total: this.history.length })}
           </div>`
         : nothing}
       </div>
@@ -420,7 +420,7 @@ class HistoryView extends LitElement {
 
   private historyItems(entries: Entry[]): TemplateResult | TemplateResult[] {
     if (!entries.length) {
-      return html`<div class="nc-empty-list">${this.t("history.no_matches")}</div>`;
+      return html`<div class="nc-empty-list">${this.localizeText("history.no_matches")}</div>`;
     }
     if (this.groupByFlow) {
       return groupHistoryEntries(entries).map((group) =>
@@ -434,10 +434,10 @@ class HistoryView extends LitElement {
     const narrow = this.layout.narrow;
     if (this.alertName) {
       return toolbar(
-        html`<strong>${this.t("history.for_alert", { name: this.alertName })}</strong>`,
+        html`<strong>${this.localizeText("history.for_alert", { name: this.alertName })}</strong>`,
         [],
         narrow,
-        haButton(this.t("panel.show_all"), this.showAll, { appearance: "filled", variant: "neutral" }),
+        haButton(this.localizeText("panel.show_all"), this.showAll, { appearance: "filled", variant: "neutral" }),
       );
     }
     const { search, ...selects } = this.filters;
@@ -445,24 +445,24 @@ class HistoryView extends LitElement {
     return toolbar(
       html`<ha-input
         type="search"
-        .label=${this.t("history.search")}
+        .label=${this.localizeText("history.search")}
         .value=${search}
         @input=${(event: Event) => this.setFilter("search", (event.currentTarget as HTMLInputElement).value)}
       ></ha-input>`,
       [
         {
-          label: active ? `${this.t("history.more_filters")} (${active})` : this.t("history.more_filters"),
+          label: active ? `${this.localizeText("history.more_filters")} (${active})` : this.localizeText("history.more_filters"),
           path: mdiFilterVariant,
           action: () => this.set(() => (this.showFilters = !this.showFilters)),
         },
         {
-          label: this.t("history.group_by_flow"),
+          label: this.localizeText("history.group_by_flow"),
           path: this.groupByFlow ? mdiFormatListGroup : mdiFormatListBulleted,
           action: () => this.set(() => (this.groupByFlow = !this.groupByFlow)),
         },
         ...(active || search
           ? [{
-              label: this.t("history.clear"),
+              label: this.localizeText("history.clear"),
               path: mdiFilterRemoveOutline,
               action: () => this.set(() => (this.filters = emptyHistoryFilters())),
             }]
@@ -477,10 +477,10 @@ class HistoryView extends LitElement {
     const select = (key: SelectFilter, label: string, all: string, options: SelectOption[]) =>
       html`<ha-selector
         .hass=${this.hass}
-        .selector=${selectConfig(`history-${key}`, [{ value: "", label: this.t(all) }, ...options])}
+        .selector=${selectConfig(`history-${key}`, [{ value: "", label: this.localizeText(all) }, ...options])}
         .value=${this.filters[key]}
         .required=${false}
-        .label=${this.t(label)}
+        .label=${this.localizeText(label)}
         @value-changed=${(event: CustomEvent<{ value?: string }>) => this.setFilter(key, event.detail.value || "")}
       ></ha-selector>`;
 
@@ -497,13 +497,13 @@ class HistoryView extends LitElement {
         "type",
         "history.event_type",
         "history.all_event_types",
-        types.map((type) => ({ value: type, label: this.t(`event.${type}`, {}, formatType(type)) })),
+        types.map((type) => ({ value: type, label: this.localizeText(`event.${type}`, {}, formatType(type)) })),
       )}
       ${select(
         "severity",
         "history.severity",
         "history.all_severities",
-        SEVERITIES.map((value) => ({ value, label: this.t(`history.${value}`) })),
+        SEVERITIES.map((value) => ({ value, label: this.localizeText(`history.${value}`) })),
       )}
     </div>`;
   }
@@ -516,16 +516,16 @@ class HistoryView extends LitElement {
     }, undefined);
     return html`<details class="nc-flow">
       <summary>
-        <span>${this.t("history.flow")} ${shortFlowId(flowId)}</span>
+        <span>${this.localizeText("history.flow")} ${shortFlowId(flowId)}</span>
         <span>
-          ${this.t("history.flow_alert", {
-            name: entries[0]?.config?.name || this.t("history.unknown_alert"),
+          ${this.localizeText("history.flow_alert", {
+            name: entries[0]?.config?.name || this.localizeText("history.unknown_alert"),
           })}
         </span>
-        ${latest ? html`<time datetime=${latest}>${this.t("history.latest_activity", {
+        ${latest ? html`<time datetime=${latest}>${this.localizeText("history.latest_activity", {
           timestamp: formatLocalDateTime(latest, true, this.hass?.locale),
         })}</time>` : nothing}
-        <span>${this.t("history.flow_events", { count: entries.length })}</span>
+        <span>${this.localizeText("history.flow_events", { count: entries.length })}</span>
       </summary>
       ${entries.map((entry) => this.item(entry, false))}
     </details>`;
@@ -544,7 +544,7 @@ class HistoryView extends LitElement {
   }
 
   private alertLink(entry: Entry): TemplateResult {
-    const name = entry.config?.name || this.t("history.unknown_alert");
+    const name = entry.config?.name || this.localizeText("history.unknown_alert");
     const alertId = entry.config?.id;
     if (!alertId) return html`<span>${name}</span>`;
     return html`<button class="nc-link"
@@ -554,7 +554,7 @@ class HistoryView extends LitElement {
 
   private flowLabel(entry: Entry, showFlow: boolean): TemplateResult | typeof nothing {
     if (!showFlow || !entry.event?.flow_id) return nothing;
-    return html`<span class="nc-flow-id">${this.t("history.flow")} ${shortFlowId(entry.event.flow_id)}</span>`;
+    return html`<span class="nc-flow-id">${this.localizeText("history.flow")} ${shortFlowId(entry.event.flow_id)}</span>`;
   }
 
   private itemSummary(entry: Entry): string {
@@ -563,9 +563,9 @@ class HistoryView extends LitElement {
     const startedBy = historyStartedBySummary(details);
     const secondary = [
       formatLocalDateTime(event?.timestamp, true, this.hass?.locale),
-      startedBy ? this.t("history.started_by", { trigger: startedBy }) : "",
+      startedBy ? this.localizeText("history.started_by", { trigger: startedBy }) : "",
       details?.reason === "confirmation_notification"
-        ? this.t("history.reason", { reason: this.t("history.confirmation_notification") })
+        ? this.localizeText("history.reason", { reason: this.localizeText("history.confirmation_notification") })
         : "",
     ].filter(Boolean);
     return secondary.join(" · ");
@@ -574,7 +574,7 @@ class HistoryView extends LitElement {
   private itemDetails(details: Record<string, unknown> | undefined): TemplateResult | typeof nothing {
     if (!details || !Object.keys(details).length) return nothing;
     return html`<details class="nc-muted">
-      <summary>${this.t("history.details")}</summary>
+      <summary>${this.localizeText("history.details")}</summary>
       <pre>${JSON.stringify(details, null, 2)}</pre>
     </details>`;
   }
@@ -583,8 +583,8 @@ class HistoryView extends LitElement {
   private chips(): TemplateResult | typeof nothing {
     const labels: Record<SelectFilter, string | undefined> = {
       alertId: this.alerts.find(({ id }) => id === this.filters.alertId)?.name,
-      type: this.filters.type && this.t(`event.${this.filters.type}`, {}, formatType(this.filters.type)),
-      severity: this.filters.severity && this.t(`history.${this.filters.severity}`),
+      type: this.filters.type && this.localizeText(`event.${this.filters.type}`, {}, formatType(this.filters.type)),
+      severity: this.filters.severity && this.localizeText(`history.${this.filters.severity}`),
     };
     const titles: Record<SelectFilter, string> = {
       alertId: "history.alert",
@@ -597,7 +597,7 @@ class HistoryView extends LitElement {
       ${active.map(
         (key) => html`<ha-filter-chip
           selected
-          .label=${`${this.t(titles[key])}: ${labels[key] ?? this.filters[key]}`}
+          .label=${`${this.localizeText(titles[key])}: ${labels[key] ?? this.filters[key]}`}
           @click=${(event: Event) => {
             event.preventDefault();
             this.setFilter(key, "");

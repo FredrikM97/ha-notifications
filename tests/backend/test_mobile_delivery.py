@@ -147,3 +147,43 @@ async def test_generated_alert_reaches_mobile_notify_service(
         assert "tag" not in cleared["data"]
     assert notification == original
     assert {"sent": sent, "cleared": cleared} == snapshot
+
+
+async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery(
+    hass: HomeAssistant,
+    notify_phone,
+    alert_factory,
+    option_controls_contract,
+    mock_automation_files,
+    enable_custom_integrations,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
+    device, calls = notify_phone
+    notification = deepcopy(option_controls_contract["notification"])
+    notification["target"] = {"device_id": [device.id]}
+    alert = alert_factory(notification=notification)
+    original = deepcopy(alert)
+    mock_automation_files["prepare"]()
+    assert await async_setup_component(hass, "automation", {})
+    entry = MockConfigEntry(domain=DOMAIN, data={"version": 1, "alerts": [alert]})
+    entry.add_to_hass(hass)
+    assert await ha_notifications.async_setup_entry(hass, entry)
+    await hass.async_block_till_done()
+    automation = next(
+        state for state in hass.states.async_all("automation")
+        if state.attributes.get("id") == automation_id(alert)
+    )
+    await hass.services.async_call(
+        "automation", "trigger",
+        {"entity_id": automation.entity_id, "skip_condition": True}, blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert len(calls) == 1
+    assert dict(calls[0].data) == {
+        "title": notification["title"],
+        "message": notification["message"],
+        "data": {**option_controls_contract["delivery_options"], "tag": alert["id"]},
+    }
+    assert entry.data["alerts"][0]["notification"] == original["notification"]
+    assert alert == original

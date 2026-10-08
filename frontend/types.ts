@@ -19,55 +19,105 @@ export interface HassLocale {
   time_format: string;
 }
 
-type HaConfig = Record<string, unknown>;
-type Duration = string | number | Record<string, number>;
+/** Native HA passthrough fields; Home Assistant validators own their semantics. */
+export interface HaConfig {
+  [key: string]: unknown;
+}
+
+export interface DurationParts {
+  days?: number;
+  hours?: number;
+  minutes?: number;
+  seconds?: number;
+}
+
+export type DurationValue = string | number | DurationParts;
+export type AutomationMode = "single" | "restart" | "queued" | "parallel";
 
 /** HA service target plus `user_id`, which the integration resolves to mobile devices. */
-export type NotificationTarget = HassServiceTarget & { user_id?: string[] };
+export interface NotificationTarget extends HassServiceTarget {
+  user_id?: string[];
+}
+
+export interface NotificationOptionControl {
+  enabled: boolean;
+  fields: Record<string, boolean>;
+}
+
+export interface NotificationOptionControls {
+  mobile?: NotificationOptionControl;
+  android?: NotificationOptionControl;
+  ios?: NotificationOptionControl;
+}
 
 export interface Notification {
+  /** Follow-up delivery switch; main notification enablement belongs to the alert. */
+  enabled?: boolean;
   action?: string;
   target?: NotificationTarget;
   title: string;
   message: string;
   use_default_tag?: boolean;
-  options: Record<string, unknown>;
+  options: HaConfig;
+  option_controls?: NotificationOptionControls;
 }
 
-export interface EnabledFeature {
+export interface TriggerConfig {
   enabled: boolean;
+  items: HaConfig[];
+}
+
+export interface IntervalConfig {
+  enabled: boolean;
+  value: DurationValue;
+}
+
+export interface ConditionConfig {
+  enabled: boolean;
+  items: HaConfig[];
+  startup: boolean;
+  interval: IntervalConfig;
+}
+
+export interface InactiveConfig {
+  enabled: boolean;
+  items: HaConfig[];
+  clear_notification: boolean;
 }
 
 export interface MonitorConfig {
-  automation_mode: "single" | "restart" | "queued" | "parallel";
-  triggers: EnabledFeature & {
-    items: HaConfig[];
-  };
-  conditions: EnabledFeature & {
-    items: HaConfig[];
-    startup: boolean;
-    periodic: boolean;
-    interval?: Duration;
-  };
-  inactive: EnabledFeature & {
-    items: HaConfig[];
-    clear_notification: boolean;
-  };
+  automation_mode: AutomationMode;
+  triggers: TriggerConfig;
+  conditions: ConditionConfig;
+  inactive: InactiveConfig;
+}
+
+export interface ConfirmationButton {
+  id?: string;
+  label: string;
+}
+
+export interface ReminderConfig {
+  enabled: boolean;
+  interval: DurationValue;
+  max_attempts: number;
+  show_attempts: boolean;
+  forget_after_enabled: boolean;
+  timeout: DurationValue;
 }
 
 export interface ConfirmationConfig {
   enabled: boolean;
-  buttons: { id?: string; label: string }[];
-  notification: Notification & { enabled?: boolean };
-  reminders: {
-    enabled: boolean;
-    interval: Duration;
-    max_attempts: number;
-    show_attempts: boolean;
-    forget_after_enabled: boolean;
-    timeout: Duration;
-  };
+  buttons: ConfirmationButton[];
+  notification: Notification;
+  reminders: ReminderConfig;
   actions: HaConfig[];
+  actions_enabled?: boolean;
+}
+
+export interface PostSendActionsConfig {
+  enabled: boolean;
+  actions?: HaConfig[];
 }
 
 /** One alert, as stored in the integration's canonical configuration. */
@@ -78,9 +128,9 @@ export interface Alert {
   icon?: string;
   enabled: boolean;
   monitor: MonitorConfig;
-  notification: Notification & { target: NotificationTarget };
+  notification: Notification;
   confirmation?: ConfirmationConfig;
-  post_send_actions?: { enabled: boolean; actions?: HaConfig[] };
+  post_send_actions?: PostSendActionsConfig;
   runtime?: unknown;
 }
 
@@ -107,7 +157,7 @@ export interface RuntimeAlertHistoryEntry {
     timestamp: string;
     type: string;
     message: string;
-    details: Record<string, unknown>;
+    details: HaConfig;
     flow_id?: string;
   };
 }

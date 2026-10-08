@@ -91,7 +91,7 @@ class YamlView extends LitElement {
 
   /** Ask before discarding unsaved edits; returns whether leaving is fine. */
   confirmLeave(): boolean {
-    return !this.dirty || window.confirm(this.t("yaml.unsaved"));
+    return !this.dirty || window.confirm(this.localizeText("yaml.unsaved"));
   }
 
   private warnUnsaved = (event: BeforeUnloadEvent): void => {
@@ -102,24 +102,24 @@ class YamlView extends LitElement {
     void this.load().catch(error => notify(this, errorMessage(error)));
   }
 
-  private t = (key: string) => localize(this.hass, key);
+  private localizeText = (key: string) => localize(this.hass, key);
 
   protected render() {
     return html`<ha-card>
       ${toolbar(
         html`<div class="nc-yaml-title">
-          <strong>${this.t("yaml.aria")}</strong>
+          <strong>${this.localizeText("yaml.aria")}</strong>
           <ha-icon-button id="yaml-help" .path=${mdiInformationOutline}
-            .label=${this.t("yaml.help")} aria-describedby="yaml-help-tooltip"
+            .label=${this.localizeText("yaml.about.label")} aria-describedby="yaml-help-tooltip"
           ></ha-icon-button>
-          <ha-tooltip id="yaml-help-tooltip" for="yaml-help">${this.t("yaml.description")}</ha-tooltip>
+          <ha-tooltip id="yaml-help-tooltip" for="yaml-help">${this.localizeText("yaml.about.helper")}</ha-tooltip>
         </div>`,
         [
-          { label: this.t("yaml.validate"), tooltip: this.t("yaml.validate_help"), path: mdiCheckDecagramOutline, action: this.validate, disabled: this.busy },
-          { label: this.t("yaml.reload"), tooltip: this.t("yaml.reload_help"), path: mdiReload, action: this.reload, disabled: this.busy },
+          { label: this.localizeText("yaml.validate.label"), tooltip: this.localizeText("yaml.validate.helper"), path: mdiCheckDecagramOutline, action: this.validate, disabled: this.busy },
+          { label: this.localizeText("yaml.reload.label"), tooltip: this.localizeText("yaml.reload.helper"), path: mdiReload, action: this.reload, disabled: this.busy },
         ],
         this.layout.narrow,
-        haButton(this.t("yaml.save"), this.save, { disabled: this.busy || !this.valid }),
+        haButton(this.localizeText("yaml.save"), this.save, { disabled: this.busy || !this.valid }),
       )}
       ${this.renderValidation()}
       ${this.renderEditor()}
@@ -128,7 +128,7 @@ class YamlView extends LitElement {
 
   private renderValidation(): TemplateResult | typeof nothing {
     if (this.valid) return nothing;
-    return html`<ha-alert alert-type="error">${this.t("yaml.invalid")}</ha-alert>`;
+    return html`<ha-alert alert-type="error">${this.localizeText("yaml.invalid")}</ha-alert>`;
   }
 
   private renderEditor(): TemplateResult | typeof nothing {
@@ -137,7 +137,7 @@ class YamlView extends LitElement {
       .hass=${this.hass}
       .defaultValue=${this.config}
       .label=${""}
-      aria-label=${this.t("yaml.aria")}
+      aria-label=${this.localizeText("yaml.aria")}
       @value-changed=${this.editDocument}
     ></ha-yaml-editor>`;
   }
@@ -183,7 +183,7 @@ class YamlView extends LitElement {
   private validate = () =>
     this.run(async () => {
       await request(this.hass, "validate_config", { config: this.mapping() });
-      return this.t("yaml.valid");
+      return this.localizeText("yaml.valid");
     });
 
   private reload = () =>
@@ -191,17 +191,17 @@ class YamlView extends LitElement {
       await request(this.hass, "reload");
       this.config = null;
       await this.load();
-      return this.t("yaml.reloaded");
+      return this.localizeText("yaml.reloaded");
     });
 
   private save = () =>
     this.run(async () => {
       const config = this.mapping();
       const result = await request<{ saved: boolean }>(this.hass, "save_config", { config });
-      if (!result.saved) throw new Error(this.t("yaml.not_saved"));
+      if (!result.saved) throw new Error(this.localizeText("yaml.not_saved"));
       if (this.draft === config) this.setDraft(config, this.valid, false);
       this.dispatchEvent(new CustomEvent("yaml-saved", { bubbles: true, composed: true }));
-      return this.t("yaml.saved");
+      return this.localizeText("yaml.saved");
     });
 }
 

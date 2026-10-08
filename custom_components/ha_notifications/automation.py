@@ -84,7 +84,7 @@ class _SendComponent:
             "payload": {
                 "title": notification.title,
                 "message": notification.message,
-                "data": _copy_native_value(notification.options),
+                "data": notification.delivery_options(),
             },
         }
         if notification.action:
@@ -561,8 +561,6 @@ def compose_automation(
     triggers = tuple(trigger for fragment in fragments for trigger in fragment.triggers)
     conditions = tuple(condition for fragment in fragments for condition in fragment.conditions)
     actions = tuple(action for fragment in fragments for action in fragment.actions)
-    if not triggers:
-        raise ValueError(f"alert {alert.id!r} must define at least one evaluation trigger")
     return AutomationFragments(
         triggers=triggers,
         conditions=conditions,
@@ -795,8 +793,6 @@ def generate_automations(
 ) -> list[dict[str, Any]]:
     """Generate the single Home Assistant automation owned by an alert."""
     validated = _validated_alert(alert)
-    if not validated.monitor.enabled_triggers:
-        return []
     generated = [generate_automation(validated, components)]
     inactive = validated.monitor.inactive
     if inactive.enabled and inactive.items:
@@ -863,7 +859,9 @@ def _follow_up_actions(
             confirmation=confirmation_context,
             history_reason="confirmation_notification",
         )
-    native_actions = [_copy_native_value(action) for action in confirmation.actions]
+    native_actions = []
+    if confirmation.actions_enabled is not False:
+        native_actions = [_copy_native_value(action) for action in confirmation.actions]
     actions = [notification_action] if notification_action is not None else []
     for action in native_actions:
         actions.extend(steps.recorded_action(action))

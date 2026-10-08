@@ -36,7 +36,7 @@ from custom_components.ha_notifications.automation_runtime import (
 from custom_components.ha_notifications.automation_storage import (
     write_automation_files,
 )
-from custom_components.ha_notifications.configuration import AlertConfig
+from custom_components.ha_notifications.configuration import AlertConfig, validate_config
 from custom_components.ha_notifications.const import AUTOMATION_FILE
 
 
@@ -155,7 +155,7 @@ def automation_alert() -> dict[str, object]:
                 "enabled": True,
                 "items": [{"condition": "numeric_state", "entity_id": "sensor.water", "below": 20}],
                 "startup": True,
-                "periodic": False,
+                "interval": {"enabled": False, "value": 43200},
             },
         },
         "notification": {
@@ -184,6 +184,45 @@ def test_generate_automation_uses_explicit_triggers_and_active_branches(automati
             **notification,
         },
     }
+
+
+@pytest.mark.parametrize("group", ["mobile", "android", "ios"])
+@pytest.mark.parametrize(
+    ("group_enabled", "field_enabled"),
+    [(True, True), (True, False), (False, True), (False, False)],
+)
+def test_generate_automation_filters_option_controls_without_changing_canonical_data(
+    automation_alert, group: str, group_enabled: bool, field_enabled: bool,
+) -> None:
+    automation_alert["notification"]["options"] = {
+        "channel": "Saved channel", "ttl": 0, "sticky": False,
+        "push": {"sound": "saved.aiff", "custom": {"values": [False, 0]}},
+    }
+    automation_alert["notification"]["option_controls"] = {
+        group: {
+            "enabled": group_enabled,
+            "fields": {"channel": field_enabled, "push.sound": field_enabled},
+        },
+    }
+    original = deepcopy(automation_alert)
+    canonical = validate_config({"alerts": [automation_alert]})
+    stored = deepcopy(canonical)
+    alert = AlertConfig.model_validate(canonical["alerts"][0])
+    expected = deepcopy(automation_alert["notification"]["options"])
+    if not group_enabled or not field_enabled:
+        del expected["channel"]
+        del expected["push"]["sound"]
+
+    generated = generate_automation(alert)
+    send = _active_sequence(generated)[0]["data"]
+    assert send["payload"]["data"] == expected
+    assert "option_controls" not in send
+    assert "option_controls" not in send["payload"]
+    assert "option_controls" not in send["payload"]["data"]
+    send["payload"]["data"]["push"]["custom"]["values"].append("changed")
+    assert alert.model_dump(exclude_none=True) == stored["alerts"][0]
+    assert canonical == stored
+    assert automation_alert == original
 
 
 def test_generate_automation_rejects_persisted_mobile_options(automation_alert) -> None:
@@ -263,8 +302,7 @@ def test_trigger_and_condition_sections_can_be_disabled_independently() -> None:
             "conditions": {
                 "enabled": True,
                 "startup": True,
-                "periodic": True,
-                "interval": 300,
+                "interval": {"enabled": True, "value": 300},
                 "items": [{"condition": "state", "entity_id": "binary_sensor.door", "state": "on"}],
             },
         },
@@ -297,7 +335,9 @@ def test_trigger_and_condition_sections_can_be_disabled_independently() -> None:
             "conditions": {**alert["monitor"]["conditions"], "enabled": False},
         },
     }
-    assert generate_automations(neither) == []
+    neither_generated = generate_automations(neither)
+    assert len(neither_generated) == 1
+    assert neither_generated[0]["triggers"] == []
     assert neither["enabled"] is True
 
 
@@ -491,10 +531,10 @@ def test_inactive_prefixed_trigger_id_is_not_reserved() -> None:
 
 
 @pytest.mark.parametrize("triggers_enabled", [False, True])
-def test_conditional_alert_does_not_generate_automation_without_enabled_triggers(
+def test_conditional_alert_without_enabled_triggers_generates_trigger_less_automation(
     triggers_enabled: bool,
 ) -> None:
-    assert generate_automations({
+    generated = generate_automations({
         "id": "no_main_triggers",
         "monitor": {
             "automation_mode": "parallel",
@@ -513,7 +553,10 @@ def test_conditional_alert_does_not_generate_automation_without_enabled_triggers
             }]},
         },
         "notification": {"action": "notify.mobile_app_phone"},
-    }) == []
+    })
+
+    assert len(generated) == 1
+    assert generated[0]["triggers"] == []
 
 
 def test_startup_condition_check_does_not_infer_door_watcher() -> None:
@@ -605,11 +648,13 @@ async def test_conditions_are_preserved_without_inferred_triggers(
         },
         "notification": {"action": "notify.mobile_app_phone"},
     }).conditions == tuple(conditions)
-    assert generate_automations({
+    condition_only = generate_automations({
         "id": "condition_only",
         "monitor": {"conditions": {"items": conditions}},
         "notification": {"action": "notify.mobile_app_phone"},
-    }) == []
+    })
+    assert len(condition_only) == 1
+    assert condition_only[0]["triggers"] == []
     validated = await async_validate_config(hass, {"automation": generated})
     assert all(
         automation.validation_status is ValidationStatus.OK
@@ -745,12 +790,12 @@ async def test_condition_schema_is_validated_before_automation_save(
         await async_validate_alerts(hass, [invalid_alert])
 
 
-def test_generate_automation_keeps_periodic_trigger_and_condition() -> None:
+def test_generate_automation_keeps_interval_trigger_and_condition() -> None:
     generated = generate_automation({
         "id": "interval_only",
         "monitor": {
             "automation_mode": "parallel",
-            "conditions": {"periodic": True, "interval": 300, "items": [{
+            "conditions": {"interval": {"enabled": True, "value": 300}, "items": [{
                 "condition": "state",
                 "entity_id": "binary_sensor.door",
                 "state": "on",
@@ -975,6 +1020,87 @@ async def test_generated_tag_metadata_is_independent_for_main_and_follow_up(
         assert "use_default_tag" not in data["payload"]["data"]
         assert data["payload"]["data"]["tag"] == ("follow-up-custom" if is_follow_up else "main-custom")
     assert await async_validate_alerts(hass, [automation_alert]) == generated
+
+
+@pytest.mark.parametrize(
+    ("group_enabled", "field_enabled"),
+    [(False, True), (True, False)],
+    ids=["disabled_group", "disabled_field"],
+)
+def test_generated_option_controls_are_independent_for_main_reminders_and_follow_up(
+    automation_alert, group_enabled: bool, field_enabled: bool,
+) -> None:
+    automation_alert["notification"]["options"] = {
+        "channel": "Main saved", "push": {"sound": "main.aiff"},
+    }
+    automation_alert["notification"]["option_controls"] = {
+        "android": {"enabled": group_enabled, "fields": {"channel": field_enabled}},
+    }
+    automation_alert["confirmation"] = {
+        "enabled": True,
+        "buttons": [{"id": "confirm", "label": "Done"}],
+        "notification": {
+            "enabled": True,
+            "message": "Done",
+            "options": {
+                "channel": "Follow-up saved", "ttl": 0, "sticky": False,
+                "push": {"sound": "follow-up.aiff", "custom": {"values": [False, 0]}},
+            },
+            "option_controls": {
+                "ios": {"enabled": group_enabled, "fields": {"push.sound": field_enabled}},
+            },
+        },
+        "reminders": {"enabled": True, "max_attempts": 2},
+    }
+    original = deepcopy(automation_alert)
+    canonical = validate_config({"alerts": [automation_alert]})
+    stored = deepcopy(canonical)
+    alert = AlertConfig.model_validate(canonical["alerts"][0])
+    sequence = _active_sequence(generate_automation(alert))
+    outcome = next(action for action in sequence if "choose" in action)
+    repeat = next(action["repeat"] for action in outcome["default"] if "repeat" in action)
+    follow_up = next(
+        action["data"] for action in outcome["choose"][0]["sequence"]
+        if action.get("action") == "ha_notifications.send"
+    )
+
+    for send in [sequence[0]["data"], repeat["sequence"][0]["data"]]:
+        assert "channel" not in send["payload"]["data"]
+        assert send["payload"]["data"]["push"] == {"sound": "main.aiff"}
+        assert send["payload"]["data"]["actions"]
+        assert "option_controls" not in send
+        assert "option_controls" not in send["payload"]
+        assert "option_controls" not in send["payload"]["data"]
+    assert follow_up["payload"]["data"] == {
+        "channel": "Follow-up saved", "ttl": 0, "sticky": False,
+        "push": {"custom": {"values": [False, 0]}},
+    }
+    assert "option_controls" not in follow_up
+    assert "option_controls" not in follow_up["payload"]
+    assert follow_up["target"] == automation_alert["notification"]["target"]
+    assert follow_up["action"] == automation_alert["notification"]["action"]
+    follow_up["payload"]["data"]["push"]["custom"]["values"].append("changed")
+    assert alert.model_dump(exclude_none=True) == stored["alerts"][0]
+    assert canonical == stored
+    assert automation_alert == original
+
+
+@pytest.mark.parametrize("enabled", [None, False, True])
+def test_confirmation_action_enablement_preserves_saved_actions(automation_alert, enabled) -> None:
+    alert = deepcopy(automation_alert)
+    alert["confirmation"] = {
+        "enabled": True,
+        "buttons": [{"id": "confirm", "label": "Done"}],
+        "actions": [{"action": "script.retained_confirmation_action"}],
+    }
+    if enabled is not None:
+        alert["confirmation"]["actions_enabled"] = enabled
+    canonical = validate_config({"alerts": [alert]})
+    original = deepcopy(canonical)
+    generated = generate_automation(canonical["alerts"][0])
+    assert ("script.retained_confirmation_action" in yaml.safe_dump(generated)) is (enabled is not False)
+    assert canonical == original
+    assert canonical["alerts"][0]["confirmation"]["actions"] == alert["confirmation"]["actions"]
 
 
 def test_enabled_reminders_repeat_the_original_notification(automation_alert) -> None:
@@ -1813,12 +1939,20 @@ def test_inactive_triggers_do_not_create_main_evaluation_trigger(triggers_enable
         "notification": {},
     }
 
-    assert generate_automations(alert) == []
+    generated = generate_automations(alert)
+
+    assert generated[0]["triggers"] == []
+    assert len(generated) == 2
 
 
-def test_generate_automation_requires_evaluation_trigger() -> None:
-    with pytest.raises(ValueError, match="at least one evaluation trigger"):
-        generate_automation({"id": "no_trigger", "notification": {"action": "notify.mobile_app_phone"}})
+@pytest.mark.asyncio
+async def test_trigger_less_alert_generates_valid_automation(hass: HomeAssistant) -> None:
+    generated = generate_automations({"id": "no_trigger", "notification": {"action": "notify.mobile_app_phone"}})
+
+    assert len(generated) == 1
+    assert generated[0]["triggers"] == []
+    validated = await async_validate_config(hass, {"automation": generated})
+    assert validated["automation"][0].validation_status is ValidationStatus.OK
 
 
 @pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
@@ -1908,8 +2042,7 @@ def test_renderer_preserves_native_boundaries_and_top_level_conditions(automatio
             ]},
             "conditions": {
                 "startup": True,
-                "periodic": True,
-                "interval": 300,
+                "interval": {"enabled": True, "value": 300},
                 "items": [{
                     "condition": "and",
                     "conditions": [

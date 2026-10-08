@@ -10,6 +10,13 @@ export type Localize = (
   fallback?: string,
 ) => string;
 
+export function optionalTranslation(localize: Localize, key?: string): string | undefined {
+  if (!key) return undefined;
+  const text = localize(key);
+  if (!text || text === key) return undefined;
+  return text;
+}
+
 function catalogValue(key: string): string | undefined {
   let value: TranslationValue | undefined = translations as TranslationCatalog;
   for (const part of key.split(".")) {

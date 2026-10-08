@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { render } from "lit";
 import type { TemplateResult } from "lit";
+import type { SettingRow } from "../../frontend/editor/setting-row.js";
 import type { Alert, Hass, RuntimeAlertHistoryEntry } from "../../frontend/types.js";
 import { createAlertDraft, editableAlert as toEditableAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
 import alertFixtureData from "./fixtures/alerts.json";
@@ -24,10 +25,6 @@ export function homeAssistantFixture(overrides: Partial<Hass> = {}): Hass {
     callWS: createHassClient().callWS,
     ...overrides,
   } as Hass;
-}
-
-export function alertFixture(overrides: Partial<Alert> = {}): Alert {
-  return { id: "door", name: "Door", ...overrides } as Alert;
 }
 
 export function configuredAlertFixture(overrides: Partial<Alert> = {}): Alert {
@@ -90,6 +87,18 @@ export async function settleElement(element: HTMLElement): Promise<void> {
     await updateComplete;
   }
   await Promise.resolve();
+}
+
+export function settingRowHeading(row: Element): HTMLSpanElement {
+  const component = row as SettingRow;
+  component.performUpdate();
+  return component.shadowRoot!.querySelector<HTMLSpanElement>(".nc-heading")!;
+}
+
+export function settingRowSlot(row: Element, name: string): HTMLSlotElement {
+  const component = row as SettingRow;
+  component.performUpdate();
+  return component.shadowRoot!.querySelector<HTMLSlotElement>(`slot[name="${name}"]`)!;
 }
 
 export function editorRoot(): ShadowRoot {

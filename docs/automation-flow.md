@@ -38,9 +38,40 @@ only when `use_default_tag` is true (the default). Set it to false at the
 notification level to omit that default and keep separate notifications. A
 custom `options.tag` is always preserved; no random tag is generated.
 Android `subject` and iOS `subtitle` remain native
-device options. Unknown options and template values are not coerced. Presence
-means enabled, absence disabled; root `mobile_options` and enabled-field
-metadata are not persisted. Disabled drafts survive only within the open editor.
+device options. Unknown options and template values are not coerced. Values remain
+saved in `options` even when disabled. Optional `option_controls` stores group and
+field enablement separately; the backend omits disabled paths only from generated
+delivery payloads, never from saved configuration. Without controls, native options
+are sent unchanged. Root `mobile_options` remains unsupported.
+
+```yaml
+notification:
+    title: Door open
+    message: The door is open.
+    options:
+        channel: Security
+        push:
+            sound: default
+            badge: 0
+    option_controls:
+        android:
+            enabled: false
+            fields:
+                channel: true
+        ios:
+            enabled: true
+            fields:
+                push.sound: false
+                push.badge: true
+```
+
+This retains all three values in storage but sends only `push.badge: 0` from
+these controlled options. Group disablement excludes every path declared in that
+group. Field disablement excludes only that path. Uncontrolled native extensions
+remain untouched. The editor records all its managed paths when a group is toggled,
+so it can be saved, reopened, and enabled without losing values. The same contract
+applies to confirmation follow-up options. Option controls are integration metadata,
+not Companion App data.
 
 Generated `ha_notifications.send` and `clear` use this service contract:
 
@@ -79,6 +110,10 @@ the setting.
 Retired notification wrappers and persisted editor metadata are rejected, not
 adapted. Existing stored alerts require an explicit canonical update; nothing
 automatically rewrites or resets the user's config-entry data.
+
+Post-confirmation actions remain saved in `confirmation.actions` when disabled.
+`confirmation.actions_enabled: false` prevents the backend from generating those
+actions. When the flag is omitted, the configured action list is enabled.
 
 ## Generated Automations
 
@@ -135,8 +170,31 @@ monitored, and no reverse state edge or door-closing watcher is inferred. An
 explicitly configured closing trigger remains a normal main trigger, with its
 original ID and duration; it is not repurposed as a completion handler.
 
-Each alert generates its main automation; without enabled main triggers it
-generates no automations. Automation mode belongs to `monitor.automation_mode`,
+Startup and interval checks belong to `monitor.conditions`. Interval enablement
+and its configured duration are saved together:
+
+```yaml
+monitor:
+    conditions:
+        enabled: true
+        items: []
+        startup: false
+        interval:
+            enabled: false
+            value: 43200
+```
+
+The interval defaults to disabled with a 12-hour value. Disabling interval checks
+retains the duration; disabling Conditions retains the interval's own enablement
+and value, but neither startup nor interval checks contribute triggers while the
+parent is disabled. Native duration forms such as `"01:00:00"` or `{ hours: 1 }`
+remain valid interval values. The editor's periodic switch writes `interval.enabled`,
+not a persisted `periodic` field. The retired sibling flag and flat interval shape
+are rejected by the backend; the frontend does not migrate them automatically.
+
+Each alert always generates its main automation; without enabled main triggers
+it has an empty trigger list and runs only when started manually, such as by
+**Test alert**. Automation mode belongs to `monitor.automation_mode`,
 not to individual triggers. Nested mode settings and retired options are rejected.
 The **Inactive** child section under **When to run** optionally defines native
 triggers in `monitor.inactive.items`. When enabled and nonempty, these generate

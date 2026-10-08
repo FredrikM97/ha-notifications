@@ -31,7 +31,7 @@ def _monitor(
     triggers: list[dict[str, object]] | None = None,
     conditions: list[dict[str, object]] | None = None,
     startup: bool = False,
-    periodic: bool = False,
+    interval_enabled: bool = False,
     interval: int = 43200,
     automation_mode: str = "parallel",
 ) -> dict[str, object]:
@@ -46,8 +46,7 @@ def _monitor(
             "enabled": True,
             "items": conditions or [],
             "startup": startup,
-            "periodic": periodic,
-            "interval": interval,
+            "interval": {"enabled": interval_enabled, "value": interval},
         },
     }
 
@@ -467,7 +466,7 @@ async def test_generated_automation_executes_interval_trigger(
     assert await async_setup_component(hass, "automation", {})
     alert = alert_factory(
         "base",
-        monitor=_monitor(periodic=True, interval=1),
+        monitor=_monitor(interval_enabled=True, interval=1),
     )
     entry = MockConfigEntry(
         domain=DOMAIN,

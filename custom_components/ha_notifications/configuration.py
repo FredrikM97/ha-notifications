@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     field_validator,
     model_validator,
 )
@@ -60,6 +62,15 @@ def _periodic_trigger(interval: ReminderInterval | None) -> dict[str, Any]:
     return {"trigger": "time_pattern", "seconds": f"/{max(1, int(seconds))}"}
 
 
+class NotificationOptionControl(BaseModel):
+    """Delivery switches for frontend-declared native option paths."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=True, strict=True)
+    fields: dict[str, StrictBool] = Field(default_factory=dict)
+
+
 class NotificationConfig(BaseModel):
     """Canonical destination, content, and opaque native device options."""
 
@@ -71,6 +82,36 @@ class NotificationConfig(BaseModel):
     message: str = ""
     use_default_tag: bool = Field(default=True, strict=True)
     options: dict[str, Any] = Field(default_factory=dict)
+    option_controls: dict[
+        Literal["mobile", "android", "ios"], NotificationOptionControl
+    ] | None = None
+
+    def delivery_options(self) -> dict[str, Any]:
+        """Copy native options and omit only explicitly disabled paths."""
+        options = deepcopy(self.options)
+        for control in (self.option_controls or {}).values():
+            for path, enabled in control.fields.items():
+                if control.enabled and enabled:
+                    continue
+                segments = path.split(".")
+                current = options
+                ancestors: list[tuple[dict[str, Any], str]] = []
+                for segment in segments[:-1]:
+                    nested = current.get(segment)
+                    if not isinstance(nested, dict):
+                        break
+                    ancestors.append((current, segment))
+                    current = nested
+                else:
+                    if segments[-1] not in current:
+                        continue
+                    del current[segments[-1]]
+                    for parent, segment in reversed(ancestors):
+                        if current:
+                            break
+                        del parent[segment]
+                        current = parent
+        return options
 
     @field_validator("action")
     @classmethod
@@ -128,6 +169,7 @@ class ConfirmationConfig(BaseModel):
     notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
     actions: list[dict[str, Any]] = Field(default_factory=list)
+    actions_enabled: bool | None = Field(default=None, strict=True)
 
 
 class EnabledFeature(BaseModel):
@@ -151,13 +193,21 @@ class TriggerOptions(EnabledFeature):
         return value
 
 
+class IntervalConfig(BaseModel):
+    """Independent enablement and native duration for scheduled evaluations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, strict=True)
+    value: ReminderInterval = 43200
+
+
 class ConditionOptions(EnabledFeature):
     """Condition gate and built-in startup/periodic evaluations."""
 
     items: list[dict[str, Any]] = Field(default_factory=list)
     startup: bool = False
-    periodic: bool = False
-    interval: ReminderInterval = 43200
+    interval: IntervalConfig = Field(default_factory=IntervalConfig)
 
     @field_validator("items")
     @classmethod
@@ -194,8 +244,8 @@ class MonitorConfig(BaseModel):
         if self.conditions.enabled:
             if self.conditions.startup:
                 triggers.append({"trigger": "homeassistant", "event": "start"})
-            if self.conditions.periodic:
-                triggers.append(_periodic_trigger(self.conditions.interval))
+            if self.conditions.interval.enabled:
+                triggers.append(_periodic_trigger(self.conditions.interval.value))
         if self.triggers.enabled:
             triggers.extend(dict(trigger) for trigger in self.triggers.items)
         return triggers

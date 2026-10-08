@@ -17,6 +17,8 @@ from custom_components.ha_notifications.configuration import (
     ConfirmationButtonConfig,
     ConfirmationConfig,
     ConfirmationNotificationConfig,
+    IntervalConfig,
+    MonitorConfig,
     NotificationConfig,
     ReminderConfig,
     TriggerOptions,
@@ -37,7 +39,8 @@ def test_feature_model_defaults_match_shared_contract_and_are_independent() -> N
 
     first.monitor.triggers.items.append({"trigger": "event", "event_type": "changed"})
     first.monitor.conditions.items.append({"condition": "template", "value_template": "{{ true }}"})
-    first.monitor.conditions.interval = 60
+    first.monitor.conditions.interval.enabled = True
+    first.monitor.conditions.interval.value = 60
     first.monitor.inactive.items.append({"trigger": "event", "event_type": "inactive"})
     first.notification.target["entity_id"] = ["notify.phone"]
     first.notification.options["push"] = {"sound": "default"}
@@ -57,7 +60,7 @@ def test_validate_config_minimal_alert_defaults_interval_without_confirmation() 
     alert = validate_config({"alerts": [{"id": "minimal", "notification": {}}]})["alerts"][0]
 
     assert "confirmation" not in alert
-    assert alert["monitor"]["conditions"]["interval"] == 43200
+    assert alert["monitor"]["conditions"]["interval"] == {"enabled": False, "value": 43200}
 
 
 def test_alert_requires_notification_without_defaulting_confirmation() -> None:
@@ -89,12 +92,91 @@ def test_reminder_model_preserves_explicit_values_and_native_extensions() -> Non
     assert ReminderConfig.model_validate(reminders.model_dump()) == reminders
 
 
-@pytest.mark.parametrize("interval", [60, "00:05:00", {"minutes": 5}])
-def test_condition_interval_defaults_and_preserves_explicit_values(interval: object) -> None:
-    assert ConditionOptions().model_dump()["interval"] == 43200
-    assert ConditionOptions.model_validate({"interval": interval}).model_dump()["interval"] == interval
+def test_condition_interval_defaults_to_nested_model() -> None:
+    conditions = ConditionOptions()
+    assert isinstance(conditions.interval, IntervalConfig)
+    assert conditions.interval.model_dump() == {"enabled": False, "value": 43200}
+    assert "periodic" not in ConditionOptions.model_fields
+    assert ConditionOptions.model_validate({"interval": {}}) == conditions
+
+
+@pytest.mark.parametrize(
+    "interval",
+    [60, 0.5, "300", "05:00", "00:05:00", {"minutes": 5},
+     {"days": 1, "hours": 2, "minutes": 3, "seconds": 0.5}],
+)
+@pytest.mark.parametrize("enabled", [False, True])
+def test_condition_interval_defaults_and_preserves_explicit_values(
+    interval: object, enabled: bool,
+) -> None:
+    raw = {"interval": {"enabled": enabled, "value": interval}}
+    original = deepcopy(raw)
+    conditions = ConditionOptions.model_validate(raw)
+    assert conditions.model_dump()["interval"] == raw["interval"]
+    assert ConditionOptions.model_validate(conditions.model_dump()) == conditions
+    assert raw == original
+
+
+def test_disabled_condition_interval_retains_value_without_scheduling() -> None:
+    raw = {"alerts": [{
+        "id": "disabled_interval", "notification": {},
+        "monitor": {"conditions": {"interval": {"enabled": False, "value": {"minutes": 5}}}},
+    }]}
+    original = deepcopy(raw)
+    stored = validate_config(raw)["alerts"][0]
+    assert stored["monitor"]["conditions"]["interval"] == {"enabled": False, "value": {"minutes": 5}}
+    assert AlertConfig.model_validate(stored).monitor.enabled_triggers == []
+    assert raw == original
+
+
+@pytest.mark.parametrize("conditions_enabled", [False, True])
+def test_condition_interval_schedule_requires_parent_conditions_enabled(
+    conditions_enabled: bool,
+) -> None:
+    monitor = MonitorConfig.model_validate({"conditions": {
+        "enabled": conditions_enabled,
+        "interval": {"enabled": True, "value": {"minutes": 5}},
+    }})
+    assert monitor.enabled_triggers == (
+        [{"trigger": "time_pattern", "minutes": "/5"}] if conditions_enabled else []
+    )
+    assert monitor.conditions.interval.model_dump() == {"enabled": True, "value": {"minutes": 5}}
+
+
+@pytest.mark.parametrize("invalid", ["false", 0, 1, None, {}])
+def test_condition_interval_enabled_requires_strict_boolean(invalid: object) -> None:
+    with pytest.raises(ValidationError, match="valid boolean"):
+        ConditionOptions.model_validate({"interval": {"enabled": invalid}})
+
+
+@pytest.mark.parametrize("periodic", [False, True])
+def test_condition_periodic_legacy_field_is_rejected_without_mutation(periodic: bool) -> None:
+    raw = {"alerts": [{
+        "id": "legacy_periodic", "notification": {},
+        "monitor": {"conditions": {"periodic": periodic}},
+    }]}
+    original = deepcopy(raw)
+    with pytest.raises(ValidationError, match="periodic"):
+        validate_config(raw)
+    assert raw == original
+
+
+@pytest.mark.parametrize("interval", [60, 0.5, "00:05:00", {"minutes": 5}, None])
+def test_condition_legacy_interval_is_rejected_without_mutation(interval: object) -> None:
+    raw = {"alerts": [{
+        "id": "legacy_interval", "notification": {},
+        "monitor": {"conditions": {"interval": interval}},
+    }]}
+    original = deepcopy(raw)
+    with pytest.raises(ValidationError, match="interval"):
+        validate_config(raw)
+    assert raw == original
+
+
+@pytest.mark.parametrize("interval", [{"value": None}, {"unknown": True}])
+def test_condition_interval_rejects_null_value_and_extra_fields(interval: dict) -> None:
     with pytest.raises(ValidationError):
-        ConditionOptions.model_validate({"interval": None})
+        ConditionOptions.model_validate({"interval": interval})
 
 
 @pytest.mark.parametrize("buttons", [[], [{"id": "skip", "label": "Skip", "native_extra": True}]])
@@ -111,7 +193,10 @@ def test_missing_confirmation_buttons_do_not_create_editor_content() -> None:
 
 
 @pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
-@pytest.mark.parametrize("conditions", [{}, {"interval": 60}])
+@pytest.mark.parametrize("conditions", [
+    {}, {"interval": {}}, {"interval": {"value": 60}},
+    {"interval": {"enabled": True}}, {"interval": {"enabled": True, "value": 60}},
+])
 def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
     reminders: dict, conditions: dict,
 ) -> None:
@@ -125,7 +210,9 @@ def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
     validated = validate_config(raw)
     alert = validated["alerts"][0]
 
-    assert alert["monitor"]["conditions"]["interval"] == conditions.get("interval", 43200)
+    assert alert["monitor"]["conditions"]["interval"] == {
+        "enabled": False, "value": 43200, **conditions.get("interval", {}),
+    }
     assert alert["confirmation"]["reminders"] == {
         "enabled": True, "interval": 1800, "max_attempts": 5,
         "show_attempts": False, "forget_after_enabled": False, "timeout": 900,
@@ -167,6 +254,156 @@ def test_notification_default_tag_requires_a_boolean(model, invalid) -> None:
 def test_notification_models_define_canonical_content_fields(model) -> None:
     assert {"title", "message", "options"} <= model.model_fields.keys()
     assert "data" not in model.model_fields
+
+
+def test_shared_option_controls_contract(option_controls_contract) -> None:
+    original = deepcopy(option_controls_contract["notification"])
+    notification = NotificationConfig.model_validate(original)
+    assert notification.delivery_options() == option_controls_contract["delivery_options"]
+    assert notification.model_dump(exclude_none=True) == original
+
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
+def test_validate_config_retains_notification_option_controls_and_disabled_values(
+    confirmation: bool,
+) -> None:
+    notification = {
+        "options": {
+            "channel": "Saved channel", "ttl": 0, "sticky": False,
+            "push": {"sound": "saved.aiff", "custom": {"values": [False, 0]}},
+        },
+        "option_controls": {
+            "mobile": {"enabled": True, "fields": {"sticky": True}},
+            "android": {"enabled": False, "fields": {"channel": True, "ttl": False}},
+            "ios": {"enabled": True, "fields": {"push.sound": False}},
+        },
+    }
+    alert = {"id": "option_controls", "notification": {}}
+    if confirmation:
+        alert["confirmation"] = {"notification": notification}
+    else:
+        alert["notification"] = notification
+    raw = {"alerts": [alert]}
+    original = deepcopy(raw)
+
+    validated = validate_config(raw)
+    stored = validated["alerts"][0]
+    if confirmation:
+        stored = stored["confirmation"]
+    assert stored["notification"]["options"] == notification["options"]
+    assert stored["notification"]["option_controls"] == notification["option_controls"]
+    assert validate_config(validated) == validated
+    assert raw == original
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+@pytest.mark.parametrize("group", ["mobile", "android", "ios"])
+@pytest.mark.parametrize(
+    ("group_enabled", "field_enabled"),
+    [(True, True), (True, False), (False, True), (False, False)],
+)
+def test_notification_delivery_options_filters_only_declared_disabled_paths(
+    model, group: str, group_enabled: bool, field_enabled: bool,
+) -> None:
+    raw = {
+        "options": {
+            "channel": "Saved channel", "ttl": 0, "sticky": False,
+            "push": {"sound": "saved.aiff", "custom": {"values": [False, 0]}},
+            "native_empty": {},
+        },
+        "option_controls": {
+            group: {"enabled": group_enabled, "fields": {"push.sound": field_enabled}},
+        },
+    }
+    original = deepcopy(raw)
+    notification = model.model_validate(raw)
+    stored = notification.model_dump(exclude_none=True)
+    expected = deepcopy(raw["options"])
+    if not group_enabled or not field_enabled:
+        del expected["push"]["sound"]
+
+    delivered = notification.delivery_options()
+    assert delivered == expected
+    assert delivered["ttl"] == 0
+    assert delivered["sticky"] is False
+    delivered["push"]["custom"]["values"].append("changed")
+    assert notification.model_dump(exclude_none=True) == stored
+    assert raw == original
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+@pytest.mark.parametrize("value", [False, 0])
+def test_notification_delivery_options_preserves_enabled_false_and_zero(model, value) -> None:
+    notification = model.model_validate({
+        "options": {"native_extension": value, "push": {"custom": value}},
+        "option_controls": {
+            "mobile": {"fields": {"native_extension": True, "push.custom": True}},
+        },
+    })
+    delivered = notification.delivery_options()
+    assert delivered == {"native_extension": value, "push": {"custom": value}}
+    assert type(delivered["native_extension"]) is type(value)
+    assert type(delivered["push"]["custom"]) is type(value)
+
+
+@pytest.mark.parametrize("controls", [None, {}, {"ios": {"enabled": False, "fields": {}}}])
+def test_notification_delivery_options_without_declared_paths_is_a_deep_copy(controls) -> None:
+    notification = NotificationConfig.model_validate({
+        "options": {"push": {"sound": "default", "custom": [False, 0]}, "empty": {}},
+        "option_controls": controls,
+    })
+    stored = notification.model_dump(exclude_none=True)
+    if controls is None:
+        assert "option_controls" not in stored
+    delivered = notification.delivery_options()
+    assert delivered == notification.options
+    delivered["push"]["custom"].append("changed")
+    assert notification.model_dump(exclude_none=True) == stored
+
+
+@pytest.mark.parametrize(
+    ("options", "paths", "expected"),
+    [
+        ({"push": {"sound": "default"}}, ["push.sound"], {}),
+        ({"push": {"sound": {"name": "default"}}}, ["push.sound.name"], {}),
+        ({"push": {"sound": "default", "custom": {}}}, ["push.sound"], {"push": {"custom": {}}}),
+        ({"push": {}}, ["push.sound"], {"push": {}}),
+        ({"push": "native"}, ["push.sound"], {"push": "native"}),
+        ({"push": {"sound": "default"}}, ["missing.sound"], {"push": {"sound": "default"}}),
+        ({"push": {"sound": "default", "badge": 0}}, ["push.sound", "push.badge"], {}),
+    ],
+)
+def test_notification_delivery_options_prunes_only_ancestors_of_removed_paths(
+    options: dict, paths: list[str], expected: dict,
+) -> None:
+    notification = NotificationConfig.model_validate({
+        "options": options,
+        "option_controls": {"ios": {"fields": dict.fromkeys(paths, False)}},
+    })
+    original = deepcopy(options)
+    assert notification.delivery_options() == expected
+    assert notification.options == original
+    assert options == original
+
+
+@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
+@pytest.mark.parametrize("invalid", ["false", 0, 1, None, {}])
+@pytest.mark.parametrize("control_field", ["enabled", "fields"])
+def test_notification_option_controls_require_strict_booleans(
+    model, invalid, control_field: str,
+) -> None:
+    control = {control_field: {"push.sound": invalid} if control_field == "fields" else invalid}
+    with pytest.raises(ValidationError, match="valid boolean"):
+        model.model_validate({"option_controls": {"ios": control}})
+
+
+@pytest.mark.parametrize(
+    "controls",
+    [{"general": {"fields": {}}}, {"mobile": {"unknown": True}}],
+)
+def test_notification_option_controls_reject_unknown_groups_and_control_fields(controls) -> None:
+    with pytest.raises(ValidationError):
+        NotificationConfig.model_validate({"option_controls": controls})
 
 
 @pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])

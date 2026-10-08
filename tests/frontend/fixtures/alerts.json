@@ -30,7 +30,10 @@
           }
         ],
         "startup": true,
-        "periodic": false
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        }
       }
     },
     "notification": {
@@ -101,8 +104,10 @@
           }
         ],
         "startup": true,
-        "periodic": true,
-        "interval": 3600
+        "interval": {
+          "enabled": true,
+          "value": 3600
+        }
       }
     },
     "notification": {
@@ -138,7 +143,9 @@
         "enabled": true,
         "interval": "00:30:00",
         "max_attempts": 3,
-        "show_attempts": true
+        "show_attempts": true,
+        "forget_after_enabled": false,
+        "timeout": 900
       },
       "actions": [
         {

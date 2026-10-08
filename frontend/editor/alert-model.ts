@@ -1,6 +1,4 @@
-import type { Alert, AlertsConfig, ConfirmationConfig, NotificationTarget } from "../types.js";
-
-type DurationValue = string | number | Record<string, number>;
+import type { Alert, AlertsConfig, ConfirmationConfig, DurationValue, NotificationTarget } from "../types.js";
 
 const UNIT_SECONDS: Record<string, number> = { days: 86400, hours: 3600, minutes: 60, seconds: 1 };
 
@@ -42,8 +40,9 @@ export function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
   return canonical as AlertsConfig["alerts"][number];
 }
 
-export type EditableAlert = Alert & { confirmation: ConfirmationConfig };
-type HaConfig = Record<string, unknown>;
+export interface EditableAlert extends Alert {
+  confirmation: ConfirmationConfig;
+}
 
 export interface Duration {
   days: number;
@@ -54,14 +53,18 @@ export interface Duration {
 
 /** Deep copy with every optional block the editor binds to filled in. */
 export function editableAlert(source: Alert | null | undefined, defaults = createAlertDraft()): EditableAlert {
-  return structuredClone({
+  const alert: EditableAlert = structuredClone({
     ...defaults,
     ...source,
     monitor: {
       ...defaults.monitor,
       ...source?.monitor,
       triggers: { ...defaults.monitor.triggers, ...source?.monitor?.triggers },
-      conditions: { ...defaults.monitor.conditions, ...source?.monitor?.conditions },
+      conditions: {
+        ...defaults.monitor.conditions,
+        ...source?.monitor?.conditions,
+        interval: { ...defaults.monitor.conditions.interval, ...source?.monitor?.conditions?.interval },
+      },
       inactive: { ...defaults.monitor.inactive, ...source?.monitor?.inactive },
     },
     notification: { ...defaults.notification, ...source?.notification },
@@ -72,6 +75,9 @@ export function editableAlert(source: Alert | null | undefined, defaults = creat
       reminders: { ...defaults.confirmation.reminders, ...source?.confirmation?.reminders },
     },
   });
+  // The backend runs actions unless explicitly disabled; show that as an enabled switch.
+  if (alert.confirmation.actions.length) alert.confirmation.actions_enabled ??= true;
+  return alert;
 }
 
 export function createAlertDraft(): EditableAlert {
@@ -87,7 +93,7 @@ export function createAlertDraft(): EditableAlert {
     monitor: {
       automation_mode: "parallel",
       triggers: { enabled: true, items: [] },
-      conditions: { enabled: true, items: [], startup: false, periodic: false, interval: 43200 },
+      conditions: { enabled: true, items: [], startup: false, interval: { enabled: false, value: 43200 } },
       inactive: { enabled: false, items: [], clear_notification: false },
     },
     notification: { target: {}, title: "", message: "", use_default_tag: true, options: {} },
@@ -127,7 +133,8 @@ export const fromDuration = (value: unknown) =>
 
 // ---- Saving ----
 
-function hasRecipients(target: NotificationTarget): boolean {
+function hasRecipients(target: NotificationTarget | undefined): boolean {
+  if (!target) return false;
   return Object.values(target).some((values) => {
     if (typeof values === "string") return values.trim().length > 0;
     return Array.isArray(values) && values.some(
@@ -137,16 +144,17 @@ function hasRecipients(target: NotificationTarget): boolean {
 }
 
 /** Turn the edited alert into the canonical payload the backend expects. */
-export function finalizeAlert(
-  draft: EditableAlert,
-  postConfirmationActions: boolean,
-  validate = true,
-): Alert {
+export function finalizeAlert(draft: EditableAlert, validate = true): Alert {
   const alert = structuredClone(draft);
   delete alert.runtime;
   const { confirmation, notification } = alert;
   if (validate) {
     if (!alert.name.trim()) throw new Error("Name is required.");
+    for (const delivery of [notification, confirmation.notification]) {
+      if (delivery.action !== undefined && !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(delivery.action)) {
+        throw new Error("Notification action must be a domain.service name.");
+      }
+    }
     if (!notification.action && !hasRecipients(notification.target)) {
       throw new Error("Select at least one device, area, label, or notification entity in Recipients.");
     }
@@ -160,7 +168,6 @@ export function finalizeAlert(
   alert.name = alert.name.trim();
   alert.icon = alert.icon?.trim();
   if (!alert.icon) delete alert.icon;
-  if (!postConfirmationActions) confirmation.actions = [];
   if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.actions?.length) {
     delete alert.post_send_actions;
   }

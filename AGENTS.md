@@ -33,6 +33,11 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 - `build/` is generated/ignored: edit authored sources. Bundles stay there until local install or HACS packaging stages them.
 - Keep `README.md` short/stable: overview, install, basic usage, dashboard card snippet, docs links. Feature details/examples belong in `docs/`.
 - No branches, staging, or commits without an explicit request; preserve unrelated work.
+- After changing implementation instructions, review the affected current code and
+	apply the requested rule to the relevant implementation in the same task. Do not
+	stop at recording the rule; fix local violations and validate code changes, or
+	explain why no implementation change is needed. Respect explicit instruction-only
+	requests and keep the review scoped to the behavior that prompted the rule.
 - Finish implementation first, then author/update tests, then validate once per coherent slice; do not rerun unchanged checks after minor edits.
 - Backend: `python3 -m pytest tests/backend/test_<owner>.py`; `python3 -m ruff check custom_components/ha_notifications tests/backend`.
 - Frontend: `npx vitest run tests/frontend/<owner>.test.ts`; `npm run typecheck`; `npm run build`. Check UI behavior in real HA with `npm run dev`.

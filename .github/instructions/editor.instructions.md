@@ -3,19 +3,24 @@ description: "Use when changing alert editor help icons, labels, boolean rows, s
 applyTo: "frontend/editor/index.ts, tests/frontend/editor-native-controls.test.ts"
 ---
 
-Reuse `labelWithHelp()`: `.nc-heading` contains a label-text span immediately
-followed by its info icon. Boolean help stays after label text, never after
-the switch/checkbox or at the end of the row.
-Boolean rows use `.nc-option.nc-option-inline` with a separate trailing
-`ha-switch`, not a `ha-settings-row` heading slot. Keep `.nc-heading`
-inline-flex with a small gap and content-sized children; the switch, not
-the info icon, absorbs remaining row space.
+Use `ha-notifications-setting-row` for boolean and scalar field rows;
+slot native controls, label text, help icons, and the trailing toggle into it.
+Use `ha-notifications-help-icon` for info buttons. It owns the native icon and
+accessible tooltip, and emits `help-request`; the editor alone owns help dialogs.
+Boolean rows: label then help inside `.nc-heading`, a separate slotted `ha-switch`.
+Scalar rows: the one-field `ha-form` then its help icon (top-aligned to the
+native field), then the optional `ha-notifications-feature-switch` for
+option-group fields. Option-group rows, numbers and durations keep the compact
+field width; other fields use the full card width. Template code editors get a
+divider-colored frame. Prefer a `placeholder` translation
+over a help icon for short text-field guidance. Color rows: native picker,
+label, help, then the switch.
+Large editors (trigger, condition, action, template, object, target) take the
+full row with no visible label (label becomes `aria-label`); their `helper` text
+joins the section `helper` in the heading help dialog, never beside the editor.
+Section help goes immediately right of the section heading.
 Do not duplicate native form labels or manipulate private shadow DOM.
-
-Section help goes immediately right of the heading via `sectionHelp()` and
-the shared label/help template, never inside or beside a code editor.
-Notification template-values help belongs beside the Notification `h2`,
-not its message field. Preserve other field-specific text helper layouts.
-Test the visible shared structure: label-text span then icon in `.nc-heading`,
-switch outside that label, and section-heading help without duplicate
-message-field help.
+Section and optional-field enablement use the presentation-only
+`ha-notifications-feature-switch`; it takes enabled/label values and emits
+`enabled-changed`. Boolean value controls remain direct native switches.
+Tests may access the feature component's public shadow switch explicitly.

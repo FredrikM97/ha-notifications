@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
 import { mdiCheckCircle, mdiCloseCircle } from "@mdi/js";
 import { navMenu, uiStyles } from "../../frontend/ui.js";
-import { editorSections, sectionStatus, type EditorState } from "../../frontend/editor/sections.js";
-import { cleanupTestDom, draftAlertFixture, editableAlert, homeAssistantFixture, renderTemplate } from "./conftest.js";
+import { findSection, sectionStatus } from "../../frontend/editor/sections.js";
+import { cleanupTestDom, draftAlertFixture, editableAlert, renderTemplate } from "./conftest.js";
 
 afterEach(cleanupTestDom);
 
@@ -41,12 +41,9 @@ describe("section navigation status", () => {
       { trigger: "homeassistant", event: "start" },
       { trigger: "time_pattern", minutes: "/5" },
     ];
-    const state: EditorState = {
-      alert, hass: homeAssistantFixture(), localize: () => "", users: [], postConfirmationActions: false,
-    };
-    expect(sectionStatus(editorSections.find(section => section.key === "when")!, state)).toBeUndefined();
-    expect(sectionStatus(editorSections.find(section => section.key === "triggers")!, state)).toBe(enabled);
-    expect(sectionStatus(editorSections.find(section => section.key === "conditions")!, state)).toBe(!enabled);
+    expect(sectionStatus(alert, findSection("when"))).toBeUndefined();
+    expect(sectionStatus(alert, findSection("triggers"))).toBe(enabled);
+    expect(sectionStatus(alert, findSection("conditions"))).toBe(!enabled);
   });
 
   it.each([false, true])("renders both status icons in narrow=%s navigation", narrow => {

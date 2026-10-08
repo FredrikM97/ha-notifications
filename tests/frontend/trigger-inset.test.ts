@@ -34,7 +34,6 @@ async function mount(): Promise<LitElement> {
       callWS: vi.fn().mockResolvedValue({ platforms: [], unknown: true }),
     }),
     alert: draftAlertFixture(),
-    users: [],
     onSave: vi.fn(),
     onValidateAlert: vi.fn(),
   });

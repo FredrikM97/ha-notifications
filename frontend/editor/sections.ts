@@ -1,490 +1,346 @@
-/**
- * Editor sections as data. Each section is an ha-form schema plus a mapping
- * between the alert and the form; the editor renders all of them the same way.
- */
-import type { Hass } from "../types.js";
-import type { Localize } from "../localize.js";
-import {
-  fromDuration,
-  toDuration,
-  type EditableAlert,
-} from "./alert-model.js";
+import type { NotificationOptionControl, NotificationOptionControls, NotificationTarget } from "../types.js";
+import { fromDuration, toDuration, type EditableAlert } from "./alert-model.js";
 
-type FormData = Record<string, unknown>;
+type Data = Record<string, unknown>;
+type Selector = Record<string, unknown>;
+type OptionGroup = keyof NotificationOptionControls;
 
-export interface SchemaField {
-  hideLabel?: boolean;
-  default?: string;
+export interface EditorField {
+  /** Form key; translations resolve as `editor.<section>.<name>.label` and `.helper`. */
   name: string;
-  selector: Record<string, unknown>;
+  /** Dotted path into the alert draft. */
+  path: string;
+  selector: Selector;
   required?: boolean;
   disabled?: boolean;
-}
-
-export interface EditorState {
-  hass: Hass;
-  localize: Localize;
-  alert: EditableAlert;
-  postConfirmationActions: boolean;
-  users: { value: string; label: string }[];
-  mobileDrafts?: Record<string, {
-    enabled?: boolean;
-    values?: FormData;
-    fields?: Record<string, { enabled: boolean; value?: unknown }>;
-  }>;
+  read?(value: unknown): unknown;
+  write?(value: unknown): unknown;
 }
 
 export interface EditorSection {
+  /** Translation namespace: `editor.<key>.label` and optional `editor.<key>.helper`. */
   key: string;
-  /** Translation key for the section title. */
-  title: string;
-  localTitle?: string;
   parent?: string;
+  /** Rendered inside the parent section instead of as its own navigation item. */
   embedded?: boolean;
-  schema(state: EditorState): SchemaField[];
-  read(state: EditorState): FormData;
-  write(state: EditorState, data: FormData): void;
-  /** Field label and helper translation keys, by field name. */
-  labels: Record<string, string>;
-  helpers?: Record<string, string>;
-  helperIcons?: string[];
-  optional?: {
-    enabled(state: EditorState, name: string): boolean;
-    set(state: EditorState, name: string, enabled: boolean): void;
-  };
-  /** Optional enable switch, shown above the form; also drives the nav status dot. */
-  toggle?: {
-    get(state: EditorState): boolean;
-    set(state: EditorState, enabled: boolean): void;
-    help?: string;
-  };
-  status?(state: EditorState): boolean;
-  /** Adds a footer action that validates the alert with Home Assistant. */
-  validate?: { label: string; success: string };
+  /** Path of the boolean that enables this section. */
+  toggle?: string;
+  /** Native notification option group with per-field delivery switches. */
+  options?: OptionGroup;
+  validate?: boolean;
+  fields(alert: EditableAlert): EditorField[];
 }
 
-function mobileOptionsGroup(key: string): "general" | "android" | "ios" {
-  return key === "mobile" ? "general" : key as "android" | "ios";
+const OPTIONS_PATH = "notification.options.";
+
+function isRecord(value: unknown): value is Data {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function writeOptions(target: FormData, data: FormData, fields: string[]): void {
-  for (const name of fields) {
-    if (!(name in data)) continue;
-    const value = data[name];
-    if (value === "" || value === null || value === undefined) delete target[name];
-    else target[name] = value;
+function hasValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function getPath(root: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((value, key) => (isRecord(value) ? value[key] : undefined), root);
+}
+
+function setPath(root: object, path: string, value: unknown): void {
+  const keys = path.split(".");
+  const last = keys.pop()!;
+  let target = root as Data;
+  for (const key of keys) target = (target[key] ??= {}) as Data;
+  target[last] = value;
+}
+
+/** Remove a native option and any containers it leaves empty, keeping `notification.options`. */
+function unsetOption(alert: EditableAlert, path: string): void {
+  const keys = path.slice(OPTIONS_PATH.length).split(".");
+  const parents: Data[] = [alert.notification.options];
+  for (const key of keys.slice(0, -1)) {
+    const next = parents[parents.length - 1][key];
+    if (!isRecord(next)) return;
+    parents.push(next);
+  }
+  delete parents[parents.length - 1][keys[keys.length - 1]];
+  for (let index = parents.length - 1; index > 0 && !Object.keys(parents[index]).length; index--) {
+    delete parents[index - 1][keys[index - 1]];
   }
 }
 
-function mobileSection(key: string, fields: SchemaField[], pushFields: string[] = []): EditorSection {
-  const names = fields.map(field => field.name);
-  const section: EditorSection = {
-    key,
-    title: `editor.mobile.${key}`,
-    parent: "notification",
-    embedded: key === "mobile",
-    labels: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}`])),
-    helpers: Object.fromEntries(names.map(name => [name, `editor.mobile.${name}_help`])),
-    schema: ({ alert, localize }) => fields.map(field => {
-      const sound = (alert.notification.options.push as FormData | undefined)?.sound;
-      if (field.name === "sound" && sound && typeof sound === "object") {
-        return { ...field, selector: { object: {} } };
-      }
-      if ("text" in field.selector) {
-        return { ...field, selector: { text: { ...(field.selector.text as Record<string, unknown>), placeholder: localize("editor.mobile.not_set") } } };
-      }
-      return field;
-    }),
-    read: ({ alert, mobileDrafts }) => {
-      const data = alert.notification.options;
-      const push = data.push as FormData | undefined;
-      const group = mobileOptionsGroup(key);
-      const savedSection = mobileDrafts?.[group];
-      const savedValues = savedSection?.enabled === false ? savedSection.values : undefined;
-      return Object.fromEntries(names.map(name => {
-        if (savedValues) return [name, savedValues[name]];
-        return [name, pushFields.includes(name) ? push?.[name] : data[name]];
-      }));
-    },
-    write: ({ alert }, values) => {
-      const data = { ...alert.notification.options };
-      writeOptions(data, values, names.filter(name => !pushFields.includes(name)));
-      if (pushFields.length) {
-        const push = { ...data.push as FormData | undefined };
-        writeOptions(push, values, pushFields);
-        if (Object.keys(push).length) data.push = push;
-        else delete data.push;
-      }
-      alert.notification.options = data;
-    },
-    optional: {
-      enabled: (state, name) => {
-        const saved = state.mobileDrafts?.[mobileOptionsGroup(key)]?.fields?.[name];
-        const data = state.alert.notification.options;
-        const target = pushFields.includes(name) ? data.push as FormData | undefined : data;
-        return saved?.enabled ?? Boolean(target && Object.hasOwn(target, name));
-      },
-      set: (state, name, enabled) => {
-        state.mobileDrafts ??= {};
-        const group = state.mobileDrafts[mobileOptionsGroup(key)] ??= {};
-        group.fields ??= {};
-        const previous = group.fields[name];
-        if (enabled) {
-          section.write(state, { [name]: previous?.value ?? section.read(state)[name] });
-          group.fields[name] = { enabled: true };
-        } else {
-          group.fields[name] = { enabled: false, value: section.read(state)[name] ?? previous?.value };
-          section.write(state, { [name]: undefined });
-        }
-      },
-    },
-    status: ({ alert }) => {
-      const data = alert.notification.options;
-      const push = data.push as FormData | undefined;
-      return names.some(name => {
-        return pushFields.includes(name) ? Boolean(push && Object.hasOwn(push, name)) : Object.hasOwn(data, name);
-      });
-    },
-  };
-  if (key === "android" || key === "ios") {
-    const configured = section.status;
-    section.toggle = {
-      get: state => state.mobileDrafts?.[key]?.enabled ?? Boolean(configured?.(state)),
-      set: (state, enabled) => {
-        state.mobileDrafts ??= {};
-        const mobileOptions = state.mobileDrafts[key] ??= {};
-        if (enabled) {
-          const previousValues = mobileOptions.values;
-          mobileOptions.enabled = true;
-          mobileOptions.values = undefined;
-          if (previousValues) section.write(state, previousValues);
-        } else {
-          mobileOptions.enabled = false;
-          mobileOptions.values = section.read(state);
-          section.write(state, Object.fromEntries(names.map(name => [name, undefined])));
-        }
-      },
-      help: "editor.mobile.optional_help",
-    };
-  }
-  delete section.status;
-  return section;
+function isList(selector: Selector): boolean {
+  return ["trigger", "condition", "action"].some(type => type in selector)
+    || Boolean((selector.object as { multiple?: boolean } | undefined)?.multiple);
 }
 
-const dropdown = (options: string[]) => ({ select: { mode: "dropdown", options } });
+export function readField(alert: EditableAlert, field: EditorField): unknown {
+  const value = getPath(alert, field.path);
+  if (field.read) return field.read(value);
+  if ("duration" in field.selector) return toDuration(value);
+  if ("boolean" in field.selector) return value === true;
+  return value;
+}
+
+export function writeField(alert: EditableAlert, section: EditorSection, field: EditorField, value: unknown): void {
+  if (field.disabled) return;
+  let stored = value;
+  if (field.write) stored = field.write(value);
+  else if ("duration" in field.selector) stored = fromDuration(value);
+  else if (isList(field.selector)) stored = value ?? [];
+  if (section.options) {
+    // Pin the switches before the first value so typing never enables the group or field.
+    optionControl(alert, section);
+    if (!hasValue(stored)) return unsetOption(alert, field.path);
+  }
+  setPath(alert, field.path, stored);
+}
+
+export function hasOptionValues(alert: EditableAlert, section: EditorSection): boolean {
+  return section.fields(alert).some(field => hasValue(getPath(alert, field.path)));
+}
+
+export function isSectionEnabled(alert: EditableAlert, section: EditorSection): boolean | undefined {
+  if (!section.toggle) return undefined;
+  const enabled = getPath(alert, section.toggle);
+  if (typeof enabled === "boolean") return enabled;
+  return Boolean(section.options) && hasOptionValues(alert, section);
+}
+
+export function setSectionEnabled(alert: EditableAlert, section: EditorSection, enabled: boolean): void {
+  if (section.options) optionControl(alert, section);
+  setPath(alert, section.toggle!, enabled);
+}
+
+/** Own switch combined with every ancestor switch; undefined when the section has none. */
+export function sectionStatus(alert: EditableAlert, section: EditorSection): boolean | undefined {
+  const enabled = isSectionEnabled(alert, section);
+  if (enabled === undefined || !section.parent) return enabled;
+  return enabled && sectionStatus(alert, findSection(section.parent)) !== false;
+}
+
+function controlPath(field: EditorField): string {
+  return field.path.slice(OPTIONS_PATH.length);
+}
+
+export function isFieldEnabled(alert: EditableAlert, section: EditorSection, field: EditorField): boolean {
+  return alert.notification.option_controls?.[section.options!]?.fields[controlPath(field)]
+    ?? hasValue(getPath(alert, field.path));
+}
+
+export function setFieldEnabled(alert: EditableAlert, section: EditorSection, field: EditorField, enabled: boolean): void {
+  optionControl(alert, section).fields[controlPath(field)] = enabled;
+}
+
+/** Create the group's control, snapshotting inferred flags so a disabled group lists the paths it withholds. */
+function optionControl(alert: EditableAlert, section: EditorSection): NotificationOptionControl {
+  const controls = (alert.notification.option_controls ??= {});
+  const control = (controls[section.options!] ??= { enabled: isSectionEnabled(alert, section) ?? true, fields: {} });
+  for (const field of section.fields(alert)) control.fields[controlPath(field)] ??= isFieldEnabled(alert, section, field);
+  return control;
+}
+
+export function findSection(key: string): EditorSection {
+  return editorSections.find(section => section.key === key)!;
+}
+
+export function rootSection(section: EditorSection): EditorSection {
+  return section.parent ? rootSection(findSection(section.parent)) : section;
+}
+
+export function embeddedSections(section: EditorSection): EditorSection[] {
+  return editorSections.filter(child => child.parent === section.key && child.embedded);
+}
+
+function option(name: string, selector: Selector, path = name): EditorField {
+  return { name, path: `${OPTIONS_PATH}${path}`, selector };
+}
+
+function pushOption(name: string, selector: Selector): EditorField {
+  return option(name, selector, `push.${name}`);
+}
+
+const text = { text: {} };
+// Editor-only: rendered as a native color picker storing a hex string, never passed to ha-form.
+const color = { color_hex: {} };
+const toggle = { boolean: {} };
+const duration = { duration: { enable_day: true } };
+const dropdown = (...options: string[]) => ({ select: { mode: "dropdown", options } });
 
 export const editorSections: EditorSection[] = [
   {
     key: "basic",
-    title: "editor.basic.section",
-    labels: { name: "editor.basic.name", description: "editor.basic.description", icon: "editor.basic.icon" },
-    helpers: { description: "editor.basic.description_help" },
-    schema: () => [
-      { name: "name", selector: { text: {} }, required: true },
-      { name: "description", selector: { text: { multiline: true } } },
-      { name: "icon", selector: { icon: {} } },
+    fields: () => [
+      { name: "name", path: "name", selector: text, required: true },
+      { name: "description", path: "description", selector: { text: { multiline: true } } },
+      { name: "icon", path: "icon", selector: { icon: {} } },
     ],
-    read: ({ alert }) => ({ name: alert.name, description: alert.description, icon: alert.icon }),
-    write: ({ alert }, data) => Object.assign(alert, data),
   },
   {
     key: "when",
-    title: "editor.triggers.section",
-    localTitle: "editor.triggers.overview",
-    labels: {
-      automation_mode: "editor.basic.automation_mode",
-    },
-    helpers: {
-      automation_mode: "editor.basic.automation_mode_help",
-    },
-    schema: (s) => [
-      {
+    fields({ monitor: { conditions } }) {
+      // Conditional alerts always run in parallel; the backend enforces it.
+      const conditional = conditions.enabled && conditions.items.length > 0;
+      return [{
         name: "automation_mode",
-        disabled: s.alert.monitor.conditions.items.length > 0,
-        selector: {
-          select: {
-            mode: "dropdown",
-            options: ["parallel", "single", "restart", "queued"].map((value) => ({ value, label: s.localize(`editor.basic.mode_${value}`) })),
-          },
-        },
-      },
-    ],
-    read: ({ alert }) => ({
-      automation_mode: alert.monitor.conditions.items.length ? "parallel" : alert.monitor.automation_mode || "parallel",
-    }),
-    write: ({ alert }, data) => {
-      if (!alert.monitor.conditions.items.length) alert.monitor.automation_mode = data.automation_mode as EditableAlert["monitor"]["automation_mode"];
+        path: "monitor.automation_mode",
+        selector: dropdown("parallel", "single", "restart", "queued"),
+        disabled: conditional,
+        read: value => (conditional ? "parallel" : value),
+      }];
     },
   },
   {
     key: "triggers",
-    title: "editor.triggers.custom",
     parent: "when",
-    labels: { triggers: "editor.triggers.custom" },
-    helpers: { triggers: "editor.triggers.help" },
-    toggle: {
-      get: ({ alert }) => alert.monitor.triggers.enabled,
-      set: ({ alert }, enabled) => (alert.monitor.triggers.enabled = enabled),
-      help: "editor.triggers.enable_help",
-    },
-    schema: () => [{ name: "triggers", selector: { trigger: {} } }],
-    read: ({ alert }) => ({ triggers: alert.monitor.triggers.items }),
-    write: ({ alert }, data) => {
-      alert.monitor.triggers.items = (data.triggers as EditableAlert["monitor"]["triggers"]["items"]) ?? [];
-    },
-    validate: { label: "editor.common.validate_triggers", success: "panel.triggers_valid" },
+    toggle: "monitor.triggers.enabled",
+    validate: true,
+    fields: () => [{ name: "items", path: "monitor.triggers.items", selector: { trigger: {} } }],
   },
   {
     key: "conditions",
-    title: "editor.conditions.section",
     parent: "when",
-    labels: {
-      startup: "editor.conditions.startup",
-      periodic: "editor.conditions.interval_enabled",
-      interval: "editor.conditions.interval",
-      conditions: "editor.conditions.section",
+    toggle: "monitor.conditions.enabled",
+    validate: true,
+    fields({ monitor: { conditions } }) {
+      const fields: EditorField[] = [
+        { name: "startup", path: "monitor.conditions.startup", selector: toggle },
+        { name: "interval_enabled", path: "monitor.conditions.interval.enabled", selector: toggle },
+      ];
+      if (conditions.interval.enabled) fields.push({ name: "interval", path: "monitor.conditions.interval.value", selector: duration });
+      fields.push({ name: "items", path: "monitor.conditions.items", selector: { condition: {} } });
+      return fields;
     },
-    helpers: { interval: "editor.conditions.interval_help", conditions: "editor.conditions.help" },
-    toggle: {
-      get: ({ alert }) => alert.monitor.conditions.enabled,
-      set: ({ alert }, enabled) => (alert.monitor.conditions.enabled = enabled),
-      help: "editor.conditions.enable_help",
-    },
-    schema: (s) => [
-      { name: "startup", selector: { boolean: {} } },
-      { name: "periodic", selector: { boolean: {} } },
-      ...(s.alert.monitor.conditions.periodic ? [{ name: "interval", selector: { duration: { enable_day: true } } }] : []),
-      { name: "conditions", selector: { condition: {} } },
-    ],
-    read: ({ alert }) => ({
-      startup: alert.monitor.conditions.startup,
-      periodic: alert.monitor.conditions.periodic,
-      interval: toDuration(alert.monitor.conditions.interval),
-      conditions: alert.monitor.conditions.items,
-    }),
-    write: ({ alert }, data) => {
-      alert.monitor.conditions.items = (data.conditions as EditableAlert["monitor"]["conditions"]["items"]) ?? [];
-      alert.monitor.conditions.startup = Boolean(data.startup);
-      alert.monitor.conditions.periodic = Boolean(data.periodic);
-      if (data.periodic) alert.monitor.conditions.interval = fromDuration(data.interval);
-    },
-    validate: { label: "editor.common.validate_conditions", success: "panel.condition_valid" },
   },
   {
     key: "inactive",
-    title: "editor.inactive.section",
     parent: "when",
-    labels: { triggers: "editor.triggers.custom", clear_notification: "editor.inactive.clear_notification" },
-    helpers: { clear_notification: "editor.inactive.clear_notification_help" },
-    helperIcons: ["clear_notification"],
-    toggle: {
-      get: ({ alert }) => alert.monitor.inactive.enabled,
-      set: ({ alert }, enabled) => (alert.monitor.inactive.enabled = enabled),
-      help: "editor.inactive.enable_help",
-    },
-    schema: () => [
-      { name: "clear_notification", selector: { boolean: {} } },
-      { name: "triggers", selector: { trigger: {} } },
+    toggle: "monitor.inactive.enabled",
+    fields: () => [
+      { name: "clear_notification", path: "monitor.inactive.clear_notification", selector: toggle },
+      { name: "items", path: "monitor.inactive.items", selector: { trigger: {} } },
     ],
-    read: ({ alert }) => ({ triggers: alert.monitor.inactive.items, clear_notification: alert.monitor.inactive.clear_notification }),
-    write: ({ alert }, data) => {
-      alert.monitor.inactive.items = (data.triggers as EditableAlert["monitor"]["inactive"]["items"]) ?? [];
-      alert.monitor.inactive.clear_notification = Boolean(data.clear_notification);
-    },
   },
   {
     key: "recipients",
-    title: "editor.recipients.section",
-    labels: { target: "editor.recipients.section" },
-    helpers: { target: "editor.recipients.service_help" },
-    schema: () => [
-      { name: "target", selector: { target: { entity: { domain: "notify" } } } },
-    ],
-    read: ({ alert }) => {
-      const { user_id, ...target } = alert.notification.target;
-      return { target };
-    },
-    write: ({ alert }, data) => {
-      const users = alert.notification.target.user_id;
-      alert.notification.target = {
-        ...(data.target as object),
-        ...(users?.length ? { user_id: users } : {}),
-      };
-    },
+    fields: ({ notification }) => [{
+      name: "target",
+      path: "notification.target",
+      selector: { target: { entity: { domain: "notify" } } },
+      // `user_id` is integration-specific and has no native target picker; keep it out of the form.
+      read(value) {
+        const { user_id: _users, ...target } = (value ?? {}) as NotificationTarget;
+        return target;
+      },
+      write(value) {
+        const users = notification.target?.user_id;
+        return users?.length ? { ...(value as NotificationTarget), user_id: users } : value ?? {};
+      },
+    }],
   },
   {
     key: "notification",
-    title: "editor.notification.section",
-    labels: { title: "editor.notification.title", message: "editor.notification.message", use_default_tag: "editor.notification.use_default_tag" },
-    helpers: { message: "editor.notification.template_values_help", use_default_tag: "editor.notification.use_default_tag_help" },
-    helperIcons: ["use_default_tag"],
-    schema: ({ localize }) => [
-      { name: "title", selector: { text: {} } },
-      { name: "message", selector: { template: {} }, hideLabel: true, default: localize("editor.notification.message_placeholder") },
-      { name: "use_default_tag", selector: { boolean: {} } },
+    fields: () => [
+      { name: "title", path: "notification.title", selector: text },
+      { name: "message", path: "notification.message", selector: { template: {} } },
+      { name: "use_default_tag", path: "notification.use_default_tag", selector: toggle },
     ],
-    read: ({ alert }) => ({
-      title: alert.notification.title,
-      message: alert.notification.message,
-      use_default_tag: alert.notification.use_default_tag,
-    }),
-    write: ({ alert }, data) => Object.assign(alert.notification, data),
   },
   {
     key: "postSendActions",
-    title: "editor.notification.post_send_actions",
     parent: "notification",
-    labels: { actions: "editor.notification.post_send_actions" },
-    schema: () => [{ name: "actions", selector: { action: {} } }],
-    read: ({ alert }) => ({ actions: alert.post_send_actions?.actions ?? [] }),
-    write: ({ alert }, data) =>
-      (alert.post_send_actions = { ...alert.post_send_actions, enabled: Boolean(alert.post_send_actions?.enabled), actions: data.actions as [] }),
-    toggle: {
-      get: ({ alert }) => Boolean(alert.post_send_actions?.enabled),
-      set: ({ alert }, enabled) => (alert.post_send_actions = { ...alert.post_send_actions, enabled }),
-      help: "editor.notification.post_send_help",
-    },
+    toggle: "post_send_actions.enabled",
+    fields: () => [{ name: "actions", path: "post_send_actions.actions", selector: { action: {} } }],
   },
-  mobileSection("mobile", [
-    { name: "group", selector: { text: {} } },
-    { name: "color", selector: { text: {} } },
-    { name: "notification_icon", selector: { icon: {} } },
-    { name: "icon_url", selector: { text: {} } },
-  ]),
-  mobileSection("android", [
-    { name: "channel", selector: { text: {} } },
-    { name: "importance", selector: dropdown(["min", "low", "default", "high", "max"]) },
-    { name: "sticky", selector: { boolean: {} } },
-    { name: "persistent", selector: { boolean: {} } },
-    { name: "alert_once", selector: { boolean: {} } },
-    { name: "clickAction", selector: { text: {} } },
-    { name: "timeout", selector: { number: { min: 0, mode: "box", unit_of_measurement: "s" } } },
-    { name: "visibility", selector: dropdown(["public", "private", "secret"]) },
-    { name: "vibrationPattern", selector: { text: {} } },
-    { name: "ledColor", selector: { text: {} } },
-  ]),
-  mobileSection("ios", [
-    { name: "subtitle", selector: { text: {} } },
-    { name: "url", selector: { text: {} } },
-    { name: "interruption-level", selector: dropdown(["passive", "active", "time-sensitive", "critical"]) },
-    { name: "sound", selector: { text: {} } },
-    { name: "badge", selector: { number: { min: 0, mode: "box" } } },
-    { name: "notification_icon_color", selector: { text: {} } },
-    { name: "presentation_options", selector: { select: { multiple: true, options: ["alert", "badge", "sound"] } } },
-  ], ["interruption-level", "sound", "badge"]),
+  {
+    key: "mobile",
+    parent: "notification",
+    embedded: true,
+    options: "mobile",
+    fields: () => [
+      option("group", text),
+      option("color", color),
+      option("notification_icon", { icon: {} }),
+      option("icon_url", text),
+    ],
+  },
+  {
+    key: "android",
+    parent: "notification",
+    toggle: "notification.option_controls.android.enabled",
+    options: "android",
+    fields: () => [
+      option("channel", text),
+      option("importance", dropdown("min", "low", "default", "high", "max")),
+      option("sticky", toggle),
+      option("persistent", toggle),
+      option("alert_once", toggle),
+      option("clickAction", text),
+      option("timeout", { number: { min: 0, mode: "box", unit_of_measurement: "s" } }),
+      option("visibility", dropdown("public", "private", "secret")),
+      option("vibrationPattern", text),
+      option("ledColor", color),
+    ],
+  },
+  {
+    key: "ios",
+    parent: "notification",
+    toggle: "notification.option_controls.ios.enabled",
+    options: "ios",
+    fields: ({ notification: { options } }) => [
+      option("subtitle", text),
+      option("url", text),
+      pushOption("interruption-level", dropdown("passive", "active", "time-sensitive", "critical")),
+      // Structured critical sounds stay editable as an object.
+      pushOption("sound", isRecord(getPath(options, "push.sound")) ? { object: {} } : text),
+      pushOption("badge", { number: { min: 0, mode: "box" } }),
+      option("notification_icon_color", color),
+      option("presentation_options", { select: { multiple: true, options: ["alert", "badge", "sound"] } }),
+    ],
+  },
   {
     key: "confirmation",
-    title: "editor.confirmation.section",
-    localTitle: "editor.confirmation.buttons",
-    labels: {
-      buttons: "editor.confirmation.button_label",
-      forget_after_enabled: "editor.confirmation.enable_timeout",
-      timeout: "editor.confirmation.timeout",
-    },
-    helpers: { forget_after_enabled: "editor.confirmation.timeout_help" },
-    schema: (s) => [
-      {
-        name: "buttons",
-        selector: {
-          object: {
+    toggle: "confirmation.enabled",
+    fields({ confirmation: { reminders } }) {
+      const fields: EditorField[] = [
+        {
+          name: "buttons",
+          path: "confirmation.buttons",
+          selector: { object: {
             multiple: true,
             label_field: "label",
             description_field: "id",
-            fields: {
-              label: { label: s.localize("editor.confirmation.button_label"), required: true, selector: { text: {} } },
-              id: { label: s.localize("editor.confirmation.button_ids"), selector: { text: {} } },
-            },
-          },
+            fields: { label: { required: true, selector: text }, id: { selector: text } },
+          } },
         },
-      },
-      { name: "forget_after_enabled", selector: { boolean: {} } },
-      ...(s.alert.confirmation.reminders.forget_after_enabled ? [{ name: "timeout", selector: { duration: { enable_day: true } } }] : []),
-    ],
-    read: ({ alert: { confirmation } }) => ({
-      buttons: confirmation.buttons,
-      forget_after_enabled: confirmation.reminders.forget_after_enabled === true,
-      timeout: toDuration(confirmation.reminders.timeout),
-    }),
-    write: ({ alert: { confirmation } }, data) => {
-      confirmation.buttons = (data.buttons as typeof confirmation.buttons) ?? [];
-      confirmation.reminders.forget_after_enabled = Boolean(data.forget_after_enabled);
-      if ("timeout" in data) confirmation.reminders.timeout = data.timeout as Record<string, number>;
-    },
-    toggle: {
-      get: ({ alert }) => alert.confirmation.enabled,
-      set: ({ alert }, enabled) => (alert.confirmation.enabled = enabled),
+        { name: "forget_after_enabled", path: "confirmation.reminders.forget_after_enabled", selector: toggle },
+      ];
+      if (reminders.forget_after_enabled) fields.push({ name: "timeout", path: "confirmation.reminders.timeout", selector: duration });
+      return fields;
     },
   },
   {
     key: "reminder",
-    title: "editor.confirmation.reminder.section",
     parent: "confirmation",
-    labels: {
-      interval: "editor.confirmation.reminder.remind_every",
-      max_attempts: "editor.confirmation.reminder.maximum",
-      show_attempts: "editor.confirmation.reminder.show_attempt_count",
-    },
-    schema: () => [
-      { name: "interval", selector: { duration: { enable_day: true } } },
-      { name: "max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } } },
-      { name: "show_attempts", selector: { boolean: {} } },
+    toggle: "confirmation.reminders.enabled",
+    fields: () => [
+      { name: "interval", path: "confirmation.reminders.interval", selector: duration },
+      { name: "max_attempts", path: "confirmation.reminders.max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } } },
+      { name: "show_attempts", path: "confirmation.reminders.show_attempts", selector: toggle },
     ],
-    read: ({ alert: { confirmation } }) => ({
-      interval: toDuration(confirmation.reminders.interval),
-      max_attempts: confirmation.reminders.max_attempts,
-      show_attempts: confirmation.reminders.show_attempts === true,
-    }),
-    write: ({ alert: { confirmation } }, data) => Object.assign(confirmation.reminders, data),
-    toggle: {
-      get: ({ alert }) => alert.confirmation.reminders.enabled !== false,
-      set: ({ alert }, enabled) => (alert.confirmation.reminders.enabled = enabled),
-    },
-    status: (s) => s.alert.confirmation.enabled && s.alert.confirmation.reminders.enabled !== false,
   },
   {
     key: "confirmationNotification",
-    title: "editor.confirmation.notification.section",
     parent: "confirmation",
-    labels: { message: "editor.confirmation.message", use_default_tag: "editor.notification.use_default_tag" },
-    helpers: { use_default_tag: "editor.notification.use_default_tag_help" },
-    helperIcons: ["use_default_tag"],
-    schema: ({ localize }) => [
-      { name: "message", selector: { template: {} }, hideLabel: true, default: localize("editor.confirmation.message") },
-      { name: "use_default_tag", selector: { boolean: {} } },
+    toggle: "confirmation.notification.enabled",
+    fields: () => [
+      { name: "message", path: "confirmation.notification.message", selector: { template: {} } },
+      { name: "use_default_tag", path: "confirmation.notification.use_default_tag", selector: toggle },
     ],
-    read: ({ alert }) => ({ message: alert.confirmation.notification.message, use_default_tag: alert.confirmation.notification.use_default_tag }),
-    write: ({ alert }, data) => Object.assign(alert.confirmation.notification, data),
-    toggle: {
-      get: ({ alert }) => Boolean(alert.confirmation.notification.enabled),
-      set: ({ alert }, enabled) => (alert.confirmation.notification.enabled = enabled),
-      help: "editor.confirmation.notification.help",
-    },
-    status: (s) => s.alert.confirmation.enabled && Boolean(s.alert.confirmation.notification.enabled),
   },
   {
     key: "postConfirmationActions",
-    title: "editor.confirmation.actions.section",
     parent: "confirmation",
-    labels: { actions: "editor.confirmation.actions.section" },
-    schema: () => [{ name: "actions", selector: { action: {} } }],
-    read: ({ alert }) => ({ actions: alert.confirmation.actions }),
-    write: ({ alert }, data) => (alert.confirmation.actions = (data.actions as []) ?? []),
-    toggle: {
-      get: (s) => s.postConfirmationActions,
-      set: (s, enabled) => (s.postConfirmationActions = enabled),
-      help: "editor.confirmation.actions.help",
-    },
-    status: (s) => s.alert.confirmation.enabled && s.postConfirmationActions,
+    toggle: "confirmation.actions_enabled",
+    fields: () => [{ name: "actions", path: "confirmation.actions", selector: { action: {} } }],
   },
 ];
-
-export function sectionStatus(section: EditorSection, state: EditorState): boolean | undefined {
-  return section.status?.(state) ?? section.toggle?.get(state);
-}
-
-export function rootSection(key: string): EditorSection | undefined {
-  const section = editorSections.find(section => section.key === key);
-  if (!section?.parent) return section;
-  const parent = editorSections.find(item => item.key === section.parent);
-  return parent?.parent ? editorSections.find(item => item.key === parent.parent) : parent;
-}

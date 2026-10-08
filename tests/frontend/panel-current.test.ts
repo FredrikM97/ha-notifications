@@ -452,7 +452,7 @@ describe("panel view", () => {
     ).toBe(true));
   });
 
-  it.each([false, true])("loads only users before initializing the local editor with create=%s", async create => {
+  it.each([false, true])("opens the local editor without loading users with create=%s", async create => {
     const panel = mountPanel();
     await ready(panel);
 
@@ -460,34 +460,32 @@ describe("panel view", () => {
     client.callWS.mockClear();
     const options = await openPanelEditor(panel, create);
 
-    expect(messages("config/auth/list")).toEqual([{ type: "config/auth/list" }]);
+    expect(messages("config/auth/list")).toHaveLength(0);
     expect(messages("alert_defaults")).toHaveLength(0);
     expect(client.callWS.mock.calls.map(([message]) => message)).toEqual([
-      { type: "config/auth/list" },
       { type: "ha_notifications/mobile_platforms", target: create ? {} : alert.notification.target },
     ]);
     const openingOrder = editor.openEditor.mock.invocationCallOrder[0];
-    expect(client.callWS.mock.invocationCallOrder[0]).toBeLessThan(openingOrder);
-    expect(client.callWS.mock.invocationCallOrder[1]).toBeGreaterThan(openingOrder);
+    expect(client.callWS.mock.invocationCallOrder[0]).toBeGreaterThan(openingOrder);
     expect(options).not.toHaveProperty("defaults");
     expect(options.alert).toEqual(create ? null : alert);
     const host = panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
-      state: { alert: Alert };
+      alert: Alert;
     };
     if (create) {
-      expect(host.state.alert.id).toMatch(/^alert_[0-9a-f]{32}$/);
-      expect({ ...host.state.alert, id: "alert_draft" }).toEqual(draftAlertFixture());
+      expect(host.alert.id).toMatch(/^alert_[0-9a-f]{32}$/);
+      expect({ ...host.alert, id: "alert_draft" }).toEqual(draftAlertFixture());
     } else {
-      expect(host.state.alert.id).toBe(alert.id);
-      expect(host.state.alert).toMatchObject(alert);
-      expect(host.state.alert.monitor.conditions.interval).toBe(draftAlertFixture().monitor.conditions.interval);
-      expect(host.state.alert.monitor).not.toBe(alert.monitor);
-      expect(host.state.alert.notification).not.toBe(alert.notification);
+      expect(host.alert.id).toBe(alert.id);
+      expect(host.alert).toMatchObject(alert);
+      expect(host.alert.monitor.conditions.interval).toEqual(draftAlertFixture().monitor.conditions.interval);
+      expect(host.alert.monitor).not.toBe(alert.monitor);
+      expect(host.alert.notification).not.toBe(alert.notification);
     }
   });
 
   it.each([false, true])(
-    "notifies without opening on user load failure with create=%s and retries successfully",
+    "opens despite unavailable user-list permissions with create=%s",
     async create => {
       const panel = mountPanel();
       await ready(panel);
@@ -498,29 +496,15 @@ describe("panel view", () => {
         if (message.type === "config/auth/list") throw new Error("Unavailable");
         return transport(message);
       });
-      const target = panel.shadowRoot.querySelector<HTMLElement>(
-        create ? '[slot="actionItems"] ha-icon-button' : ".nc-alert",
-      )!;
-
-      await testUser().click(target);
-      await vi.waitFor(() => expect(notification).toHaveBeenCalledOnce());
-      expect((notification.mock.calls[0][0] as CustomEvent).detail).toEqual({
-        message: "config/auth/list: Unavailable",
-      });
-      expect(editor.openEditor).not.toHaveBeenCalled();
-      expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull();
-      expect(panel.shadowRoot.querySelector("ha-top-app-bar-fixed")!.hasAttribute("hidden")).toBe(false);
-
-      client.callWS.mockImplementation(transport);
       const options = await openPanelEditor(panel, create);
       expect(options.alert).toEqual(create ? null : alert);
       expect(messages("alert_defaults")).toHaveLength(0);
-      expect(messages("config/auth/list")).toHaveLength(2);
-      expect(notification).toHaveBeenCalledOnce();
+      expect(messages("config/auth/list")).toHaveLength(0);
+      expect(notification).not.toHaveBeenCalled();
     },
   );
 
-  it("uses a fresh local draft id for every opening while reusing cached users", async () => {
+  it("uses a fresh local draft id for every opening without loading users", async () => {
     const responses: Record<string, unknown> = {
       "config/auth/list": [{ id: "operator", name: "Operator" }],
     };
@@ -528,9 +512,9 @@ describe("panel view", () => {
     await ready(panel);
     const first = await openPanelEditor(panel, true);
     const editorHost = () => panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
-      state: { alert: Alert };
+      alert: Alert;
     };
-    const firstDraft = editorHost().state.alert;
+    const firstDraft = editorHost().alert;
     const firstId = firstDraft.id;
     expect(firstId).toMatch(/^alert_[0-9a-f]{32}$/);
     firstDraft.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
@@ -540,14 +524,14 @@ describe("panel view", () => {
 
     const second = await openPanelEditor(panel, true);
 
-    const secondDraft = editorHost().state.alert;
+    const secondDraft = editorHost().alert;
     expect(secondDraft.id).toMatch(/^alert_[0-9a-f]{32}$/);
     expect(secondDraft.id).not.toBe(firstId);
     expect({ ...secondDraft, id: "alert_draft" }).toEqual(draftAlertFixture());
     expect(firstDraft.id).toBe(firstId);
-    expect(second.users).toEqual(first.users);
-    expect(second.users).toEqual([{ value: "operator", label: "Operator" }]);
-    expect(messages("config/auth/list")).toHaveLength(1);
+    expect(first).not.toHaveProperty("users");
+    expect(second).not.toHaveProperty("users");
+    expect(messages("config/auth/list")).toHaveLength(0);
     expect(messages("alert_defaults")).toHaveLength(0);
   });
 
@@ -736,7 +720,7 @@ describe("panel configuration workflows", () => {
     });
   });
 
-  it("passes only active human users to the editor recipient selectors", async () => {
+  it("does not pass an unused user list to the editor", async () => {
     const panel = mountPanel({}, {
       "config/auth/list": [
         { id: "admin", name: "Admin" },
@@ -749,10 +733,7 @@ describe("panel configuration workflows", () => {
 
     const options = await openPanelEditor(panel);
 
-    expect(options.users).toEqual([
-      { value: "admin", label: "Admin" },
-      { value: "operator", label: "Operator" },
-    ]);
-    expect(messages("config/auth/list")).toEqual([{ type: "config/auth/list" }]);
+    expect(options).not.toHaveProperty("users");
+    expect(messages("config/auth/list")).toHaveLength(0);
   });
 });

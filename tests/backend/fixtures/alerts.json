@@ -28,6 +28,7 @@
       "conditions": {
         "startup": true,
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": []
       }
     }
@@ -73,6 +74,7 @@
       "conditions": {
         "startup": true,
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": []
       }
     }
@@ -107,6 +109,7 @@
       },
       "conditions": {
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": []
       }
     }
@@ -133,6 +136,7 @@
       },
       "conditions": {
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": []
       }
     }
@@ -160,6 +164,7 @@
       "conditions": {
         "startup": true,
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": []
       }
     }
@@ -248,6 +253,7 @@
       "conditions": {
         "startup": true,
         "enabled": true,
+        "interval": {"enabled": false, "value": 43200},
         "items": [
           {
             "condition": "and",
