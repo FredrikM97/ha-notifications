@@ -7,8 +7,6 @@ conditions, templates, and actions. Configure recipients, confirmation buttons,
 reminders, and follow-up actions in one panel. The integration generates and
 maintains the automations for you.
 
-<img width="1257" height="862" alt="HA Notifications alert editor" src="https://github.com/user-attachments/assets/b1ce380f-d098-4526-97f1-4ae0080b4cd0" />
-
 ## Installation
 
 1. Install **HA Notifications** through HACS and restart Home Assistant.
@@ -41,3 +39,44 @@ notifications and executes configured actions; it is not a simulation.
 For details, see the [automation flow](docs/automation-flow.md),
 [development guide](docs/development.md), and
 [Companion notification documentation](https://companion.home-assistant.io/docs/notifications/notifications-basic/).
+
+# Gallery
+<p align="center">
+  <img width="70%" alt="Overview of dashboard" src="https://github.com/user-attachments/assets/387f3189-f640-4956-b26e-e1143bf4dc29">
+  <br>
+  <em>Overview of dashboard</em>
+</p>
+
+<p align="center">
+  <img width="70%" alt="Settings page" src="https://github.com/user-attachments/assets/789551e0-0fdf-41ff-b6ee-e51556d7b70e">
+  <br>
+  <em>Settings page</em>
+</p>
+
+<p align="center">
+  <img width="70%" alt="image" src="https://github.com/user-attachments/assets/24db5608-40a5-4bf2-9d00-b188b4a356ef">
+  <br>
+   <em>History page</em>
+</p>
+
+<p align="center">
+  <img width="70%" alt="image" src="https://github.com/user-attachments/assets/61a0116f-bbb0-407d-9de9-f9652d3963bc">
+  <br>
+  <em>Raw yaml settings</em>
+</p>
+
+<p align="center">
+  <img width="70%" alt="image" src="https://github.com/user-attachments/assets/545d11c1-31df-4a14-921e-e31cf4ef713c">
+  <br>
+  <em>Trigger example</em>
+</p>
+
+<p align="center">
+  <img width="70%" alt="image" src="https://github.com/user-attachments/assets/0d8e0431-549a-487b-8534-c0c98f96fec1" />
+  <br>
+  <em>Automation population</em>
+</p>
+
+
+
+
