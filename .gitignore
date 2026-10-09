@@ -28,3 +28,6 @@ build/
 !.vscode/settings.json
 dist
 ha_notifications.zip
+# Playwright artifacts
+playwright-report/
+test-results/
