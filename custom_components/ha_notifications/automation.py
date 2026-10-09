@@ -686,7 +686,11 @@ def render_automation(
             )
         )
     alert_conditions = _copy_native_value(list(fragments.conditions))
-    automation_triggers = [dict(trigger) for trigger in fragments.triggers]
+    automation_triggers = []
+    for index, configured_trigger in enumerate(fragments.triggers):
+        trigger = dict(configured_trigger)
+        trigger.setdefault("id", str(index))
+        automation_triggers.append(trigger)
     actions = sequence
     automation_conditions = alert_conditions
     if alert_conditions:

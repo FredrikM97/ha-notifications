@@ -172,8 +172,8 @@ def test_generate_automation_uses_explicit_triggers_and_active_branches(automati
     assert generated["conditions"][0]["condition"] == "or"
     assert generated["conditions"][0]["conditions"][0]["conditions"][0] == automation_alert["monitor"]["conditions"]["items"][0]
     assert generated["triggers"] == [
-        {"trigger": "homeassistant", "event": "start"},
-        {"trigger": "state", "entity_id": "sensor.water"},
+        {"trigger": "homeassistant", "event": "start", "id": "0"},
+        {"trigger": "state", "entity_id": "sensor.water", "id": "1"},
     ]
     assert _active_sequence(generated)[0] == {
         "action": "ha_notifications.send",
@@ -373,6 +373,7 @@ async def test_binary_state_trigger_preserves_duration_without_inferred_edge(
             "from": "off",
             "to": "on",
             "for": {"seconds": 30},
+            "id": "0",
         },
     ]
     assert main["triggers"] == expected_triggers
@@ -410,7 +411,7 @@ def test_conditional_alert_generates_single_main_without_changing_triggers() -> 
 
     assert len(generated) == 1
     assert generated[0] == generate_automation(alert)
-    assert generated[0]["triggers"] == [active_edge]
+    assert generated[0]["triggers"] == [{**active_edge, "id": "0"}]
 
 
 @pytest.mark.asyncio
@@ -440,11 +441,12 @@ async def test_unconditional_alert_has_no_inactive_handler_or_clear(
     assert len(generated) == 1
     assert main["conditions"] == []
     assert main["triggers"] == [
-        {"trigger": "homeassistant", "event": "start"},
+        {"trigger": "homeassistant", "event": "start", "id": "0"},
         {
             "trigger": "state",
             "entity_id": "input_boolean.alert_button",
             "to": "on",
+            "id": "1",
         },
     ]
     assert _inactive_sequence(main) == []
@@ -495,7 +497,9 @@ def test_conditional_alert_preserves_configured_trigger_ids(
     generated = generate_automations(alert)
 
     assert len(generated) == 1
-    assert generated[0]["triggers"] == alert["monitor"]["triggers"]["items"]
+    expected_trigger = dict(alert["monitor"]["triggers"]["items"][0])
+    expected_trigger.setdefault("id", "0")
+    assert generated[0]["triggers"] == [expected_trigger]
     assert compose_automation(alert).triggers == tuple(alert["monitor"]["triggers"]["items"])
     assert generated[0]["conditions"][0]["conditions"][1]["conditions"][0]["id"] == [
         trigger_id if trigger_id is not None else "0",
@@ -576,7 +580,7 @@ def test_startup_condition_check_does_not_infer_door_watcher() -> None:
     })
 
     assert len(generated) == 1
-    assert generated[0]["triggers"] == [startup_trigger]
+    assert generated[0]["triggers"] == [{**startup_trigger, "id": "0"}]
     assert all(
         "entity_id" not in trigger
         for automation in generated
@@ -605,7 +609,7 @@ async def test_unconditional_alert_keeps_only_configured_state_triggers(
 
     assert len(generated) == 1
     assert generated[0]["conditions"] == []
-    assert generated[0]["triggers"] == [configured_trigger]
+    assert generated[0]["triggers"] == [{**configured_trigger, "id": "0"}]
     validated = await async_validate_config(hass, {"automation": generated})
     assert validated["automation"][0].validation_status is ValidationStatus.OK
 
@@ -688,11 +692,13 @@ def test_binary_state_trigger_preserves_explicit_on_and_off_edges() -> None:
             "trigger": "state",
             "entity_id": "input_boolean.alert_button",
             "to": "on",
+            "id": "0",
         },
         {
             "trigger": "state",
             "entity_id": "input_boolean.alert_button",
             "to": "off",
+            "id": "1",
         },
     ]
 

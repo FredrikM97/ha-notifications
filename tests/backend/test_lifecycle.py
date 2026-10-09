@@ -1305,7 +1305,7 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
     await hass.async_block_till_done()
     generated = mock_automation_files["read_automations"]()
     assert len(generated) == 1
-    assert "id" not in generated[0]["triggers"][-1]
+    assert generated[0]["triggers"][-1]["id"] == "1"
     assert len(generated[0]["triggers"]) == 2
 
     hass.states.async_set("input_boolean.alert_button", "on")

@@ -377,7 +377,7 @@ describe("alert editor", () => {
     expect(help.title).toBe("Triggers");
     expect(help.topics).toHaveLength(2);
     expect(help.topics[0]).toMatch(/^Controls custom triggers/);
-    expect(help.topics[1]).toMatch(/^Triggers Optional\. Add event or state triggers/);
+    expect(help.topics[1]).toMatch(/^Triggers Optional\. Use the native Home Assistant trigger editor/);
     expect(form(editor, "items").computeLabel()).toBe("");
     expect(form(editor, "items").getAttribute("aria-label")).toBe("Triggers");
   });

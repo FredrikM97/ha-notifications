@@ -156,8 +156,10 @@ existing saved mode choices are preserved. Parallel runs do not cancel an
 in-progress confirmation wait when another trigger fires.
 Conditional alerts use `parallel` mode so an inactive evaluation does not
 interrupt an in-progress confirmation wait. The main generated automation
-keeps exactly the enabled configured triggers, including user-supplied IDs and
-`for` durations. Optional alert conditions gate its send actions; with no
+keeps the enabled configured triggers, including user-supplied IDs and
+`for` durations. Triggers without an ID are emitted with their Home Assistant
+index ID (for example, `"0"`) so trigger conditions can refer to them
+explicitly. Optional alert conditions gate its send actions; with no
 conditions, each configured trigger runs the actions. Startup and time-pattern
 triggers can therefore be used alone for unconditional checks, or combined
 with conditions to gate those checks on current state.
@@ -166,8 +168,9 @@ bypasses that gate and runs the main actions; it does not infer an inactive
 transition.
 The built-in Startup trigger runs at Home Assistant startup, and the Repeat
 trigger performs interval checks; custom Home Assistant triggers add other
-event sources. Conditions do not create triggers: they are evaluated only when
-a configured custom, Startup, or Repeat trigger fires. For a conditional alert,
+event sources. This integration does not synthesize triggers from condition
+references: conditions are evaluated only when a configured custom, Startup,
+or Repeat trigger fires. For a conditional alert,
 the same triggers also evaluate the conditions negated and report inactive when
 they are false. This condition-evaluation report remains in the main automation
 without cancelling waits or clearing notifications. Conditions are not continuously

@@ -6,12 +6,16 @@ mode: parallel
 triggers:
 - trigger: homeassistant
   event: start
+  id: '0'
 - trigger: state
   entity_id: binary_sensor.door
+  id: '1'
 - trigger: state
   entity_id: binary_sensor.window
+  id: '2'
 - trigger: state
   entity_id: sensor.temperature
+  id: '3'
 conditions:
 - condition: or
   conditions:

@@ -14,7 +14,7 @@
     "add_alert": "Add alert",
     "no_alerts": "No alerts yet",
     "no_active_alerts": "No active alerts",
-    "create_first": "Create your first alert. You can trigger it from condition changes, an interval, or both.",
+    "create_first": "Create your first alert. Add a Home Assistant trigger, or enable startup or periodic checks to evaluate its conditions.",
     "create_alert": "Create alert",
     "alert_created": "Alert created.",
     "alert_saved": "Alert saved.",
@@ -74,7 +74,7 @@
       "label": "When",
       "automation_mode": {
         "label": "Automation mode",
-        "helper": "Parallel is usually the best choice for alerts because each trigger can start an independent run. Keep this setting unless you specifically need to ignore, restart, or queue runs. Conditional alerts use Parallel mode so inactive conditions can be monitored without interrupting an active run.",
+        "helper": "Parallel is usually the best choice for alerts because each trigger can start an independent run. Keep this setting unless you specifically need to ignore, restart, or queue runs. Conditional alerts use Parallel mode so inactive evaluations can be reported without interrupting an active run.",
         "options": {
           "parallel": "Parallel (run triggers independently)",
           "single": "Single (ignore new triggers while running)",
@@ -85,12 +85,12 @@
     },
     "triggers": {
       "label": "Triggers",
-      "helper": "Controls custom triggers and condition-change checks. When off, these settings are preserved but do not start the alert.",
+      "helper": "Controls custom triggers that start the alert. When off, these settings are preserved and do not start the alert.",
       "validate": "Validate triggers",
       "valid": "Triggers are valid.",
       "items": {
         "label": "Triggers",
-        "helper": "Optional. Add event or state triggers as YAML when those events should start the alert. Startup and periodic checks are configured separately. Include each custom trigger as an item in a YAML list; common types include state, event, and template triggers."
+        "helper": "Optional. Use the native Home Assistant trigger editor to add event, state, or template triggers that should start the alert. Startup and periodic checks are configured separately."
       }
     },
     "conditions": {
@@ -106,11 +106,11 @@
       },
       "interval": {
         "label": "Re-evaluate conditions every",
-        "helper": "Re-check conditions at this interval, even when no relevant entity-change event occurs."
+        "helper": "Evaluate the conditions on this schedule, even when no custom trigger fires."
       },
       "items": {
         "label": "Conditions",
-        "helper": "Conditions are optional and gate every enabled trigger. When enabled, referenced entities are watched for condition changes. With no conditions, the alert runs whenever another trigger fires. YAML and JSON are supported. For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration."
+        "helper": "Conditions are optional and gate each run started by an enabled trigger; they do not start the alert when an entity changes. Configure triggers separately, or enable startup or periodic checks. Use the native Home Assistant condition editor. For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration."
       }
     },
     "inactive": {
@@ -150,7 +150,7 @@
     },
     "postSendActions": {
       "label": "Post-send actions",
-      "helper": "Runs after every notification send. Enter a YAML list of Home Assistant actions. JSON arrays also work because JSON is valid YAML.",
+      "helper": "Configure actions with Home Assistant's native action editor. They run after every notification send.",
       "actions": {
         "label": "Post-send actions"
       }
@@ -280,12 +280,12 @@
       },
       "use_default_tag": {
         "label": "Replace previous notifications",
-        "helper": "On by default: uses the alert ID as the notification tag so supported providers replace previous notifications and can clear them. Turn off to omit the default tag and keep separate notifications. An explicit options.tag is always preserved. Without the default or a custom tag, clear cannot identify a previous push. Android persistent notifications require a tag. This setting applies only to this notification; the main notification and confirmation follow-up are configured independently."
+        "helper": "On by default, tags the confirmation follow-up with this alert's ID so supported providers replace the previous follow-up and can clear it. Turn off to keep separate notifications. An explicit options.tag is preserved. Android persistent notifications require a tag. The main notification is configured separately."
       }
     },
     "postConfirmationActions": {
       "label": "Post-confirmation actions",
-      "helper": "Run these Home Assistant actions after a recipient confirms the alert. Enter a YAML list; JSON arrays also work because JSON is valid YAML.",
+      "helper": "Configure actions with Home Assistant's native action editor. They run after a recipient confirms the alert.",
       "actions": {
         "label": "Post-confirmation actions"
       }
@@ -320,7 +320,7 @@
     "confirmation_notification": "Confirmation notification",
     "no_activity": {
       "label": "No activity yet",
-      "helper": "Notification activity and debug traces will appear here."
+      "helper": "Notification and automation activity will appear here."
     },
     "no_activity_for": "No activity for {{name}}",
     "show_all": "Show all history"
