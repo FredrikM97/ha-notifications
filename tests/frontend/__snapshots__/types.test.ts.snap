@@ -1,8 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`canonical frontend configuration types > includes explicit inactive configuration and monitor automation mode 1`] = `
+exports[`canonical frontend configuration types > includes explicit inactive configuration without a concurrency setting 1`] = `
 {
-  "automation_mode": "parallel",
   "conditions": {
     "enabled": true,
     "interval": {
@@ -28,10 +27,41 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
 {
   "alerts": [
     {
+      "confirmation": {
+        "actions": {
+          "enabled": false,
+          "items": [],
+        },
+        "buttons": [
+          {
+            "id": "confirm",
+            "label": "Done",
+          },
+        ],
+        "enabled": false,
+        "notification": {
+          "enabled": false,
+          "message": "",
+          "options": {},
+          "title": "",
+          "use_default_tag": true,
+        },
+        "reminders": {
+          "enabled": true,
+          "forget_after": {
+            "enabled": false,
+            "value": 900,
+          },
+          "interval": 1800,
+          "max_attempts": 5,
+          "show_attempts": false,
+        },
+      },
+      "description": "",
       "enabled": true,
+      "icon": "mdi:bell-outline",
       "id": "door",
       "monitor": {
-        "automation_mode": "parallel",
         "conditions": {
           "enabled": true,
           "interval": {
@@ -84,6 +114,7 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
           ],
         },
         "title": "Front door",
+        "use_default_tag": true,
       },
     },
   ],

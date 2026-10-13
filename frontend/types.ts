@@ -32,7 +32,6 @@ export interface DurationParts {
 }
 
 export type DurationValue = string | number | DurationParts;
-export type AutomationMode = "single" | "restart" | "queued" | "parallel";
 
 /** HA service target plus `user_id`, which the integration resolves to mobile devices. */
 export interface NotificationTarget extends HassServiceTarget {
@@ -57,7 +56,7 @@ export interface Notification {
   target?: NotificationTarget;
   title: string;
   message: string;
-  use_default_tag?: boolean;
+  use_default_tag: boolean;
   options: HaConfig;
   option_controls?: NotificationOptionControls;
 }
@@ -86,7 +85,6 @@ export interface InactiveConfig {
 }
 
 export interface MonitorConfig {
-  automation_mode: AutomationMode;
   triggers: TriggerConfig;
   conditions: ConditionConfig;
   inactive: InactiveConfig;
@@ -122,13 +120,15 @@ export interface ConfirmationConfig {
 export interface Alert {
   id: string;
   name: string;
-  description?: string;
-  icon?: string;
+  description: string;
+  icon: string;
   enabled: boolean;
   monitor: MonitorConfig;
   notification: Notification;
-  confirmation?: ConfirmationConfig;
+  confirmation: ConfirmationConfig;
   post_send_actions?: ActionsConfig;
+  created_at?: string;
+  updated_at?: string;
   runtime?: unknown;
 }
 

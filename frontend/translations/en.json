@@ -70,19 +70,6 @@
         "label": "Icon"
       }
     },
-    "when": {
-      "label": "When",
-      "automation_mode": {
-        "label": "Automation mode",
-        "helper": "Parallel is usually the best choice for alerts because each trigger can start an independent run. Keep this setting unless you specifically need to ignore, restart, or queue runs. Conditional alerts use Parallel mode so inactive evaluations can be reported without interrupting an active run.",
-        "options": {
-          "parallel": "Parallel (run triggers independently)",
-          "single": "Single (ignore new triggers while running)",
-          "restart": "Restart (cancel and start again)",
-          "queued": "Queued (run triggers in order)"
-        }
-      }
-    },
     "triggers": {
       "label": "Triggers",
       "helper": "Controls custom triggers that start the alert. When off, these settings are preserved and do not start the alert.",

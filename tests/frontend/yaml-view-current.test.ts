@@ -139,7 +139,7 @@ describe("YAML view", () => {
 
   it("loads config into Home Assistant's YAML editor", async () => {
     const view = mountYamlView();
-    await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config"));
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config", { validate: false }));
     await settleElement(view);
     const editor = editorFor(view);
 
@@ -367,7 +367,7 @@ describe("YAML view", () => {
     view.addEventListener("hass-notification", notifications);
     window.addEventListener("unhandledrejection", unhandled);
     try {
-      await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config"));
+      await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config", { validate: false }));
       pending.reject(new Error("Initial config load failed"));
       await vi.waitFor(() => expect(notifications).toHaveBeenCalledOnce());
       await settleElement(view);
@@ -385,7 +385,7 @@ describe("YAML view", () => {
   it("does not create an editor for a load that completes after removal", async () => {
     const pending = deferred<Record<string, unknown>>();
     const view = mountYamlView(async <Response>() => await pending.promise as Response);
-    await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config"));
+    await vi.waitFor(() => expect(api.request).toHaveBeenCalledExactlyOnceWith(view.hass, "get_config", { validate: false }));
     await settleElement(view);
     const notifications = vi.fn();
     view.addEventListener("hass-notification", notifications);

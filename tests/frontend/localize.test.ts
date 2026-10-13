@@ -28,8 +28,6 @@ describe("frontend localizer", () => {
     const localize = createLocalizer(undefined);
 
     expect(localize("editor.basic.label")).toBe("Basics");
-    expect(localize("editor.when.label")).toBe("When");
-    expect(localize("editor.when.automation_mode.helper")).toMatch(/^Parallel is usually/);
     expect(localize("editor.notification.label")).toBe("Notification");
     expect(localize("editor.notification.message.label")).toBe("Message");
     expect(localize("editor.recipients.label")).toBe("Recipients");
@@ -42,7 +40,6 @@ describe("frontend localizer", () => {
     expect(localize("editor.triggers.items.helper")).toContain("native Home Assistant trigger editor");
     expect(localize("editor.conditions.items.helper")).toContain("do not start the alert");
     expect(localize("editor.conditions.interval.helper")).toContain("no custom trigger fires");
-    expect(localize("editor.when.automation_mode.helper")).toContain("inactive evaluations can be reported");
     expect(localize("editor.postSendActions.helper")).toContain("native action editor");
     expect(localize("editor.postSendActions.helper")).toContain("after every notification send");
     expect(localize("editor.postConfirmationActions.helper")).toContain("native action editor");

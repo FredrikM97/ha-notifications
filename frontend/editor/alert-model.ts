@@ -1,4 +1,4 @@
-import type { Alert, AlertsConfig, ConfirmationConfig, DurationValue, NotificationTarget } from "../types.js";
+import type { Alert, AlertsConfig, DurationValue, NotificationTarget } from "../types.js";
 
 const UNIT_SECONDS: Record<string, number> = { days: 86400, hours: 3600, minutes: 60, seconds: 1 };
 
@@ -20,31 +20,9 @@ export function durationToSeconds(value: DurationValue | undefined): number | un
   return undefined;
 }
 
-function toSeconds(value: DurationValue, label: string): number {
-  const seconds = durationToSeconds(value);
-  if (seconds === undefined) throw new Error(`${label} must be a valid duration.`);
-  return seconds;
-}
-
-function normalizeAlertDurations(alert: Alert): Alert {
-  const reminders = alert.confirmation?.reminders;
-  if (!reminders) return alert;
-  if (reminders.interval !== undefined) {
-    reminders.interval = toSeconds(reminders.interval, "Confirmation reminder interval");
-  }
-  if (reminders.forget_after?.value !== undefined) {
-    reminders.forget_after.value = toSeconds(reminders.forget_after.value, "Confirmation timeout");
-  }
-  return alert;
-}
-
 export function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
-  const { runtime: _runtime, ...canonical } = normalizeAlertDurations(structuredClone(alert));
+  const { runtime: _runtime, ...canonical } = alert;
   return canonical as AlertsConfig["alerts"][number];
-}
-
-export interface EditableAlert extends Alert {
-  confirmation: ConfirmationConfig;
 }
 
 export interface Duration {
@@ -52,70 +30,6 @@ export interface Duration {
   hours: number;
   minutes: number;
   seconds: number;
-}
-
-/** Deep copy with every optional block the editor binds to filled in. */
-export function editableAlert(source: Alert | null | undefined, defaults = createAlertDraft()): EditableAlert {
-  return structuredClone({
-    ...defaults,
-    ...source,
-    monitor: {
-      ...defaults.monitor,
-      ...source?.monitor,
-      triggers: { ...defaults.monitor.triggers, ...source?.monitor?.triggers },
-      conditions: {
-        ...defaults.monitor.conditions,
-        ...source?.monitor?.conditions,
-        interval: { ...defaults.monitor.conditions.interval, ...source?.monitor?.conditions?.interval },
-      },
-      inactive: { ...defaults.monitor.inactive, ...source?.monitor?.inactive },
-    },
-    notification: { ...defaults.notification, ...source?.notification },
-    confirmation: {
-      ...defaults.confirmation,
-      ...source?.confirmation,
-      notification: { ...defaults.confirmation.notification, ...source?.confirmation?.notification },
-      reminders: {
-        ...defaults.confirmation.reminders,
-        ...source?.confirmation?.reminders,
-        forget_after: { ...defaults.confirmation.reminders.forget_after, ...source?.confirmation?.reminders?.forget_after },
-      },
-      actions: { ...defaults.confirmation.actions, ...source?.confirmation?.actions },
-    },
-  });
-}
-
-export function createAlertDraft(): EditableAlert {
-  const randomId = typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID().replaceAll("-", "")
-    : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
-  return {
-    id: `alert_${randomId}`,
-    name: "",
-    enabled: true,
-    description: "",
-    icon: "mdi:bell-outline",
-    monitor: {
-      automation_mode: "parallel",
-      triggers: { enabled: true, items: [] },
-      conditions: { enabled: true, items: [], startup: false, interval: { enabled: false, value: 43200 } },
-      inactive: { enabled: false, items: [], clear_notification: false },
-    },
-    notification: { target: {}, title: "", message: "", use_default_tag: true, options: {} },
-    confirmation: {
-      enabled: false,
-      buttons: [{ id: "confirm", label: "Done" }],
-      notification: { enabled: false, title: "", message: "", use_default_tag: true, options: {} },
-      reminders: {
-        enabled: true,
-        interval: 1800,
-        max_attempts: 5,
-        show_attempts: false,
-        forget_after: { enabled: false, value: 900 },
-      },
-      actions: { enabled: false, items: [] },
-    },
-  };
 }
 
 // ---- Durations ----
@@ -148,9 +62,8 @@ function hasRecipients(target: NotificationTarget | undefined): boolean {
 }
 
 /** Turn the edited alert into the canonical payload the backend expects. */
-export function finalizeAlert(draft: EditableAlert, validate = true): Alert {
-  const alert = structuredClone(draft);
-  delete alert.runtime;
+export function finalizeAlert(draft: Alert, validate = true): Alert {
+  const alert = draft;
   const { confirmation, notification } = alert;
   if (validate) {
     if (!alert.name.trim()) throw new Error("Name is required.");
@@ -167,11 +80,11 @@ export function finalizeAlert(draft: EditableAlert, validate = true): Alert {
       throw new Error("Forget-after duration must be greater than zero.");
     }
   }
+  delete alert.runtime;
   alert.name = alert.name.trim();
-  alert.icon = alert.icon?.trim();
-  if (!alert.icon) delete alert.icon;
+  alert.icon = alert.icon?.trim() || "mdi:bell-outline";
   if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.items?.length) {
     delete alert.post_send_actions;
   }
-  return normalizeAlertDurations(alert);
+  return alert;
 }

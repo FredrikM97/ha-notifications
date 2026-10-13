@@ -37,7 +37,7 @@ type Panel = HTMLElement & {
   refresh(silent?: boolean): Promise<void>;
 };
 
-type Message = { type: string; config?: AlertsConfig; alert_id?: string };
+type Message = { type: string; config?: AlertsConfig; alert_id?: string; new?: boolean; validate?: boolean };
 
 function messages(endpoint: string): Message[] {
   const type = endpoint.includes("/") ? endpoint : `ha_notifications/${endpoint}`;
@@ -53,6 +53,7 @@ afterEach(() => {
 });
 
 function mountPanel(overrides: Partial<Hass> = {}, responses: Record<string, unknown> = {}): Panel {
+  let newAlertId = 0;
   const defaults: Record<string, unknown> = {
     "ha_notifications/get_config": { version: 1, alerts: [alert] },
     "ha_notifications/automation_status": {
@@ -71,12 +72,25 @@ function mountPanel(overrides: Partial<Hass> = {}, responses: Record<string, unk
     "ha_notifications/validate_config": { valid: true },
   };
   client.callWS.mockImplementation(async (message) => {
-    if (Object.prototype.hasOwnProperty.call(responses, message.type)) return responses[message.type];
+    if (message.type === "ha_notifications/get_config" && message.new === true) {
+      newAlertId += 1;
+      return {
+        version: 1,
+        alerts: [draftAlertFixture({ id: `alert_${String(newAlertId).padStart(32, "0")}` })],
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(responses, message.type)) {
+      const response = responses[message.type];
+      return message.type === "ha_notifications/get_config" ? structuredClone(response) : response;
+    }
     if (message.type === "ha_notifications/save_config") {
       responses["ha_notifications/get_config"] = message.config;
       return { saved: true, config: message.config };
     }
-    if (Object.prototype.hasOwnProperty.call(defaults, message.type)) return defaults[message.type];
+    if (Object.prototype.hasOwnProperty.call(defaults, message.type)) {
+      const response = defaults[message.type];
+      return message.type === "ha_notifications/get_config" ? structuredClone(response) : response;
+    }
     throw new Error(`Unexpected transport request: ${message.type}`);
   });
   return mountCustomElement("ha-notifications-panel", {
@@ -462,13 +476,19 @@ describe("panel view", () => {
 
     expect(messages("config/auth/list")).toHaveLength(0);
     expect(messages("alert_defaults")).toHaveLength(0);
-    expect(client.callWS.mock.calls.map(([message]) => message)).toEqual([
-      { type: "ha_notifications/mobile_platforms", target: create ? {} : alert.notification.target },
+    expect(messages("save_config")).toHaveLength(0);
+    expect(client.callWS.mock.calls.map(([message]) => message)).toEqual(create ? [
+      { type: "ha_notifications/get_config", new: true },
+      { type: "ha_notifications/mobile_platforms", target: {} },
+    ] : [
+      { type: "ha_notifications/mobile_platforms", target: alert.notification.target },
     ]);
     const openingOrder = editor.openEditor.mock.invocationCallOrder[0];
-    expect(client.callWS.mock.invocationCallOrder[0]).toBeGreaterThan(openingOrder);
+    if (create) expect(client.callWS.mock.invocationCallOrder[0]).toBeLessThan(openingOrder);
+    else expect(client.callWS.mock.invocationCallOrder[0]).toBeGreaterThan(openingOrder);
     expect(options).not.toHaveProperty("defaults");
-    expect(options.alert).toEqual(create ? null : alert);
+    if (create) expect(options.alert).toEqual(draftAlertFixture({ id: options.alert.id }));
+    else expect(options.alert).toMatchObject(alert);
     const host = panel.shadowRoot.querySelector("ha-notifications-alert-editor") as HTMLElement & {
       alert: Alert;
     };
@@ -477,10 +497,9 @@ describe("panel view", () => {
       expect({ ...host.alert, id: "alert_draft" }).toEqual(draftAlertFixture());
     } else {
       expect(host.alert.id).toBe(alert.id);
+      expect(host.alert).toBe(options.alert);
       expect(host.alert).toMatchObject(alert);
       expect(host.alert.monitor.conditions.interval).toEqual(draftAlertFixture().monitor.conditions.interval);
-      expect(host.alert.monitor).not.toBe(alert.monitor);
-      expect(host.alert.notification).not.toBe(alert.notification);
     }
   });
 
@@ -497,14 +516,15 @@ describe("panel view", () => {
         return transport(message);
       });
       const options = await openPanelEditor(panel, create);
-      expect(options.alert).toEqual(create ? null : alert);
+      if (create) expect(options.alert).toEqual(draftAlertFixture({ id: options.alert.id }));
+      else expect(options.alert).toMatchObject(alert);
       expect(messages("alert_defaults")).toHaveLength(0);
       expect(messages("config/auth/list")).toHaveLength(0);
       expect(notification).not.toHaveBeenCalled();
     },
   );
 
-  it("uses a fresh local draft id for every opening without loading users", async () => {
+  it("uses a fresh backend draft id for every opening without loading users", async () => {
     const responses: Record<string, unknown> = {
       "config/auth/list": [{ id: "operator", name: "Operator" }],
     };
@@ -520,7 +540,7 @@ describe("panel view", () => {
     firstDraft.monitor.triggers.items.push({ trigger: "event", event_type: "changed" });
     await testUser().click(editorHost().shadowRoot!.querySelector<HTMLElement>('ha-icon-button[slot="navigationIcon"]')!);
     await vi.waitFor(() => expect(panel.shadowRoot.querySelector("ha-notifications-alert-editor")).toBeNull());
-    await vi.waitFor(() => expect(messages("get_config")).toHaveLength(2));
+    await vi.waitFor(() => expect(messages("get_config").filter(({ new: isNew }) => !isNew)).toHaveLength(2));
 
     const second = await openPanelEditor(panel, true);
 
@@ -546,7 +566,7 @@ describe("panel view", () => {
     selectTab(panel, "yaml");
     await settleElement(panel);
     expect(panel.shadowRoot.querySelector("ha-notifications-yaml-view")).not.toBeNull();
-    await vi.waitFor(() => expect(messages("get_config")).toHaveLength(2));
+    await vi.waitFor(() => expect(messages("get_config").some(({ validate }) => validate === false)).toBe(true));
   });
 
   it("does not load dashboard data for non-admin users", async () => {
@@ -594,7 +614,7 @@ describe("panel configuration workflows", () => {
     expect(config.alerts).toEqual([alert, other]);
   });
 
-  it.each(["save", "validate"] as const)("canonicalizes durations and strips runtime without changing native values on %s", async operation => {
+  it.each(["save", "validate"] as const)("preserves native durations and omits runtime on %s", async operation => {
     const other = configuredAlertFixture({ id: "window", name: "Window" });
     const config = { version: 1, alerts: [alert, other] };
     const panel = mountPanel({}, { "ha_notifications/get_config": config });
@@ -606,8 +626,6 @@ describe("panel configuration workflows", () => {
     draft.notification.options = { tag: "{{ trigger.entity_id }}", data: { ttl: 0 } };
     const original = structuredClone(draft);
     const { runtime: _runtime, ...canonical } = structuredClone(draft);
-    canonical.confirmation!.reminders.interval = 1800;
-    canonical.confirmation!.reminders.forget_after.value = 900;
 
     if (operation === "save") {
       await expect(options.onSave(draft)).resolves.toEqual(canonical);

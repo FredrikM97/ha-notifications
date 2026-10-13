@@ -6,9 +6,10 @@ import { durationToSeconds } from "../../frontend/editor/alert-model.js";
 const canonicalAlert = {
   id: "door",
   name: "Front door",
+  description: "",
+  icon: "mdi:bell-outline",
   enabled: true,
   monitor: {
-    automation_mode: "parallel",
     triggers: { enabled: true, items: [{ trigger: "homeassistant", event: "start" }] },
     conditions: {
       enabled: true,
@@ -25,8 +26,9 @@ const canonicalAlert = {
   notification: {
     action: "notify.mobile_app_phone",
     target: { entity_id: ["notify.phone"] },
-    title: "Front door", message: "Open", options: {  },
+    title: "Front door", message: "Open", use_default_tag: true, options: {  },
   },
+  confirmation: draftAlertFixture().confirmation,
 } satisfies Alert;
 
 const canonicalConfig = {
@@ -91,9 +93,8 @@ describe("canonical frontend configuration types", () => {
     expect(button).toEqual({ id: "confirm", label: "Done" });
   });
 
-  it("includes explicit inactive configuration and monitor automation mode", () => {
-    expectTypeOf<keyof MonitorConfig>().toEqualTypeOf<"automation_mode" | "triggers" | "conditions" | "inactive">();
-    expectTypeOf<MonitorConfig["automation_mode"]>().toEqualTypeOf<"single" | "restart" | "queued" | "parallel">();
+  it("includes explicit inactive configuration without a concurrency setting", () => {
+    expectTypeOf<keyof MonitorConfig>().toEqualTypeOf<"triggers" | "conditions" | "inactive">();
     const monitor: MonitorConfig = draftAlertFixture().monitor;
     expect(monitor).toMatchSnapshot();
   });

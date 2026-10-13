@@ -5,7 +5,7 @@ import { render } from "lit";
 import { mdiCheckCircle, mdiCloseCircle } from "@mdi/js";
 import { navMenu, uiStyles } from "../../frontend/ui.js";
 import { findSection, sectionStatus } from "../../frontend/editor/sections.js";
-import { cleanupTestDom, draftAlertFixture, editableAlert, renderTemplate } from "./conftest.js";
+import { cleanupTestDom, draftAlertFixture, renderTemplate } from "./conftest.js";
 
 afterEach(cleanupTestDom);
 
@@ -31,7 +31,7 @@ describe("section navigation status", () => {
   });
 
   it.each([false, true])("section status follows its own enabled flag=%s", enabled => {
-    const alert = editableAlert(draftAlertFixture());
+    const alert = draftAlertFixture();
     alert.enabled = true;
     alert.monitor.triggers.enabled = enabled;
     alert.monitor.conditions.enabled = !enabled;
@@ -41,7 +41,6 @@ describe("section navigation status", () => {
       { trigger: "homeassistant", event: "start" },
       { trigger: "time_pattern", minutes: "/5" },
     ];
-    expect(sectionStatus(alert, findSection("when"))).toBeUndefined();
     expect(sectionStatus(alert, findSection("triggers"))).toBe(enabled);
     expect(sectionStatus(alert, findSection("conditions"))).toBe(!enabled);
   });

@@ -154,7 +154,7 @@ class YamlView extends LitElement {
   }
 
   private async load(): Promise<void> {
-    const config = await request<Record<string, unknown>>(this.hass, "get_config");
+    const config = await request<Record<string, unknown>>(this.hass, "get_config", { validate: false });
     if (!this.isConnected) return;
     this.config = config;
     this.setDraft(config, true, false);

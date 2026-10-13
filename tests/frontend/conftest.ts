@@ -4,9 +4,9 @@ import { render } from "lit";
 import type { TemplateResult } from "lit";
 import type { SettingRow } from "../../frontend/editor/setting-row.js";
 import type { Alert, Hass, RuntimeAlertHistoryEntry } from "../../frontend/types.js";
-import { createAlertDraft, editableAlert as toEditableAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
 import alertFixtureData from "./fixtures/alerts.json";
 import fixtureData from "./fixtures/history.json";
+import alertDefaults from "../contracts/alert_defaults.json";
 
 export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
@@ -41,8 +41,8 @@ export function editorAlertFixture(overrides: Partial<Alert> = {}): Alert {
   };
 }
 
-export function draftAlertFixture(overrides: Partial<Alert> = {}): EditableAlert {
-  const alert = createAlertDraft();
+export function draftAlertFixture(overrides: Partial<Alert> = {}): Alert {
+  const alert = structuredClone(alertDefaults) as Alert;
   return {
     ...alert,
     id: "alert_draft",
@@ -52,10 +52,6 @@ export function draftAlertFixture(overrides: Partial<Alert> = {}): EditableAlert
       ...overrides.notification,
     },
   };
-}
-
-export function editableAlert(source: Alert | null | undefined): EditableAlert {
-  return toEditableAlert(source, draftAlertFixture());
 }
 
 export function mountCustomElement<T extends HTMLElement>(

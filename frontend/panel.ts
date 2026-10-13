@@ -290,25 +290,32 @@ class HaNotificationsPanel extends LitElement {
   private async openAlertEditor(alert: Alert | null): Promise<void> {
     const hass = this._hass;
     if (!hass) return;
-    this.editing = true;
-    this.requestUpdate();
-    openEditor({
-      root: this.renderRoot as ShadowRoot,
-      hass,
-      alert,
-      onValidateAlert: async (draft) => request(this._hass, "validate_config", {
-        config: await this.configWithAlert(draft),
-      }),
-      onSave: async (draft) => {
-        const saved = await this.saveAlert(draft);
-        notify(this, this.localizeText(alert ? "panel.alert_saved" : "panel.alert_created"));
-        return saved;
-      },
-      onClosed: () => {
-        this.editing = false;
-        void this.refresh();
-      },
-    });
+    try {
+      const editorAlert = alert ?? (await request<AlertsConfig>(hass, "get_config", { new: true })).alerts[0];
+      if (!editorAlert) throw new Error("ha_notifications/get_config: backend returned no new alert.");
+      if (!this.isConnected || this._hass !== hass) return;
+      this.editing = true;
+      this.requestUpdate();
+      openEditor({
+        root: this.renderRoot as ShadowRoot,
+        hass,
+        alert: editorAlert,
+        onValidateAlert: async (draft) => request(this._hass, "validate_config", {
+          config: await this.configWithAlert(draft),
+        }),
+        onSave: async (draft) => {
+          const saved = await this.saveAlert(draft);
+          notify(this, this.localizeText(alert ? "panel.alert_saved" : "panel.alert_created"));
+          return saved;
+        },
+        onClosed: () => {
+          this.editing = false;
+          void this.refresh();
+        },
+      });
+    } catch (error) {
+      notify(this, errorMessage(error));
+    }
   }
 }
 

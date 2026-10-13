@@ -6,7 +6,7 @@ import { errorMessage, request } from "../api.js";
 import type { Alert, Hass } from "../types.js";
 import { createLocalizer, optionalTranslation, type Localize } from "../localize.js";
 import { actions, haButton, NarrowController, navMenu, notify, toolbar, uiStyles, type Action } from "../ui.js";
-import { editableAlert, finalizeAlert, type EditableAlert } from "./alert-model.js";
+import { finalizeAlert } from "./alert-model.js";
 import "./setting-row.js";
 import { insetNativeEditors, nativeEditorKind } from "./native-editor.js";
 import type { EnabledChangedDetail, HelpEntry, HelpRequestDetail } from "./setting-row.js";
@@ -210,7 +210,7 @@ const styles = css`
 export interface OpenEditorOptions {
   root: ShadowRoot;
   hass: Hass;
-  alert?: Alert | null;
+  alert: Alert;
   onSave: (alert: Alert) => Promise<Alert | void>;
   onClosed?: () => void;
   onValidateAlert: (alert: Alert) => Promise<unknown>;
@@ -264,7 +264,7 @@ class AlertEditor extends LitElement {
   declare private platformDetection: PlatformDetection;
   private layout = new NarrowController(this);
   private options!: OpenEditorOptions;
-  private alert!: EditableAlert;
+  private alert!: Alert;
   private localizeText!: Localize;
   // ha-form re-creates its fields when the schema identity changes; keep it stable.
   private schemas = new Map<string, { key: string; schema: Selector[] }>();
@@ -282,7 +282,7 @@ class AlertEditor extends LitElement {
   init(options: OpenEditorOptions): void {
     this.options = options;
     this.hass = options.hass;
-    this.alert = editableAlert(options.alert);
+    this.alert = options.alert;
   }
 
   connectedCallback(): void {

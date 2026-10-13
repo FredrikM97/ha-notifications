@@ -2,16 +2,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
+import type { Alert } from "../../frontend/types.js";
 import type { FeatureSwitch, HelpIcon } from "../../frontend/editor/setting-row.js";
 import { openEditor } from "../../frontend/editor/index.js";
-import { finalizeAlert, type EditableAlert } from "../../frontend/editor/alert-model.js";
+import { finalizeAlert } from "../../frontend/editor/alert-model.js";
 import {
   editorSections, findSection, isFieldEnabled, isSectionEnabled, readField, sectionStatus, setFieldEnabled,
   setSectionEnabled, writeField, type EditorField,
 } from "../../frontend/editor/sections.js";
 import { createLocalizer, optionalTranslation } from "../../frontend/localize.js";
 import {
-  cleanupTestDom, draftAlertFixture, editableAlert, editorRoot, homeAssistantFixture, settleElement,
+  cleanupTestDom, draftAlertFixture, editorRoot, homeAssistantFixture, settleElement,
   settingRowHeading, settingRowSlot, testUser,
 } from "./conftest.js";
 
@@ -35,20 +36,20 @@ type NativeForm = HTMLElement & {
 };
 type NativeSwitch = HTMLElement & { checked: boolean };
 
-function draft(): EditableAlert {
-  return editableAlert(draftAlertFixture());
+function draft(): Alert {
+  return draftAlertFixture();
 }
 
 function field(sectionKey: string, name: string, alert = draft()): EditorField {
   return findSection(sectionKey).fields(alert).find(item => item.name === name)!;
 }
 
-function write(alert: EditableAlert, sectionKey: string, name: string, value: unknown): void {
+function write(alert: Alert, sectionKey: string, name: string, value: unknown): void {
   writeField(alert, findSection(sectionKey), field(sectionKey, name, alert), value);
 }
 
 async function mount(options: {
-  alert?: EditableAlert;
+  alert?: Alert;
   callWS?: ReturnType<typeof vi.fn>;
   onSave?: ReturnType<typeof vi.fn>;
   loadFragmentTranslation?: ReturnType<typeof vi.fn>;
@@ -185,7 +186,6 @@ describe("section data bindings", () => {
     expect(children.map(child => sectionStatus(alert, child))).toEqual([false, false, false]);
     setSectionEnabled(alert, findSection("confirmation"), true);
     expect(children.map(child => sectionStatus(alert, child))).toEqual([true, true, true]);
-    expect(sectionStatus(alert, findSection("when"))).toBeUndefined();
     alert.monitor.triggers.enabled = false;
     expect(sectionStatus(alert, findSection("triggers"))).toBe(false);
   });
@@ -204,15 +204,13 @@ describe("section data bindings", () => {
     expect(readField(alert, field("conditions", "interval", alert))).toEqual({ days: 0, hours: 2, minutes: 0, seconds: 0 });
   });
 
-  it("forces parallel automation mode while conditions are active", () => {
-    const alert = draft();
-    alert.monitor.automation_mode = "single";
-    alert.monitor.conditions.items = [{ condition: "state", entity_id: "binary_sensor.door", state: "on" }];
-    const mode = field("when", "automation_mode", alert);
-    expect(mode.disabled).toBe(true);
-    expect(readField(alert, mode)).toBe("parallel");
-    writeField(alert, findSection("when"), mode, "queued");
-    expect(alert.monitor.automation_mode).toBe("single");
+  it("keeps trigger, condition and inactive sections directly navigable without a mode setting", async () => {
+    const { editor } = await mount();
+    const labels = navigationLabels(editor);
+    expect(labels).toEqual(expect.arrayContaining(["Triggers", "Conditions", "Inactive"]));
+    expect(labels).not.toContain("When");
+    expect(labels).not.toContain("Automation mode");
+    expect(editor.shadowRoot!.querySelector('[data-editor-field="automation_mode"]')).toBeNull();
   });
 
   it("removes cleared native options, prunes empty push options and keeps unknown extras", () => {
@@ -283,7 +281,7 @@ describe("section data bindings", () => {
     alert.confirmation.notification.enabled = true;
     const original = structuredClone(alert.confirmation);
     setSectionEnabled(alert, findSection("confirmation"), false);
-    const reopened = editableAlert(finalizeAlert(alert, false));
+    const reopened = finalizeAlert(alert, false);
     expect(reopened.confirmation).toEqual({ ...original, enabled: false });
   });
 });
@@ -292,7 +290,7 @@ describe("alert editor", () => {
   it("renders navigation from the section list and embeds common mobile options", async () => {
     const { editor } = await mount();
     expect(navigationLabels(editor)).toEqual([
-      "Basics", "When", "Triggers", "Conditions", "Inactive", "Recipients", "Notification", "Post-send actions",
+      "Basics", "Triggers", "Conditions", "Inactive", "Recipients", "Notification", "Post-send actions",
       "Android", "iOS / macOS", "Confirmation", "Reminder policy", "Notify recipients when confirmed", "Post-confirmation actions",
     ]);
     await select(editor, "notification");
@@ -309,7 +307,7 @@ describe("alert editor", () => {
     const colorRow = row(editor, "color");
     const picker = colorRow.querySelector<HTMLInputElement>('input[type="color"]')!;
     expect(picker.getAttribute("aria-label")).toBe("Notification color");
-    const alert = (editor as unknown as { alert: EditableAlert }).alert;
+    const alert = (editor as unknown as { alert: Alert }).alert;
     await toggle(editor, featureSwitch(colorRow.querySelector("ha-notifications-feature-switch")!), true);
     expect(alert.notification.options.color).toBe("#112233");
     picker.value = "#445566";
@@ -331,19 +329,11 @@ describe("alert editor", () => {
     expect(form(editor, "interval").data.interval).toEqual({ days: 0, hours: 12, minutes: 0, seconds: 0 });
   });
 
-  it("keeps one-field schemas stable across rerenders and localizes select options", async () => {
+  it("keeps the direct trigger section visible in the navigation", async () => {
     const { editor } = await mount();
-    await select(editor, "when");
-    const schema = form(editor, "automation_mode").schema;
-    expect(schema[0].selector).toEqual({ select: { mode: "dropdown", options: [
-      { value: "parallel", label: "Parallel (run triggers independently)" },
-      { value: "single", label: "Single (ignore new triggers while running)" },
-      { value: "restart", label: "Restart (cancel and start again)" },
-      { value: "queued", label: "Queued (run triggers in order)" },
-    ] } });
-    editor.requestUpdate();
-    await settleElement(editor);
-    expect(form(editor, "automation_mode").schema).toBe(schema);
+    expect(navigationLabels(editor)).toContain("Triggers");
+    await select(editor, "triggers");
+    expect(editor.shadowRoot!.querySelector('[data-section="triggers"]')).not.toBeNull();
   });
 
   it("toggles sections and option fields through feature switches", async () => {
@@ -354,7 +344,7 @@ describe("alert editor", () => {
     const channelSwitch = featureSwitch(channel.querySelector("ha-notifications-feature-switch")!);
     expect(channelSwitch.checked).toBe(false);
     await toggle(editor, channelSwitch, true);
-    const alert = (editor as unknown as { alert: EditableAlert }).alert;
+    const alert = (editor as unknown as { alert: Alert }).alert;
     expect(alert.notification.option_controls?.android).toMatchObject({ enabled: true, fields: { channel: true } });
   });
 
@@ -389,10 +379,7 @@ describe("alert editor", () => {
       selector: { text: { multiline: true } }, default: expect.stringMatching(/^An optional note/),
     });
     expect(row(editor, "name").querySelector(".nc-field-input")!.classList.contains("nc-wide")).toBe(true);
-    await select(editor, "when");
-    const help = await openHelp(editor, row(editor, "automation_mode").querySelector("ha-notifications-help-icon")!);
-    expect(help.title).toBe("Automation mode");
-    expect(help.topics[0]).toMatch(/^Parallel is usually/);
+    expect(navigationLabels(editor)).not.toContain("Automation mode");
   });
 
   it("hides platform sections nobody receives unless they are configured", async () => {
@@ -463,8 +450,11 @@ describe("alert editor", () => {
   });
 
   it("previews YAML and confirms before discarding a dirty draft", async () => {
-    const { editor, onClosed } = await mount();
+    const alert = draftAlertFixture();
+    const { editor, onClosed, onSave } = await mount({ alert });
     await changeForm(editor, "name", "Preview");
+    expect(alert.name).toBe("Preview");
+    expect(onSave).not.toHaveBeenCalled();
     const menu = editor.shadowRoot!.querySelector<HTMLElement & { items: { action: () => void }[] }>(
       'div[slot="actionItems"] ha-icon-overflow-menu')!;
     menu.items[0].action();
@@ -480,6 +470,7 @@ describe("alert editor", () => {
     [...editor.shadowRoot!.querySelectorAll<HTMLElement>("ha-button")]
       .find(button => button.textContent?.trim() === "Discard changes")!.click();
     expect(onClosed).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("loads HA configuration translations and reports loading errors", async () => {
