@@ -17,6 +17,7 @@ from .configuration import validate_config
 from .const import DOMAIN
 from .domain import RuntimeData
 from .history import HistoryStore
+from .migration import async_migrate_entry as async_migrate_entry
 from .notification import async_setup_services, async_unload_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)

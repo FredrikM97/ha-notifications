@@ -7,13 +7,13 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from .const import CONFIG_VERSION, DOMAIN
+from .const import CONFIG_ENTRY_VERSION, CONFIG_VERSION, DOMAIN
 
 
 class HaNotificationsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Create the canonical config-entry source of truth."""
 
-    VERSION = CONFIG_VERSION
+    VERSION = CONFIG_ENTRY_VERSION
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
