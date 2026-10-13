@@ -21,13 +21,18 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import aiohttp
+from aiohttp import web
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".ha-config"
 LOCK_FILE = Path(tempfile.gettempdir()) / f"ha-notifications-dev-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]}.lock"
 INTEGRATION = ROOT / "custom_components" / "ha_notifications"
 TOKEN_FILE = CONFIG / ".dev-token"
-CLIENT_ID = "http://localhost:8124/"
+MOCK_PUSH_URL_FILE = CONFIG / ".dev-mobile-app-push-url"
+MOCK_DEVICE_NAME = "HA Notifications Dev Phone"
+MOCK_APP_ID = "io.homeassistant.ha_notifications_dev"
+MOCK_DEVICE_ID = "ha_notifications_dev_phone"
+MOCK_PUSH_PORT = 8126
 
 CONFIGURATION_YAML = """\
 frontend:
@@ -53,6 +58,8 @@ homeassistant:
 
 http:
   server_port: {port}
+
+mobile_app:
 
 logger:
   default: warning
@@ -124,6 +131,11 @@ def prepare_config(port: int, reset: bool) -> Path:
         configuration.write_text(CONFIGURATION_YAML.format(port=port))
     existing = configuration.read_text()
     updated = _with_http_port(existing, port)
+    if not any(
+        line.partition("#")[0].strip() == "mobile_app:"
+        for line in updated.splitlines()
+    ):
+        updated = updated.rstrip() + "\n\nmobile_app:\n"
     if updated != existing:
         configuration.write_text(updated)
     return bundle
@@ -158,14 +170,15 @@ async def websocket(base: str, session: aiohttp.ClientSession, token: str, *mess
     return result
 
 
-async def onboard(base: str, session: aiohttp.ClientSession) -> str:
+async def onboard(base: str, session: aiohttp.ClientSession, port: int) -> str:
+    client_id = f"http://localhost:{port}/"
     async with session.post(
         f"{base}/api/onboarding/users",
         json={
             "name": "Developer",
             "username": "dev",
             "password": "dev",
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "language": "en",
         },
     ) as response:
@@ -173,7 +186,7 @@ async def onboard(base: str, session: aiohttp.ClientSession) -> str:
         code = (await response.json())["auth_code"]
     async with session.post(
         f"{base}/auth/token",
-        data={"grant_type": "authorization_code", "code": code, "client_id": CLIENT_ID},
+        data={"grant_type": "authorization_code", "code": code, "client_id": client_id},
     ) as response:
         response.raise_for_status()
         access = (await response.json())["access_token"]
@@ -181,7 +194,7 @@ async def onboard(base: str, session: aiohttp.ClientSession) -> str:
     for step, body in (
         ("core_config", None),
         ("analytics", None),
-        ("integration", {"client_id": CLIENT_ID, "redirect_uri": f"{CLIENT_ID}?auth_callback=1"}),
+        ("integration", {"client_id": client_id, "redirect_uri": f"{client_id}?auth_callback=1"}),
     ):
         async with session.post(f"{base}/api/onboarding/{step}", json=body, headers=headers):
             pass
@@ -193,6 +206,127 @@ async def onboard(base: str, session: aiohttp.ClientSession) -> str:
     )
     TOKEN_FILE.write_text(token)
     return token
+
+
+async def ensure_mock_mobile_app(
+    base: str,
+    session: aiohttp.ClientSession,
+    token: str,
+    push_url: str,
+) -> None:
+    """Register a local-only Companion device for target testing."""
+    headers = {"Authorization": f"Bearer {token}"}
+    entries_url = f"{base}/api/config/config_entries/entry?domain=mobile_app"
+
+    async def mock_entry() -> dict | None:
+        async with session.get(entries_url, headers=headers) as response:
+            response.raise_for_status()
+            entries = await response.json()
+        if not isinstance(entries, list):
+            return None
+        return next(
+            (
+                entry
+                for entry in entries
+                if isinstance(entry, dict) and entry.get("title") == MOCK_DEVICE_NAME
+            ),
+            None,
+        )
+
+    async def has_mock_notify_entity(entry_id: str) -> bool:
+        entities = await websocket(
+            base,
+            session,
+            token,
+            {"type": "config/entity_registry/list"},
+        )
+        return isinstance(entities, list) and any(
+            isinstance(entity, dict)
+            and str(entity.get("entity_id", "")).startswith("notify.")
+            and entity.get("config_entry_id") == entry_id
+            for entity in entities
+        )
+
+    async def wait_for_mock_notify_entity(entry_id: str) -> bool:
+        for _ in range(40):
+            if await has_mock_notify_entity(entry_id):
+                return True
+            await asyncio.sleep(0.25)
+        return False
+
+    registration_url = f"{base}/api/mobile_app/registrations"
+    existing = await mock_entry()
+    if existing:
+        configured_push_url = (
+            MOCK_PUSH_URL_FILE.read_text().strip()
+            if MOCK_PUSH_URL_FILE.exists()
+            else ""
+        )
+        if configured_push_url == push_url and await wait_for_mock_notify_entity(existing["entry_id"]):
+            return
+        for _ in range(40):
+            async with session.get(registration_url, headers=headers) as response:
+                if response.status != 404:
+                    break
+            await asyncio.sleep(0.25)
+        else:
+            raise TimeoutError("Home Assistant did not load the Mobile App integration.")
+        async with session.delete(
+            f"{base}/api/config/config_entries/entry/{existing['entry_id']}",
+            headers=headers,
+        ) as response:
+            response.raise_for_status()
+
+    registration_data = {
+        "app_data": {"push_token": "ha-notifications-dev", "push_url": push_url},
+        "app_id": MOCK_APP_ID,
+        "app_name": "HA Notifications Dev",
+        "app_version": "1.0",
+        "device_id": MOCK_DEVICE_ID,
+        "device_name": MOCK_DEVICE_NAME,
+        "manufacturer": "HA Notifications",
+        "model": "Development Simulator",
+        "os_name": "Android",
+        "os_version": "1.0",
+        "supports_encryption": False,
+    }
+    for _ in range(40):
+        async with session.post(
+            registration_url, headers=headers, json=registration_data
+        ) as response:
+            if response.status == 404:
+                await asyncio.sleep(0.25)
+                continue
+            response.raise_for_status()
+            MOCK_PUSH_URL_FILE.write_text(push_url)
+            break
+    else:
+        raise TimeoutError("Home Assistant did not load the Mobile App registration endpoint.")
+
+    for _ in range(40):
+        registered = await mock_entry()
+        if registered and await has_mock_notify_entity(registered["entry_id"]):
+            print(f"[dev] Added mock Mobile App device: {MOCK_DEVICE_NAME}", flush=True)
+            return
+        await asyncio.sleep(0.25)
+    raise TimeoutError("Home Assistant did not finish registering the mock Mobile App device.")
+
+
+async def start_mock_push_sink() -> web.AppRunner:
+    """Start a loopback-only receiver for dev Mobile App push requests."""
+    async def receive_notification(request: web.Request) -> web.Response:
+        await request.json()
+        print("[dev] Mock phone received a notification.", flush=True)
+        return web.json_response({"ok": True})
+
+    app = web.Application()
+    app.router.add_post("/notify", receive_notification)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", MOCK_PUSH_PORT)
+    await site.start()
+    print(f"[dev] Mock phone push sink listening on 127.0.0.1:{MOCK_PUSH_PORT}.", flush=True)
+    return runner
 
 
 def _notify_entities(states: object) -> list[str]:
@@ -214,19 +348,39 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
     async with session.get(
         f"{base}/api/config/config_entries/entry?domain=ha_notifications", headers=headers
     ) as response:
-        if await response.json():
-            return
-    async with session.post(
-        f"{base}/api/config/config_entries/flow", json={"handler": "ha_notifications"}, headers=headers
-    ) as response:
-        flow = await response.json()
-    if flow.get("type") == "form":
+        entries = await response.json()
+    if not entries:
         async with session.post(
-            f"{base}/api/config/config_entries/flow/{flow['flow_id']}", json={}, headers=headers
-        ):
-            pass
+            f"{base}/api/config/config_entries/flow", json={"handler": "ha_notifications"}, headers=headers
+        ) as response:
+            flow = await response.json()
+        if flow.get("type") == "form":
+            async with session.post(
+                f"{base}/api/config/config_entries/flow/{flow['flow_id']}", json={}, headers=headers
+            ):
+                pass
+    for attempt in range(40):
+        try:
+            config = await websocket(
+                base,
+                session,
+                token,
+                {"type": "ha_notifications/get_config"},
+            )
+        except RuntimeError as error:
+            if "unknown_command" not in str(error):
+                raise
+            if attempt == 39:
+                raise TimeoutError(
+                    "HA Notifications websocket commands did not register during startup."
+                ) from error
+            await asyncio.sleep(0.25)
+        else:
+            break
+    if isinstance(config, dict) and config.get("alerts"):
+        return
     fixtures = json.loads((ROOT / "tests" / "backend" / "fixtures" / "alerts.json").read_text())
-    alerts = [fixtures["full_feature"], fixtures["configuration"]]
+    alerts = [fixtures["front_door_switch"], fixtures["full_feature"]]
     states = await websocket(base, session, token, {"type": "get_states"})
     entities = _notify_entities(states)
     for alert in alerts:
@@ -243,7 +397,6 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
                 if isinstance(confirmation_notification, dict):
                     confirmation_notification.pop("action", None)
                     confirmation_notification.pop("target", None)
-    alerts[1]["name"] = "Window left open"
     if not entities:
         print("[dev] No notify entities found; sample alerts are disabled until one is configured.", flush=True)
     await websocket(
@@ -254,20 +407,45 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
     )
 
 
-async def bootstrap(port: int) -> None:
+async def bootstrap(port: int, push_url: str) -> str:
     base = f"http://127.0.0.1:{port}"
     async with aiohttp.ClientSession() as session:
         await wait_for_http(base, session)
-        token = TOKEN_FILE.read_text() if TOKEN_FILE.exists() else await onboard(base, session)
+        token = TOKEN_FILE.read_text() if TOKEN_FILE.exists() else await onboard(base, session, port)
         try:
             await websocket(base, session, token, {"type": "http/config/promote"})
         except RuntimeError:
             pass
         try:
+            await ensure_mock_mobile_app(base, session, token, push_url)
+        except Exception as error:
+            print(f"[dev] Mock Mobile App registration failed: {error}", flush=True)
+        try:
             await seed(base, session, token)
         except Exception as error:
             print(f"[dev] Seeding sample alerts failed: {error}", flush=True)
-    print(f"\n[dev] Ready: http://localhost:{port}/ha_notifications  (no login needed)\n", flush=True)
+    print(f"\n[dev] Ready inside the container on port {port}: http://localhost:{port}/ha_notifications (no login needed)", flush=True)
+    print("[dev] Open the forwarded port from VS Code's Ports view if its host port differs.\n", flush=True)
+    return token
+
+
+async def run_dev_runtime(port: int, processes: list[subprocess.Popen]) -> None:
+    """Run the local push sink before HA and keep it alive until HA exits."""
+    sink = await start_mock_push_sink()
+    try:
+        processes.append(subprocess.Popen(
+            [sys.executable, "-m", "homeassistant", "-c", str(CONFIG)],
+            cwd=CONFIG,
+            start_new_session=True,
+        ))
+        await bootstrap(port, f"http://127.0.0.1:{MOCK_PUSH_PORT}/notify")
+        home_assistant = processes[-1]
+        while (result := home_assistant.poll()) is None:
+            await asyncio.sleep(0.25)
+        if result:
+            raise RuntimeError(f"Home Assistant exited with status {result}.")
+    finally:
+        await sink.cleanup()
 
 
 @contextmanager
@@ -343,13 +521,7 @@ def run_dev(port: int, reset: bool) -> None:
             if processes[-1].wait() != 0:
                 raise RuntimeError("Initial frontend build failed.")
             processes.append(subprocess.Popen([*build_command, "--watch=forever"], cwd=ROOT, start_new_session=True))
-            processes.append(subprocess.Popen(
-                [sys.executable, "-m", "homeassistant", "-c", str(CONFIG)], cwd=CONFIG, start_new_session=True,
-            ))
-            asyncio.run(bootstrap(port))
-            result = processes[-1].wait()
-            if result:
-                raise RuntimeError(f"Home Assistant exited with status {result}.")
+            asyncio.run(run_dev_runtime(port, processes))
         finally:
             for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
                 signal.signal(signum, signal.SIG_IGN)

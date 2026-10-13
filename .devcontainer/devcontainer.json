@@ -8,7 +8,7 @@
 
   "remoteUser": "vscode",
 
-  "appPort": ["8124:8124"],
+  "forwardPorts": [8124],
 
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
@@ -41,5 +41,5 @@
     "type=bind,source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,readonly"
   ],
 
-  "postCreateCommand": "pip install -e . && npm ci && git config core.hooksPath .githooks"
+  "postCreateCommand": "python -m pip install -e '.[all]' && npm ci && git config core.hooksPath .githooks"
 }

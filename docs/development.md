@@ -4,16 +4,20 @@
 
 ```bash
 npm ci
-python3 -m pip install -e .
+python3 -m pip install -e ".[all]"
 git config core.hooksPath .githooks   # optional: run checks before each commit
 ```
+
+The project requires Python 3.14.2 or newer. The devcontainer uses Python 3.14
+and installs the `all` extra, including the pinned Home Assistant version from
+`pyproject.toml`. Rebuild the devcontainer after changing its Python base image.
 
 ## Run it
 
 `npm run dev` starts a throwaway Home Assistant with this integration loaded:
 
 ```bash
-npm run dev               # http://localhost:8124/ha_notifications
+npm run dev               # container listener: http://localhost:8124/ha_notifications
 npm run dev -- --reset    # start again from a clean instance
 ```
 
@@ -35,11 +39,12 @@ npm run dev -- --port 8125
 npm run dev -- --reset
 ```
 
-The devcontainer publishes port 8124 on the Docker host. Rebuild the container
-after changing its configuration, then browse to
-`http://<docker-host-LAN-IP>:8124/ha_notifications` from another device. Allow
-TCP 8124 through the host firewall if required; the host port must be free.
-Alternate dev ports require matching port mappings.
+Home Assistant listens on container port 8124 by default. VS Code forwards that
+port to the host; if host port 8124 is already occupied, the forwarded host port
+may be different. Use the URL shown in the VS Code Ports view in that case.
+For access from another device, expose the selected port on the Docker host and
+allow it through the host firewall. Alternate dev ports require matching port
+forwarding or Docker mappings.
 
 The dev configuration bypasses login for private-network clients. Use LAN
 access only on a trusted network; remove the `trusted_networks` auth provider in

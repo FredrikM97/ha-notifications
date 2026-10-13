@@ -31,3 +31,4 @@ ha_notifications.zip
 # Playwright artifacts
 playwright-report/
 test-results/
+.vscode/settings.json
