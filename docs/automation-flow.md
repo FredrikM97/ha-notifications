@@ -170,13 +170,11 @@ The built-in Startup trigger runs at Home Assistant startup, and the Repeat
 trigger performs interval checks; custom Home Assistant triggers add other
 event sources. This integration does not synthesize triggers from condition
 references: conditions are evaluated only when a configured custom, Startup,
-or Repeat trigger fires. For a conditional alert,
-the same triggers also evaluate the conditions negated and report inactive when
-they are false. This condition-evaluation report remains in the main automation
-without cancelling waits or clearing notifications. Conditions are not continuously
-monitored, and no reverse state edge or door-closing watcher is inferred. An
-explicitly configured closing trigger remains a normal main trigger, with its
-original ID and duration; it is not repurposed as a completion handler.
+or Repeat trigger fires. An active trigger that fails its configured conditions
+is ignored and does not create an inactive report. Conditions are not
+continuously monitored, and no reverse state edge or door-closing watcher is
+inferred. Configure an explicit trigger in the **Inactive** section when the
+alert needs a signal that it became inactive.
 
 Startup and interval checks belong to `monitor.conditions`. Interval enablement
 and its configured duration are saved together:
@@ -200,17 +198,17 @@ remain valid interval values. The editor's periodic switch writes `interval.enab
 not a persisted `periodic` field. The retired sibling flag and flat interval shape
 are rejected by the backend; the frontend does not migrate them automatically.
 
-Each alert always generates its main automation; without enabled main triggers
-it has an empty trigger list and runs only when started manually, such as by
-**Test alert**. Automation mode belongs to `monitor.automation_mode`,
-not to individual triggers. Nested mode settings and retired options are rejected.
-The **Inactive** child section under **When to run** optionally defines native
-triggers in `monitor.inactive.items`. When enabled and nonempty, these generate
-a separate queued automation that records inactivity and sends `cancel_run` to
-pending confirmation waits. Its triggers bypass main alert conditions and mode.
-The optional `clear_notification` setting also clears the delivered notification.
-Disabled inactive settings are preserved but do not generate an automation.
-No inverse triggers or automation-completion listeners are inferred.
+Each alert always generates one main automation. Alerts run in parallel so each
+active trigger that passes the configured conditions starts an independent flow.
+An active trigger that fails those conditions is ignored; it does not create an
+inactive report. The **Inactive** section optionally defines native triggers in
+`monitor.inactive.items`. When enabled and nonempty, those triggers are awaited
+inside active flows; when one fires, that flow records inactivity and stops.
+They do not start a separate automation and do not need to pass the main
+conditions. The optional `clear_notification` setting also clears the delivered
+notification for that flow. Disabled inactive settings are preserved but are
+not added to waits. No inverse triggers or automation-completion listeners are
+inferred.
 Notifications default to the alert ID as their `data.tag`, so providers that
 support tagged replacement update the previous notification for that alert.
 Set `notification.use_default_tag: false` to omit the managed tag.

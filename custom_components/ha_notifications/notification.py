@@ -217,6 +217,11 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
         native_payload = await _render_confirmation_message(hass, native_payload, call)
     service_name = SERVICE_CLEAR if clear else SERVICE_SEND
     services = _target_services(hass, call.data, service_name)
+    alert_id = call.data.get("alert_id")
+    history = None
+    flow_id = call.data.get("flow_id")
+    if isinstance(alert_id, str) and alert_id:
+        history = history_store(hass, _entry(hass))
     payload = _payload(
         native_payload, clear, call.data.get("alert_id"), call.data["use_default_tag"]
     )
@@ -226,8 +231,8 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
             "Notification %s: action=%s alert_id=%s flow_id=%s payload=%s",
             service_name,
             action,
-            call.data.get("alert_id"),
-            call.data.get("flow_id"),
+            alert_id,
+            flow_id,
             payload,
         )
         try:
@@ -249,17 +254,17 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
             )
             raise
         _LOGGER.debug("Notification %s completed: action=%s", service_name, action)
-    alert_id = call.data.get("alert_id")
     if isinstance(alert_id, str) and alert_id:
         kwargs = {}
-        flow_id = call.data.get("flow_id")
         if isinstance(flow_id, str) and flow_id:
             kwargs["flow_id"] = flow_id
         details = {"service": services[0] if len(services) == 1 else services}
         history_reason = call.data.get("history_reason")
         if isinstance(history_reason, str) and history_reason:
             details["reason"] = history_reason
-        await history_store(hass, _entry(hass)).async_record(
+        if history is None:
+            history = history_store(hass, _entry(hass))
+        await history.async_record(
             alert_id,
             str(call.data.get("alert_name", alert_id)),
             "notification_cleared" if clear else "notification_sent",

@@ -33,10 +33,8 @@ def _monitor(
     startup: bool = False,
     interval_enabled: bool = False,
     interval: int = 43200,
-    automation_mode: str = "parallel",
 ) -> dict[str, object]:
     return {
-        "automation_mode": automation_mode,
         "inactive": {"enabled": False, "items": [], "clear_notification": False},
         "triggers": {
             "enabled": True,
@@ -372,6 +370,15 @@ async def test_generated_automation_reports_inactive_without_clearing(
             "options": {},
         },
     )
+    alert["monitor"]["inactive"] = {
+        "enabled": True,
+        "items": [{
+            "trigger": "state",
+            "entity_id": "binary_sensor.door",
+            "to": "off",
+        }],
+        "clear_notification": False,
+    }
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="HA Notifications",
@@ -385,7 +392,7 @@ async def test_generated_automation_reports_inactive_without_clearing(
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await hass.async_block_till_done()
     history = await entry.runtime_data.history.async_entries("base_alert")
-    assert [item["event"]["type"] for item in history] == ["inactive"]
+    assert history == []
 
     hass.states.async_set("binary_sensor.door", "on")
     await hass.async_block_till_done()
@@ -399,7 +406,6 @@ async def test_generated_automation_reports_inactive_without_clearing(
         "completed",
         "notification_sent",
         "started",
-        "inactive",
     ]
 
 
@@ -747,7 +753,7 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
             "title": "Confirm",
         }]},
     }]
-    assert post_send_calls == [{"name": "Full feature sent"}]
+    assert post_send_calls == []
     assert confirmation_calls == []
     assert hass.states.get(main.entity_id).attributes["current"] == 1
     assert hass.states.get(main.entity_id).state == expected_state
@@ -863,7 +869,7 @@ async def test_full_flow_uses_native_automation(
         "message": "Confirmed by Unknown device",
         "data": {"tag": "full_feature"},
     }
-    assert post_send_calls == [{"name": "Full feature sent"}]
+    assert post_send_calls == []
     assert confirmation_calls == [{"entity_id": ["light.hall"]}]
     history_entries = await entry.runtime_data.history.async_entries("full_feature")
     assert any(
@@ -1031,7 +1037,6 @@ async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
     alert = alert_factory(
         "base",
         monitor=_monitor(
-            automation_mode="parallel",
             triggers=[
                 {"trigger": "state", "entity_id": "input_boolean.alert_button", "to": "on"},
                 {"trigger": "state", "entity_id": "binary_sensor.second_trigger", "to": "on"},
@@ -1098,7 +1103,7 @@ async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
     "inactive_enabled,has_items,clear_notification",
     [(True, True, False), (True, True, True), (False, True, True), (True, False, True), (False, False, False)],
 )
-async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
+async def test_explicit_door_close_uses_shared_trigger_without_stopping_parallel_flows(
     hass: HomeAssistant,
     alert_factory,
     mock_automation_files,
@@ -1108,7 +1113,7 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
     has_items: bool,
     clear_notification: bool,
 ) -> None:
-    """Only configured inactive triggers cancel waits, independently of conditions."""
+    """Configured inactive triggers clear state without stopping active flows."""
     async def register_panel(_hass: HomeAssistant) -> None:
         return None
 
@@ -1142,7 +1147,6 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
         }, {
             "condition": "state", "entity_id": "binary_sensor.guard", "state": "on",
         }],
-        automation_mode="parallel",
     )
     monitor["inactive"] = {
         "enabled": inactive_enabled,
@@ -1168,20 +1172,27 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
     await hass.async_block_till_done()
     generated = mock_automation_files["read_automations"]()
     has_handler = inactive_enabled and has_items
-    assert len(generated) == (2 if has_handler else 1)
-    assert generated[0]["triggers"] == active_triggers
-    if has_handler:
-        assert generated[1]["triggers"] == [inactive_trigger]
-        assert generated[1]["conditions"] == []
+    assert len(generated) == 1
+    active_automation = generated[0]
+    assert active_automation["id"] == automation_id(alert)
+    assert active_automation["triggers"] == [
+        {**trigger, "id": str(index)}
+        for index, trigger in enumerate(active_triggers)
+    ] + ([{
+        "trigger": "state",
+        "entity_id": "binary_sensor.door",
+        "from": "on",
+        "to": "off",
+        "id": "inactive_0",
+    }] if has_handler else [])
     main = next(
         state for state in hass.states.async_all("automation")
         if state.attributes.get("id") == automation_id(alert)
     )
-    companions = [
-        state for state in hass.states.async_all("automation")
-        if state.attributes.get("id") == f"{automation_id(alert)}_inactive"
-    ]
-    assert len(companions) == int(has_handler)
+    assert not any(
+        state.attributes.get("id") == f"{automation_id(alert)}_inactive"
+        for state in hass.states.async_all("automation")
+    )
     for count, entity_id in enumerate(("input_boolean.alert_button", "binary_sensor.second_trigger"), start=1):
         hass.states.async_set(entity_id, "on")
         await _wait_for_history_events(entry.runtime_data, alert["id"], "waiting", count)
@@ -1220,20 +1231,15 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
         await door_closed.wait()
     remove_listener()
     if has_handler:
-        await _wait_for_history_events(entry.runtime_data, alert["id"], "cancelled", 2)
-        await hass.async_block_till_done()
+        await _wait_for_history_events(entry.runtime_data, alert["id"], "inactive")
     entries = await entry.runtime_data.history.async_entries(alert["id"])
     if has_handler:
-        assert [event.data for event in commands] == [{"alert_id": alert["id"], "command": "cancel_run"}]
-        assert hass.states.get(main.entity_id).attributes["current"] == 0
-        cancelled_flows = {
-            item["event"]["flow_id"] for item in entries
-            if item["event"]["type"] == "cancelled"
-        }
-        assert cancelled_flows == waiting_flows
+        assert commands == []
+        assert hass.states.get(main.entity_id).attributes["current"] == 2
         inactive = [item for item in entries if item["event"]["type"] == "inactive"]
         assert len(inactive) == 1
-        assert inactive[0]["event"]["details"]["action"] == "inactive_trigger"
+        assert inactive[0]["event"]["flow_id"] not in waiting_flows
+        assert all(item["event"]["details"]["action"] == "inactive_trigger" for item in inactive)
         assert hass.states.get(main.entity_id).state == "on"
     else:
         assert commands == []
@@ -1244,7 +1250,12 @@ async def test_explicit_door_close_inactive_trigger_cancels_parallel_waits(
     assert [item for item in delivered if item["message"] == "clear_notification"] == (
         [{"title": "", "message": "clear_notification", "data": {"tag": alert["id"]}}] if cleared else []
     )
-    assert sum(item["event"]["type"] == "notification_cleared" for item in entries) == int(cleared)
+    cleared_events = [item for item in entries if item["event"]["type"] == "notification_cleared"]
+    assert len(cleared_events) == int(cleared)
+    assert all(
+        item["event"]["flow_id"] not in waiting_flows
+        for item in cleared_events
+    )
     assert not any(item["event"]["type"] in {"confirmation_completed", "confirmation_timeout"} for item in entries)
     await hass.services.async_call(
         "automation", "turn_off", {"entity_id": main.entity_id, "stop_actions": True}, blocking=True,
@@ -1281,7 +1292,6 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
         "base",
         monitor=_monitor(
             startup=True,
-            automation_mode="parallel",
             triggers=[{"trigger": "state", "entity_id": "input_boolean.alert_button", "to": "on"}],
         ),
         confirmation={
@@ -1432,14 +1442,14 @@ async def test_saving_alert_cancels_active_confirmation_wait(
     assert run_events[0]["details"]["action"] == "automation_reloaded"
 
 
-async def test_false_condition_report_does_not_cancel_pending_confirmation_wait(
+async def test_active_trigger_with_false_conditions_is_ignored(
     hass: HomeAssistant,
     alert_factory,
     mock_automation_files,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
-    """False-condition reporting leaves the pending wait available for confirmation."""
+    """An active trigger whose configured conditions fail does not start a flow."""
     async def register_panel(_hass: HomeAssistant) -> None:
         return None
 
@@ -1458,11 +1468,10 @@ async def test_false_condition_report_does_not_cancel_pending_confirmation_wait(
     assert await async_setup_component(hass, "automation", {})
 
     hass.states.async_set("input_boolean.alert_button", "off")
-    hass.states.async_set("binary_sensor.alert_guard", "on")
+    hass.states.async_set("binary_sensor.alert_guard", "off")
     alert = alert_factory(
         "base",
         monitor=_monitor(
-            automation_mode="restart",
             triggers=[
                 {"trigger": "state", "entity_id": "input_boolean.alert_button", "to": "on"},
                 {"trigger": "state", "entity_id": "binary_sensor.alert_guard"},
@@ -1490,49 +1499,16 @@ async def test_false_condition_report_does_not_cancel_pending_confirmation_wait(
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
     hass.states.async_set("input_boolean.alert_button", "on")
-    await _wait_for_history_events(entry.runtime_data, alert["id"], "waiting")
-
-    entries = await entry.runtime_data.history.async_entries(alert["id"])
-    waiting = next(
-        item for item in entries if item["event"]["type"] == "waiting"
-    )
-    waiting_flow_id = waiting["event"]["flow_id"]
-    assert len(delivered) == 1
-    main_automation = next(
-        state
-        for state in hass.states.async_all("automation")
-        if state.attributes.get("id") == automation_id(alert)
-    )
-    assert main_automation.attributes["current"] == 1
-
-    hass.states.async_set("binary_sensor.alert_guard", "off")
-    await _wait_for_history_events(entry.runtime_data, alert["id"], "inactive")
-
-    entries = await entry.runtime_data.history.async_entries(alert["id"])
-    assert commands == []
-    assert inactive_events == []
-    assert len(delivered) == 1
-    assert delivered[0]["message"] != "clear_notification"
-    assert hass.states.get(main_automation.entity_id).attributes["current"] == 1
-    assert not any(item["event"]["type"] == "cancelled" for item in entries)
-
-    hass.bus.async_fire("mobile_app_notification_action", {
-        "action": delivered[0]["data"]["actions"][0]["action"],
-    })
     await hass.async_block_till_done()
     entries = await entry.runtime_data.history.async_entries(alert["id"])
-    flow_events = [
-        item["event"]["type"]
-        for item in entries
-        if item["event"].get("flow_id") == waiting_flow_id
-    ]
-    assert flow_events[0] == "confirmation_completed"
-    assert "cancelled" not in flow_events
-    assert "confirmation_timeout" not in flow_events
     assert commands == []
     assert inactive_events == []
-    assert len(delivered) == 1
-    main_automation = hass.states.get(main_automation.entity_id)
+    assert delivered == []
+    assert not any(item["event"]["type"] in {"started", "waiting", "inactive"} for item in entries)
+    main_automation = next(
+        state for state in hass.states.async_all("automation")
+        if state.attributes.get("id") == automation_id(alert)
+    )
     assert main_automation.attributes["current"] == 0
 
 

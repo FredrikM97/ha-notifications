@@ -22,8 +22,7 @@
       "enabled": false,
       "items": [],
       "clear_notification": false
-    },
-    "automation_mode": "parallel"
+    }
   },
   "notification": {
     "target": {},

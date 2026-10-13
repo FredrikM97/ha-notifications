@@ -28,6 +28,7 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 ## Boundaries And Checks
 
 - Keep persisted alert data separate from runtime state; preserve native HA trigger, condition, template, and action fields.
+- Do not add legacy compatibility, migration, or field-stripping logic for removed configuration; remove obsolete code and tests unless the user explicitly requests legacy support.
 - Frontend owns editor draft initialization; backend nested Pydantic feature models own runtime defaults. No backend defaults endpoint.
 - Do not reintroduce `controller/`, `delivery/`, `features/`, or `support/` implementation paths.
 - `build/` is generated/ignored: edit authored sources. Bundles stay there until local install or HACS packaging stages them.

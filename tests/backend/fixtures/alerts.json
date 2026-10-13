@@ -15,7 +15,6 @@
       "options": {}
     },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],
@@ -64,7 +63,6 @@
       }
     },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],
@@ -103,7 +101,6 @@
       "enabled": false
     },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],
@@ -133,7 +130,6 @@
       "options": {}
     },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],
@@ -163,7 +159,6 @@
       "options": {}
     },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],
@@ -175,6 +170,55 @@
       },
       "conditions": {
         "startup": true,
+        "enabled": true,
+        "interval": {
+          "enabled": false,
+          "value": 43200
+        },
+        "items": []
+      }
+    }
+  },
+  "front_door_switch": {
+    "id": "front_door_switch",
+    "name": "Front door switch",
+    "enabled": true,
+    "notification": {
+      "action": "notify.mobile_app_phone",
+      "target": {
+        "entity_id": [
+          "notify.mobile_app_phone"
+        ]
+      },
+      "title": "Front door",
+      "message": "The front door is open.",
+      "options": {}
+    },
+    "monitor": {
+      "inactive": {
+        "enabled": true,
+        "items": [
+          {
+            "trigger": "state",
+            "entity_id": "input_boolean.front_door",
+            "to": "off"
+          }
+        ],
+        "clear_notification": false
+      },
+      "triggers": {
+        "enabled": true,
+        "items": [
+          {
+            "trigger": "state",
+            "entity_id": "input_boolean.front_door",
+            "from": "off",
+            "to": "on"
+          }
+        ]
+      },
+      "conditions": {
+        "startup": false,
         "enabled": true,
         "interval": {
           "enabled": false,
@@ -233,19 +277,7 @@
         ]
       }
     },
-    "post_send_actions": {
-      "enabled": true,
-      "items": [
-        {
-          "action": "logbook.log",
-          "data": {
-            "name": "Full feature sent"
-          }
-        }
-      ]
-    },
     "monitor": {
-      "automation_mode": "parallel",
       "inactive": {
         "enabled": false,
         "items": [],

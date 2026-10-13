@@ -87,6 +87,8 @@ class HistoryStore:
                     continue
                 if not isinstance(event, dict):
                     continue
+                if flow_id and event.get("flow_id") != flow_id:
+                    continue
                 event_type = event.get("type")
                 if event_type in {"started", "notification_sent", "inactive"}:
                     previous_state = event_type

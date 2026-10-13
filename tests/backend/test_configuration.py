@@ -21,7 +21,6 @@ from custom_components.ha_notifications.configuration import (
     MonitorConfig,
     NotificationConfig,
     ReminderConfig,
-    TriggerOptions,
     validate_config,
 )
 
@@ -29,7 +28,6 @@ from custom_components.ha_notifications.configuration import (
 def test_feature_model_defaults_match_shared_contract_and_are_independent() -> None:
     expected = json.loads((Path(__file__).parents[1] / "contracts" / "alert_defaults.json").read_text())
     assert validate_config({"alerts": [expected]})["alerts"][0] == expected
-    expected["confirmation"]["buttons"] = []
     first = AlertConfig(id="alert_draft", notification=NotificationConfig(), confirmation=ConfirmationConfig())
     second = AlertConfig(id="alert_draft", notification=NotificationConfig(), confirmation=ConfirmationConfig())
 
@@ -57,19 +55,24 @@ def test_feature_model_defaults_match_shared_contract_and_are_independent() -> N
     ).model_dump(exclude_none=True) == expected
 
 
-def test_validate_config_minimal_alert_defaults_interval_without_confirmation() -> None:
+def test_validate_config_minimal_alert_defaults_confirmation_and_interval() -> None:
     alert = validate_config({"alerts": [{"id": "minimal", "notification": {}}]})["alerts"][0]
 
-    assert "confirmation" not in alert
+    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
     assert alert["monitor"]["conditions"]["interval"] == {"enabled": False, "value": 43200}
 
 
-def test_alert_requires_notification_without_defaulting_confirmation() -> None:
-    with pytest.raises(ValidationError, match="notification"):
-        AlertConfig(id="minimal")
-    alert = AlertConfig(id="minimal", notification=NotificationConfig())
-    assert alert.confirmation is None
-    assert "confirmation" not in alert.model_dump(exclude_none=True)
+def test_alert_requires_id_and_defaults_notification_and_confirmation() -> None:
+    with pytest.raises(ValidationError, match="id"):
+        AlertConfig()
+    alert = AlertConfig(id="minimal")
+    assert alert.notification.model_dump(exclude_none=True) == NotificationConfig().model_dump(exclude_none=True)
+    assert alert.confirmation.model_dump()["buttons"] == [
+        {"id": "confirm", "label": "Done"},
+    ]
+    assert alert.model_dump(exclude_none=True)["confirmation"]["buttons"] == [
+        {"id": "confirm", "label": "Done"},
+    ]
 
 
 def test_reminder_model_serializes_declared_defaults() -> None:
@@ -182,15 +185,15 @@ def test_condition_interval_rejects_null_value_and_extra_fields(interval: dict) 
 
 @pytest.mark.parametrize("buttons", [[], [{"id": "skip", "label": "Skip", "native_extra": True}]])
 def test_confirmation_buttons_preserve_explicit_values(buttons: list[dict]) -> None:
-    assert ConfirmationConfig().model_dump()["buttons"] == []
+    assert ConfirmationConfig().model_dump()["buttons"] == [{"id": "confirm", "label": "Done"}]
     assert ConfirmationConfig.model_validate({"buttons": buttons}).model_dump()["buttons"] == buttons
 
 
-def test_missing_confirmation_buttons_do_not_create_editor_content() -> None:
+def test_missing_confirmation_buttons_use_the_shared_default() -> None:
     alert = validate_config({"alerts": [{
         "id": "minimal", "notification": {}, "confirmation": {"enabled": True},
     }]})["alerts"][0]
-    assert alert["confirmation"]["buttons"] == []
+    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
 
 
 @pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
@@ -445,8 +448,6 @@ def test_validate_config_accepts_canonical_monitor_object() -> None:
     assert alert["monitor"]["triggers"]["items"] == [{"trigger": "state", "entity_id": "sensor.water"}]
     assert alert["monitor"]["conditions"]["items"][0]["entity_id"] == "sensor.water"
     assert alert["notification"]["target"] == {"entity_id": ["notify.phone"]}
-    assert alert["monitor"]["automation_mode"] == "parallel"
-    assert "automation_mode" not in alert["monitor"]["triggers"]
     assert alert["monitor"]["inactive"] == {
         "enabled": False, "items": [], "clear_notification": False,
     }
@@ -630,46 +631,6 @@ def test_validate_config_rejects_retired_clear_on_inactive_option() -> None:
         }]})
 
 
-@pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
-def test_validate_config_accepts_automation_modes(mode: str) -> None:
-    config = validate_config({"alerts": [{
-        "id": "mode_alert",
-        "monitor": {"automation_mode": mode},
-        "notification": {"action": "notify.mobile_app_phone"},
-    }]})
-
-    assert config["alerts"][0]["monitor"]["automation_mode"] == mode
-
-
-@pytest.mark.parametrize("legacy_mode", ["single", "restart", "queued", "parallel"])
-@pytest.mark.parametrize("top_mode", [None, "queued"])
-def test_validate_config_rejects_nested_mode_without_mutating_input(
-    legacy_mode: str, top_mode: str | None,
-) -> None:
-    monitor = {
-        "triggers": {"automation_mode": legacy_mode, "items": [{
-            "trigger": "state", "entity_id": "binary_sensor.door", "id": "open",
-        }]},
-    }
-    if top_mode is not None:
-        monitor["automation_mode"] = top_mode
-    raw = {"alerts": [{"id": "door", "monitor": monitor, "notification": {}}]}
-    original = deepcopy(raw)
-
-    with pytest.raises(ValidationError) as error:
-        validate_config(raw)
-
-    assert [(item["loc"], item["type"]) for item in error.value.errors()] == [
-        (("alerts", 0, "monitor", "triggers", "automation_mode"), "extra_forbidden"),
-    ]
-    assert raw == original
-
-
-def test_trigger_options_rejects_monitor_owned_mode() -> None:
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        TriggerOptions.model_validate({"automation_mode": "parallel"})
-
-
 def test_validate_config_preserves_native_inactive_triggers() -> None:
     inactive = {
         "enabled": True,
@@ -696,15 +657,6 @@ def test_validate_config_rejects_invalid_inactive_items(items: object) -> None:
     with pytest.raises(ValidationError):
         validate_config({"alerts": [{
             "id": "door", "monitor": {"inactive": {"items": items}}, "notification": {},
-        }]})
-
-
-def test_validate_config_rejects_unknown_automation_mode() -> None:
-    with pytest.raises(ValidationError):
-        validate_config({"alerts": [{
-            "id": "mode_alert",
-            "monitor": {"automation_mode": "restart_and_parallel"},
-            "notification": {"action": "notify.mobile_app_phone"},
         }]})
 
 
@@ -923,7 +875,7 @@ def test_configuration_preserves_native_extensions_on_canonical_models() -> None
     }
 
 
-def test_full_feature_configuration_preserves_confirmation_and_post_send_actions(
+def test_full_feature_configuration_preserves_confirmation_actions_without_post_send_action(
     full_feature_alert: dict[str, object],
 ) -> None:
     validated = validate_config({"alerts": [full_feature_alert]})
@@ -935,11 +887,7 @@ def test_full_feature_configuration_preserves_confirmation_and_post_send_actions
         "action": "light.turn_on",
         "target": {"entity_id": "light.hall"},
     }]
-    assert alert.post_send_actions is not None
-    assert alert.post_send_actions.items == [{
-        "action": "logbook.log",
-        "data": {"name": "Full feature sent"},
-    }]
+    assert alert.post_send_actions is None
 
 
 @pytest.mark.asyncio

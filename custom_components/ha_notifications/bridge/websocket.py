@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
+from uuid import uuid4
 
 import voluptuous as vol
 from homeassistant.components import automation as ha_automation
@@ -109,57 +110,9 @@ def _triggered_activity(entries: list[dict[str, Any]]) -> dict[str, bool]:
     return activity
 
 
-def _running_activity(
-    entries: list[dict[str, Any]],
-    automation_modes: dict[str, str],
-) -> dict[str, bool]:
-    """Project run activity using each automation's concurrency semantics."""
-    runs: dict[tuple[str, str], bool] = {}
-    restart_activity: dict[str, bool] = {}
-    active_statuses = {"started", "waiting", "running"}
-    terminal_statuses = {
-        "cancelled",
-        "completed",
-        "inactive",
-        "confirmation_completed",
-        "confirmation_timeout",
-    }
-    for entry in entries:
-        config = entry.get("config")
-        event = entry.get("event")
-        if not isinstance(config, Mapping) or not isinstance(event, Mapping):
-            continue
-        alert_id = config.get("id")
-        flow_id = event.get("flow_id")
-        event_type = event.get("type")
-        if not isinstance(alert_id, str):
-            continue
-        if (
-            not isinstance(flow_id, str)
-            or not flow_id
-            or event_type not in active_statuses | terminal_statuses
-        ):
-            continue
-        if automation_modes.get(alert_id) == "restart":
-            restart_activity.setdefault(
-                alert_id,
-                event_type in active_statuses,
-            )
-            continue
-        key = (alert_id, flow_id)
-        if key not in runs:
-            runs[key] = event_type in active_statuses
-    activity: dict[str, bool] = {}
-    for (alert_id, _flow_id), active in runs.items():
-        activity[alert_id] = activity.get(alert_id, False) or active
-    activity.update(restart_activity)
-    return activity
-
-
 def _active_flow_ids(
     entries: list[dict[str, Any]],
     alert_id: str,
-    automation_mode: str,
 ) -> list[str]:
     """Return the latest active history flow IDs for one alert."""
     active_statuses = {"started", "waiting", "running"}
@@ -188,8 +141,6 @@ def _active_flow_ids(
         ):
             continue
         is_active = event_type in active_statuses
-        if automation_mode == "restart":
-            return [flow_id] if is_active else []
         latest[flow_id] = is_active
     return [flow_id for flow_id, is_active in latest.items() if is_active]
 
@@ -235,9 +186,12 @@ class WebsocketDispatcher:
         connection.send_result(msg["id"], _json_safe(result))
 
     async def get_config(
-        self, hass: HomeAssistant, _msg: dict[str, Any]
+        self, hass: HomeAssistant, msg: dict[str, Any]
     ) -> dict[str, Any]:
-        return _raw_config_for(hass)
+        """Return canonical config, a new alert, or raw config for YAML recovery."""
+        if msg.get("new", False):
+            return validate_config({"alerts": [{"id": f"alert_{uuid4().hex}"}]})
+        return _config_for(hass) if msg.get("validate", True) else _raw_config_for(hass)
 
     async def mobile_platforms(
         self, hass: HomeAssistant, msg: dict[str, Any]
@@ -317,11 +271,7 @@ class WebsocketDispatcher:
 
         history = history_store(hass, entry)
         entries = await history.async_entries(alert_id)
-        automation_mode = alert.get("monitor", {}).get("automation_mode", "parallel")
-        running = _running_activity(entries, {alert_id: automation_mode}).get(
-            alert_id,
-            False,
-        )
+        running = bool(_active_flow_ids(entries, alert_id))
         document = await _automation_document(hass)
         runtime_status = _automation_runtime_status(hass, document, alert)
         if not running and runtime_status["current"] == 0:
@@ -347,7 +297,7 @@ class WebsocketDispatcher:
             )
 
         entries = await history.async_entries(alert_id)
-        for flow_id in _active_flow_ids(entries, alert_id, automation_mode):
+        for flow_id in _active_flow_ids(entries, alert_id):
             await history.async_record(
                 alert_id,
                 str(alert.get("name", alert_id)),
@@ -456,7 +406,10 @@ def register(hass: HomeAssistant) -> None:
 
     dispatcher = WebsocketDispatcher()
     commands = {
-        "get_config": (dispatcher.get_config, {}),
+        "get_config": (dispatcher.get_config, {
+            vol.Optional("new", default=False): bool,
+            vol.Optional("validate", default=True): bool,
+        }),
         "mobile_platforms": (
             dispatcher.mobile_platforms,
             {

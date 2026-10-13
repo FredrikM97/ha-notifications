@@ -181,7 +181,9 @@ class ConfirmationConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
-    buttons: list[ConfirmationButtonConfig] = Field(default_factory=list)
+    buttons: list[ConfirmationButtonConfig] = Field(
+        default_factory=lambda: [ConfirmationButtonConfig(id="confirm", label="Done")]
+    )
     notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
     actions: ActionsConfig = Field(default_factory=ActionsConfig)
@@ -233,7 +235,7 @@ class ConditionOptions(EnabledFeature):
 
 
 class InactiveOptions(BaseModel):
-    """Explicit native triggers that cancel pending confirmation waits."""
+    """Explicit native triggers that clear active notification state."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -250,7 +252,6 @@ class MonitorConfig(BaseModel):
     triggers: TriggerOptions = Field(default_factory=TriggerOptions)
     conditions: ConditionOptions = Field(default_factory=ConditionOptions)
     inactive: InactiveOptions = Field(default_factory=InactiveOptions)
-    automation_mode: Literal["single", "restart", "queued", "parallel"] = "parallel"
 
     @property
     def enabled_triggers(self) -> list[dict[str, Any]]:
@@ -276,8 +277,8 @@ class AlertConfig(BaseModel):
     description: str = ""
     icon: str = "mdi:bell-outline"
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
-    notification: NotificationConfig
-    confirmation: ConfirmationConfig | None = None
+    notification: NotificationConfig = Field(default_factory=NotificationConfig)
+    confirmation: ConfirmationConfig = Field(default_factory=ConfirmationConfig)
     post_send_actions: ActionsConfig | None = None
     created_at: str | None = None
     updated_at: str | None = None

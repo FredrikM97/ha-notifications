@@ -268,7 +268,7 @@ async def test_async_register_panel_registers_packaged_static_asset(
 
 
 @pytest.mark.asyncio
-async def test_get_config_returns_invalid_persisted_document_for_repair() -> None:
+async def test_get_config_can_skip_validation_for_yaml_repair() -> None:
     persisted = {
         "version": 1,
         "alerts": [{"id": "door", "triggers": []}],
@@ -279,19 +279,67 @@ async def test_get_config_returns_invalid_persisted_document_for_repair() -> Non
     )
     connection = SimpleNamespace(
         send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail(
-            "get_config should not validate persisted data"
-        ),
+        send_error=lambda *_args: pytest.fail("raw config retrieval should not fail"),
     )
 
     await _dispatch(
         hass,
         connection,
-        {"id": 1},
+        {"id": 1, "validate": False},
         websocket.WebsocketDispatcher().get_config,
     )
 
     assert connection.result == persisted
+
+
+@pytest.mark.asyncio
+async def test_get_config_returns_canonical_defaults() -> None:
+    entry = SimpleNamespace(options={"version": 1, "alerts": [{"id": "door", "notification": {}}]}, data={})
+    hass = SimpleNamespace(config_entries=SimpleNamespace(async_entries=lambda domain: [entry]))
+    connection = SimpleNamespace(
+        send_result=lambda _id, result: setattr(connection, "result", result),
+        send_error=lambda *_args: pytest.fail("valid canonical config should load"),
+    )
+
+    await _dispatch(
+        hass, connection, {"id": 1}, websocket.WebsocketDispatcher().get_config,
+    )
+
+    alert = connection.result["alerts"][0]
+    assert alert["description"] == ""
+    assert alert["icon"] == "mdi:bell-outline"
+    assert alert["notification"]["use_default_tag"] is True
+    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
+    assert alert["monitor"]["conditions"]["interval"] == {"enabled": False, "value": 43200}
+
+
+@pytest.mark.asyncio
+async def test_get_config_creates_a_backend_default_alert() -> None:
+    hass = SimpleNamespace()
+    connection = SimpleNamespace(
+        send_result=lambda _id, result: setattr(connection, "result", result),
+        send_error=lambda *_args: pytest.fail("new alert config should be valid"),
+    )
+
+    await _dispatch(
+        hass, connection, {"id": 1, "new": True},
+        websocket.WebsocketDispatcher().get_config,
+    )
+
+    assert connection.result["version"] == 1
+    assert len(connection.result["alerts"]) == 1
+    assert connection.result["alerts"][0]["id"].startswith("alert_")
+    assert connection.result["alerts"][0]["confirmation"]["buttons"] == [
+        {"id": "confirm", "label": "Done"},
+    ]
+    first_id = connection.result["alerts"][0]["id"]
+
+    await _dispatch(
+        hass, connection, {"id": 2, "new": True},
+        websocket.WebsocketDispatcher().get_config,
+    )
+
+    assert connection.result["alerts"][0]["id"] != first_id
 
 
 @pytest.mark.asyncio
@@ -449,14 +497,7 @@ async def test_automation_status_projects_generated_automation_ownership(
         },
     }]
 
-@pytest.mark.parametrize(
-    ("mode", "expected"),
-    [("restart", False), ("parallel", True)],
-)
-def test_running_activity_respects_automation_mode(
-    mode: str,
-    expected: bool,
-) -> None:
+def test_active_flow_ids_track_parallel_runs_independently() -> None:
     entries = [
         {
             "config": {"id": "door"},
@@ -468,12 +509,10 @@ def test_running_activity_respects_automation_mode(
         },
     ]
 
-    assert websocket._running_activity(entries, {"door": mode}) == {
-        "door": expected,
-    }
+    assert websocket._active_flow_ids(entries, "door") == ["cancelled-run"]
 
 
-def test_cancelled_history_is_terminal_for_running_activity() -> None:
+def test_cancelled_history_is_terminal_for_its_flow() -> None:
     entries = [
         {
             "config": {"id": "door"},
@@ -485,9 +524,7 @@ def test_cancelled_history_is_terminal_for_running_activity() -> None:
         },
     ]
 
-    assert websocket._running_activity(entries, {"door": "parallel"}) == {
-        "door": False,
-    }
+    assert websocket._active_flow_ids(entries, "door") == []
 
 
 @pytest.mark.asyncio
@@ -561,10 +598,10 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
         for item in history._entries
         if item["event"].get("flow_id") == "run-1"
     ) == 1
-    assert websocket._running_activity(
+    assert websocket._active_flow_ids(
         await history.async_entries("door"),
-        {"door": "restart"},
-    ) == {"door": False}
+        "door",
+    ) == []
 
 
 def test_automation_runtime_status_reports_native_current_runs(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
@@ -163,14 +164,16 @@ class _ActionStepBuilder:
         message: str | None = None,
         details: dict[str, Any] | None = None,
         flow_id: str = "{{ context.parent_id or context.id }}",
+        include_flow_id: bool = True,
         include_run_id: bool = True,
     ) -> dict[str, Any]:
         data: dict[str, Any] = {
             "alert_id": self._alert.id,
             "alert_name": self._alert.name,
-            "flow_id": flow_id,
             "status": status,
         }
+        if include_flow_id:
+            data["flow_id"] = flow_id
         if include_run_id:
             data["run_id"] = flow_id
         if message is not None:
@@ -191,7 +194,8 @@ class _ActionStepBuilder:
         self,
         native_action: dict[str, Any],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        return native_action, self.action_executed(native_action)
+        copied_action = deepcopy(native_action)
+        return copied_action, self.action_executed(copied_action)
 
     def stop(
         self,
@@ -251,37 +255,38 @@ class _ConfirmationWaitComponent:
         timeout = confirmation.reminders.interval
         if isinstance(timeout, dict):
             timeout = dict(timeout)
+        wait_triggers = [
+            *[
+                {
+                    "trigger": "event",
+                    "event_type": "mobile_app_notification_action",
+                    "id": "confirmation",
+                    "event_data": {"action": (f"ha_notifications_{alert.id}_confirmation_{_confirmation_button_id(button, index)}")},
+                }
+                for index, button in enumerate(confirmation.buttons)
+            ],
+            {
+                "trigger": "event",
+                "event_type": EVENT_COMMAND,
+                "id": "cancel_run",
+                "event_data": {
+                    "alert_id": alert.id,
+                    "command": COMMAND_CANCEL_RUN,
+                },
+            },
+            {
+                "trigger": "event",
+                "event_type": EVENT_COMMAND,
+                "id": "skip_confirmation",
+                "event_data": {
+                    "alert_id": alert.id,
+                    "command": COMMAND_SKIP_CONFIRMATION,
+                },
+            },
+        ]
         return _ConfirmationActionFragments(
             wait={
-                "wait_for_trigger": [
-                    {
-                        "trigger": "event",
-                        "event_type": "mobile_app_notification_action",
-                        "id": "confirmation",
-                        "event_data": {"action": (f"ha_notifications_{alert.id}_confirmation_{_confirmation_button_id(button, index)}")},
-                    }
-                    for index, button in enumerate(confirmation.buttons)
-                ]
-                + [
-                    {
-                        "trigger": "event",
-                        "event_type": EVENT_COMMAND,
-                        "id": "cancel_run",
-                        "event_data": {
-                            "alert_id": alert.id,
-                            "command": COMMAND_CANCEL_RUN,
-                        },
-                    },
-                    {
-                        "trigger": "event",
-                        "event_type": EVENT_COMMAND,
-                        "id": "skip_confirmation",
-                        "event_data": {
-                            "alert_id": alert.id,
-                            "command": COMMAND_SKIP_CONFIRMATION,
-                        },
-                    }
-                ],
+                "wait_for_trigger": wait_triggers,
                 "timeout": timeout,
                 "continue_on_timeout": True,
             }
@@ -299,25 +304,26 @@ class _ConfirmationCompletionComponent:
     ) -> _ConfirmationActionFragments:
         steps = _ActionStepBuilder(alert)
         follow_up = _follow_up_actions(alert, confirmation, steps)
-        return _ConfirmationActionFragments(
-            completion=(
-                steps.report(
-                    "confirmation_completed",
-                    "confirmation_completed",
-                    message="Confirmation completed",
-                    details={
-                        "action": "confirmation_completed",
-                        "device_id": (
-                            "{{ wait.trigger.event.data.device_id | default('', true) }}"
-                        ),
-                        "user_id": (
-                            "{{ wait.trigger.event.context.user_id | default('', true) }}"
-                        ),
-                    },
-                ),
-                *follow_up,
-                {"stop": "confirmation completed"},
+        completion = (
+            steps.report(
+                "confirmation_completed",
+                "confirmation_completed",
+                message="Confirmation completed",
+                details={
+                    "action": "confirmation_completed",
+                    "device_id": (
+                        "{{ wait.trigger.event.data.device_id | default('', true) }}"
+                    ),
+                    "user_id": (
+                        "{{ wait.trigger.event.context.user_id | default('', true) }}"
+                    ),
+                },
             ),
+            *follow_up,
+        )
+        completion = (*completion, {"stop": "confirmation completed"})
+        return _ConfirmationActionFragments(
+            completion=completion,
         )
 
 
@@ -412,8 +418,6 @@ class _ConfirmationComponent:
     def _confirmation_actions(self, alert: AlertConfig) -> list[dict[str, Any]]:
         """Assemble native confirmation fragments into an action sequence."""
         confirmation = alert.confirmation
-        if confirmation is None:
-            return []
         components = self._action_components()
         fragments = [component.compose(alert, confirmation) for component in components]
         wait = next(
@@ -469,13 +473,15 @@ def _confirmation_outcome_branches(
     steps: _ActionStepBuilder,
 ) -> tuple[dict[str, Any], ...]:
     """Build shared confirmation and cancellation outcomes."""
-    return (
+    branches = []
+    confirmation_sequence = list(completion_actions)
+    branches.extend((
         {
             "conditions": [{
                 "condition": "template",
                 "value_template": "{{ wait.trigger.id == 'confirmation' }}",
             }],
-            "sequence": list(completion_actions),
+            "sequence": confirmation_sequence,
         },
         {
             "conditions": [{
@@ -484,27 +490,39 @@ def _confirmation_outcome_branches(
             }],
             "sequence": _confirmation_terminal_actions(steps, cancelled=True),
         },
-    )
+    ))
+    return tuple(branches)
 
 
 def _confirmation_terminal_actions(
     steps: _ActionStepBuilder,
     *,
     cancelled: bool = False,
+    stop: bool = True,
 ) -> list[dict[str, Any]]:
     """Report one terminal confirmation outcome."""
     status = "cancelled" if cancelled else "confirmation_timeout"
     action = "confirmation_cancelled" if cancelled else "confirmation_timeout"
     message = "Automation run cancelled" if cancelled else "Confirmation timed out"
-    return [
+    actions = [
         steps.report(
             status,
             action,
             message=message,
             details={"action": action},
         ),
-        {"stop": "Confirmation ended"},
     ]
+    if cancelled or stop:
+        actions.append({"stop": "Confirmation ended"})
+    return actions
+
+
+def _inactive_triggers(alert: AlertConfig) -> list[dict[str, Any]]:
+    """Return explicitly configured inactive triggers when enabled."""
+    inactive = alert.monitor.inactive
+    if not inactive.enabled:
+        return []
+    return list(inactive.items)
 
 
 class _PostSendComponent:
@@ -516,7 +534,7 @@ class _PostSendComponent:
         if not post_send or not post_send.enabled:
             return AutomationFragments()
         steps = _ActionStepBuilder(alert)
-        actions = [_copy_native_value(action) for action in post_send.items]
+        actions = post_send.items
         return AutomationFragments(
             actions=tuple(
                 item
@@ -627,13 +645,39 @@ async def async_validate_alerts(
     return document
 
 
-def render_automation(
-    alert: AlertConfig | dict[str, Any],
+def _inactive_trigger_actions(
+    alert: AlertConfig,
+    steps: _ActionStepBuilder,
+) -> list[dict[str, Any]]:
+    """Build the inactive outcome for the current automation flow."""
+    actions = []
+    if alert.monitor.inactive.clear_notification:
+        actions.append({
+            "action": "ha_notifications.clear",
+            "data": {
+                "alert_id": alert.id,
+                "alert_name": alert.name,
+                "flow_id": "{{ context.parent_id or context.id }}",
+                **_SEND_COMPONENT.notification_mapping(alert.notification),
+            },
+        })
+    actions.append(steps.report(
+        "inactive",
+        "inactive_trigger",
+        message="Configured inactive trigger fired",
+        details={"action": "inactive_trigger"},
+        flow_id="{{ context.parent_id or context.id }}",
+        include_run_id=False,
+    ))
+    return actions
+
+
+def _execution_sequence(
+    alert: AlertConfig,
     fragments: AutomationFragments,
-) -> dict[str, Any]:
-    """Render composed fragments as one native Home Assistant automation."""
-    alert = _validated_alert(alert)
-    steps = _ActionStepBuilder(alert)
+    steps: _ActionStepBuilder,
+) -> list[dict[str, Any]]:
+    """Build the active path's lifecycle reports and composed actions."""
     sequence = [
         steps.report(
             "started",
@@ -685,101 +729,64 @@ def render_automation(
                 details={"action": "automation_completed"},
             )
         )
-    alert_conditions = _copy_native_value(list(fragments.conditions))
-    automation_triggers = []
-    for index, configured_trigger in enumerate(fragments.triggers):
-        trigger = dict(configured_trigger)
-        trigger.setdefault("id", str(index))
-        automation_triggers.append(trigger)
+    return sequence
+
+
+def render_automation(
+    alert: AlertConfig | dict[str, Any],
+    fragments: AutomationFragments,
+) -> dict[str, Any]:
+    """Render composed fragments as one native Home Assistant automation."""
+    alert = _validated_alert(alert)
+    steps = _ActionStepBuilder(alert)
+    sequence = _execution_sequence(alert, fragments, steps)
+    inactive_triggers = _inactive_triggers(alert)
+    active_trigger_ids = [str(index) for index in range(len(fragments.triggers))]
+    inactive_trigger_ids = [f"inactive_{index}" for index in range(len(inactive_triggers))]
+    triggers = [
+        {**trigger, "id": str(index)}
+        for index, trigger in enumerate(fragments.triggers)
+    ]
+    triggers.extend(
+        {**trigger, "id": f"inactive_{index}"}
+        for index, trigger in enumerate(inactive_triggers)
+    )
+    conditions = list(fragments.conditions)
     actions = sequence
-    automation_conditions = alert_conditions
-    if alert_conditions:
-        trigger_ids = [
-            trigger.get("id", str(index))
-            for index, trigger in enumerate(automation_triggers)
-        ]
-        all_trigger_condition = {
-            "condition": "trigger",
-            "id": trigger_ids,
-        }
-        active_trigger_condition = {
-            "condition": "or",
-            "conditions": [
-                *([{
-                    "condition": "trigger",
-                    "id": trigger_ids,
-                }] if trigger_ids else []),
-                {
-                    "condition": "template",
-                    "value_template": (
-                        "{{ trigger is not defined or trigger.platform is none }}"
-                    ),
-                },
-            ],
-        }
-        not_conditions = {
-            "condition": "not",
-            "conditions": alert_conditions,
-        }
-        active_conditions = [
-            *alert_conditions,
-            active_trigger_condition,
-        ]
-        automation_conditions = [{
-            "condition": "or",
-            "conditions": [
-                {"condition": "and", "conditions": active_conditions},
-                {
-                    "condition": "and",
-                    "conditions": [all_trigger_condition, not_conditions],
-                },
-            ],
-        }]
-        inactive_report = steps.report(
-            "inactive",
-            "automation_inactive",
-            message="Condition inactive",
-            details={"action": "automation_inactive"},
-            flow_id="{{ context.id }}",
-            include_run_id=False,
-        )
+    if inactive_triggers and active_trigger_ids:
         actions = [{
-            "choose": [{
-                "conditions": [all_trigger_condition, not_conditions],
-                "sequence": [inactive_report],
-            }, {
-                "conditions": [{
-                    "condition": "or",
+            "choose": [
+                {
+                    "conditions": [{
+                        "condition": "trigger",
+                        "id": inactive_trigger_ids,
+                    }],
+                    "sequence": _inactive_trigger_actions(alert, steps),
+                },
+                {
                     "conditions": [
-                        {
-                            "condition": "and",
-                            "conditions": [
-                                *alert_conditions,
-                                active_trigger_condition,
-                            ],
-                        },
-                        {
-                            "condition": "template",
-                            "value_template": (
-                                "{{ trigger is not defined or trigger.platform is none }}"
-                            ),
-                        },
+                        {"condition": "trigger", "id": active_trigger_ids},
+                        *conditions,
                     ],
-                }],
-                "sequence": sequence,
-            }],
-            "default": [],
+                    "sequence": sequence,
+                },
+            ],
         }]
-    return {
+        conditions = []
+    elif inactive_triggers:
+        actions = _inactive_trigger_actions(alert, steps)
+        conditions = []
+    automation = {
         "id": automation_id(alert),
         "alias": f"HA Notifications: {alert.name or alert.id}",
         "description": GENERATED_DESCRIPTION,
         "initial_state": alert.enabled,
-        "mode": "parallel" if alert_conditions else alert.monitor.automation_mode,
-        "triggers": automation_triggers,
-        "conditions": automation_conditions,
+        "mode": "parallel",
+        "triggers": triggers,
+        "conditions": conditions,
         "actions": actions,
     }
+    return automation
 
 
 def generate_automation(
@@ -795,43 +802,9 @@ def generate_automations(
     alert: AlertConfig | dict[str, Any],
     components: tuple[AutomationComponent, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    """Generate the single Home Assistant automation owned by an alert."""
+    """Generate one automation containing active and inactive triggers."""
     validated = _validated_alert(alert)
-    generated = [generate_automation(validated, components)]
-    inactive = validated.monitor.inactive
-    if inactive.enabled and inactive.items:
-        steps = _ActionStepBuilder(validated)
-        actions = [
-            steps.report(
-                "inactive", "inactive_trigger", message="Configured inactive trigger fired",
-                include_run_id=False,
-            ),
-            {
-                "action": "ha_notifications.command",
-                "data": {"alert_id": validated.id, "command": COMMAND_CANCEL_RUN},
-            },
-        ]
-        if inactive.clear_notification:
-            actions.append({
-                "action": "ha_notifications.clear",
-                "data": {
-                    "alert_id": validated.id,
-                    "alert_name": validated.name,
-                    "flow_id": "{{ context.parent_id or context.id }}",
-                    **_SEND_COMPONENT.notification_mapping(validated.notification),
-                },
-            })
-        generated.append({
-            "id": f"{automation_id(validated)}_inactive",
-            "alias": f"HA Notifications: {validated.name or validated.id} inactive",
-            "description": GENERATED_DESCRIPTION,
-            "initial_state": validated.enabled,
-            "mode": "queued",
-            "triggers": _copy_native_value(inactive.items),
-            "conditions": [],
-            "actions": actions,
-        })
-    return generated
+    return [render_automation(validated, compose_automation(validated, components))]
 
 
 def _validated_alert(alert: AlertConfig | dict[str, Any]) -> AlertConfig:
@@ -863,9 +836,7 @@ def _follow_up_actions(
             confirmation=confirmation_context,
             history_reason="confirmation_notification",
         )
-    native_actions = []
-    if confirmation.actions.enabled:
-        native_actions = [_copy_native_value(action) for action in confirmation.actions.items]
+    native_actions = confirmation.actions.items if confirmation.actions.enabled else []
     actions = [notification_action] if notification_action is not None else []
     for action in native_actions:
         actions.extend(steps.recorded_action(action))
@@ -884,17 +855,6 @@ def _confirmation_notification_mapping(
         if fallback.action:
             mapping["action"] = fallback.action
     return mapping
-
-
-def _copy_native_value(value: Any) -> Any:
-    """Detach configured native containers from mutable generated output."""
-    if isinstance(value, dict):
-        return {key: _copy_native_value(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_copy_native_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_copy_native_value(item) for item in value)
-    return value
 
 
 def automation_id(alert: AlertConfig | dict[str, Any]) -> str:

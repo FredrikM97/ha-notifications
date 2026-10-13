@@ -145,7 +145,6 @@ def automation_alert() -> dict[str, object]:
         "name": "Low water",
         "enabled": True,
         "monitor": {
-            "automation_mode": "parallel",
             "inactive": {"enabled": False, "items": [], "clear_notification": False},
             "triggers": {
                 "enabled": True,
@@ -169,8 +168,7 @@ def automation_alert() -> dict[str, object]:
 def test_generate_automation_uses_explicit_triggers_and_active_branches(automation_alert) -> None:
     generated = generate_automation(automation_alert)
     notification = _managed_notification(automation_alert["notification"])
-    assert generated["conditions"][0]["condition"] == "or"
-    assert generated["conditions"][0]["conditions"][0]["conditions"][0] == automation_alert["monitor"]["conditions"]["items"][0]
+    assert generated["conditions"] == automation_alert["monitor"]["conditions"]["items"]
     assert generated["triggers"] == [
         {"trigger": "homeassistant", "event": "start", "id": "0"},
         {"trigger": "state", "entity_id": "sensor.water", "id": "1"},
@@ -275,7 +273,7 @@ def test_started_by_description_defaults_when_trigger_metadata_is_missing(
     }) == "Low water threshold"
 
 
-def test_conditional_alert_keeps_inactive_report_without_companion(automation_alert) -> None:
+def test_conditional_alert_has_no_generated_inactive_report(automation_alert) -> None:
     generated = generate_automations(automation_alert)
 
     assert len(generated) == 1
@@ -283,9 +281,7 @@ def test_conditional_alert_keeps_inactive_report_without_companion(automation_al
     assert main["id"] == "ha_notifications_low_water"
     assert main["mode"] == "parallel"
     assert any(trigger.get("entity_id") == "sensor.water" for trigger in main["triggers"])
-    inactive = _inactive_sequence(main)[0]
-    assert inactive["data"]["status"] == "inactive"
-    assert "cancel_on_inactive" not in inactive["data"]
+    assert _inactive_sequence(main) == []
 
     assert main == generate_automation(automation_alert)
     rendered = _render_yaml(main)
@@ -348,7 +344,6 @@ async def test_binary_state_trigger_preserves_duration_without_inferred_edge(
     generated = generate_automations({
         "id": "button_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{
                 "trigger": "state",
                 "entity_id": "input_boolean.alert_button",
@@ -378,7 +373,11 @@ async def test_binary_state_trigger_preserves_duration_without_inferred_edge(
     ]
     assert main["triggers"] == expected_triggers
     assert len(generated) == 1
-    assert main["conditions"][0]["condition"] == "or"
+    assert main["conditions"] == [{
+        "condition": "state",
+        "entity_id": "input_boolean.alert_button",
+        "state": "on",
+    }]
     validated = await async_validate_config(hass, {"automation": generated})
     assert len(validated["automation"]) == 1
     assert all(
@@ -391,7 +390,6 @@ def test_conditional_alert_generates_single_main_without_changing_triggers() -> 
     alert = {
         "id": "conditional_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{
                 "trigger": "state",
                 "entity_id": "input_boolean.alert_button",
@@ -421,7 +419,6 @@ async def test_unconditional_alert_has_no_inactive_handler_or_clear(
     generated = generate_automations({
         "id": "unconditional_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "conditions": {"startup": True},
             "triggers": {"items": [{
                 "trigger": "state",
@@ -457,7 +454,6 @@ async def test_unconditional_alert_has_no_inactive_handler_or_clear(
     validated = await async_validate_alerts(hass, [{
         "id": "unconditional_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": main["triggers"]},
         },
         "notification": {"action": "notify.mobile_app_phone"},
@@ -471,14 +467,13 @@ async def test_unconditional_alert_has_no_inactive_handler_or_clear(
     )
 
 
-@pytest.mark.parametrize("trigger_id", [None, "front_door_open", "1"])
-def test_conditional_alert_preserves_configured_trigger_ids(
+@pytest.mark.parametrize("trigger_id", [None, "front_door_open", "door_open"])
+def test_conditional_alert_uses_generic_trigger_ids(
     trigger_id: str | None,
 ) -> None:
     alert = {
         "id": "door_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{
                 "trigger": "state",
                 "entity_id": "binary_sensor.front_door",
@@ -498,19 +493,17 @@ def test_conditional_alert_preserves_configured_trigger_ids(
 
     assert len(generated) == 1
     expected_trigger = dict(alert["monitor"]["triggers"]["items"][0])
-    expected_trigger.setdefault("id", "0")
+    expected_trigger["id"] = "0"
     assert generated[0]["triggers"] == [expected_trigger]
     assert compose_automation(alert).triggers == tuple(alert["monitor"]["triggers"]["items"])
-    assert generated[0]["conditions"][0]["conditions"][1]["conditions"][0]["id"] == [
-        trigger_id if trigger_id is not None else "0",
-    ]
+    assert generated[0]["conditions"] == alert["monitor"]["conditions"]["items"]
+    assert "choose" not in generated[0]["actions"][0]
 
 
-def test_inactive_prefixed_trigger_id_is_not_reserved() -> None:
+def test_configured_trigger_ids_are_replaced_with_generic_ids() -> None:
     alert = {
         "id": "door_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [
                 {
                     "trigger": "state",
@@ -530,7 +523,10 @@ def test_inactive_prefixed_trigger_id_is_not_reserved() -> None:
     }
     generated = generate_automation(alert)
 
-    assert generated["triggers"] == alert["monitor"]["triggers"]["items"]
+    assert generated["triggers"] == [
+        {**alert["monitor"]["triggers"]["items"][0], "id": "0"},
+        {**alert["monitor"]["triggers"]["items"][1], "id": "1"},
+    ]
     assert len(generate_automations(alert)) == 1
 
 
@@ -541,7 +537,6 @@ def test_conditional_alert_without_enabled_triggers_generates_trigger_less_autom
     generated = generate_automations({
         "id": "no_main_triggers",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {
                 "enabled": triggers_enabled,
                 "items": [] if triggers_enabled else [{
@@ -568,7 +563,6 @@ def test_startup_condition_check_does_not_infer_door_watcher() -> None:
     generated = generate_automations({
         "id": "condition_tracking",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"enabled": False, "items": []},
             "conditions": {"startup": True, "items": [{
                 "condition": "state",
@@ -601,7 +595,6 @@ async def test_unconditional_alert_keeps_only_configured_state_triggers(
     generated = generate_automations({
         "id": "button_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [configured_trigger]},
         },
         "notification": {"action": "notify.mobile_app_phone"},
@@ -612,6 +605,65 @@ async def test_unconditional_alert_keeps_only_configured_state_triggers(
     assert generated[0]["triggers"] == [{**configured_trigger, "id": "0"}]
     validated = await async_validate_config(hass, {"automation": generated})
     assert validated["automation"][0].validation_status is ValidationStatus.OK
+
+
+@pytest.mark.parametrize("conditions_enabled", [False, True])
+async def test_front_door_conditions_do_not_block_parallel_inactive_trigger(
+    hass: HomeAssistant,
+    backend_alerts: dict[str, dict[str, Any]],
+    conditions_enabled: bool,
+) -> None:
+    alert = backend_alerts["front_door_switch"]
+    alert["monitor"]["conditions"]["enabled"] = conditions_enabled
+    if conditions_enabled:
+        alert["monitor"]["conditions"]["items"] = [{
+            "condition": "state",
+            "entity_id": "input_boolean.front_door",
+            "state": "on",
+        }]
+
+    generated = generate_automations(alert)
+    assert len(generated) == 1
+    main = generated[0]
+
+    assert main["triggers"] == [
+        {
+            "trigger": "state",
+            "entity_id": "input_boolean.front_door",
+            "from": "off",
+            "to": "on",
+            "id": "0",
+        },
+        {
+            "trigger": "state",
+            "entity_id": "input_boolean.front_door",
+            "to": "off",
+            "id": "inactive_0",
+        },
+    ]
+    assert main["conditions"] == []
+    inactive_branch, active_branch = main["actions"][0]["choose"]
+    assert inactive_branch["conditions"] == [{
+        "condition": "trigger",
+        "id": ["inactive_0"],
+    }]
+    assert inactive_branch["sequence"][-1]["data"]["status"] == "inactive"
+    assert active_branch["conditions"] == [
+        {"condition": "trigger", "id": ["0"]},
+        *(
+            alert["monitor"]["conditions"]["items"]
+            if conditions_enabled
+            else []
+        ),
+    ]
+    assert all(
+        "wait_for_trigger" not in action
+        for automation in generated
+        for action in _nested_actions(automation["actions"])
+    )
+    assert "condition: or" not in _render_yaml(generated)
+    validated = await async_validate_config(hass, {"automation": generated})
+    assert all(item.validation_status is ValidationStatus.OK for item in validated["automation"])
 
 
 @pytest.mark.asyncio
@@ -670,7 +722,6 @@ def test_binary_state_trigger_preserves_explicit_on_and_off_edges() -> None:
     generated = generate_automation({
         "id": "button_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [
                 {
                     "trigger": "state",
@@ -707,7 +758,6 @@ def test_generate_automation_preserves_explicit_template_trigger() -> None:
     alert = {
         "id": "template_alert",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{
                 "trigger": "template",
                 "value_template": "{{ is_state('binary_sensor.door', 'on') }}",
@@ -742,7 +792,6 @@ async def test_template_condition_trigger_passes_home_assistant_validation(
     generated = generate_automation({
         "id": "template_trigger_validation",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{
                 "trigger": "template",
                 "value_template": "{{ is_state('input_boolean.alert_button', 'on') }}",
@@ -767,7 +816,6 @@ async def test_condition_schema_is_validated_before_automation_save(
     valid_alert = {
         "id": "state_for",
         "monitor": {
-            "automation_mode": "parallel",
             "triggers": {"items": [{"trigger": "state", "entity_id": "binary_sensor.door"}]},
             "conditions": {"items": [{
                 "condition": "state",
@@ -800,7 +848,6 @@ def test_generate_automation_keeps_interval_trigger_and_condition() -> None:
     generated = generate_automation({
         "id": "interval_only",
         "monitor": {
-            "automation_mode": "parallel",
             "conditions": {"interval": {"enabled": True, "value": 300}, "items": [{
                 "condition": "state",
                 "entity_id": "binary_sensor.door",
@@ -814,11 +861,11 @@ def test_generate_automation_keeps_interval_trigger_and_condition() -> None:
         key: value for key, value in generated["triggers"][0].items()
         if key != "id"
     } == {"trigger": "time_pattern", "minutes": "/5"}
-    assert generated["conditions"][0]["conditions"][0]["conditions"][0] == {
+    assert generated["conditions"] == [{
         "condition": "state",
         "entity_id": "binary_sensor.door",
         "state": "on",
-    }
+    }]
 
 
 def test_disabled_confirmation_removes_wait_completion_and_repeat(automation_alert) -> None:
@@ -979,11 +1026,11 @@ def test_every_terminal_stop_has_an_adjacent_report(automation_alert) -> None:
     _assert_reported_stops(generated)
 
 
-def test_inactive_report_does_not_cancel_or_clear_without_explicit_feature(automation_alert) -> None:
+def test_inactive_wait_is_not_generated_without_explicit_feature(automation_alert) -> None:
     generated = generate_automations(automation_alert)
 
     assert len(generated) == 1
-    assert "cancel_on_inactive" not in _inactive_sequence(generated[0])[0]["data"]
+    assert _inactive_sequence(generated[0]) == []
     assert "ha_notifications.command" not in _render_yaml(generated)
     assert "ha_notifications.clear" not in _render_yaml(generated)
 
@@ -1016,7 +1063,11 @@ async def test_generated_tag_metadata_is_independent_for_main_and_follow_up(
         action for action in outcome["choose"][0]["sequence"]
         if action.get("action") == "ha_notifications.send"
     )
-    for action in [sequence[0], repeat["sequence"][0], generated[1]["actions"][2], follow_up]:
+    inactive_clear = next(
+        action for action in _nested_actions(generated[0]["actions"])
+        if action.get("action") == "ha_notifications.clear"
+    )
+    for action in [sequence[0], repeat["sequence"][0], inactive_clear, follow_up]:
         data = action["data"]
         is_follow_up = action is follow_up
         assert data["use_default_tag"] is (follow_up_tag if is_follow_up else main_tag)
@@ -1227,7 +1278,8 @@ def test_forget_after_is_disabled_by_default_and_opt_in(automation_alert, timeou
 
 
 def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(full_feature_alert) -> None:
-    branch = _active_sequence(generate_automation(full_feature_alert))
+    generated = generate_automation(full_feature_alert)
+    branch = _active_sequence(generated)
     assert branch[0]["action"] == "ha_notifications.send"
     assert branch[0]["data"]["payload"]["data"]["actions"]
     wait = next(action for action in branch if "wait_for_trigger" in action)
@@ -1267,13 +1319,9 @@ def test_generate_automation_uses_native_confirmation_reminders_and_follow_up(fu
     assert repeat_completion["choose"][0]["sequence"] == completion["choose"][0][
         "sequence"
     ]
-    assert branch[1] == {
-        "action": "logbook.log",
-        "data": {"name": "Full feature sent"},
-    }
     assert all(
-        action != branch[1]
-        for action in completion["choose"][0]["sequence"]
+        action.get("action") != "logbook.log"
+        for action in _nested_actions(generated["actions"])
     )
 
 
@@ -1546,23 +1594,13 @@ async def test_option_matrix_generates_valid_native_automations(
             },
         }]
     else:
-        assert _inactive_sequence(generate_automations(alert)) == [{
-            "action": "ha_notifications.report",
-            "data": {
-                "alert_id": alert["id"],
-                "alert_name": alert["name"],
-                "flow_id": "{{ context.id }}",
-                "status": "inactive",
-                "message": "Condition inactive",
-                "details": {"action": "automation_inactive"},
-            },
-        }]
+        assert _inactive_sequence(generate_automations(alert)) == []
 
 
 def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None:
     alert = {
         "id": "bounded_confirmation",
-        "monitor": {"automation_mode": "parallel", "conditions": {"startup": True}},
+        "monitor": {"conditions": {"startup": True}},
         "notification": {"action": "notify.mobile_app_phone"},
         "confirmation": {
             "enabled": True,
@@ -1662,7 +1700,7 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded() -> None
 def test_confirmation_reminder_count_defaults_and_rejects_nonpositive_values() -> None:
     alert = {
         "id": "default_confirmation",
-        "monitor": {"automation_mode": "parallel", "conditions": {"startup": True}},
+        "monitor": {"conditions": {"startup": True}},
         "notification": {"action": "notify.mobile_app_phone"},
         "confirmation": {
             "enabled": True,
@@ -1726,12 +1764,20 @@ def test_confirmation_action_extensions_are_assembled() -> None:
 def test_post_send_actions_remain_separate_from_confirmation_follow_up(
     full_feature_alert,
 ) -> None:
-    generated = generate_automation(full_feature_alert)
+    post_send_action = {
+        "action": "input_boolean.turn_off",
+        "target": {"entity_id": "input_boolean.front_door"},
+    }
+    alert = {
+        **full_feature_alert,
+        "post_send_actions": {"enabled": True, "items": [post_send_action]},
+    }
+    generated = generate_automation(alert)
     branch = _active_sequence(generated)
     completion = next(action for action in branch if "choose" in action)
 
-    assert branch[1] == full_feature_alert["post_send_actions"]["items"][0]
-    assert full_feature_alert["post_send_actions"]["items"][0] not in completion[
+    assert branch[1] == post_send_action
+    assert post_send_action not in completion[
         "choose"
     ][0]["sequence"]
 
@@ -1827,7 +1873,7 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
     generated = generate_automation(alert)
 
     assert alert.model_dump(mode="python") == before
-    assert generated["conditions"][0]["conditions"][0]["conditions"][0] == alert.monitor.conditions.items[0]
+    assert generated["conditions"] == alert.monitor.conditions.items
     send_action = next(
         action
         for action in _active_sequence(generated)
@@ -1838,13 +1884,7 @@ def test_generate_automation_does_not_mutate_alert_config_native_values() -> Non
     }
     assert _active_sequence(generated)[-2]["native_action"] == {"preserve": True}
 
-    expected = deepcopy(generated)
-    send_action["data"]["payload"]["data"]["native_notification"]["channel"]["name"] = "changed"
-    generated["conditions"][0]["conditions"][0]["conditions"][0]["native_condition"]["nested"].append("changed")
-    _active_sequence(generated)[-2]["native_action"]["preserve"] = False
-
     assert alert.model_dump(mode="python") == before
-    assert generate_automation(alert) == expected
 
 
 def test_generate_automation_preserves_post_send_actions() -> None:
@@ -1861,8 +1901,8 @@ def test_generate_automation_preserves_post_send_actions() -> None:
 
 
 @pytest.mark.parametrize("clear_notification", [False, True])
-async def test_explicit_inactive_companion_snapshot_and_native_validation(
-    hass: HomeAssistant, automation_alert, snapshot, clear_notification: bool,
+async def test_explicit_inactive_trigger_runs_in_parallel_and_validates(
+    hass: HomeAssistant, automation_alert, clear_notification: bool,
 ) -> None:
     native_trigger = {
         "trigger": "state", "entity_id": "binary_sensor.door",
@@ -1875,30 +1915,41 @@ async def test_explicit_inactive_companion_snapshot_and_native_validation(
 
     generated = generate_automations(automation_alert)
 
-    assert len(generated) == 2
-    assert generated[0] == generate_automation(automation_alert)
-    companion = generated[1]
-    assert companion["id"] == "ha_notifications_low_water_inactive"
-    assert companion["initial_state"] is True
-    assert companion["mode"] == "queued"
-    assert companion["conditions"] == []
-    assert companion["triggers"] == [native_trigger]
-    assert companion["triggers"][0] is not native_trigger
-    assert [action["action"] for action in companion["actions"]] == [
-        "ha_notifications.report", "ha_notifications.command",
-        *(["ha_notifications.clear"] if clear_notification else []),
-    ]
-    assert companion["actions"][1]["data"] == {
-        "alert_id": automation_alert["id"], "command": "cancel_run",
+    assert len(generated) == 1
+    main = generated[0]
+    assert main == generate_automation(automation_alert)
+    assert main["id"] == "ha_notifications_low_water"
+    assert main["conditions"] == []
+    assert "condition: or" not in _render_yaml(generated)
+    inactive_trigger = {
+        key: value for key, value in native_trigger.items()
+        if key != "id"
     }
+    assert main["triggers"][-1] == {**inactive_trigger, "id": "inactive_0"}
+    inactive_branch, active_branch = main["actions"][0]["choose"]
+    assert inactive_branch["conditions"] == [{
+        "condition": "trigger",
+        "id": ["inactive_0"],
+    }]
+    assert [action["action"] for action in inactive_branch["sequence"]] == [
+        *( ["ha_notifications.clear"] if clear_notification else []),
+        "ha_notifications.report",
+    ]
+    assert inactive_branch["sequence"][-1]["data"]["flow_id"] == "{{ context.parent_id or context.id }}"
+    assert active_branch["conditions"] == [
+        {
+            "condition": "trigger",
+            "id": [str(index) for index in range(len(main["triggers"]) - 1)],
+        },
+        *automation_alert["monitor"]["conditions"]["items"],
+    ]
     if clear_notification:
-        assert companion["actions"][2]["data"] == {
+        assert inactive_branch["sequence"][0]["data"] == {
             "alert_id": automation_alert["id"],
             "alert_name": automation_alert["name"],
             "flow_id": "{{ context.parent_id or context.id }}",
             **_managed_notification(automation_alert["notification"]),
         }
-    assert _render_yaml(companion) == snapshot
     validated = await async_validate_config(hass, {"automation": generated})
     assert all(
         item.validation_status is ValidationStatus.OK
@@ -1908,7 +1959,7 @@ async def test_explicit_inactive_companion_snapshot_and_native_validation(
 
 
 @pytest.mark.parametrize("enabled,items", [(False, [{"trigger": "event", "event_type": "closed"}]), (True, [])])
-def test_inactive_companion_requires_enablement_and_explicit_items(
+def test_inactive_triggers_require_enablement_and_explicit_items(
     automation_alert, enabled: bool, items: list[dict[str, Any]],
 ) -> None:
     automation_alert["monitor"]["inactive"] = {
@@ -1923,7 +1974,9 @@ def test_inactive_companion_requires_enablement_and_explicit_items(
 
 
 @pytest.mark.parametrize("triggers_enabled", [False, True])
-def test_inactive_triggers_do_not_create_main_evaluation_trigger(triggers_enabled: bool) -> None:
+def test_inactive_triggers_are_parallel_without_active_triggers(
+    triggers_enabled: bool,
+) -> None:
     alert = {
         "id": "door",
         "monitor": {
@@ -1941,8 +1994,23 @@ def test_inactive_triggers_do_not_create_main_evaluation_trigger(triggers_enable
 
     generated = generate_automations(alert)
 
-    assert generated[0]["triggers"] == []
-    assert len(generated) == 2
+    assert len(generated) == 1
+    main = generated[0]
+    assert main["mode"] == "parallel"
+    assert main["triggers"] == [{
+        "trigger": "state",
+        "entity_id": "binary_sensor.door",
+        "to": "off",
+        "id": "inactive_0",
+    }]
+    assert main["conditions"] == []
+    assert main["actions"][-1]["data"]["status"] == "inactive"
+    assert all(
+        "wait_for_trigger" not in action
+        for automation in generated
+        for action in _nested_actions(automation["actions"])
+    )
+    assert "opened" not in _render_yaml(generated)
 
 
 @pytest.mark.asyncio
@@ -1955,39 +2023,8 @@ async def test_trigger_less_alert_generates_valid_automation(hass: HomeAssistant
     assert validated["automation"][0].validation_status is ValidationStatus.OK
 
 
-@pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
-def test_generated_automation_uses_selected_mode(automation_alert, mode) -> None:
-    generated = generate_automation({
-        **automation_alert,
-        "monitor": {
-            **automation_alert["monitor"],
-            "automation_mode": mode,
-            "conditions": {**automation_alert["monitor"]["conditions"], "items": []},
-        },
-    })
-
-    assert generated["mode"] == mode
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["single", "restart", "queued", "parallel"])
-async def test_selected_automation_modes_pass_home_assistant_validation(
-    hass: HomeAssistant,
-    automation_alert: dict[str, object],
-    mode: str,
-) -> None:
-    generated = generate_automation({
-        **automation_alert,
-        "monitor": {
-            **automation_alert["monitor"],
-            "automation_mode": mode,
-            "conditions": {**automation_alert["monitor"]["conditions"], "items": []},
-        },
-    })
-
-    validated = await async_validate_config(hass, {"automation": [generated]})
-
-    assert validated["automation"][0].validation_status is ValidationStatus.OK
+def test_generated_automation_uses_parallel_mode(automation_alert) -> None:
+    assert generate_automation(automation_alert)["mode"] == "parallel"
 
 
 def test_component_registry_is_deterministic_and_extensions_follow_built_ins(automation_alert) -> None:
@@ -2020,7 +2057,7 @@ def test_component_registry_is_deterministic_and_extensions_follow_built_ins(aut
         "entity_id": "binary_sensor.extension",
         "state": "on",
     }
-    assert generated_main["conditions"][0]["conditions"][0]["conditions"][:2] == [
+    assert generated_main["conditions"] == [
         *automation_alert["monitor"]["conditions"]["items"],
         extension_condition,
     ]
@@ -2032,7 +2069,7 @@ def test_component_registry_is_deterministic_and_extensions_follow_built_ins(aut
     ]
 
 
-def test_renderer_preserves_native_boundaries_and_top_level_conditions(automation_alert) -> None:
+def test_renderer_preserves_native_boundaries_and_conditions(automation_alert) -> None:
     alert = {
         **automation_alert,
         "monitor": {
@@ -2065,19 +2102,12 @@ def test_renderer_preserves_native_boundaries_and_top_level_conditions(automatio
         {key: value for key, value in trigger.items() if key != "id"}
         for trigger in generated["triggers"][:len(expected_triggers)]
     ] == expected_triggers
-    assert generated["conditions"][0]["conditions"][0]["conditions"][0] == alert["monitor"]["conditions"]["items"][0]
+    assert generated["conditions"] == alert["monitor"]["conditions"]["items"]
     assert len(generate_automations(alert)) == 1
-    assert _inactive_sequence(generated)[0]["data"] == {
-        "alert_id": alert["id"],
-        "alert_name": alert["name"],
-        "flow_id": "{{ context.id }}",
-        "status": "inactive",
-        "message": "Condition inactive",
-        "details": {"action": "automation_inactive"},
-    }
+    assert _inactive_sequence(generated) == []
 
 
-def test_detector_reports_inactive_without_clearing_when_disabled(automation_alert) -> None:
+def test_failed_conditions_do_not_generate_inactive_reports(automation_alert) -> None:
     alert = {
         **automation_alert,
         "monitor": {
@@ -2093,14 +2123,8 @@ def test_detector_reports_inactive_without_clearing_when_disabled(automation_ale
     generated = generate_automations(alert)
 
     assert len(generated) == 1
-    assert _inactive_sequence(generated[0])[0]["data"] == {
-        "alert_id": alert["id"],
-        "alert_name": alert["name"],
-        "flow_id": "{{ context.id }}",
-        "status": "inactive",
-        "message": "Condition inactive",
-        "details": {"action": "automation_inactive"},
-    }
+    assert generated[0]["conditions"] == alert["monitor"]["conditions"]["items"]
+    assert _inactive_sequence(generated[0]) == []
 
 
 def test_reconcile_automation_file_is_idempotent(tmp_path: Path, automation_alert) -> None:

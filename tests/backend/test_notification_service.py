@@ -231,7 +231,7 @@ async def test_command_fires_alert_scoped_event(
 
 
 @pytest.mark.asyncio
-async def test_inactive_report_preserves_history_deduplication_without_cancellation(
+async def test_inactive_reports_are_deduplicated_per_explicit_flow(
     hass: HomeAssistant,
 ) -> None:
     await async_setup_services(hass)
@@ -247,50 +247,17 @@ async def test_inactive_report_preserves_history_deduplication_without_cancellat
     hass.bus.async_listen(EVENT_COMMAND, callback(lambda event: events.append(event)))
     clear_calls = async_mock_service(hass, DOMAIN, "clear")
     notification_calls = async_mock_service(hass, "notify", "mobile_app_phone")
-    report = {"alert_id": "door", "status": "inactive"}
+    for flow_id in ("run-1", "run-1", "run-2"):
+        await hass.services.async_call(
+            DOMAIN,
+            "report",
+            {"alert_id": "door", "status": "inactive", "flow_id": flow_id},
+            blocking=True,
+        )
 
-    await hass.services.async_call(
-        DOMAIN,
-        "report",
-        report,
-        blocking=True,
-    )
-    assert [
-        item["event"]["type"] for item in await history.async_entries("door")
-    ] == ["inactive"]
-    assert events == []
-    await hass.services.async_call(
-        DOMAIN,
-        "report",
-        {"alert_id": "door", "status": "inactive"},
-        blocking=True,
-    )
-    assert [
-        item["event"]["type"] for item in await history.async_entries("door")
-    ] == ["inactive"]
-
-    await hass.services.async_call(
-        DOMAIN,
-        "report",
-        {"alert_id": "door", "status": "started", "run_id": "run-1"},
-        blocking=True,
-    )
-    await hass.services.async_call(
-        DOMAIN,
-        "report",
-        report,
-        blocking=True,
-    )
-    await hass.services.async_call(
-        DOMAIN,
-        "report",
-        {"alert_id": "door", "status": "inactive"},
-        blocking=True,
-    )
-
-    assert [
-        item["event"]["type"] for item in await history.async_entries("door")
-    ] == ["inactive", "started", "inactive"]
+    entries = await history.async_entries("door")
+    assert [item["event"]["type"] for item in entries] == ["inactive", "inactive"]
+    assert {item["event"]["flow_id"] for item in entries} == {"run-1", "run-2"}
     assert events == []
     assert clear_calls == []
     assert notification_calls == []
@@ -321,13 +288,14 @@ async def test_inactive_report_does_not_cancel_waits_by_default(
     await hass.services.async_call(
         DOMAIN,
         "report",
-        {"alert_id": "door", "status": "inactive"},
+        {"alert_id": "door", "status": "inactive", "run_id": "run-1"},
         blocking=True,
     )
 
     assert [
         item["event"]["type"] for item in await history.async_entries("door")
     ] == ["inactive", "started"]
+    assert (await history.async_entries("door"))[0]["event"]["flow_id"] == "run-1"
     assert events == []
 
 
