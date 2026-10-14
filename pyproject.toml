@@ -17,10 +17,10 @@ dependencies = [
 all = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
-    "homeassistant==2026.10.0",
-    "home-assistant-frontend==20260930.0",
+    "homeassistant==2026.10.1",
+    "home-assistant-frontend==20260930.3",
     "syrupy==6.1.1",
-    "ruff==0.16.10",
+    "ruff==0.17.0",
 ]
 
 [tool.setuptools.packages.find]
