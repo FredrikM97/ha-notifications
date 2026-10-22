@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_get_all_descriptions
 
+from custom_components.ha_notifications import RuntimeData
 from custom_components.ha_notifications.automation import _SendComponent
 from custom_components.ha_notifications.configuration import AlertConfig
 from custom_components.ha_notifications.const import (
@@ -18,7 +19,6 @@ from custom_components.ha_notifications.const import (
     DOMAIN,
     EVENT_COMMAND,
 )
-from custom_components.ha_notifications.domain import RuntimeData
 from custom_components.ha_notifications.history import HistoryStore
 from custom_components.ha_notifications.notification import (
     _parse_payload,

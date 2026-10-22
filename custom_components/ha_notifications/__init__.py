@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -17,12 +19,22 @@ from .automation_runtime import (
 from .bridge import async_register_panel
 from .configuration import empty_config, stored_config, validate_config
 from .const import DOMAIN
-from .domain import RuntimeData
 from .history import HistoryStore
 from .migration import async_migrate_entry as async_migrate_entry
 from .notification import async_setup_services, async_unload_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+@dataclass(slots=True)
+class RuntimeData:
+    """Runtime state for one loaded config entry; persisted alerts live in options."""
+
+    config: dict[str, Any]
+    automations: list[dict[str, Any]] | None = None
+    history: HistoryStore | None = None
+    remove_update_listener: Callable[[], None] | None = None
+    remove_automation_listener: Callable[[], None] | None = None
 
 
 async def _async_apply_config(

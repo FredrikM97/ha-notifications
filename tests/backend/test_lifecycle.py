@@ -16,6 +16,7 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.setup import async_setup_component
 
 from custom_components import ha_notifications
+from custom_components.ha_notifications import RuntimeData
 from custom_components.ha_notifications.automation import (
     automation_id,
 )
@@ -26,7 +27,6 @@ from custom_components.ha_notifications.const import (
     AUTOMATION_LABEL,
     DOMAIN,
 )
-from custom_components.ha_notifications.domain import RuntimeData
 from tests.backend.conftest import MockConfigEntry
 
 
