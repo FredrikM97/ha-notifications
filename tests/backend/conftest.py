@@ -66,7 +66,7 @@ class MockConfigEntry(config_entries.ConfigEntry):
         title: str = "Mock Title",
         data=None,
         options=None,
-        version: int = 5,
+        version: int = 6,
         minor_version: int = 0,
     ) -> None:
         super().__init__(

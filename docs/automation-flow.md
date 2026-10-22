@@ -161,16 +161,19 @@ Home Assistant's automation UI afterward.
 
 ### Upgrading from the dedicated automation file
 
-When upgrading from a release that used the
-`ha_notifications_automations.yaml` include, remove the line below from
-`configuration.yaml`, review and remove the retired file, then restart Home
-Assistant. Use **YAML > Reload** in the HA Notifications panel to apply saved alerts
-to the standard automation store. Any user-owned automation you added to the retired file must
-be moved to `automations.yaml` before deleting it.
+Releases that stored generated automations in `ha_notifications_automations.yaml`
+are cleaned up automatically by the config-entry migration (`migration.py`):
 
-```yaml
-automation ha_notifications: !include ha_notifications_automations.yaml
-```
+1. The `automation ha_notifications: !include ha_notifications_automations.yaml`
+   line is removed from `configuration.yaml`; other lines are left unchanged.
+2. `ha_notifications_automations.yaml` is deleted.
+3. Its generated automations are added to the standard `automations.yaml` unless
+   an automation with the same ID is already there.
+4. Automations are reloaded once after Home Assistant has started.
+
+If the dedicated file cannot be read, nothing is changed and a warning is
+logged. Remove the include line and file manually, restart Home Assistant, then
+use **YAML > Reload** in the panel to write the saved alerts' automations.
 
 ### Standard automation store
 
