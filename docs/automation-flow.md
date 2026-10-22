@@ -159,6 +159,8 @@ Removing the config entry does not remove its automations. Delete the alerts
 from the panel before uninstalling, or remove their generated automations from
 Home Assistant's automation UI afterward.
 
+### Upgrading from the dedicated automation file
+
 When upgrading from a release that used the
 `ha_notifications_automations.yaml` include, remove the line below from
 `configuration.yaml`, review and remove the retired file, then restart Home
