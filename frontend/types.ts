@@ -7,10 +7,27 @@ import type { HassServiceTarget } from "home-assistant-js-websocket";
 /** The subset of HA's frontend `hass` object this panel uses. */
 export interface Hass {
   callWS<Response>(message: Record<string, unknown>): Promise<Response>;
+  callApi<Response>(
+    method: string,
+    path: string,
+    parameters?: Record<string, unknown>,
+  ): Promise<Response>;
   localize?(key: string, variables?: Record<string, unknown>): string;
   loadFragmentTranslation?(fragment: string): Promise<void>;
   locale?: HassLocale;
   user?: { is_admin: boolean };
+}
+
+export interface AutomationChanges {
+  upsert: HaConfig[];
+  delete: string[];
+  description: string;
+}
+
+export interface ConfigurationSaveResult {
+  saved: boolean;
+  config: AlertsConfig;
+  automation_changes: AutomationChanges;
 }
 
 export interface HassLocale {
@@ -103,7 +120,7 @@ export interface ReminderConfig {
   forget_after: IntervalConfig;
 }
 
-export interface ActionsConfig {
+interface ActionsConfig {
   enabled: boolean;
   items: HaConfig[];
 }

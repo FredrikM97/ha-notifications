@@ -15,6 +15,8 @@ from pydantic import (
     model_validator,
 )
 
+from .const import CONFIG_VERSION
+
 ReminderInterval = int | float | str | dict[str, Any]
 
 
@@ -82,9 +84,9 @@ class NotificationConfig(BaseModel):
     message: str = ""
     use_default_tag: bool = Field(default=True, strict=True)
     options: dict[str, Any] = Field(default_factory=dict)
-    option_controls: dict[
-        Literal["mobile", "android", "ios"], NotificationOptionControl
-    ] | None = None
+    option_controls: dict[Literal["mobile", "android", "ios"], NotificationOptionControl] | None = (
+        None
+    )
 
     def delivery_options(self) -> dict[str, Any]:
         """Copy native options and omit only explicitly disabled paths."""
@@ -148,7 +150,7 @@ class ForgetAfterConfig(BaseModel):
     value: ReminderInterval = 900
 
     @model_validator(mode="after")
-    def validate_positive_value(self) -> "ForgetAfterConfig":
+    def validate_positive_value(self) -> ForgetAfterConfig:
         if self.enabled and (_duration_seconds(self.value) or 0) <= 0:
             raise ValueError("reminders.forget_after requires a positive value")
         return self
@@ -184,7 +186,9 @@ class ConfirmationConfig(BaseModel):
     buttons: list[ConfirmationButtonConfig] = Field(
         default_factory=lambda: [ConfirmationButtonConfig(id="confirm", label="Done")]
     )
-    notification: ConfirmationNotificationConfig = Field(default_factory=ConfirmationNotificationConfig)
+    notification: ConfirmationNotificationConfig = Field(
+        default_factory=ConfirmationNotificationConfig
+    )
     reminders: ReminderConfig = Field(default_factory=ReminderConfig)
     actions: ActionsConfig = Field(default_factory=ActionsConfig)
 
@@ -266,6 +270,7 @@ class MonitorConfig(BaseModel):
             triggers.extend(dict(trigger) for trigger in self.triggers.items)
         return triggers
 
+
 class AlertConfig(BaseModel):
     """Canonical persisted configuration for one alert."""
 
@@ -283,6 +288,7 @@ class AlertConfig(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
 
+
 class Configuration(BaseModel):
     """Canonical persisted HA Notifications configuration."""
 
@@ -292,7 +298,7 @@ class Configuration(BaseModel):
     alerts: list[AlertConfig] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_unique_alert_ids(self) -> "Configuration":
+    def validate_unique_alert_ids(self) -> Configuration:
         """Prevent duplicate IDs from producing colliding automations."""
         ids = [alert.id for alert in self.alerts]
         if len(ids) != len(set(ids)):
@@ -304,3 +310,29 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     """Validate and serialize the canonical nested configuration."""
     validated = Configuration.model_validate(config)
     return validated.model_dump(mode="python", exclude_none=True)
+
+
+def empty_config() -> dict[str, Any]:
+    """Return the canonical configuration stored by a new config entry."""
+    return {"version": CONFIG_VERSION, "alerts": []}
+
+
+def stored_config(entry: Any) -> dict[str, Any]:
+    """Return the canonical alert configuration persisted in entry options."""
+    return dict(entry.options)
+
+
+def find_alert(config: dict[str, Any], alert_id: str) -> dict[str, Any] | None:
+    """Return the alert with ``alert_id`` from a canonical configuration."""
+    return next((alert for alert in config["alerts"] if alert["id"] == alert_id), None)
+
+
+def upsert_alert(config: dict[str, Any], alert: dict[str, Any]) -> dict[str, Any]:
+    """Return ``config`` with ``alert`` replacing its id or appended."""
+    alerts = [item for item in config["alerts"] if item["id"] != alert["id"]]
+    if len(alerts) == len(config["alerts"]):
+        return {**config, "alerts": [*alerts, alert]}
+    return {
+        **config,
+        "alerts": [alert if item["id"] == alert["id"] else item for item in config["alerts"]],
+    }

@@ -1,13 +1,29 @@
-import { css, html, LitElement, nothing } from "lit";
-import type { TemplateResult } from "lit";
 import { mdiPlus } from "@mdi/js";
-import { errorMessage, request } from "./api.js";
-import type { Alert, AlertsConfig, AutomationRuntimeStatus, Hass, RuntimeAlertHistoryEntry } from "./types.js";
-import { localize } from "./localize.js";
-import { emptyState, NarrowController, notify, uiStyles } from "./ui.js";
-import { openEditor, updateOpenEditorHass } from "./editor/index.js";
+import type { TemplateResult } from "lit";
+import { css, html, LitElement, type nothing } from "lit";
+import { errorMessage, isAdmin, request } from "./api.js";
+import { deleteAlert, saveAlert as persistAlert } from "./automations.js";
 import { toCanonicalAlert } from "./editor/alert-model.js";
-import { alertList, alertListStyles, type AlertHandlers } from "./views/alerts.js";
+import { openEditor, updateOpenEditorHass } from "./editor/index.js";
+import { localize } from "./localize.js";
+import type {
+  Alert,
+  AlertsConfig,
+  AutomationRuntimeStatus,
+  Hass,
+  RuntimeAlertHistoryEntry,
+} from "./types.js";
+import {
+  adminRequiredState,
+  NarrowController,
+  notify,
+  uiStyles,
+} from "./ui.js";
+import {
+  type AlertHandlers,
+  alertList,
+  alertListStyles,
+} from "./views/alerts.js";
 import "./views/history.js";
 import "./views/yaml.js";
 
@@ -66,18 +82,23 @@ class HaNotificationsPanel extends LitElement {
   }
 
   get hass(): Hass {
-    return this._hass!;
+    const hass = this._hass;
+    if (!hass) throw new Error("Home Assistant client is not ready.");
+    return hass;
   }
 
   connectedCallback(): void {
     // HA may set hass before this module loads; that own property shadows the setter.
-    if (Object.prototype.hasOwnProperty.call(this, "hass")) {
+    if (Object.hasOwn(this, "hass")) {
       const hass = (this as { hass?: Hass }).hass;
       delete (this as { hass?: Hass }).hass;
       if (hass) this._hass = hass;
     }
     super.connectedCallback();
-    this.timer = window.setInterval(() => void this.refresh(true), AUTO_REFRESH_MS);
+    this.timer = window.setInterval(
+      () => void this.refresh(true),
+      AUTO_REFRESH_MS,
+    );
     if (this._hass) void this.refresh();
   }
 
@@ -87,16 +108,20 @@ class HaNotificationsPanel extends LitElement {
     super.disconnectedCallback();
   }
 
-  private localizeText = (key: string, variables?: Record<string, unknown>) => localize(this._hass, key, variables);
+  private localizeText = (key: string, variables?: Record<string, unknown>) =>
+    localize(this._hass, key, variables);
 
   async refresh(silent = false): Promise<void> {
-    if (!this._hass?.user?.is_admin || !this.isConnected) return;
+    if (!isAdmin(this._hass) || !this.isConnected) return;
     if (silent && this.refreshRequest) return;
     if (silent && (this.editing || this.tab === "yaml")) return;
     const pending = {};
     this.refreshRequest = pending;
     const errors: unknown[] = [];
-    async function retainOnError<Value>(request: Promise<Value>, previous: Value): Promise<Value> {
+    async function retainOnError<Value>(
+      request: Promise<Value>,
+      previous: Value,
+    ): Promise<Value> {
       try {
         return await request;
       } catch (error) {
@@ -106,18 +131,28 @@ class HaNotificationsPanel extends LitElement {
     }
     const [alerts, statuses, history] = await Promise.all([
       retainOnError(this.loadAlerts(), this.alerts),
-      retainOnError(request<Record<string, AutomationRuntimeStatus>>(this._hass, "automation_status"), this.statuses),
-      retainOnError(request<RuntimeAlertHistoryEntry[]>(this._hass, "get_history", {
-        ...(this.historyAlert?.id ? { alert_id: this.historyAlert.id } : {}),
-      }), this.history),
+      retainOnError(
+        request<Record<string, AutomationRuntimeStatus>>(
+          this._hass,
+          "automation_status",
+        ),
+        this.statuses,
+      ),
+      retainOnError(
+        request<RuntimeAlertHistoryEntry[]>(this._hass, "get_history", {
+          ...(this.historyAlert?.id ? { alert_id: this.historyAlert.id } : {}),
+        }),
+        this.history,
+      ),
     ]);
     if (this.refreshRequest !== pending || !this.isConnected) return;
     this.refreshRequest = undefined;
     this.alerts = alerts;
     this.statuses = statuses;
     this.history = history;
-    if (this.historyAlert) {
-      const alert = this.alerts.find(({ id }) => id === this.historyAlert!.id);
+    const historyAlert = this.historyAlert;
+    if (historyAlert) {
+      const alert = this.alerts.find(({ id }) => id === historyAlert.id);
       if (alert) this.historyAlert = { id: alert.id, name: alert.name };
     }
     if (!silent) {
@@ -127,9 +162,7 @@ class HaNotificationsPanel extends LitElement {
   }
 
   protected render(): TemplateResult {
-    if (!this._hass?.user?.is_admin) {
-      return emptyState(this.localizeText("panel.admin_required.label"), this.localizeText("panel.admin_required.helper"));
-    }
+    if (!isAdmin(this._hass)) return adminRequiredState(this.localizeText);
     const narrow = this.layout.narrow;
     const add = html`<ha-icon-button
       .label=${this.localizeText("panel.add_alert")}
@@ -140,7 +173,9 @@ class HaNotificationsPanel extends LitElement {
       @wa-tab-show=${(event: CustomEvent<{ name: Tab }>) => this.selectTab(event.detail.name)}
     >
       ${TABS.map(
-        (tab) => html`<ha-tab-group-tab slot="nav" panel=${tab} .active=${tab === this.tab}>
+        (
+          tab,
+        ) => html`<ha-tab-group-tab slot="nav" panel=${tab} .active=${tab === this.tab}>
           ${this.localizeText(`panel.tabs.${tab}`)}
         </ha-tab-group-tab>`,
       )}
@@ -165,15 +200,27 @@ class HaNotificationsPanel extends LitElement {
     switch (this.tab) {
       case "alerts":
       case "active":
-        return alertList(this._hass, this.alerts, this.statuses, this.tab === "active", this.on, this.layout.narrow);
+        return alertList(
+          this._hass,
+          this.alerts,
+          this.statuses,
+          this.tab === "active",
+          this.on,
+          this.layout.narrow,
+        );
       case "history":
         return html`<ha-notifications-history-view
           .hass=${this._hass}
           .history=${this.history}
           .alerts=${this.alerts}
           .alertName=${this.historyAlert?.name ?? null}
-          @history-alert-selected=${(event: CustomEvent<{ alertId: string; alertName: string }>) =>
-            this.showHistory({ id: event.detail.alertId, name: event.detail.alertName })}
+          @history-alert-selected=${(
+            event: CustomEvent<{ alertId: string; alertName: string }>,
+          ) =>
+            this.showHistory({
+              id: event.detail.alertId,
+              name: event.detail.alertName,
+            })}
           @history-show-all=${() => this.showHistory(null)}
         ></ha-notifications-history-view>`;
       case "yaml":
@@ -186,9 +233,9 @@ class HaNotificationsPanel extends LitElement {
 
   private selectTab(tab: Tab): void {
     if (this.tab === tab) return;
-    const yaml = this.renderRoot.querySelector<HTMLElement & { confirmLeave(): boolean }>(
-      "ha-notifications-yaml-view",
-    );
+    const yaml = this.renderRoot.querySelector<
+      HTMLElement & { confirmLeave(): boolean }
+    >("ha-notifications-yaml-view");
     if (yaml && !yaml.confirmLeave()) {
       this.requestUpdate();
       return;
@@ -197,7 +244,9 @@ class HaNotificationsPanel extends LitElement {
     this.requestUpdate();
   }
 
-  private async showHistory(alert: { id: string; name: string } | null): Promise<void> {
+  private async showHistory(
+    alert: { id: string; name: string } | null,
+  ): Promise<void> {
     this.historyAlert = alert;
     this.history = [];
     this.selectTab("history");
@@ -206,47 +255,31 @@ class HaNotificationsPanel extends LitElement {
 
   private async loadAlerts(): Promise<Alert[]> {
     const config = await request(this._hass, "get_config");
-    if (!config || typeof config !== "object" || Array.isArray(config)
-      || !Array.isArray((config as { alerts?: unknown }).alerts)) {
-      throw new Error("ha_notifications/get_config: expected canonical configuration with an alerts array.");
+    if (
+      !config ||
+      typeof config !== "object" ||
+      Array.isArray(config) ||
+      !Array.isArray((config as { alerts?: unknown }).alerts)
+    ) {
+      throw new Error(
+        "ha_notifications/get_config: expected canonical configuration with an alerts array.",
+      );
     }
     return (config as { alerts: Alert[] }).alerts;
-  }
-
-  private async configWithAlert(alert: Alert): Promise<AlertsConfig> {
-    const config = await request<AlertsConfig>(this._hass, "get_config");
-    const canonical = toCanonicalAlert(alert);
-    if (config.alerts.some(({ id }) => id === alert.id)) {
-      return { ...config, alerts: config.alerts.map((existing) => existing.id === alert.id ? canonical : existing) };
-    }
-    return { ...config, alerts: [...config.alerts, canonical] };
   }
 
   private async saveAlert(alert: Alert): Promise<Alert> {
     if (!alert.id || typeof alert.id !== "string") {
       throw new Error("ha_notifications/save_config: alert.id is required.");
     }
-    const config = await this.configWithAlert(alert);
-    const result = await request<{ saved: boolean; config: AlertsConfig }>(this._hass, "save_config", { config });
-    const saved = result.config.alerts.find(({ id }) => id === alert.id);
-    if (!saved) {
-      throw new Error(`ha_notifications/save_config: saved alert ${alert.id} was not returned.`);
-    }
-    return saved as Alert;
-  }
-
-  private async deleteAlert(alertId: string): Promise<unknown> {
-    const config = await request<AlertsConfig>(this._hass, "get_config");
-    if (!config.alerts.some(({ id }) => id === alertId)) {
-      throw new Error(`ha_notifications/save_config: alert ${alertId} was not found.`);
-    }
-    return request(this._hass, "save_config", {
-      config: { ...config, alerts: config.alerts.filter(({ id }) => id !== alertId) },
-    });
+    return persistAlert(this.hass, toCanonicalAlert(alert));
   }
 
   /** Run an API call, report its outcome, and refresh. */
-  private async act(call: () => Promise<unknown>, success?: string): Promise<void> {
+  private async act(
+    call: () => Promise<unknown>,
+    success?: string,
+  ): Promise<void> {
     try {
       const message = await call();
       const text = typeof message === "string" ? message : success;
@@ -260,12 +293,21 @@ class HaNotificationsPanel extends LitElement {
   private on: AlertHandlers = {
     create: () => void this.openAlertEditor(null),
     edit: (alert) => void this.openAlertEditor(alert),
-    history: (alert) => void this.showHistory({ id: alert.id, name: alert.name }),
+    history: (alert) =>
+      void this.showHistory({ id: alert.id, name: alert.name }),
     navigate: (path) => {
-      window.history.pushState({ from: window.location.pathname + window.location.search }, "", path);
-      window.dispatchEvent(new CustomEvent("location-changed", {
-        detail: { replace: false }, bubbles: true, composed: true,
-      }));
+      window.history.pushState(
+        { from: window.location.pathname + window.location.search },
+        "",
+        path,
+      );
+      window.dispatchEvent(
+        new CustomEvent("location-changed", {
+          detail: { replace: false },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     },
     toggle: (alert) =>
       void this.act(
@@ -274,16 +316,33 @@ class HaNotificationsPanel extends LitElement {
       ),
     cancelRun: (alert) =>
       void this.act(async () => {
-        const result = await request<{ cancelled: boolean }>(this._hass, "cancel_run", { alert_id: alert.id });
-        return this.localizeText(result.cancelled ? "alert.run_cancelled" : "alert.run_not_active");
+        const result = await request<{ cancelled: boolean }>(
+          this._hass,
+          "cancel_run",
+          { alert_id: alert.id },
+        );
+        return this.localizeText(
+          result.cancelled ? "alert.run_cancelled" : "alert.run_not_active",
+        );
       }),
     testAlert: (alert) => {
-      if (!window.confirm(this.localizeText("alert.confirm_test", { name: alert.name }))) return;
-      void this.act(() => request(this._hass, "test_alert", { alert_id: alert.id }), this.localizeText("alert.test_started"));
+      if (
+        !window.confirm(
+          this.localizeText("alert.confirm_test", { name: alert.name }),
+        )
+      )
+        return;
+      void this.act(
+        () => request(this._hass, "test_alert", { alert_id: alert.id }),
+        this.localizeText("alert.test_started"),
+      );
     },
     remove: (alert) => {
       if (!window.confirm(`Delete "${alert.name}"?`)) return;
-      void this.act(() => this.deleteAlert(alert.id), this.localizeText("panel.alert_deleted"));
+      void this.act(
+        () => deleteAlert(this.hass, alert.id),
+        this.localizeText("panel.alert_deleted"),
+      );
     },
   };
 
@@ -291,8 +350,14 @@ class HaNotificationsPanel extends LitElement {
     const hass = this._hass;
     if (!hass) return;
     try {
-      const editorAlert = alert ?? (await request<AlertsConfig>(hass, "get_config", { new: true })).alerts[0];
-      if (!editorAlert) throw new Error("ha_notifications/get_config: backend returned no new alert.");
+      const editorAlert =
+        alert ??
+        (await request<AlertsConfig>(hass, "get_config", { new: true }))
+          .alerts[0];
+      if (!editorAlert)
+        throw new Error(
+          "ha_notifications/get_config: backend returned no new alert.",
+        );
       if (!this.isConnected || this._hass !== hass) return;
       this.editing = true;
       this.requestUpdate();
@@ -300,12 +365,18 @@ class HaNotificationsPanel extends LitElement {
         root: this.renderRoot as ShadowRoot,
         hass,
         alert: editorAlert,
-        onValidateAlert: async (draft) => request(this._hass, "validate_config", {
-          config: await this.configWithAlert(draft),
-        }),
+        onValidateAlert: async (draft) =>
+          request(this._hass, "validate_config", {
+            alert: toCanonicalAlert(draft),
+          }),
         onSave: async (draft) => {
           const saved = await this.saveAlert(draft);
-          notify(this, this.localizeText(alert ? "panel.alert_saved" : "panel.alert_created"));
+          notify(
+            this,
+            this.localizeText(
+              alert ? "panel.alert_saved" : "panel.alert_created",
+            ),
+          );
           return saved;
         },
         onClosed: () => {
@@ -351,7 +422,11 @@ if (!customElements.get("ha-notifications-card")) {
   customElements.define("ha-notifications-card", HaNotificationsCard);
 }
 
-const cards = ((window as { customCards?: { type: string }[] }).customCards ??= []);
+const homeAssistantWindow = window as Window & {
+  customCards?: { type: string }[];
+};
+const cards = homeAssistantWindow.customCards ?? [];
+homeAssistantWindow.customCards = cards;
 if (!cards.some(({ type }) => type === "ha-notifications-card")) {
   cards.push({
     type: "ha-notifications-card",

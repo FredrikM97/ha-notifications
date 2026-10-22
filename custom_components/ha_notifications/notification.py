@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.template import Template
 
 from .const import (
@@ -25,17 +26,20 @@ from .targets import resolve_target
 
 _LOGGER = logging.getLogger(__name__)
 
-_DELIVERY_SCHEMA = vol.Schema({
-    vol.Required("payload"): {vol.Optional("data"): dict, vol.Extra: object},
-    vol.Optional("action"): str,
-    vol.Optional("target"): dict,
-    vol.Optional("alert_id"): str,
-    vol.Optional("alert_name"): str,
-    vol.Optional("use_default_tag", default=True): bool,
-    vol.Optional("flow_id"): str,
-    vol.Optional("confirmation"): dict,
-    vol.Optional("history_reason"): str,
-})
+_DELIVERY_SCHEMA = vol.Schema(
+    {
+        vol.Required("payload"): {vol.Optional("data"): dict, vol.Extra: object},
+        vol.Optional("action"): str,
+        vol.Optional("target"): dict,
+        vol.Optional("alert_id"): str,
+        vol.Optional("alert_name"): str,
+        vol.Optional("use_default_tag", default=True): bool,
+        vol.Optional("flow_id"): str,
+        vol.Optional("confirmation"): dict,
+        vol.Optional("history_reason"): str,
+    }
+)
+_ALLOW_EXTRA_SCHEMA = vol.Schema({}, extra=vol.ALLOW_EXTRA)
 
 
 def _entry(hass: HomeAssistant) -> Any:
@@ -110,26 +114,20 @@ async def _async_report(hass: HomeAssistant, call: ServiceCall) -> None:
     status = call.data.get("status")
     run_id = call.data.get("run_id")
     if not isinstance(alert_id, str) or not alert_id:
-        raise HomeAssistantError(
-            "ha_notifications.report requires alert_id"
-        )
+        raise HomeAssistantError("ha_notifications.report requires alert_id")
     if not isinstance(status, str) or not status:
-        raise HomeAssistantError(
-            "ha_notifications.report requires status"
-        )
-    if status == "started" or status.endswith("_completed") or status in {
-        "waiting",
-        "running",
-    }:
-        if not isinstance(run_id, str) or not run_id:
-            raise HomeAssistantError(
-                f"ha_notifications.report status {status!r} requires run_id"
-            )
-    details = (
-        dict(call.data.get("details"))
-        if isinstance(call.data.get("details"), dict)
-        else {}
-    )
+        raise HomeAssistantError("ha_notifications.report requires status")
+    if (
+        status == "started"
+        or status.endswith("_completed")
+        or status
+        in {
+            "waiting",
+            "running",
+        }
+    ) and (not isinstance(run_id, str) or not run_id):
+        raise HomeAssistantError(f"ha_notifications.report status {status!r} requires run_id")
+    details = dict(call.data.get("details")) if isinstance(call.data.get("details"), dict) else {}
     if status == "confirmation_completed":
         details["confirmed_by"] = await _confirmed_by(hass, details)
         details.pop("device_id", None)
@@ -174,9 +172,7 @@ def _target_services(
         action = notification.get("action")
         if isinstance(action, str) and action.count(".") == 1:
             return [action]
-        raise HomeAssistantError(
-            f"ha_notifications.{service_name} requires a target or action"
-        )
+        raise HomeAssistantError(f"ha_notifications.{service_name} requires a target or action")
 
     resolution = resolve_target(hass, target)
     services = resolve_services(hass, resolution)
@@ -185,9 +181,9 @@ def _target_services(
         return [action]
     if not services:
         services = sorted(
-        entity_id
-        for entity_id in resolution.entity_ids
-        if entity_id.startswith("notify.") and entity_id.count(".") == 1
+            entity_id
+            for entity_id in resolution.entity_ids
+            if entity_id.startswith("notify.") and entity_id.count(".") == 1
         )
     if not services:
         raise HomeAssistantError(
@@ -197,7 +193,9 @@ def _target_services(
 
 
 def _payload(
-    native_payload: dict[str, Any], clear: bool, alert_id: str | None,
+    native_payload: dict[str, Any],
+    clear: bool,
+    alert_id: str | None,
     use_default_tag: bool = True,
 ) -> dict[str, Any]:
     payload = dict(native_payload)
@@ -276,6 +274,7 @@ async def _deliver(hass: HomeAssistant, call: ServiceCall, clear: bool) -> None:
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's Home Assistant services."""
+
     async def send(call: ServiceCall) -> None:
         await _deliver(hass, call, False)
 
@@ -289,26 +288,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         alert_id = call.data.get("alert_id")
         command_name = call.data.get("command")
         if not isinstance(alert_id, str) or not alert_id:
-            raise HomeAssistantError(
-                "ha_notifications.command requires alert_id"
-            )
+            raise HomeAssistantError("ha_notifications.command requires alert_id")
         if not isinstance(command_name, str) or not command_name:
-            raise HomeAssistantError(
-                "ha_notifications.command requires command"
-            )
+            raise HomeAssistantError("ha_notifications.command requires command")
         hass.bus.async_fire(
             EVENT_COMMAND,
             {"alert_id": alert_id, "command": command_name},
         )
 
-    hass.services.async_register(
-        DOMAIN, SERVICE_SEND, send, schema=_DELIVERY_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR, clear, schema=_DELIVERY_SCHEMA
-    )
-    hass.services.async_register(DOMAIN, SERVICE_REPORT, report)
-    hass.services.async_register(DOMAIN, SERVICE_COMMAND, command)
+    async_register_admin_service(hass, DOMAIN, SERVICE_SEND, send, schema=_DELIVERY_SCHEMA)
+    async_register_admin_service(hass, DOMAIN, SERVICE_CLEAR, clear, schema=_DELIVERY_SCHEMA)
+    async_register_admin_service(hass, DOMAIN, SERVICE_REPORT, report, schema=_ALLOW_EXTRA_SCHEMA)
+    async_register_admin_service(hass, DOMAIN, SERVICE_COMMAND, command, schema=_ALLOW_EXTRA_SCHEMA)
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:

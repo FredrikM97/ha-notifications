@@ -2,9 +2,14 @@
  * Generic UI built on Home Assistant's own elements, so every view follows HA's
  * look and responsive behaviour instead of custom styling.
  */
-import { css, html, nothing } from "lit";
+
 import { mdiCheckCircle, mdiCloseCircle } from "@mdi/js";
-import type { ReactiveController, ReactiveControllerHost, TemplateResult } from "lit";
+import type {
+  ReactiveController,
+  ReactiveControllerHost,
+  TemplateResult,
+} from "lit";
+import { css, html, nothing } from "lit";
 
 /** Shared styles for the helpers below, using HA theme variables only. */
 export const uiStyles = css`
@@ -113,7 +118,7 @@ export const uiStyles = css`
 `;
 
 /** HA's breakpoint for collapsing toolbars and side navigation. */
-export const NARROW_WIDTH = 870;
+const NARROW_WIDTH = 870;
 
 /** Tracks whether the host is narrower than HA's breakpoint (works for panels and cards). */
 export class NarrowController implements ReactiveController {
@@ -149,8 +154,9 @@ export interface Action {
 
 /** Icon actions that collapse into HA's ⋮ menu on narrow screens. */
 export function actions(items: Action[], narrow: boolean): TemplateResult {
-  return html`<ha-icon-overflow-menu .items=${items.map(item => ({
-    ...item, tooltip: item.tooltip ?? item.label,
+  return html`<ha-icon-overflow-menu .items=${items.map((item) => ({
+    ...item,
+    tooltip: item.tooltip ?? item.label,
   }))} .narrow=${narrow}></ha-icon-overflow-menu>`;
 }
 
@@ -191,7 +197,12 @@ export function selectConfig(id: string, options: SelectOption[]): object {
 export function haButton(
   label: string,
   onClick: () => void,
-  options: { variant?: "brand" | "neutral" | "danger"; appearance?: string; disabled?: boolean; slot?: string } = {},
+  options: {
+    variant?: "brand" | "neutral" | "danger";
+    appearance?: string;
+    disabled?: boolean;
+    slot?: string;
+  } = {},
 ): TemplateResult {
   return html`<ha-button
     variant=${options.variant ?? "brand"}
@@ -217,14 +228,27 @@ export function emptyState(
   </ha-card>`;
 }
 
-/** Show HA's snackbar; works from anywhere inside the HA DOM. */
-export function notify(from: Element, message: string): void {
-  from.dispatchEvent(
-    new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true }),
+export function adminRequiredState(
+  localize: (key: string) => string,
+): TemplateResult {
+  return emptyState(
+    localize("panel.admin_required.label"),
+    localize("panel.admin_required.helper"),
   );
 }
 
-export interface NavItem {
+/** Show HA's snackbar; works from anywhere inside the HA DOM. */
+export function notify(from: Element, message: string): void {
+  from.dispatchEvent(
+    new CustomEvent("hass-notification", {
+      detail: { message },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+interface NavItem {
   key: string;
   label: string;
   child?: boolean;

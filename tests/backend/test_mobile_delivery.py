@@ -57,7 +57,7 @@ async def test_generated_alert_reaches_mobile_notify_service(
     hass: HomeAssistant,
     notify_phone,
     alert_factory,
-    mock_automation_files,
+    automation_api,
     enable_custom_integrations,
     monkeypatch,
     snapshot,
@@ -89,22 +89,25 @@ async def test_generated_alert_reaches_mobile_notify_service(
     }
     original = deepcopy(notification)
     alert = alert_factory(notification=notification)
-    mock_automation_files["prepare"]()
+    automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={"version": 1, "alerts": [alert]},
+        options={"version": 1, "alerts": [alert]},
     )
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
+    await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
     automation = next(
-        state for state in hass.states.async_all("automation")
+        state
+        for state in hass.states.async_all("automation")
         if state.attributes.get("id") == automation_id(alert)
     )
 
     await hass.services.async_call(
-        "automation", "trigger",
+        "automation",
+        "trigger",
         {"entity_id": automation.entity_id, "skip_condition": True},
         blocking=True,
     )
@@ -116,7 +119,8 @@ async def test_generated_alert_reaches_mobile_notify_service(
     assert sent["title"] == "TEst text test"
     expected_tag = custom_tag or (alert["id"] if use_default_tag else None)
     assert sent["data"] == {
-        **device_data, **({"tag": expected_tag} if expected_tag is not None else {}),
+        **device_data,
+        **({"tag": expected_tag} if expected_tag is not None else {}),
     }
     assert "use_default_tag" not in sent
     assert "use_default_tag" not in sent["data"]
@@ -125,7 +129,8 @@ async def test_generated_alert_reaches_mobile_notify_service(
     assert notification == original
 
     await hass.services.async_call(
-        DOMAIN, "clear",
+        DOMAIN,
+        "clear",
         {
             "alert_id": alert["id"],
             "use_default_tag": use_default_tag,
@@ -154,7 +159,7 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
     notify_phone,
     alert_factory,
     option_controls_contract,
-    mock_automation_files,
+    automation_api,
     enable_custom_integrations,
     monkeypatch,
 ) -> None:
@@ -164,19 +169,23 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
     notification["target"] = {"device_id": [device.id]}
     alert = alert_factory(notification=notification)
     original = deepcopy(alert)
-    mock_automation_files["prepare"]()
+    automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
-    entry = MockConfigEntry(domain=DOMAIN, data={"version": 1, "alerts": [alert]})
+    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [alert]})
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
+    await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
     automation = next(
-        state for state in hass.states.async_all("automation")
+        state
+        for state in hass.states.async_all("automation")
         if state.attributes.get("id") == automation_id(alert)
     )
     await hass.services.async_call(
-        "automation", "trigger",
-        {"entity_id": automation.entity_id, "skip_condition": True}, blocking=True,
+        "automation",
+        "trigger",
+        {"entity_id": automation.entity_id, "skip_condition": True},
+        blocking=True,
     )
     await hass.async_block_till_done()
     assert len(calls) == 1
@@ -185,5 +194,5 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
         "message": notification["message"],
         "data": {**option_controls_contract["delivery_options"], "tag": alert["id"]},
     }
-    assert entry.data["alerts"][0]["notification"] == original["notification"]
+    assert entry.options["alerts"][0]["notification"] == original["notification"]
     assert alert == original

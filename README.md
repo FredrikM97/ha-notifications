@@ -11,10 +11,17 @@ maintains the automations for you.
 
 1. Install **HA Notifications** through HACS and restart Home Assistant.
 2. Add **HA Notifications** under **Settings > Devices & services**.
-3. Open the sidebar panel and create an alert.
+3. Open the sidebar panel and create an alert; saving creates its automation.
 
-First setup adds an automation include to `configuration.yaml`; restart once
-afterwards to load it. Your own `automations.yaml` is left untouched.
+HA Notifications stores its generated automations in Home Assistant's standard
+`automations.yaml` file through Home Assistant's admin automation API. Alert
+edits create, update, or remove only the corresponding automations. Home Assistant
+must load that store using its standard `automation: !include automations.yaml`
+configuration; see [setup details](docs/automation-flow.md#standard-automation-store).
+On upgrade
+from a version that used `ha_notifications_automations.yaml`, remove its include
+from `configuration.yaml`, delete the retired file after confirming it contains
+no user automations, restart Home Assistant, then use **YAML > Reload** to apply saved alerts.
 
 ## Using the Panel
 
@@ -82,8 +89,3 @@ For details, see the [automation flow](docs/automation-flow.md),
   <br>
   <em>Example of generated automation</em>
 </p>
-
-
-
-
-

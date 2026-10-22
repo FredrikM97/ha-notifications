@@ -1,10 +1,22 @@
-import { css, html, LitElement, nothing } from "lit";
+import {
+  mdiCheckDecagramOutline,
+  mdiInformationOutline,
+  mdiReload,
+} from "@mdi/js";
 import type { TemplateResult } from "lit";
-import { mdiCheckDecagramOutline, mdiInformationOutline, mdiReload } from "@mdi/js";
-import { errorMessage, request } from "../api.js";
-import type { Hass } from "../types.js";
+import { css, html, LitElement, nothing } from "lit";
+import { errorMessage, isAdmin, request } from "../api.js";
+import { reloadAutomations, saveConfiguration } from "../automations.js";
 import { localize } from "../localize.js";
-import { haButton, NarrowController, notify, toolbar, uiStyles } from "../ui.js";
+import type { Hass } from "../types.js";
+import {
+  adminRequiredState,
+  haButton,
+  NarrowController,
+  notify,
+  toolbar,
+  uiStyles,
+} from "../ui.js";
 
 const styles = css`
   :host {
@@ -98,13 +110,18 @@ class YamlView extends LitElement {
     if (this.dirty) event.preventDefault();
   };
 
-  protected firstUpdated(): void {
-    void this.load().catch(error => notify(this, errorMessage(error)));
+  protected updated(changed: Map<PropertyKey, unknown>): void {
+    if (!changed.has("hass")) return;
+    const previous = changed.get("hass") as Hass | undefined;
+    if (isAdmin(this.hass) && !isAdmin(previous)) {
+      void this.load().catch((error) => notify(this, errorMessage(error)));
+    }
   }
 
   private localizeText = (key: string) => localize(this.hass, key);
 
   protected render() {
+    if (!isAdmin(this.hass)) return adminRequiredState(this.localizeText);
     return html`<ha-card>
       ${toolbar(
         html`<div class="nc-yaml-title">
@@ -115,11 +132,25 @@ class YamlView extends LitElement {
           <ha-tooltip id="yaml-help-tooltip" for="yaml-help">${this.localizeText("yaml.about.helper")}</ha-tooltip>
         </div>`,
         [
-          { label: this.localizeText("yaml.validate.label"), tooltip: this.localizeText("yaml.validate.helper"), path: mdiCheckDecagramOutline, action: this.validate, disabled: this.busy },
-          { label: this.localizeText("yaml.reload.label"), tooltip: this.localizeText("yaml.reload.helper"), path: mdiReload, action: this.reload, disabled: this.busy },
+          {
+            label: this.localizeText("yaml.validate.label"),
+            tooltip: this.localizeText("yaml.validate.helper"),
+            path: mdiCheckDecagramOutline,
+            action: this.validate,
+            disabled: this.busy,
+          },
+          {
+            label: this.localizeText("yaml.reload.label"),
+            tooltip: this.localizeText("yaml.reload.helper"),
+            path: mdiReload,
+            action: this.reload,
+            disabled: this.busy,
+          },
         ],
         this.layout.narrow,
-        haButton(this.localizeText("yaml.save"), this.save, { disabled: this.busy || !this.valid }),
+        haButton(this.localizeText("yaml.save"), this.save, {
+          disabled: this.busy || !this.valid,
+        }),
       )}
       ${this.renderValidation()}
       ${this.renderEditor()}
@@ -142,7 +173,9 @@ class YamlView extends LitElement {
     ></ha-yaml-editor>`;
   }
 
-  private editDocument = (event: CustomEvent<{ value: unknown; isValid: boolean }>): void => {
+  private editDocument = (
+    event: CustomEvent<{ value: unknown; isValid: boolean }>,
+  ): void => {
     event.stopPropagation();
     this.setDraft(event.detail.value, event.detail.isValid);
   };
@@ -154,14 +187,23 @@ class YamlView extends LitElement {
   }
 
   private async load(): Promise<void> {
-    const config = await request<Record<string, unknown>>(this.hass, "get_config", { validate: false });
-    if (!this.isConnected) return;
+    const config = await request<Record<string, unknown>>(
+      this.hass,
+      "get_config",
+      { validate: false },
+    );
+    if (!this.isConnected || !isAdmin(this.hass)) return;
     this.config = config;
     this.setDraft(config, true, false);
   }
 
   private mapping(): Record<string, unknown> {
-    if (!this.valid || !this.draft || typeof this.draft !== "object" || Array.isArray(this.draft)) {
+    if (
+      !this.valid ||
+      !this.draft ||
+      typeof this.draft !== "object" ||
+      Array.isArray(this.draft)
+    ) {
       throw new Error("YAML must contain a mapping.");
     }
     return this.draft as Record<string, unknown>;
@@ -172,6 +214,9 @@ class YamlView extends LitElement {
     if (this.busy) return;
     this.busy = true;
     try {
+      if (!isAdmin(this.hass)) {
+        throw new Error(this.localizeText("panel.admin_required.helper"));
+      }
       notify(this, await task());
     } catch (error) {
       notify(this, errorMessage(error));
@@ -188,7 +233,7 @@ class YamlView extends LitElement {
 
   private reload = () =>
     this.run(async () => {
-      await request(this.hass, "reload");
+      await reloadAutomations(this.hass);
       this.config = null;
       await this.load();
       return this.localizeText("yaml.reloaded");
@@ -197,10 +242,11 @@ class YamlView extends LitElement {
   private save = () =>
     this.run(async () => {
       const config = this.mapping();
-      const result = await request<{ saved: boolean }>(this.hass, "save_config", { config });
-      if (!result.saved) throw new Error(this.localizeText("yaml.not_saved"));
+      await saveConfiguration(this.hass, config);
       if (this.draft === config) this.setDraft(config, this.valid, false);
-      this.dispatchEvent(new CustomEvent("yaml-saved", { bubbles: true, composed: true }));
+      this.dispatchEvent(
+        new CustomEvent("yaml-saved", { bubbles: true, composed: true }),
+      );
       return this.localizeText("yaml.saved");
     });
 }

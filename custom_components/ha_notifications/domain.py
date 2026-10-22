@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -19,3 +20,4 @@ class RuntimeData:
     automations: list[Mapping] | None = None
     history: HistoryStore | None = None
     remove_update_listener: Any | None = None
+    remove_automation_listener: Callable[[], None] | None = None

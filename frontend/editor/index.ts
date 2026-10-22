@@ -1,19 +1,48 @@
-import { css, html, LitElement, nothing } from "lit";
-import type { PropertyValues, TemplateResult } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { mdiCheckDecagramOutline, mdiClose, mdiCodeBraces } from "@mdi/js";
+import type { PropertyValues, TemplateResult } from "lit";
+import { css, html, LitElement, nothing } from "lit";
+import { classMap } from "lit/directives/class-map.js";
 import { errorMessage, request } from "../api.js";
+import {
+  createLocalizer,
+  type Localize,
+  optionalTranslation,
+} from "../localize.js";
 import type { Alert, Hass } from "../types.js";
-import { createLocalizer, optionalTranslation, type Localize } from "../localize.js";
-import { actions, haButton, NarrowController, navMenu, notify, toolbar, uiStyles, type Action } from "../ui.js";
+import {
+  type Action,
+  actions,
+  haButton,
+  NarrowController,
+  navMenu,
+  notify,
+  toolbar,
+  uiStyles,
+} from "../ui.js";
 import { finalizeAlert } from "./alert-model.js";
 import "./setting-row.js";
 import { insetNativeEditors, nativeEditorKind } from "./native-editor.js";
-import type { EnabledChangedDetail, HelpEntry, HelpRequestDetail } from "./setting-row.js";
 import {
-  editorSections, embeddedSections, findSection, hasOptionValues, isFieldEnabled, isSectionEnabled, readField,
-  rootSection, sectionStatus, setFieldEnabled, setSectionEnabled, writeField, type EditorField, type EditorSection,
+  type EditorField,
+  type EditorSection,
+  editorSections,
+  embeddedSections,
+  findSection,
+  hasOptionValues,
+  isFieldEnabled,
+  isSectionEnabled,
+  readField,
+  rootSection,
+  sectionStatus,
+  setFieldEnabled,
+  setSectionEnabled,
+  writeField,
 } from "./sections.js";
+import type {
+  EnabledChangedDetail,
+  HelpEntry,
+  HelpRequestDetail,
+} from "./setting-row.js";
 
 const styles = css`
   :host {
@@ -211,7 +240,7 @@ export interface OpenEditorOptions {
   root: ShadowRoot;
   hass: Hass;
   alert: Alert;
-  onSave: (alert: Alert) => Promise<Alert | void>;
+  onSave: (alert: Alert) => Promise<Alert | undefined>;
   onClosed?: () => void;
   onValidateAlert: (alert: Alert) => Promise<unknown>;
 }
@@ -236,11 +265,15 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** Large editors own their whole row; their help moves into the section heading. */
 function isBlockField(field: EditorField): boolean {
-  return Boolean(nativeEditorKind(field.selector)) || ["template", "object", "target"].some(type => type in field.selector);
+  return (
+    Boolean(nativeEditorKind(field.selector)) ||
+    ["template", "object", "target"].some((type) => type in field.selector)
+  );
 }
 
 function isWideField(section: EditorSection, field: EditorField): boolean {
-  if ((field.selector.select as { multiple?: boolean } | undefined)?.multiple) return true;
+  if ((field.selector.select as { multiple?: boolean } | undefined)?.multiple)
+    return true;
   if ("number" in field.selector || "duration" in field.selector) return false;
   return !section.options;
 }
@@ -288,7 +321,8 @@ class AlertEditor extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     void this.loadPlatforms();
-    void this.hass.loadFragmentTranslation?.("config")
+    void this.hass
+      .loadFragmentTranslation?.("config")
       .then(() => this.requestUpdate())
       .catch((error: unknown) => notify(this, errorMessage(error)));
   }
@@ -298,7 +332,10 @@ class AlertEditor extends LitElement {
   }
 
   protected updated(): void {
-    for (const form of this.renderRoot.querySelectorAll<HTMLElement>("ha-form[data-native-editor]")) void insetNativeEditors(form);
+    for (const form of this.renderRoot.querySelectorAll<HTMLElement>(
+      "ha-form[data-native-editor]",
+    ))
+      void insetNativeEditors(form);
   }
 
   protected render(): TemplateResult {
@@ -316,7 +353,7 @@ class AlertEditor extends LitElement {
               ${this.renderHeader(section)}
               <div class="card-content">
                 ${this.renderFields(section)}
-                ${embeddedSections(section).map(child => this.renderEmbeddedSection(child))}
+                ${embeddedSections(section).map((child) => this.renderEmbeddedSection(child))}
               </div>
             </section>
           </ha-card>
@@ -328,28 +365,52 @@ class AlertEditor extends LitElement {
 
   private renderActions(): TemplateResult {
     return html`<span slot="actionItems" class="nc-dirty">${this.dirty ? this.localizeText("editor.common.unsaved_changes") : ""}</span>
-      <div slot="actionItems">${actions([
-        { label: this.localizeText("editor.common.view_yaml"), path: mdiCodeBraces, action: this.showYaml },
-      ], this.layout.narrow)}</div>
+      <div slot="actionItems">${actions(
+        [
+          {
+            label: this.localizeText("editor.common.view_yaml"),
+            path: mdiCodeBraces,
+            action: this.showYaml,
+          },
+        ],
+        this.layout.narrow,
+      )}</div>
       ${haButton(this.localizeText("editor.common.save_alert"), this.save, { disabled: this.saving, slot: "actionItems" })}`;
   }
 
   private renderNavigation(current: EditorSection): TemplateResult {
     const items = editorSections
-      .filter(section => !section.embedded && !this.platformUnavailable(section))
-      .map(section => ({
+      .filter(
+        (section) => !section.embedded && !this.platformUnavailable(section),
+      )
+      .map((section) => ({
         key: section.key,
         label: this.sectionLabel(section),
         child: Boolean(section.parent),
         status: sectionStatus(this.alert, section),
       }));
-    return navMenu(items, current.key, this.select, this.layout.narrow, this.localizeText("editor.common.alert_sections"),
-      { on: this.localizeText("alert.enabled"), off: this.localizeText("alert.disabled") });
+    return navMenu(
+      items,
+      current.key,
+      this.select,
+      this.layout.narrow,
+      this.localizeText("editor.common.alert_sections"),
+      {
+        on: this.localizeText("alert.enabled"),
+        off: this.localizeText("alert.disabled"),
+      },
+    );
   }
 
   private renderHeader(section: EditorSection): TemplateResult {
     const validation: Action[] = section.validate
-      ? [{ label: this.localizeText(`editor.${section.key}.validate`), path: mdiCheckDecagramOutline, action: () => this.validate(section) }]
+      ? [
+          {
+            label: this.localizeText(`editor.${section.key}.validate`),
+            path: mdiCheckDecagramOutline,
+            action: () => this.validate(section),
+          },
+        ]
       : [];
     const title = html`<div class="nc-title-group">
       <div class="nc-heading"><h2>${this.sectionLabel(section)}</h2>${this.renderSectionHelp(section)}</div>
@@ -367,25 +428,42 @@ class AlertEditor extends LitElement {
     </div>`;
   }
 
-  private renderSectionSwitch(section: EditorSection): TemplateResult | undefined {
+  private renderSectionSwitch(
+    section: EditorSection,
+  ): TemplateResult | undefined {
     if (!section.toggle) return undefined;
-    return this.renderSwitch(Boolean(isSectionEnabled(this.alert, section)), this.sectionLabel(section),
-      enabled => this.setSectionEnabled(section, enabled));
+    return this.renderSwitch(
+      Boolean(isSectionEnabled(this.alert, section)),
+      this.sectionLabel(section),
+      (enabled) => this.setSectionEnabled(section, enabled),
+    );
   }
 
-  private renderSwitch(enabled: boolean, label: string, change: (enabled: boolean) => void, slot?: string): TemplateResult {
+  private renderSwitch(
+    enabled: boolean,
+    label: string,
+    change: (enabled: boolean) => void,
+    slot?: string,
+  ): TemplateResult {
     return html`<ha-notifications-feature-switch slot=${slot ?? nothing} .enabled=${enabled}
       .label=${`${this.localizeText(enabled ? "alert.disable" : "alert.enable")} ${label}`}
       @enabled-changed=${(event: CustomEvent<EnabledChangedDetail>) => change(event.detail.enabled)}></ha-notifications-feature-switch>`;
   }
 
   private renderFields(section: EditorSection): TemplateResult[] {
-    return section.fields(this.alert).map(field => this.renderField(section, field));
+    return section
+      .fields(this.alert)
+      .map((field) => this.renderField(section, field));
   }
 
-  private renderField(section: EditorSection, field: EditorField): TemplateResult {
-    if ("boolean" in field.selector) return this.renderBooleanField(section, field);
-    if ("color_hex" in field.selector) return this.renderColorField(section, field);
+  private renderField(
+    section: EditorSection,
+    field: EditorField,
+  ): TemplateResult {
+    if ("boolean" in field.selector)
+      return this.renderBooleanField(section, field);
+    if ("color_hex" in field.selector)
+      return this.renderColorField(section, field);
     if (isBlockField(field)) return this.renderForm(section, field);
     return html`<ha-notifications-setting-row data-editor-field=${field.name}>
       <div class=${classMap({ "nc-field-input": true, "nc-wide": isWideField(section, field) })}>
@@ -395,7 +473,10 @@ class AlertEditor extends LitElement {
     </ha-notifications-setting-row>`;
   }
 
-  private renderColorField(section: EditorSection, field: EditorField): TemplateResult {
+  private renderColorField(
+    section: EditorSection,
+    field: EditorField,
+  ): TemplateResult {
     const label = this.fieldLabel(section, field);
     const value = readField(this.alert, field);
     return html`<ha-notifications-setting-row data-editor-field=${field.name}>
@@ -406,13 +487,23 @@ class AlertEditor extends LitElement {
     </ha-notifications-setting-row>`;
   }
 
-  private renderFieldSwitch(section: EditorSection, field: EditorField): TemplateResult | typeof nothing {
+  private renderFieldSwitch(
+    section: EditorSection,
+    field: EditorField,
+  ): TemplateResult | typeof nothing {
     if (!section.options) return nothing;
-    return this.renderSwitch(isFieldEnabled(this.alert, section, field), this.fieldLabel(section, field),
-      enabled => this.setFieldEnabled(section, field, enabled), "toggle");
+    return this.renderSwitch(
+      isFieldEnabled(this.alert, section, field),
+      this.fieldLabel(section, field),
+      (enabled) => this.setFieldEnabled(section, field, enabled),
+      "toggle",
+    );
   }
 
-  private renderBooleanField(section: EditorSection, field: EditorField): TemplateResult {
+  private renderBooleanField(
+    section: EditorSection,
+    field: EditorField,
+  ): TemplateResult {
     const label = this.fieldLabel(section, field);
     return html`<ha-notifications-setting-row data-editor-field=${field.name}>
       <span slot="label">${label}</span>${this.renderFieldHelp(section, field, "help")}
@@ -421,7 +512,10 @@ class AlertEditor extends LitElement {
     </ha-notifications-setting-row>`;
   }
 
-  private renderForm(section: EditorSection, field: EditorField): TemplateResult {
+  private renderForm(
+    section: EditorSection,
+    field: EditorField,
+  ): TemplateResult {
     const label = this.fieldLabel(section, field);
     const block = isBlockField(field);
     return html`<ha-form
@@ -438,15 +532,28 @@ class AlertEditor extends LitElement {
     ></ha-form>`;
   }
 
-  private renderFieldHelp(section: EditorSection, field: EditorField, slot?: string): TemplateResult | typeof nothing {
+  private renderFieldHelp(
+    section: EditorSection,
+    field: EditorField,
+    slot?: string,
+  ): TemplateResult | typeof nothing {
     const text = this.fieldHelp(section, field);
     if (!text) return nothing;
-    return this.renderHelpIcon(this.fieldLabel(section, field), [{ text }], slot);
+    return this.renderHelpIcon(
+      this.fieldLabel(section, field),
+      [{ text }],
+      slot,
+    );
   }
 
-  private renderSectionHelp(section: EditorSection): TemplateResult | typeof nothing {
+  private renderSectionHelp(
+    section: EditorSection,
+  ): TemplateResult | typeof nothing {
     const entries: HelpEntry[] = [];
-    const help = optionalTranslation(this.localizeText, `editor.${section.key}.helper`);
+    const help = optionalTranslation(
+      this.localizeText,
+      `editor.${section.key}.helper`,
+    );
     if (help) entries.push({ text: help });
     for (const field of section.fields(this.alert).filter(isBlockField)) {
       const text = this.fieldHelp(section, field);
@@ -456,7 +563,11 @@ class AlertEditor extends LitElement {
     return this.renderHelpIcon(this.sectionLabel(section), entries);
   }
 
-  private renderHelpIcon(heading: string, entries: HelpEntry[], slot?: string): TemplateResult {
+  private renderHelpIcon(
+    heading: string,
+    entries: HelpEntry[],
+    slot?: string,
+  ): TemplateResult {
     return html`<ha-notifications-help-icon slot=${slot ?? nothing} .heading=${heading}
       .moreInfo=${this.localizeText("editor.common.more_info")} .entries=${entries}></ha-notifications-help-icon>`;
   }
@@ -464,29 +575,43 @@ class AlertEditor extends LitElement {
   private renderPlatformSummary(): TemplateResult {
     const detection = this.platformDetection;
     let summary: string;
-    if (detection.status === "loading") summary = this.localizeText("editor.recipients.detecting");
-    else if (detection.status === "error") summary = this.localizeText("editor.recipients.unknown");
+    if (detection.status === "loading")
+      summary = this.localizeText("editor.recipients.detecting");
+    else if (detection.status === "error")
+      summary = this.localizeText("editor.recipients.unknown");
     else {
-      const labels = detection.platforms.map(platform => this.localizeText(`editor.${platform}.label`));
-      if (detection.unknown) labels.push(this.localizeText("editor.recipients.unknown"));
-      summary = labels.join(", ") || this.localizeText("editor.recipients.no_platforms");
+      const labels = detection.platforms.map((platform) =>
+        this.localizeText(`editor.${platform}.label`),
+      );
+      if (detection.unknown)
+        labels.push(this.localizeText("editor.recipients.unknown"));
+      summary =
+        labels.join(", ") ||
+        this.localizeText("editor.recipients.no_platforms");
     }
     return html`<span class="nc-platform-summary" role="status">${summary}</span>`;
   }
 
   private renderDialog(): TemplateResult | typeof nothing {
-    if (this.dialog?.type === "help") return this.renderHelpDialog(this.dialog.title, this.dialog.entries);
+    if (this.dialog?.type === "help")
+      return this.renderHelpDialog(this.dialog.title, this.dialog.entries);
     if (this.dialog?.type === "discard") return this.renderDiscardDialog();
-    if (this.dialog?.type === "yaml") return this.renderYamlDialog(this.dialog.alert);
+    if (this.dialog?.type === "yaml")
+      return this.renderYamlDialog(this.dialog.alert);
     return nothing;
   }
 
-  private renderHelpDialog(title: string, entries: HelpEntry[]): TemplateResult {
+  private renderHelpDialog(
+    title: string,
+    entries: HelpEntry[],
+  ): TemplateResult {
     return html`<ha-dialog class="nc-info-dialog" open type="alert" width="small" .headerTitle=${title} @closed=${this.closeDialog}>
-      <div class="nc-help-content">${entries.map(entry => html`<section class="nc-help-topic">
+      <div class="nc-help-content">${entries.map(
+        (entry) => html`<section class="nc-help-topic">
         ${entry.title ? html`<h3>${entry.title}</h3>` : nothing}
         <p>${entry.text}</p>
-      </section>`)}</div>
+      </section>`,
+      )}</div>
       <div slot="footer">${haButton(this.localizeText("editor.common.close"), this.closeDialog)}</div>
     </ha-dialog>`;
   }
@@ -515,12 +640,20 @@ class AlertEditor extends LitElement {
     return this.localizeText(`editor.${section.key}.${field.name}.label`);
   }
 
-  private fieldHelp(section: EditorSection, field: EditorField): string | undefined {
-    return optionalTranslation(this.localizeText, `editor.${section.key}.${field.name}.helper`);
+  private fieldHelp(
+    section: EditorSection,
+    field: EditorField,
+  ): string | undefined {
+    return optionalTranslation(
+      this.localizeText,
+      `editor.${section.key}.${field.name}.helper`,
+    );
   }
 
   private themeColor(): string {
-    const color = getComputedStyle(this).getPropertyValue("--primary-color").trim();
+    const color = getComputedStyle(this)
+      .getPropertyValue("--primary-color")
+      .trim();
     return HEX_COLOR.test(color) ? color : "#03a9f4";
   }
 
@@ -528,8 +661,17 @@ class AlertEditor extends LitElement {
   private schema(section: EditorSection, field: EditorField): Selector[] {
     const { path: _path, read: _read, write: _write, ...item } = field;
     // ha-form renders an optional field's `default` as its placeholder.
-    const placeholder = optionalTranslation(this.localizeText, `editor.${section.key}.${field.name}.placeholder`);
-    const schema = [{ ...item, selector: this.localizeSelector(section, field), ...(placeholder ? { default: placeholder } : {}) }];
+    const placeholder = optionalTranslation(
+      this.localizeText,
+      `editor.${section.key}.${field.name}.placeholder`,
+    );
+    const schema = [
+      {
+        ...item,
+        selector: this.localizeSelector(section, field),
+        ...(placeholder ? { default: placeholder } : {}),
+      },
+    ];
     const cacheKey = `${section.key}.${field.name}`;
     const key = JSON.stringify(schema);
     const cached = this.schemas.get(cacheKey);
@@ -538,19 +680,33 @@ class AlertEditor extends LitElement {
     return schema;
   }
 
-  private localizeSelector(section: EditorSection, field: EditorField): Selector {
+  private localizeSelector(
+    section: EditorSection,
+    field: EditorField,
+  ): Selector {
     const prefix = `editor.${section.key}.${field.name}`;
     const { select, object } = field.selector as {
       select?: { options: string[] };
       object?: { fields?: Record<string, Selector> };
     };
     if (select) {
-      const options = select.options.map(value => ({ value, label: optionalTranslation(this.localizeText, `${prefix}.options.${value}`) ?? value }));
+      const options = select.options.map((value) => ({
+        value,
+        label:
+          optionalTranslation(
+            this.localizeText,
+            `${prefix}.options.${value}`,
+          ) ?? value,
+      }));
       return { select: { ...select, options } };
     }
     if (object?.fields) {
-      const fields = Object.fromEntries(Object.entries(object.fields)
-        .map(([name, item]) => [name, { ...item, label: this.localizeText(`${prefix}.fields.${name}`) }]));
+      const fields = Object.fromEntries(
+        Object.entries(object.fields).map(([name, item]) => [
+          name,
+          { ...item, label: this.localizeText(`${prefix}.fields.${name}`) },
+        ]),
+      );
       return { object: { ...object, fields } };
     }
     return field.selector;
@@ -564,15 +720,21 @@ class AlertEditor extends LitElement {
   /** Hide a platform section nobody receives unless it is enabled or configured. */
   private platformUnavailable(section: EditorSection): boolean {
     const platform = section.options;
-    return (platform === "android" || platform === "ios")
-      && this.platformDetection.status === "ready"
-      && !this.platformDetection.unknown
-      && !this.platformDetection.platforms.includes(platform)
-      && !isSectionEnabled(this.alert, section)
-      && !hasOptionValues(this.alert, section);
+    return (
+      (platform === "android" || platform === "ios") &&
+      this.platformDetection.status === "ready" &&
+      !this.platformDetection.unknown &&
+      !this.platformDetection.platforms.includes(platform) &&
+      !isSectionEnabled(this.alert, section) &&
+      !hasOptionValues(this.alert, section)
+    );
   }
 
-  private edit(section: EditorSection, field: EditorField, value: unknown): void {
+  private edit(
+    section: EditorSection,
+    field: EditorField,
+    value: unknown,
+  ): void {
     writeField(this.alert, section, field, value);
     if (section.key === "recipients") void this.loadPlatforms();
     this.changed();
@@ -583,10 +745,18 @@ class AlertEditor extends LitElement {
     this.changed();
   }
 
-  private setFieldEnabled(section: EditorSection, field: EditorField, enabled: boolean): void {
+  private setFieldEnabled(
+    section: EditorSection,
+    field: EditorField,
+    enabled: boolean,
+  ): void {
     setFieldEnabled(this.alert, section, field, enabled);
     // An enabled picker with no stored value would show a color that is never sent.
-    if (enabled && "color_hex" in field.selector && !readField(this.alert, field)) {
+    if (
+      enabled &&
+      "color_hex" in field.selector &&
+      !readField(this.alert, field)
+    ) {
       writeField(this.alert, section, field, this.themeColor());
     }
     this.changed();
@@ -603,7 +773,9 @@ class AlertEditor extends LitElement {
     let detection: PlatformDetection;
     try {
       const result = await request<{ platforms: Platform[]; unknown: boolean }>(
-        this.hass, "mobile_platforms", { target: this.alert.notification.target },
+        this.hass,
+        "mobile_platforms",
+        { target: this.alert.notification.target },
       );
       detection = { status: "ready", ...result };
     } catch {

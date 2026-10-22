@@ -91,11 +91,7 @@ def _target_device_ids(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
     area_ids = set(target_values(target, "area_id"))
     floor_ids = set(target_values(target, "floor_id"))
     label_ids = set(target_values(target, "label_id"))
-    area_ids.update(
-        area.id
-        for area in area_registry.areas.values()
-        if area.floor_id in floor_ids
-    )
+    area_ids.update(area.id for area in area_registry.areas.values() if area.floor_id in floor_ids)
     devices = [
         device
         for area_id in area_ids
@@ -103,6 +99,4 @@ def _target_device_ids(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
     ]
     for label_id in label_ids:
         devices.extend(async_entries_for_label(device_registry, label_id))
-    return set(target_values(target, "device_id")) | {
-        device.id for device in devices
-    }
+    return set(target_values(target, "device_id")) | {device.id for device in devices}

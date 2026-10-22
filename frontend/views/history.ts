@@ -1,9 +1,22 @@
-import { css, html, LitElement, nothing } from "lit";
+import {
+  mdiFilterRemoveOutline,
+  mdiFilterVariant,
+  mdiFormatListBulleted,
+  mdiFormatListGroup,
+} from "@mdi/js";
 import type { TemplateResult } from "lit";
-import { mdiFilterRemoveOutline, mdiFilterVariant, mdiFormatListBulleted, mdiFormatListGroup } from "@mdi/js";
-import type { Hass, HassLocale, RuntimeAlertHistoryEntry } from "../types.js";
+import { css, html, LitElement, nothing } from "lit";
 import { localize } from "../localize.js";
-import { emptyState, haButton, NarrowController, selectConfig, toolbar, uiStyles, type SelectOption } from "../ui.js";
+import type { Hass, HassLocale, RuntimeAlertHistoryEntry } from "../types.js";
+import {
+  emptyState,
+  haButton,
+  NarrowController,
+  type SelectOption,
+  selectConfig,
+  toolbar,
+  uiStyles,
+} from "../ui.js";
 
 const styles = css`
   :host {
@@ -134,19 +147,19 @@ export function emptyHistoryFilters(): HistoryFilters {
   return { search: "", alertId: "", type: "", severity: "" };
 }
 
-export interface HistoryFilters {
+interface HistoryFilters {
   search: string;
   alertId: string;
   type: string;
   severity: string;
 }
 
-export interface HistoryFlowGroup {
+interface HistoryFlowGroup {
   flowId?: string;
   entries: RuntimeAlertHistoryEntry[];
 }
 
-export function historySeverity(type: string | undefined): string {
+function historySeverity(type: string | undefined): string {
   if (!type) return "info";
   if (type.includes("failed") || type.includes("error")) return "error";
   if (type.includes("confirmed") || type.includes("sent")) return "success";
@@ -154,11 +167,11 @@ export function historySeverity(type: string | undefined): string {
   return "info";
 }
 
-export function formatType(value: string | undefined): string {
+function formatType(value: string | undefined): string {
   return String(value || "event").replaceAll("_", " ");
 }
 
-export function shortFlowId(value: string | undefined): string {
+function shortFlowId(value: string | undefined): string {
   if (!value) return "";
   if (value.length > 18) return value.slice(-12);
   return value;
@@ -189,7 +202,10 @@ export function historyStartedBySummary(
   if (description) return description;
 
   const triggerId = stringValue(trigger.id);
-  if (triggerId) return platform ? `${platform} trigger ${triggerId}` : `trigger ${triggerId}`;
+  if (triggerId)
+    return platform
+      ? `${platform} trigger ${triggerId}`
+      : `trigger ${triggerId}`;
   return platform ? `${platform} trigger` : "";
 }
 
@@ -330,7 +346,7 @@ function formatDatePart(
 
 // ---- View ----
 
-export interface HistoryAlertOption {
+interface HistoryAlertOption {
   id: string;
   name: string;
 }
@@ -384,17 +400,24 @@ class HistoryView extends LitElement {
     if (changed.has("alertName")) this.filters = emptyHistoryFilters();
   }
 
-  private localizeText = (key: string, variables?: Record<string, unknown>, fallback?: string) =>
-    localize(this.hass, key, variables, fallback);
+  private localizeText = (
+    key: string,
+    variables?: Record<string, unknown>,
+    fallback?: string,
+  ) => localize(this.hass, key, variables, fallback);
 
   protected render(): TemplateResult {
     if (!this.history.length) {
       return emptyState(
         this.alertName
-          ? this.localizeText("history.no_activity_for", { name: this.alertName })
+          ? this.localizeText("history.no_activity_for", {
+              name: this.alertName,
+            })
           : this.localizeText("history.no_activity.label"),
         this.localizeText("history.no_activity.helper"),
-        this.alertName ? { label: this.localizeText("history.show_all"), run: this.showAll } : undefined,
+        this.alertName
+          ? { label: this.localizeText("history.show_all"), run: this.showAll }
+          : undefined,
       );
     }
 
@@ -404,11 +427,13 @@ class HistoryView extends LitElement {
       ${this.filterArea()}
       <div class="nc-list">
       ${this.historyItems(entries)}
-      ${entries.length && entries.length !== this.history.length
-        ? html`<div class="nc-muted">
+      ${
+        entries.length && entries.length !== this.history.length
+          ? html`<div class="nc-muted">
             ${this.localizeText("history.showing", { count: entries.length, total: this.history.length })}
           </div>`
-        : nothing}
+          : nothing
+      }
       </div>
     </ha-card>`;
   }
@@ -424,7 +449,9 @@ class HistoryView extends LitElement {
     }
     if (this.groupByFlow) {
       return groupHistoryEntries(entries).map((group) =>
-        group.flowId ? this.flow(group.flowId, group.entries) : this.item(group.entries[0]),
+        group.flowId
+          ? this.flow(group.flowId, group.entries)
+          : this.item(group.entries[0]),
       );
     }
     return entries.map((entry) => this.item(entry));
@@ -437,7 +464,10 @@ class HistoryView extends LitElement {
         html`<strong>${this.localizeText("history.for_alert", { name: this.alertName })}</strong>`,
         [],
         narrow,
-        haButton(this.localizeText("panel.show_all"), this.showAll, { appearance: "filled", variant: "neutral" }),
+        haButton(this.localizeText("panel.show_all"), this.showAll, {
+          appearance: "filled",
+          variant: "neutral",
+        }),
       );
     }
     const { search, ...selects } = this.filters;
@@ -451,7 +481,9 @@ class HistoryView extends LitElement {
       ></ha-input>`,
       [
         {
-          label: active ? `${this.localizeText("history.more_filters")} (${active})` : this.localizeText("history.more_filters"),
+          label: active
+            ? `${this.localizeText("history.more_filters")} (${active})`
+            : this.localizeText("history.more_filters"),
           path: mdiFilterVariant,
           action: () => this.set(() => (this.showFilters = !this.showFilters)),
         },
@@ -461,11 +493,14 @@ class HistoryView extends LitElement {
           action: () => this.set(() => (this.groupByFlow = !this.groupByFlow)),
         },
         ...(active || search
-          ? [{
-              label: this.localizeText("history.clear"),
-              path: mdiFilterRemoveOutline,
-              action: () => this.set(() => (this.filters = emptyHistoryFilters())),
-            }]
+          ? [
+              {
+                label: this.localizeText("history.clear"),
+                path: mdiFilterRemoveOutline,
+                action: () =>
+                  this.set(() => (this.filters = emptyHistoryFilters())),
+              },
+            ]
           : []),
       ],
       narrow,
@@ -473,8 +508,17 @@ class HistoryView extends LitElement {
   }
 
   private filterControls(): TemplateResult {
-    const types = [...new Set(this.history.map((entry) => entry.event?.type).filter(Boolean))] as string[];
-    const select = (key: SelectFilter, label: string, all: string, options: SelectOption[]) =>
+    const types = [
+      ...new Set(
+        this.history.map((entry) => entry.event?.type).filter(Boolean),
+      ),
+    ] as string[];
+    const select = (
+      key: SelectFilter,
+      label: string,
+      all: string,
+      options: SelectOption[],
+    ) =>
       html`<ha-selector
         .hass=${this.hass}
         .selector=${selectConfig(`history-${key}`, [{ value: "", label: this.localizeText(all) }, ...options])}
@@ -485,25 +529,33 @@ class HistoryView extends LitElement {
       ></ha-selector>`;
 
     return html`<div class="nc-filters">
-      ${this.alerts.length
-        ? select(
-            "alertId",
-            "history.alert",
-            "history.all_alerts",
-            this.alerts.map(({ id, name }) => ({ value: id, label: name })),
-          )
-        : nothing}
+      ${
+        this.alerts.length
+          ? select(
+              "alertId",
+              "history.alert",
+              "history.all_alerts",
+              this.alerts.map(({ id, name }) => ({ value: id, label: name })),
+            )
+          : nothing
+      }
       ${select(
         "type",
         "history.event_type",
         "history.all_event_types",
-        types.map((type) => ({ value: type, label: this.localizeText(`event.${type}`, {}, formatType(type)) })),
+        types.map((type) => ({
+          value: type,
+          label: this.localizeText(`event.${type}`, {}, formatType(type)),
+        })),
       )}
       ${select(
         "severity",
         "history.severity",
         "history.all_severities",
-        SEVERITIES.map((value) => ({ value, label: this.localizeText(`history.${value}`) })),
+        SEVERITIES.map((value) => ({
+          value,
+          label: this.localizeText(`history.${value}`),
+        })),
       )}
     </div>`;
   }
@@ -511,20 +563,36 @@ class HistoryView extends LitElement {
   private flow(flowId: string, entries: Entry[]): TemplateResult {
     const latest = entries.reduce<string | undefined>((timestamp, entry) => {
       const candidate = entry.event?.timestamp;
-      if (!candidate || !Number.isFinite(Date.parse(candidate))) return timestamp;
-      return !timestamp || Date.parse(candidate) > Date.parse(timestamp) ? candidate : timestamp;
+      if (!candidate || !Number.isFinite(Date.parse(candidate)))
+        return timestamp;
+      return !timestamp || Date.parse(candidate) > Date.parse(timestamp)
+        ? candidate
+        : timestamp;
     }, undefined);
     return html`<details class="nc-flow">
       <summary>
         <span>${this.localizeText("history.flow")} ${shortFlowId(flowId)}</span>
         <span>
           ${this.localizeText("history.flow_alert", {
-            name: entries[0]?.config?.name || this.localizeText("history.unknown_alert"),
+            name:
+              entries[0]?.config?.name ||
+              this.localizeText("history.unknown_alert"),
           })}
         </span>
-        ${latest ? html`<time datetime=${latest}>${this.localizeText("history.latest_activity", {
-          timestamp: formatLocalDateTime(latest, true, this.hass?.locale),
-        })}</time>` : nothing}
+        ${
+          latest
+            ? html`<time datetime=${latest}>${this.localizeText(
+                "history.latest_activity",
+                {
+                  timestamp: formatLocalDateTime(
+                    latest,
+                    true,
+                    this.hass?.locale,
+                  ),
+                },
+              )}</time>`
+            : nothing
+        }
         <span>${this.localizeText("history.flow_events", { count: entries.length })}</span>
       </summary>
       ${entries.map((entry) => this.item(entry, false))}
@@ -544,7 +612,8 @@ class HistoryView extends LitElement {
   }
 
   private alertLink(entry: Entry): TemplateResult {
-    const name = entry.config?.name || this.localizeText("history.unknown_alert");
+    const name =
+      entry.config?.name || this.localizeText("history.unknown_alert");
     const alertId = entry.config?.id;
     if (!alertId) return html`<span>${name}</span>`;
     return html`<button class="nc-link"
@@ -552,7 +621,10 @@ class HistoryView extends LitElement {
     >${name}</button>`;
   }
 
-  private flowLabel(entry: Entry, showFlow: boolean): TemplateResult | typeof nothing {
+  private flowLabel(
+    entry: Entry,
+    showFlow: boolean,
+  ): TemplateResult | typeof nothing {
     if (!showFlow || !entry.event?.flow_id) return nothing;
     return html`<span class="nc-flow-id">${this.localizeText("history.flow")} ${shortFlowId(entry.event.flow_id)}</span>`;
   }
@@ -563,15 +635,21 @@ class HistoryView extends LitElement {
     const startedBy = historyStartedBySummary(details);
     const secondary = [
       formatLocalDateTime(event?.timestamp, true, this.hass?.locale),
-      startedBy ? this.localizeText("history.started_by", { trigger: startedBy }) : "",
+      startedBy
+        ? this.localizeText("history.started_by", { trigger: startedBy })
+        : "",
       details?.reason === "confirmation_notification"
-        ? this.localizeText("history.reason", { reason: this.localizeText("history.confirmation_notification") })
+        ? this.localizeText("history.reason", {
+            reason: this.localizeText("history.confirmation_notification"),
+          })
         : "",
     ].filter(Boolean);
     return secondary.join(" · ");
   }
 
-  private itemDetails(details: Record<string, unknown> | undefined): TemplateResult | typeof nothing {
+  private itemDetails(
+    details: Record<string, unknown> | undefined,
+  ): TemplateResult | typeof nothing {
     if (!details || !Object.keys(details).length) return nothing;
     return html`<details class="nc-muted">
       <summary>${this.localizeText("history.details")}</summary>
@@ -583,15 +661,25 @@ class HistoryView extends LitElement {
   private chips(): TemplateResult | typeof nothing {
     const labels: Record<SelectFilter, string | undefined> = {
       alertId: this.alerts.find(({ id }) => id === this.filters.alertId)?.name,
-      type: this.filters.type && this.localizeText(`event.${this.filters.type}`, {}, formatType(this.filters.type)),
-      severity: this.filters.severity && this.localizeText(`history.${this.filters.severity}`),
+      type:
+        this.filters.type &&
+        this.localizeText(
+          `event.${this.filters.type}`,
+          {},
+          formatType(this.filters.type),
+        ),
+      severity:
+        this.filters.severity &&
+        this.localizeText(`history.${this.filters.severity}`),
     };
     const titles: Record<SelectFilter, string> = {
       alertId: "history.alert",
       type: "history.event_type",
       severity: "history.severity",
     };
-    const active = (Object.keys(labels) as SelectFilter[]).filter((key) => this.filters[key]);
+    const active = (Object.keys(labels) as SelectFilter[]).filter(
+      (key) => this.filters[key],
+    );
     if (!active.length) return nothing;
     return html`<div class="nc-chips">
       ${active.map(
@@ -613,7 +701,10 @@ class HistoryView extends LitElement {
     try {
       localStorage.setItem(
         VIEW_SETTINGS_KEY,
-        JSON.stringify({ groupByFlow: this.groupByFlow, showFilters: this.showFilters }),
+        JSON.stringify({
+          groupByFlow: this.groupByFlow,
+          showFilters: this.showFilters,
+        }),
       );
     } catch {
       return;
@@ -628,7 +719,9 @@ class HistoryView extends LitElement {
   private showAll = (): void => this.emit("history-show-all");
 
   private emit(name: string, detail?: unknown): void {
-    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent(name, { detail, bubbles: true, composed: true }),
+    );
   }
 }
 

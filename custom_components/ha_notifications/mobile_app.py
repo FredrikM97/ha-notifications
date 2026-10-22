@@ -108,10 +108,7 @@ def resolve_services(
     services: list[str] = []
     for names in names_by_entry_id.values():
         for name in names:
-            service = (
-                "mobile_app_"
-                + str(name).lower().replace(" ", "_").replace("-", "_")
-            )
+            service = "mobile_app_" + str(name).lower().replace(" ", "_").replace("-", "_")
             if service in services or not hass.services.has_service("notify", service):
                 continue
             services.append(service)

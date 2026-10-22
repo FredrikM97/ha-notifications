@@ -11,10 +11,7 @@ _CONTENT = _README.read_text()
 
 
 def test_readme_has_only_the_dashboard_card_snippet() -> None:
-    examples = [
-        yaml.safe_load(block)
-        for block in re.findall(r"```yaml\n(.*?)```", _CONTENT, re.S)
-    ]
+    examples = [yaml.safe_load(block) for block in re.findall(r"```yaml\n(.*?)```", _CONTENT, re.S)]
     assert examples == [{"type": "custom:ha-notifications-card"}]
     assert "Configuration Example" not in _CONTENT
 

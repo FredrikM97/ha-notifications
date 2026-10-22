@@ -2,12 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const panelBundlePath = join(
-  process.cwd(),
-  "build",
-  "frontend",
-  "panel.js",
-);
+const panelBundlePath = join(process.cwd(), "build", "frontend", "panel.js");
 
 describe("frontend build contract", () => {
   it("bundles the Home Assistant panel and card registrations", () => {

@@ -109,7 +109,9 @@ the setting.
 
 Retired notification wrappers and persisted editor metadata are rejected, not
 adapted. Existing stored alerts require an explicit canonical update; nothing
-automatically rewrites or resets the user's config-entry data.
+automatically rewrites or resets saved alerts. Alerts are stored only in the
+config entry's `options`; the versioned config-entry migration is the only code
+that moves older entries into that shape.
 
 Features that pair a switch with its value keep both in one group, so disabling
 never discards the configured value:
@@ -130,18 +132,111 @@ only when configured as a post-send action.
 The persistent history store belongs to the loaded config entry's
 `runtime_data`; it is not kept in `hass.data`.
 
-Generated automations are written to the dedicated
-`ha_notifications_automations.yaml` include. Add this to Home Assistant's
-`configuration.yaml`:
+Generated automations are stored alongside user automations in Home Assistant's
+standard `automations.yaml` file. HA Notifications changes only automations it
+owns, identified by their generated IDs and description marker; unrelated
+automations are preserved. When an alert changes, Home Assistant reloads only
+the affected automation IDs instead of reloading the full automation collection.
+
+The frontend uses Home Assistant's admin automation config API to create,
+update, and remove the managed automation records. Home Assistant persists
+those records in `automations.yaml`; the integration does not read or write
+automation files directly. Home Assistant reloads each changed automation by
+its ID. API updates run only on an explicit save, delete, or **YAML > Reload**
+action by a signed-in administrator. Opening or refreshing the panel is read-only.
+Explicit **YAML > Reload** also requests targeted reloads for unchanged managed
+documents without rewriting them. Ordinary saves do not reload unchanged records.
+After applying an operation, the frontend waits up to 10 seconds for each desired
+automation to be available (enabled or disabled) with its complete expected
+configuration loaded. API acceptance alone is not reported as runtime success.
+Missing, unavailable, or stale loaded configurations produce an explicit error
+with the affected IDs and recovery instructions. This verification runs only
+during the operation; no background reconciliation runs.
+Home Assistant loads persisted automations normally at startup; no automatic
+repair or backend automation-file reconciliation runs.
+
+Removing the config entry does not remove its automations. Delete the alerts
+from the panel before uninstalling, or remove their generated automations from
+Home Assistant's automation UI afterward.
+
+When upgrading from a release that used the
+`ha_notifications_automations.yaml` include, remove the line below from
+`configuration.yaml`, review and remove the retired file, then restart Home
+Assistant. Use **YAML > Reload** in the HA Notifications panel to apply saved alerts
+to the standard automation store. Any user-owned automation you added to the retired file must
+be moved to `automations.yaml` before deleting it.
 
 ```yaml
 automation ha_notifications: !include ha_notifications_automations.yaml
 ```
 
-This named automation entry is unique to HA Notifications and can coexist with
-your other automation configuration. The integration adds this include
-automatically when it is missing. Restart Home Assistant after the first
-automatic insertion so the new configuration is loaded.
+### Standard automation store
+
+The API writes HA's standard `automations.yaml`, but HA must also load that file.
+The API does not add its include to `configuration.yaml`. Home Assistant's
+default configuration already has the standard setup, so normal installations
+need no configuration changes:
+
+```yaml
+automation: !include automations.yaml
+```
+
+If it is missing, add it once and ensure `automations.yaml` exists (an empty
+store contains `[]`), then restart Home Assistant. Preserve any existing inline
+automations or other automation includes; do not replace them blindly.
+Bare `automation:` loads the integration but does not load the API-managed file:
+API saves can succeed without creating a running automation entity.
+No integration-specific include is needed. For fresh `npm run dev` configurations,
+Home Assistant generates its own default files before the launcher appends
+dev-specific settings. Existing automation configuration and stores are left unchanged.
+
+### API ownership
+
+The backend generates and validates complete automation documents. Every saved
+alert has a stable automation ID derived from its alert ID:
+
+- `validate_config` checks either a full `config` or one editor draft `alert`
+  together with the other saved alerts, without persisting anything.
+- `save_config` with `alert` persists that alert and returns only its complete
+  automation document.
+- `save_config` with `config` persists the YAML editor's full alert
+  configuration and returns all desired documents and the IDs removed from the
+  previous configuration.
+- `delete` removes one saved alert and returns its automation ID for deletion.
+
+These responses contain explicit `automation_changes` (`upsert`, `delete`, and
+the ownership description). The frontend's `automations.ts` is the only owner
+that applies those operations through Home Assistant's per-ID admin config API.
+It does not read files or scan the automation collection during ordinary saves
+or deletes. A GET checks ownership for the specific IDs before POST/DELETE;
+unchanged documents are skipped so unrelated runs are not restarted.
+Home Assistant owns persistence and targeted reloads; no extra reload call is
+needed. Enable/disable remains part of the saved alert and generated automation,
+not a separate runtime-only toggle that could be undone on the next save.
+
+Backend registry events apply the category and label metadata to known
+managed entities when Home Assistant registers them. This handles renamed or
+suffixed entity IDs without frontend polling and preserves unrelated metadata
+and user-selected visibility. Generated automations are not force-hidden.
+Before replacing canonical configuration, the backend cancels changed/deleted
+runs while their alert and history are still available.
+
+Configuration persistence and Home Assistant API writes are separate operations:
+if the latter fails, the UI reports the partial save. Retry the save or use
+**YAML > Reload**. Only that explicit recovery action uses `get_automations` to
+discover stale managed IDs and restore the saved configuration, including
+cleanup after a failed deletion. Ownership checks still preserve user-owned
+automations. The mutation queue is local to the browser; it does not provide
+transactions or coordination across administrator sessions.
+
+All integration websocket commands require an authenticated administrator,
+including configuration/history reads. Home Assistant also enforces admin
+access on its automation config API. The sidebar panel, dashboard card, YAML
+view, and shared automation-operation entrypoint reject non-admin access.
+Frontend guards are UX safeguards; server-side permission checks are authoritative.
+Even **YAML > Reload** compares complete documents first: only changed/missing
+automations are POSTed and reloaded by ID. Unchanged automations are not reloaded,
+and there is no collection-wide `automation.reload` call.
 
 Generated automations are grouped in the Home Assistant automation category
 and carry the HA Notifications label. Action history is reported with the

@@ -10,7 +10,10 @@ export type Localize = (
   fallback?: string,
 ) => string;
 
-export function optionalTranslation(localize: Localize, key?: string): string | undefined {
+export function optionalTranslation(
+  localize: Localize,
+  key?: string,
+): string | undefined {
   if (!key) return undefined;
   const text = localize(key);
   if (!text || text === key) return undefined;
@@ -27,8 +30,13 @@ function catalogValue(key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function interpolate(value: string, variables: Record<string, unknown>): string {
-  return value.replace(/{{(\w+)}}/g, (_, key: string) => String(variables[key] ?? ""));
+function interpolate(
+  value: string,
+  variables: Record<string, unknown>,
+): string {
+  return value.replace(/{{(\w+)}}/g, (_, key: string) =>
+    String(variables[key] ?? ""),
+  );
 }
 
 function resolveLocalized(
@@ -39,7 +47,8 @@ function resolveLocalized(
 ): string {
   const haKey = `component.ha_notifications.frontend.${key}`;
   const runtimeValue = hass?.localize?.(haKey, variables);
-  const value = runtimeValue && runtimeValue !== haKey ? runtimeValue : catalogValue(key);
+  const value =
+    runtimeValue && runtimeValue !== haKey ? runtimeValue : catalogValue(key);
   return interpolate(value || fallback || key, variables);
 }
 

@@ -1,5 +1,5 @@
-import { css, html, LitElement } from "lit";
 import { mdiInformationOutline } from "@mdi/js";
+import { css, html, LitElement } from "lit";
 
 export interface HelpEntry {
   title?: string;
@@ -101,11 +101,13 @@ export class FeatureSwitch extends LitElement {
   }
 
   private enabledChanged(event: Event): void {
-    this.dispatchEvent(new CustomEvent<EnabledChangedDetail>("enabled-changed", {
-      detail: { enabled: (event.currentTarget as HTMLInputElement).checked },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent<EnabledChangedDetail>("enabled-changed", {
+        detail: { enabled: (event.currentTarget as HTMLInputElement).checked },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 }
 
@@ -139,11 +141,13 @@ export class HelpIcon extends LitElement {
   }
 
   private requestHelp(): void {
-    this.dispatchEvent(new CustomEvent<HelpRequestDetail>("help-request", {
-      detail: { title: this.heading, entries: this.entries },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent<HelpRequestDetail>("help-request", {
+        detail: { title: this.heading, entries: this.entries },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 }
 
@@ -172,7 +176,8 @@ export class SettingRow extends LitElement {
   }
 
   private labelChanged(event: Event): void {
-    this.hasLabel = (event.currentTarget as HTMLSlotElement).assignedElements().length > 0;
+    this.hasLabel =
+      (event.currentTarget as HTMLSlotElement).assignedElements().length > 0;
   }
 }
 

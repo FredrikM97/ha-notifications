@@ -26,6 +26,9 @@ npm run dev -- --reset    # start again from a clean instance
 - No login for local clients, and sample alerts are seeded on first run.
 - The frontend rebuilds on save; reload the page to see changes.
 - State lives in the gitignored `.ha-config/`.
+- On first setup, Home Assistant generates its standard configuration and
+  supporting files; the launcher then appends dev-specific settings. Existing
+  automation configuration is not rewritten.
 
 Starting `npm run dev` again stops the previous instance for this repository and
 its child processes. It stages a fresh integration copy under `.ha-config/`;
@@ -101,10 +104,16 @@ Focused checks while working:
 
 ```bash
 python3 -m pytest tests/backend/test_automation.py
-python3 -m ruff check custom_components/ha_notifications tests/backend
+npm run check:backend
+npm run check:frontend
 npm run typecheck
 npm run build
 ```
+
+Biome formats and lints the frontend; it does not support Python. Ruff is the
+backend equivalent, configured in `pyproject.toml`. Fix formatting and safe lint
+findings with `npm run format` (frontend) and `npm run format:backend`
+(backend). The validation gate checks both Biome and Ruff formatting and lint.
 
 Backend tests run a real Home Assistant core (see `tests/backend/conftest.py`)
 using the `homeassistant` package directly; there is no
@@ -134,11 +143,12 @@ provider or physical device, and cannot prove how a phone displays notifications
 ```
 custom_components/ha_notifications/   Python integration
   configuration.py   Canonical config schema (pydantic)
-  automation*.py     Generating, storing, and reconciling automations
+  automation.py      Native automation generation and validation
+  automation_runtime.py  Desired API configuration and run lifecycle
   notification.py    send / clear / command / report services
   history.py         Persistent history (batched writes)
   bridge/            Websocket API and panel registration
-frontend/            Lit + TypeScript panel (see frontend/AGENTS.md)
+frontend/            Lit + TypeScript panel; automations.ts owns API management
 tests/backend/       pytest suites, fixtures, and snapshots
 tests/frontend/      Vitest suites
 scripts/             dev_ha.py, validation, local install, HACS packaging

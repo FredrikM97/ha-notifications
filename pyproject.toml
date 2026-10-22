@@ -36,7 +36,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py314"
-line-length = 160
+line-length = 100
 exclude = [
     ".git",
     ".venv",
@@ -45,4 +45,8 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "C4", "PIE", "RET"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

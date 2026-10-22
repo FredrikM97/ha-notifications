@@ -4,6 +4,7 @@ import sys
 from unittest.mock import Mock, call
 
 import pytest
+from homeassistant.config import DEFAULT_CONFIG
 
 from scripts import dev_ha
 from scripts.dev_ha import (
@@ -49,9 +50,8 @@ def test_dev_instance_ignores_stale_pid_when_lock_is_free(tmp_path, monkeypatch)
 def test_dev_instance_releases_lock_on_startup_failure(tmp_path, monkeypatch) -> None:
     lock_path = tmp_path / "dev.lock"
     monkeypatch.setattr(dev_ha, "LOCK_FILE", lock_path)
-    with pytest.raises(RuntimeError, match="build failed"):
-        with dev_ha.dev_instance():
-            raise RuntimeError("build failed")
+    with pytest.raises(RuntimeError, match="build failed"), dev_ha.dev_instance():
+        raise RuntimeError("build failed")
     with dev_ha.dev_instance():
         assert lock_path.read_text() == str(os.getpid())
 
@@ -63,11 +63,14 @@ def test_stop_processes_terminates_entire_groups_and_reaps_children(monkeypatch)
 
     dev_ha.stop_processes([process])
 
-    assert kill_group.call_args_list == [call(12345, dev_ha.signal.SIGTERM), call(12345, dev_ha.signal.SIGKILL)]
+    assert kill_group.call_args_list == [
+        call(12345, dev_ha.signal.SIGTERM),
+        call(12345, dev_ha.signal.SIGKILL),
+    ]
     assert process.wait.call_args_list == [call(timeout=30), call()]
 
 
-def test_prepare_config_stages_copy_without_writing_source(tmp_path, monkeypatch) -> None:
+async def test_prepare_config_stages_copy_without_writing_source(tmp_path, monkeypatch) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "__init__.py").write_text("original")
@@ -78,17 +81,56 @@ def test_prepare_config_stages_copy_without_writing_source(tmp_path, monkeypatch
     monkeypatch.setattr(dev_ha, "INTEGRATION", source)
     monkeypatch.setattr(dev_ha, "CONFIG", config)
 
-    bundle = dev_ha.prepare_config(8124, False)
+    bundle = await dev_ha.prepare_config(8124, False)
 
     assert not installed.is_symlink()
     assert (installed.parent / "__init__.py").is_file()
     assert bundle == installed / "frontend" / "panel.js"
     assert bundle.parent.is_dir()
+    assert (config / "configuration.yaml").read_text() == (
+        DEFAULT_CONFIG + "\n" + dev_ha.DEV_CONFIGURATION_YAML.format(port=8124)
+    )
+    assert (config / "automations.yaml").read_text() == "[]"
+    assert (config / "scripts.yaml").is_file()
+    assert (config / "scenes.yaml").is_file()
     assert not (source / "frontend").exists()
     (installed / "__init__.py").write_text("staged change")
     assert (source / "__init__.py").read_text() == "original"
-    dev_ha.prepare_config(8124, False)
+    await dev_ha.prepare_config(8124, False)
     assert (installed / "__init__.py").read_text() == "original"
+
+
+@pytest.mark.parametrize(
+    "automation_config",
+    [
+        "automation:\n",
+        "automation: # dev default\n",
+        "automation: !include automations.yaml\n",
+        "automation: !include other_automations.yaml\n",
+        "automation:\n  - id: inline\n    triggers: []\n    actions: []\n",
+    ],
+)
+async def test_prepare_config_preserves_existing_automation_configuration_and_store(
+    tmp_path,
+    monkeypatch,
+    automation_config,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    config = tmp_path / "config"
+    config.mkdir()
+    store = config / "automations.yaml"
+    stored = "- id: existing_user_automation\n  alias: Keep this\n"
+    store.write_text(stored)
+    configuration = config / "configuration.yaml"
+    configuration.write_text("frontend:\n" + automation_config)
+    monkeypatch.setattr(dev_ha, "INTEGRATION", source)
+    monkeypatch.setattr(dev_ha, "CONFIG", config)
+
+    await dev_ha.prepare_config(8124, False)
+
+    assert automation_config in configuration.read_text()
+    assert store.read_text() == stored
 
 
 def test_with_http_port_updates_only_http_server_port() -> None:
@@ -188,7 +230,9 @@ async def test_onboard_uses_requested_port(monkeypatch, tmp_path) -> None:
     [([], 0), ([], 2), ([{"id": "user_alert"}], 0)],
 )
 async def test_seed_populates_only_empty_alert_config(
-    monkeypatch, saved_alerts, route_failures,
+    monkeypatch,
+    saved_alerts,
+    route_failures,
 ) -> None:
     class Response:
         async def __aenter__(self):
@@ -229,7 +273,9 @@ async def test_seed_populates_only_empty_alert_config(
     await dev_ha.seed("http://localhost:8124", Session(), "token")
 
     assert get_config_calls == route_failures + 1
-    save_calls = [call for call in websocket_calls if call["type"] == "ha_notifications/save_config"]
+    save_calls = [
+        call for call in websocket_calls if call["type"] == "ha_notifications/save_config"
+    ]
     if saved_alerts:
         assert save_calls == []
     else:
@@ -242,7 +288,9 @@ async def test_seed_populates_only_empty_alert_config(
         }
 
 
-async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(monkeypatch, tmp_path) -> None:
+async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(
+    monkeypatch, tmp_path
+) -> None:
     class Response:
         def __init__(self, data, status=200):
             self.data = data
@@ -257,7 +305,7 @@ async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(monkeypat
         def raise_for_status(self):
             if self.status >= 400:
                 raise RuntimeError(f"HTTP {self.status}")
-            return None
+            return
 
         async def json(self):
             return self.data
@@ -288,7 +336,9 @@ async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(monkeypat
 
     async def list_entities(_base, _session, _token, *_messages):
         if session.has_notify_entity:
-            return [{"entity_id": "notify.ha_notifications_dev_phone", "config_entry_id": "new-entry"}]
+            return [
+                {"entity_id": "notify.ha_notifications_dev_phone", "config_entry_id": "new-entry"}
+            ]
         return []
 
     session = Session()

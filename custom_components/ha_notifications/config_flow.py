@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
 
-from .const import CONFIG_ENTRY_VERSION, CONFIG_VERSION, DOMAIN
+from .configuration import empty_config
+from .const import CONFIG_ENTRY_MINOR_VERSION, CONFIG_ENTRY_VERSION, DOMAIN
 
 
 class HaNotificationsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Create the canonical config-entry source of truth."""
 
     VERSION = CONFIG_ENTRY_VERSION
+    MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -22,28 +24,11 @@ class HaNotificationsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(
                 title="HA Notifications",
-                data={"version": CONFIG_VERSION, "alerts": []},
+                data={},
+                options=empty_config(),
             )
 
-        return self.async_show_form(step_id="user")
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        """Return the options flow used by Home Assistant."""
-        return HaNotificationsOptionsFlow()
-
-
-class HaNotificationsOptionsFlow(config_entries.OptionsFlow):
-    """Persist configuration updates in config-entry options."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
-        """Keep options changes available to the frontend/API boundary."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        return self.async_show_form(step_id="init")
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({}),
+        )

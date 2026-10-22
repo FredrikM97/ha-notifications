@@ -1,4 +1,9 @@
-import type { Alert, NotificationOptionControl, NotificationOptionControls, NotificationTarget } from "../types.js";
+import type {
+  Alert,
+  NotificationOptionControl,
+  NotificationOptionControls,
+  NotificationTarget,
+} from "../types.js";
 import { fromDuration, toDuration } from "./alert-model.js";
 import { nativeEditorKind } from "./native-editor.js";
 
@@ -43,14 +48,29 @@ function hasValue(value: unknown): boolean {
 }
 
 function getPath(root: unknown, path: string): unknown {
-  return path.split(".").reduce<unknown>((value, key) => (isRecord(value) ? value[key] : undefined), root);
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (value, key) => (isRecord(value) ? value[key] : undefined),
+      root,
+    );
 }
 
 function setPath(root: object, path: string, value: unknown): void {
   const keys = path.split(".");
-  const last = keys.pop()!;
+  const last = keys.pop();
+  if (!last) throw new Error("Cannot write to an empty editor field path.");
   let target = root as Data;
-  for (const key of keys) target = (target[key] ??= {}) as Data;
+  for (const key of keys) {
+    const existing = target[key];
+    if (isRecord(existing)) {
+      target = existing;
+    } else {
+      const next: Data = {};
+      target[key] = next;
+      target = next;
+    }
+  }
   target[last] = value;
 }
 
@@ -64,14 +84,20 @@ function unsetOption(alert: Alert, path: string): void {
     parents.push(next);
   }
   delete parents[parents.length - 1][keys[keys.length - 1]];
-  for (let index = parents.length - 1; index > 0 && !Object.keys(parents[index]).length; index--) {
+  for (
+    let index = parents.length - 1;
+    index > 0 && !Object.keys(parents[index]).length;
+    index--
+  ) {
     delete parents[index - 1][keys[index - 1]];
   }
 }
 
 function isList(selector: Selector): boolean {
-  return Boolean(nativeEditorKind(selector))
-    || Boolean((selector.object as { multiple?: boolean } | undefined)?.multiple);
+  return (
+    Boolean(nativeEditorKind(selector)) ||
+    Boolean((selector.object as { multiple?: boolean } | undefined)?.multiple)
+  );
 }
 
 export function readField(alert: Alert, field: EditorField): unknown {
@@ -82,7 +108,12 @@ export function readField(alert: Alert, field: EditorField): unknown {
   return value;
 }
 
-export function writeField(alert: Alert, section: EditorSection, field: EditorField, value: unknown): void {
+export function writeField(
+  alert: Alert,
+  section: EditorSection,
+  field: EditorField,
+  value: unknown,
+): void {
   if (field.disabled) return;
   let stored = value;
   if (field.write) stored = field.write(value);
@@ -91,29 +122,46 @@ export function writeField(alert: Alert, section: EditorSection, field: EditorFi
   if (section.options) {
     // Pin the switches before the first value so typing never enables the group or field.
     optionControl(alert, section);
-    if (!hasValue(stored)) return unsetOption(alert, field.path);
+    if (!hasValue(stored)) {
+      unsetOption(alert, field.path);
+      return;
+    }
   }
   setPath(alert, field.path, stored);
 }
 
 export function hasOptionValues(alert: Alert, section: EditorSection): boolean {
-  return section.fields(alert).some(field => hasValue(getPath(alert, field.path)));
+  return section
+    .fields(alert)
+    .some((field) => hasValue(getPath(alert, field.path)));
 }
 
-export function isSectionEnabled(alert: Alert, section: EditorSection): boolean | undefined {
+export function isSectionEnabled(
+  alert: Alert,
+  section: EditorSection,
+): boolean | undefined {
   if (!section.toggle) return undefined;
   const enabled = getPath(alert, section.toggle);
   if (typeof enabled === "boolean") return enabled;
   return Boolean(section.options) && hasOptionValues(alert, section);
 }
 
-export function setSectionEnabled(alert: Alert, section: EditorSection, enabled: boolean): void {
+export function setSectionEnabled(
+  alert: Alert,
+  section: EditorSection,
+  enabled: boolean,
+): void {
+  const toggle = section.toggle;
+  if (!toggle) return;
   if (section.options) optionControl(alert, section);
-  setPath(alert, section.toggle!, enabled);
+  setPath(alert, toggle, enabled);
 }
 
 /** Own switch combined with every ancestor switch; undefined when the section has none. */
-export function sectionStatus(alert: Alert, section: EditorSection): boolean | undefined {
+export function sectionStatus(
+  alert: Alert,
+  section: EditorSection,
+): boolean | undefined {
   const enabled = isSectionEnabled(alert, section);
   if (enabled === undefined || !section.parent) return enabled;
   return enabled && sectionStatus(alert, findSection(section.parent)) !== false;
@@ -123,25 +171,63 @@ function controlPath(field: EditorField): string {
   return field.path.slice(OPTIONS_PATH.length);
 }
 
-export function isFieldEnabled(alert: Alert, section: EditorSection, field: EditorField): boolean {
-  return alert.notification.option_controls?.[section.options!]?.fields[controlPath(field)]
-    ?? hasValue(getPath(alert, field.path));
+export function isFieldEnabled(
+  alert: Alert,
+  section: EditorSection,
+  field: EditorField,
+): boolean {
+  const options = section.options;
+  if (!options) return hasValue(getPath(alert, field.path));
+  return (
+    alert.notification.option_controls?.[options]?.fields[controlPath(field)] ??
+    hasValue(getPath(alert, field.path))
+  );
 }
 
-export function setFieldEnabled(alert: Alert, section: EditorSection, field: EditorField, enabled: boolean): void {
+export function setFieldEnabled(
+  alert: Alert,
+  section: EditorSection,
+  field: EditorField,
+  enabled: boolean,
+): void {
   optionControl(alert, section).fields[controlPath(field)] = enabled;
 }
 
 /** Create the group's control, snapshotting inferred flags so a disabled group lists the paths it withholds. */
-function optionControl(alert: Alert, section: EditorSection): NotificationOptionControl {
-  const controls = (alert.notification.option_controls ??= {});
-  const control = (controls[section.options!] ??= { enabled: isSectionEnabled(alert, section) ?? true, fields: {} });
-  for (const field of section.fields(alert)) control.fields[controlPath(field)] ??= isFieldEnabled(alert, section, field);
+function optionControl(
+  alert: Alert,
+  section: EditorSection,
+): NotificationOptionControl {
+  const option = section.options;
+  if (!option) {
+    throw new Error(`Editor section "${section.key}" has no option control.`);
+  }
+  let controls = alert.notification.option_controls;
+  if (!controls) {
+    controls = {};
+    alert.notification.option_controls = controls;
+  }
+  let control = controls[option];
+  if (!control) {
+    control = {
+      enabled: isSectionEnabled(alert, section) ?? true,
+      fields: {},
+    };
+    controls[option] = control;
+  }
+  for (const field of section.fields(alert)) {
+    const path = controlPath(field);
+    if (control.fields[path] === undefined) {
+      control.fields[path] = isFieldEnabled(alert, section, field);
+    }
+  }
   return control;
 }
 
 export function findSection(key: string): EditorSection {
-  return editorSections.find(section => section.key === key)!;
+  const section = editorSections.find((candidate) => candidate.key === key);
+  if (!section) throw new Error(`Unknown editor section: ${key}`);
+  return section;
 }
 
 export function rootSection(section: EditorSection): EditorSection {
@@ -149,7 +235,9 @@ export function rootSection(section: EditorSection): EditorSection {
 }
 
 export function embeddedSections(section: EditorSection): EditorSection[] {
-  return editorSections.filter(child => child.parent === section.key && child.embedded);
+  return editorSections.filter(
+    (child) => child.parent === section.key && child.embedded,
+  );
 }
 
 function option(name: string, selector: Selector, path = name): EditorField {
@@ -165,14 +253,20 @@ const text = { text: {} };
 const color = { color_hex: {} };
 const toggle = { boolean: {} };
 const duration = { duration: { enable_day: true } };
-const dropdown = (...options: string[]) => ({ select: { mode: "dropdown", options } });
+const dropdown = (...options: string[]) => ({
+  select: { mode: "dropdown", options },
+});
 
 export const editorSections: EditorSection[] = [
   {
     key: "basic",
     fields: () => [
       { name: "name", path: "name", selector: text, required: true },
-      { name: "description", path: "description", selector: { text: { multiline: true } } },
+      {
+        name: "description",
+        path: "description",
+        selector: { text: { multiline: true } },
+      },
       { name: "icon", path: "icon", selector: { icon: {} } },
     ],
   },
@@ -180,7 +274,13 @@ export const editorSections: EditorSection[] = [
     key: "triggers",
     toggle: "monitor.triggers.enabled",
     validate: true,
-    fields: () => [{ name: "items", path: "monitor.triggers.items", selector: { trigger: {} } }],
+    fields: () => [
+      {
+        name: "items",
+        path: "monitor.triggers.items",
+        selector: { trigger: {} },
+      },
+    ],
   },
   {
     key: "conditions",
@@ -188,11 +288,28 @@ export const editorSections: EditorSection[] = [
     validate: true,
     fields({ monitor: { conditions } }) {
       const fields: EditorField[] = [
-        { name: "startup", path: "monitor.conditions.startup", selector: toggle },
-        { name: "interval_enabled", path: "monitor.conditions.interval.enabled", selector: toggle },
+        {
+          name: "startup",
+          path: "monitor.conditions.startup",
+          selector: toggle,
+        },
+        {
+          name: "interval_enabled",
+          path: "monitor.conditions.interval.enabled",
+          selector: toggle,
+        },
       ];
-      if (conditions.interval.enabled) fields.push({ name: "interval", path: "monitor.conditions.interval.value", selector: duration });
-      fields.push({ name: "items", path: "monitor.conditions.items", selector: { condition: {} } });
+      if (conditions.interval.enabled)
+        fields.push({
+          name: "interval",
+          path: "monitor.conditions.interval.value",
+          selector: duration,
+        });
+      fields.push({
+        name: "items",
+        path: "monitor.conditions.items",
+        selector: { condition: {} },
+      });
       return fields;
     },
   },
@@ -200,40 +317,67 @@ export const editorSections: EditorSection[] = [
     key: "inactive",
     toggle: "monitor.inactive.enabled",
     fields: () => [
-      { name: "clear_notification", path: "monitor.inactive.clear_notification", selector: toggle },
-      { name: "items", path: "monitor.inactive.items", selector: { trigger: {} } },
+      {
+        name: "clear_notification",
+        path: "monitor.inactive.clear_notification",
+        selector: toggle,
+      },
+      {
+        name: "items",
+        path: "monitor.inactive.items",
+        selector: { trigger: {} },
+      },
     ],
   },
   {
     key: "recipients",
-    fields: ({ notification }) => [{
-      name: "target",
-      path: "notification.target",
-      selector: { target: { entity: { domain: "notify" } } },
-      // `user_id` is integration-specific and has no native target picker; keep it out of the form.
-      read(value) {
-        const { user_id: _users, ...target } = (value ?? {}) as NotificationTarget;
-        return target;
+    fields: ({ notification }) => [
+      {
+        name: "target",
+        path: "notification.target",
+        selector: { target: { entity: { domain: "notify" } } },
+        // `user_id` is integration-specific and has no native target picker; keep it out of the form.
+        read(value) {
+          const { user_id: _users, ...target } = (value ??
+            {}) as NotificationTarget;
+          return target;
+        },
+        write(value) {
+          const users = notification.target?.user_id;
+          return users?.length
+            ? { ...(value as NotificationTarget), user_id: users }
+            : (value ?? {});
+        },
       },
-      write(value) {
-        const users = notification.target?.user_id;
-        return users?.length ? { ...(value as NotificationTarget), user_id: users } : value ?? {};
-      },
-    }],
+    ],
   },
   {
     key: "notification",
     fields: () => [
       { name: "title", path: "notification.title", selector: text },
-      { name: "message", path: "notification.message", selector: { template: {} } },
-      { name: "use_default_tag", path: "notification.use_default_tag", selector: toggle },
+      {
+        name: "message",
+        path: "notification.message",
+        selector: { template: {} },
+      },
+      {
+        name: "use_default_tag",
+        path: "notification.use_default_tag",
+        selector: toggle,
+      },
     ],
   },
   {
     key: "postSendActions",
     parent: "notification",
     toggle: "post_send_actions.enabled",
-    fields: () => [{ name: "actions", path: "post_send_actions.items", selector: { action: {} } }],
+    fields: () => [
+      {
+        name: "actions",
+        path: "post_send_actions.items",
+        selector: { action: {} },
+      },
+    ],
   },
   {
     key: "mobile",
@@ -259,7 +403,9 @@ export const editorSections: EditorSection[] = [
       option("persistent", toggle),
       option("alert_once", toggle),
       option("clickAction", text),
-      option("timeout", { number: { min: 0, mode: "box", unit_of_measurement: "s" } }),
+      option("timeout", {
+        number: { min: 0, mode: "box", unit_of_measurement: "s" },
+      }),
       option("visibility", dropdown("public", "private", "secret")),
       option("vibrationPattern", text),
       option("ledColor", color),
@@ -273,12 +419,20 @@ export const editorSections: EditorSection[] = [
     fields: ({ notification: { options } }) => [
       option("subtitle", text),
       option("url", text),
-      pushOption("interruption-level", dropdown("passive", "active", "time-sensitive", "critical")),
+      pushOption(
+        "interruption-level",
+        dropdown("passive", "active", "time-sensitive", "critical"),
+      ),
       // Structured critical sounds stay editable as an object.
-      pushOption("sound", isRecord(getPath(options, "push.sound")) ? { object: {} } : text),
+      pushOption(
+        "sound",
+        isRecord(getPath(options, "push.sound")) ? { object: {} } : text,
+      ),
       pushOption("badge", { number: { min: 0, mode: "box" } }),
       option("notification_icon_color", color),
-      option("presentation_options", { select: { multiple: true, options: ["alert", "badge", "sound"] } }),
+      option("presentation_options", {
+        select: { multiple: true, options: ["alert", "badge", "sound"] },
+      }),
     ],
   },
   {
@@ -289,17 +443,30 @@ export const editorSections: EditorSection[] = [
         {
           name: "buttons",
           path: "confirmation.buttons",
-          selector: { object: {
-            multiple: true,
-            label_field: "label",
-            description_field: "id",
-            fields: { label: { required: true, selector: text }, id: { selector: text } },
-          } },
+          selector: {
+            object: {
+              multiple: true,
+              label_field: "label",
+              description_field: "id",
+              fields: {
+                label: { required: true, selector: text },
+                id: { selector: text },
+              },
+            },
+          },
         },
-        { name: "forget_after", path: "confirmation.reminders.forget_after.enabled", selector: toggle },
+        {
+          name: "forget_after",
+          path: "confirmation.reminders.forget_after.enabled",
+          selector: toggle,
+        },
       ];
       if (reminders.forget_after.enabled) {
-        fields.push({ name: "timeout", path: "confirmation.reminders.forget_after.value", selector: duration });
+        fields.push({
+          name: "timeout",
+          path: "confirmation.reminders.forget_after.value",
+          selector: duration,
+        });
       }
       return fields;
     },
@@ -309,9 +476,21 @@ export const editorSections: EditorSection[] = [
     parent: "confirmation",
     toggle: "confirmation.reminders.enabled",
     fields: () => [
-      { name: "interval", path: "confirmation.reminders.interval", selector: duration },
-      { name: "max_attempts", path: "confirmation.reminders.max_attempts", selector: { number: { min: 1, max: 20, mode: "box" } } },
-      { name: "show_attempts", path: "confirmation.reminders.show_attempts", selector: toggle },
+      {
+        name: "interval",
+        path: "confirmation.reminders.interval",
+        selector: duration,
+      },
+      {
+        name: "max_attempts",
+        path: "confirmation.reminders.max_attempts",
+        selector: { number: { min: 1, max: 20, mode: "box" } },
+      },
+      {
+        name: "show_attempts",
+        path: "confirmation.reminders.show_attempts",
+        selector: toggle,
+      },
     ],
   },
   {
@@ -319,14 +498,28 @@ export const editorSections: EditorSection[] = [
     parent: "confirmation",
     toggle: "confirmation.notification.enabled",
     fields: () => [
-      { name: "message", path: "confirmation.notification.message", selector: { template: {} } },
-      { name: "use_default_tag", path: "confirmation.notification.use_default_tag", selector: toggle },
+      {
+        name: "message",
+        path: "confirmation.notification.message",
+        selector: { template: {} },
+      },
+      {
+        name: "use_default_tag",
+        path: "confirmation.notification.use_default_tag",
+        selector: toggle,
+      },
     ],
   },
   {
     key: "postConfirmationActions",
     parent: "confirmation",
     toggle: "confirmation.actions.enabled",
-    fields: () => [{ name: "actions", path: "confirmation.actions.items", selector: { action: {} } }],
+    fields: () => [
+      {
+        name: "actions",
+        path: "confirmation.actions.items",
+        selector: { action: {} },
+      },
+    ],
   },
 ];

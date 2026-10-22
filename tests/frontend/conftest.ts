@@ -12,17 +12,21 @@ export const historyFixture = fixtureData.history as RuntimeAlertHistoryEntry[];
 export const configFixture = alertFixtureData.config as Record<string, unknown>;
 export function createHassClient() {
   const callWS = vi.fn<Hass["callWS"]>().mockResolvedValue({});
+  const callApi = vi.fn<Hass["callApi"]>().mockResolvedValue({});
   return {
-    hass: { callWS } as Hass,
+    hass: { callWS, callApi } as Hass,
     callWS,
+    callApi,
   };
 }
 
 export function homeAssistantFixture(overrides: Partial<Hass> = {}): Hass {
+  const { callWS, callApi } = createHassClient();
   return {
     user: { is_admin: true },
     locale: { language: "en", date_format: "YMD", time_format: "24" },
-    callWS: createHassClient().callWS,
+    callWS,
+    callApi,
     ...overrides,
   } as Hass;
 }

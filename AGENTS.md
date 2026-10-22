@@ -13,7 +13,7 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 
 | Behavior | Owner | Nearest Test |
 | --- | --- | --- |
-| Setup, persistence, reconciliation | `B/__init__.py`, `B/automation_runtime.py`, `B/automation_storage.py` | `TB/test_lifecycle.py` |
+| Setup, persistence, automation API management | `B/__init__.py`, `B/automation_runtime.py`, `F/automations.ts` | `TB/test_lifecycle.py`, `TF/automations.test.ts` |
 | Canonical schema, runtime defaults | `B/configuration.py` | `TB/test_configuration.py` |
 | Native automation generation | `B/automation.py` | `TB/test_automation.py` |
 | Config-entry flow | `B/config_flow.py` | `TB/test_config_flow.py` |
@@ -29,7 +29,7 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 
 - Keep persisted alert data separate from runtime state; preserve native HA trigger, condition, template, and action fields.
 - Do not add legacy compatibility, migration, or field-stripping logic for removed configuration; remove obsolete code and tests unless the user explicitly requests legacy support.
-- Frontend owns editor draft initialization; backend nested Pydantic feature models own runtime defaults. No backend defaults endpoint.
+- Backend nested Pydantic feature models are the only source of defaults; `get_config` with `new: true` returns a validated starting alert and persists nothing. Frontend owns draft editing/finalization and saves through `save_config`. Do not duplicate defaults in the frontend.
 - Do not reintroduce `controller/`, `delivery/`, `features/`, or `support/` implementation paths.
 - `build/` is generated/ignored: edit authored sources. Bundles stay there until local install or HACS packaging stages them.
 - Keep `README.md` short/stable: overview, install, basic usage, dashboard card snippet, docs links. Feature details/examples belong in `docs/`.
@@ -40,7 +40,7 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 	explain why no implementation change is needed. Respect explicit instruction-only
 	requests and keep the review scoped to the behavior that prompted the rule.
 - Finish implementation first, then author/update tests, then validate once per coherent slice; do not rerun unchanged checks after minor edits.
-- Backend: `python3 -m pytest tests/backend/test_<owner>.py`; `python3 -m ruff check custom_components/ha_notifications tests/backend`.
+- Backend: `python3 -m pytest tests/backend/test_<owner>.py`; `npm run check:backend` (Ruff format and lint).
 - Frontend: `npx vitest run tests/frontend/<owner>.test.ts`; `npm run typecheck`; `npm run build`. Check UI behavior in real HA with `npm run dev`.
 - Implementation handoff: `sh scripts/validate.sh`. Instruction-only changes: read-only syntax/scope checks, not application tests/builds.
 - Setup/install/packaging: `docs/development.md`; test-specific fixtures/snapshots: `tests/AGENTS.md` and applicable testing skills.

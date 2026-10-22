@@ -17,11 +17,10 @@ duplicating the same structure with large assertion blocks; keep ordinary
 assertions for focused invariants, validation status, errors, and runtime
 behavior that snapshots cannot express well.
 
-In backend integration tests, use the `mock_automation_files` fixture to
-prepare and inspect Home Assistant's temporary automation include files.
-Avoid inline `open()` calls for this test setup; keep direct `tmp_path` file
-operations for tests that specifically verify storage serialization or
-rollback behavior.
+In backend integration tests, use the `automation_api` fixture: it serves
+Home Assistant's real admin automation config view, so `sync_entry` writes
+generated automations through the API exactly like the frontend. Use
+`prepare` to seed HA's default automation storage and `stored` to inspect it.
 
 When snapshotting generated automations, serialize the automation to stable
 YAML first so the `.ambr` output remains readable and reflects the format

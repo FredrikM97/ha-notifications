@@ -17,15 +17,20 @@ import subprocess
 import sys
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import aiohttp
 from aiohttp import web
+from homeassistant.config import async_ensure_config_exists
+from homeassistant.core import HomeAssistant
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".ha-config"
-LOCK_FILE = Path(tempfile.gettempdir()) / f"ha-notifications-dev-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]}.lock"
+LOCK_FILE = (
+    Path(tempfile.gettempdir())
+    / f"ha-notifications-dev-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]}.lock"
+)
 INTEGRATION = ROOT / "custom_components" / "ha_notifications"
 TOKEN_FILE = CONFIG / ".dev-token"
 MOCK_PUSH_URL_FILE = CONFIG / ".dev-mobile-app-push-url"
@@ -34,15 +39,7 @@ MOCK_APP_ID = "io.homeassistant.ha_notifications_dev"
 MOCK_DEVICE_ID = "ha_notifications_dev_phone"
 MOCK_PUSH_PORT = 8126
 
-CONFIGURATION_YAML = """\
-frontend:
-config:
-automation:
-script:
-history:
-logbook:
-system_log:
-
+DEV_CONFIGURATION_YAML = """\
 homeassistant:
   name: HA Notifications Dev
   auth_providers:
@@ -113,7 +110,7 @@ def _with_http_port(configuration: str, port: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def prepare_config(port: int, reset: bool) -> Path:
+async def prepare_config(port: int, reset: bool) -> Path:
     if reset and CONFIG.exists():
         shutil.rmtree(CONFIG)
     (CONFIG / "custom_components").mkdir(parents=True, exist_ok=True)
@@ -123,18 +120,24 @@ def prepare_config(port: int, reset: bool) -> Path:
         installed.unlink()
     elif installed.exists():
         shutil.rmtree(installed)
-    shutil.copytree(INTEGRATION, installed, ignore=shutil.ignore_patterns("frontend", "__pycache__", "*.pyc"))
+    shutil.copytree(
+        INTEGRATION, installed, ignore=shutil.ignore_patterns("frontend", "__pycache__", "*.pyc")
+    )
     bundle = installed / "frontend" / "panel.js"
     bundle.parent.mkdir()
     configuration = CONFIG / "configuration.yaml"
     if not configuration.exists():
-        configuration.write_text(CONFIGURATION_YAML.format(port=port))
+        hass = HomeAssistant(str(CONFIG))
+        try:
+            if not await async_ensure_config_exists(hass):
+                raise RuntimeError("Home Assistant could not create its default configuration.")
+        finally:
+            await hass.async_stop()
+        with configuration.open("a") as stream:
+            stream.write("\n" + DEV_CONFIGURATION_YAML.format(port=port))
     existing = configuration.read_text()
     updated = _with_http_port(existing, port)
-    if not any(
-        line.partition("#")[0].strip() == "mobile_app:"
-        for line in updated.splitlines()
-    ):
+    if not any(line.partition("#")[0].strip() == "mobile_app:" for line in updated.splitlines()):
         updated = updated.rstrip() + "\n\nmobile_app:\n"
     if updated != existing:
         configuration.write_text(updated)
@@ -153,7 +156,9 @@ async def wait_for_http(base: str, session: aiohttp.ClientSession) -> None:
     raise TimeoutError("Home Assistant did not start within 2 minutes.")
 
 
-async def websocket(base: str, session: aiohttp.ClientSession, token: str, *messages: dict) -> object:
+async def websocket(
+    base: str, session: aiohttp.ClientSession, token: str, *messages: dict
+) -> object:
     result: object = None
     async with session.ws_connect(f"{base.replace('http', 'ws', 1)}/api/websocket") as ws:
         await ws.receive_json()
@@ -258,11 +263,11 @@ async def ensure_mock_mobile_app(
     existing = await mock_entry()
     if existing:
         configured_push_url = (
-            MOCK_PUSH_URL_FILE.read_text().strip()
-            if MOCK_PUSH_URL_FILE.exists()
-            else ""
+            MOCK_PUSH_URL_FILE.read_text().strip() if MOCK_PUSH_URL_FILE.exists() else ""
         )
-        if configured_push_url == push_url and await wait_for_mock_notify_entity(existing["entry_id"]):
+        if configured_push_url == push_url and await wait_for_mock_notify_entity(
+            existing["entry_id"]
+        ):
             return
         for _ in range(40):
             async with session.get(registration_url, headers=headers) as response:
@@ -314,6 +319,7 @@ async def ensure_mock_mobile_app(
 
 async def start_mock_push_sink() -> web.AppRunner:
     """Start a loopback-only receiver for dev Mobile App push requests."""
+
     async def receive_notification(request: web.Request) -> web.Response:
         await request.json()
         print("[dev] Mock phone received a notification.", flush=True)
@@ -351,7 +357,9 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
         entries = await response.json()
     if not entries:
         async with session.post(
-            f"{base}/api/config/config_entries/flow", json={"handler": "ha_notifications"}, headers=headers
+            f"{base}/api/config/config_entries/flow",
+            json={"handler": "ha_notifications"},
+            headers=headers,
         ) as response:
             flow = await response.json()
         if flow.get("type") == "form":
@@ -398,7 +406,10 @@ async def seed(base: str, session: aiohttp.ClientSession, token: str) -> None:
                     confirmation_notification.pop("action", None)
                     confirmation_notification.pop("target", None)
     if not entities:
-        print("[dev] No notify entities found; sample alerts are disabled until one is configured.", flush=True)
+        print(
+            "[dev] No notify entities found; sample alerts are disabled until one is configured.",
+            flush=True,
+        )
     await websocket(
         base,
         session,
@@ -411,11 +422,11 @@ async def bootstrap(port: int, push_url: str) -> str:
     base = f"http://127.0.0.1:{port}"
     async with aiohttp.ClientSession() as session:
         await wait_for_http(base, session)
-        token = TOKEN_FILE.read_text() if TOKEN_FILE.exists() else await onboard(base, session, port)
-        try:
+        token = (
+            TOKEN_FILE.read_text() if TOKEN_FILE.exists() else await onboard(base, session, port)
+        )
+        with suppress(RuntimeError):
             await websocket(base, session, token, {"type": "http/config/promote"})
-        except RuntimeError:
-            pass
         try:
             await ensure_mock_mobile_app(base, session, token, push_url)
         except Exception as error:
@@ -424,8 +435,15 @@ async def bootstrap(port: int, push_url: str) -> str:
             await seed(base, session, token)
         except Exception as error:
             print(f"[dev] Seeding sample alerts failed: {error}", flush=True)
-    print(f"\n[dev] Ready inside the container on port {port}: http://localhost:{port}/ha_notifications (no login needed)", flush=True)
-    print("[dev] Open the forwarded port from VS Code's Ports view if its host port differs.\n", flush=True)
+    print(
+        f"\n[dev] Ready inside the container on port {port}: "
+        f"http://localhost:{port}/ha_notifications (no login needed)",
+        flush=True,
+    )
+    print(
+        "[dev] Open the forwarded port from VS Code's Ports view if its host port differs.\n",
+        flush=True,
+    )
     return token
 
 
@@ -433,11 +451,13 @@ async def run_dev_runtime(port: int, processes: list[subprocess.Popen]) -> None:
     """Run the local push sink before HA and keep it alive until HA exits."""
     sink = await start_mock_push_sink()
     try:
-        processes.append(subprocess.Popen(
-            [sys.executable, "-m", "homeassistant", "-c", str(CONFIG)],
-            cwd=CONFIG,
-            start_new_session=True,
-        ))
+        processes.append(
+            subprocess.Popen(
+                [sys.executable, "-m", "homeassistant", "-c", str(CONFIG)],
+                cwd=CONFIG,
+                start_new_session=True,
+            )
+        )
         await bootstrap(port, f"http://127.0.0.1:{MOCK_PUSH_PORT}/notify")
         home_assistant = processes[-1]
         while (result := home_assistant.poll()) is None:
@@ -457,18 +477,18 @@ def dev_instance():
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
-            except BlockingIOError:
+            except BlockingIOError as error:
                 lock.seek(0)
                 owner = lock.read().strip()
                 if owner.isdecimal() and int(owner) not in stopped:
                     print(f"[dev] Stopping previous dev instance ({owner})...", flush=True)
-                    try:
+                    with suppress(ProcessLookupError):
                         os.kill(int(owner), signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
                     stopped.add(int(owner))
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("Previous dev instance did not stop; refusing to start another.")
+                    raise TimeoutError(
+                        "Previous dev instance did not stop; refusing to start another."
+                    ) from error
                 time.sleep(0.1)
         lock.seek(0)
         lock.truncate()
@@ -485,19 +505,13 @@ def dev_instance():
 
 def stop_processes(processes: list[subprocess.Popen]) -> None:
     for process in processes:
-        try:
+        with suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
     for process in processes:
-        try:
+        with suppress(subprocess.TimeoutExpired):
             process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            pass
-        try:
+        with suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         process.wait()
 
 
@@ -512,15 +526,25 @@ def run_dev(port: int, reset: bool) -> None:
         signal.signal(signum, stop)
     with dev_instance():
         try:
-            bundle = prepare_config(port, reset)
+            bundle = asyncio.run(prepare_config(port, reset))
             build_command = [
-                "npx", "esbuild", "frontend/panel.ts", "--bundle", "--format=esm",
-                f"--outfile={bundle}", "--sourcemap", "--log-level=warning",
+                "npx",
+                "esbuild",
+                "frontend/panel.ts",
+                "--bundle",
+                "--format=esm",
+                f"--outfile={bundle}",
+                "--sourcemap",
+                "--log-level=warning",
             ]
             processes.append(subprocess.Popen(build_command, cwd=ROOT, start_new_session=True))
             if processes[-1].wait() != 0:
                 raise RuntimeError("Initial frontend build failed.")
-            processes.append(subprocess.Popen([*build_command, "--watch=forever"], cwd=ROOT, start_new_session=True))
+            processes.append(
+                subprocess.Popen(
+                    [*build_command, "--watch=forever"], cwd=ROOT, start_new_session=True
+                )
+            )
             asyncio.run(run_dev_runtime(port, processes))
         finally:
             for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):

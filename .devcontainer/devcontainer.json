@@ -22,8 +22,7 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "charliermarsh.ruff",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
+        "biomejs.biome",
         "GitHub.copilot"
       ],
       "settings": {

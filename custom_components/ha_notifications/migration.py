@@ -8,13 +8,13 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONFIG_ENTRY_VERSION
+from .const import CONFIG_ENTRY_MINOR_VERSION, CONFIG_ENTRY_VERSION
 
-_LEGACY_ENTRY_VERSION = 1
+_SUPPORTED_OLD_ENTRY_VERSIONS = {1, 2, 3, 4}
 
 
 def migrate_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Remove configuration fields retired before the current entry version."""
+    """Migrate retired configuration fields when upgrading an entry."""
     migrated = deepcopy(config)
     alerts = migrated.get("alerts")
     if not isinstance(alerts, list):
@@ -32,16 +32,21 @@ async def async_migrate_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> bool:
-    """Migrate version 1 entries by removing retired monitor automation mode."""
+    """Migrate supported older config-entry versions.
+
+    Before version 5, new entries stored alerts in ``data`` until the first save
+    wrote ``options``. Version 5 keeps alerts only in ``options``.
+    """
     if entry.version == CONFIG_ENTRY_VERSION:
         return True
-    if entry.version != _LEGACY_ENTRY_VERSION:
+    if entry.version not in _SUPPORTED_OLD_ENTRY_VERSIONS:
         return False
 
     hass.config_entries.async_update_entry(
         entry,
-        data=migrate_config(dict(entry.data)),
-        options=migrate_config(dict(entry.options)),
+        data={},
+        options=migrate_config(dict(entry.options or entry.data)),
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         version=CONFIG_ENTRY_VERSION,
     )
     return True

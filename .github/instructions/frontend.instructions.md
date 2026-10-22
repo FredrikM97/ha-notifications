@@ -19,8 +19,9 @@ mobile value writes preserve existing field flags; direct boolean values enable
 their declared field, and explicit clearing may mark the field disabled.
 Explicitly clearing an input is distinct from disabling it. Missing-translation
 and translation fallback behavior belongs in `frontend/localize.ts`.
-`frontend/editor/alert-model.ts` owns editor draft initialization/finalization;
-backend nested Pydantic feature models own runtime defaults. No defaults endpoint.
+New drafts start from `get_config` with `new: true`; do not duplicate backend
+defaults. `frontend/editor/alert-model.ts` owns draft editing/finalization, and
+saves go through `save_config`.
 `frontend/api.ts` is the only transport boundary: use public `hass.callWS`,
 keep the wrapper generic, and let callers own payload/response types.
 For unfamiliar HA APIs, consult official developer docs; avoid private internals.

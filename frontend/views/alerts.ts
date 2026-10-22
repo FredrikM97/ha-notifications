@@ -1,9 +1,16 @@
-import { css, html, nothing } from "lit";
+import {
+  mdiDeleteOutline,
+  mdiHistory,
+  mdiOpenInNew,
+  mdiPencil,
+  mdiPlayOutline,
+  mdiStopCircleOutline,
+} from "@mdi/js";
 import type { TemplateResult } from "lit";
-import { mdiDeleteOutline, mdiHistory, mdiOpenInNew, mdiPencil, mdiPlayOutline, mdiStopCircleOutline } from "@mdi/js";
-import type { Alert, AutomationRuntimeStatus, Hass } from "../types.js";
+import { css, html, nothing } from "lit";
 import { localize } from "../localize.js";
-import { actions, emptyState, type Action } from "../ui.js";
+import type { Alert, AutomationRuntimeStatus, Hass } from "../types.js";
+import { type Action, actions, emptyState } from "../ui.js";
 
 export interface AlertHandlers {
   create(): void;
@@ -119,9 +126,14 @@ export const alertListStyles = css`
   }
 `;
 
-function statusText(hass: Hass | null, alert: Alert, status: AutomationRuntimeStatus | undefined): string {
+function statusText(
+  hass: Hass | null,
+  alert: Alert,
+  status: AutomationRuntimeStatus | undefined,
+): string {
   if (!alert.enabled) return localize(hass, "alert.disabled");
-  if (status && status.current > 0) return localize(hass, "alert.active_runs", { count: status.current });
+  if (status && status.current > 0)
+    return localize(hass, "alert.active_runs", { count: status.current });
   return localize(hass, status ? "alert.automation_idle" : "alert.enabled");
 }
 
@@ -132,36 +144,68 @@ function menuActions(
   on: AlertHandlers,
 ): Action[] {
   const localizeText = (key: string) => localize(hass, key);
+  const automationId = status?.automation_id;
   return [
-    { label: localizeText("alert.history"), path: mdiHistory, action: () => on.history(alert) },
-    { label: localizeText("alert.edit"), path: mdiPencil, action: () => on.edit(alert) },
-    ...(status?.automation_id
-      ? [{
-          label: localizeText("alert.open_automation"),
-          path: mdiOpenInNew,
-          action: () => on.navigate(`/config/automation/edit/${encodeURIComponent(status.automation_id!)}`),
-        }, {
-          label: localizeText("alert.test"),
-          path: mdiPlayOutline,
-          action: () => on.testAlert(alert),
-        }]
+    {
+      label: localizeText("alert.history"),
+      path: mdiHistory,
+      action: () => on.history(alert),
+    },
+    {
+      label: localizeText("alert.edit"),
+      path: mdiPencil,
+      action: () => on.edit(alert),
+    },
+    ...(automationId
+      ? [
+          {
+            label: localizeText("alert.open_automation"),
+            path: mdiOpenInNew,
+            action: () =>
+              on.navigate(
+                `/config/automation/edit/${encodeURIComponent(automationId)}`,
+              ),
+          },
+          {
+            label: localizeText("alert.test"),
+            path: mdiPlayOutline,
+            action: () => on.testAlert(alert),
+          },
+        ]
       : []),
     ...(status && status.current > 0
-      ? [{ label: localizeText("alert.cancel_run"), path: mdiStopCircleOutline, action: () => on.cancelRun(alert), warning: true }]
+      ? [
+          {
+            label: localizeText("alert.cancel_run"),
+            path: mdiStopCircleOutline,
+            action: () => on.cancelRun(alert),
+            warning: true,
+          },
+        ]
       : []),
-    { label: localizeText("alert.delete"), path: mdiDeleteOutline, action: () => on.remove(alert), warning: true },
+    {
+      label: localizeText("alert.delete"),
+      path: mdiDeleteOutline,
+      action: () => on.remove(alert),
+      warning: true,
+    },
   ];
 }
 
-function labelledActions(items: Action[], narrow: boolean): TemplateResult | typeof nothing {
+function labelledActions(
+  items: Action[],
+  narrow: boolean,
+): TemplateResult | typeof nothing {
   if (narrow) return nothing;
   return html`<div class="nc-alert-labelled-actions">
-    ${items.map(item => html`<ha-button
+    ${items.map(
+      (item) => html`<ha-button
       appearance="outlined"
       variant=${item.warning ? "danger" : "neutral"}
       size="s"
       @click=${item.action}
-    ><ha-svg-icon slot="start" .path=${item.path}></ha-svg-icon>${item.label}</ha-button>`)}
+    ><ha-svg-icon slot="start" .path=${item.path}></ha-svg-icon>${item.label}</ha-button>`,
+    )}
   </div>`;
 }
 
@@ -173,7 +217,10 @@ function alertRow(
   narrow: boolean,
 ): TemplateResult {
   const running = Boolean(status && status.current > 0);
-  const toggleLabel = localize(hass, alert.enabled ? "alert.disable" : "alert.enable");
+  const toggleLabel = localize(
+    hass,
+    alert.enabled ? "alert.disable" : "alert.enable",
+  );
   const items = menuActions(hass, alert, status, on);
   return html`<div
     class="nc-alert ${alert.enabled ? "" : "disabled"} ${running ? "running" : ""}"
@@ -182,7 +229,11 @@ function alertRow(
     aria-label=${`${localize(hass, "alert.edit")}: ${alert.name}`}
     @click=${() => on.edit(alert)}
     @keydown=${(event: KeyboardEvent) => {
-      if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+      if (
+        event.target !== event.currentTarget ||
+        (event.key !== "Enter" && event.key !== " ")
+      )
+        return;
       event.preventDefault();
       on.edit(alert);
     }}
@@ -219,14 +270,20 @@ export function alertList(
   on: AlertHandlers,
   narrow: boolean,
 ): TemplateResult {
-  const visible = activeOnly ? alerts.filter((alert) => statuses[alert.id]?.current > 0) : alerts;
+  const visible = activeOnly
+    ? alerts.filter((alert) => statuses[alert.id]?.current > 0)
+    : alerts;
   if (!visible.length) {
     return activeOnly
       ? emptyState(localize(hass, "panel.no_active_alerts"))
-      : emptyState(localize(hass, "panel.no_alerts"), localize(hass, "panel.create_first"), {
-          label: localize(hass, "panel.create_alert"),
-          run: on.create,
-        });
+      : emptyState(
+          localize(hass, "panel.no_alerts"),
+          localize(hass, "panel.create_first"),
+          {
+            label: localize(hass, "panel.create_alert"),
+            run: on.create,
+          },
+        );
   }
   return html`<ha-card class="nc-alert-list">${visible.map((alert) => alertRow(hass, alert, statuses[alert.id], on, narrow))}</ha-card>`;
 }

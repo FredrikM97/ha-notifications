@@ -1,9 +1,22 @@
-import type { Alert, AlertsConfig, DurationValue, NotificationTarget } from "../types.js";
+import type {
+  Alert,
+  AlertsConfig,
+  DurationValue,
+  NotificationTarget,
+} from "../types.js";
 
-const UNIT_SECONDS: Record<string, number> = { days: 86400, hours: 3600, minutes: 60, seconds: 1 };
+const UNIT_SECONDS: Record<string, number> = {
+  days: 86400,
+  hours: 3600,
+  minutes: 60,
+  seconds: 1,
+};
 
-export function durationToSeconds(value: DurationValue | undefined): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+export function durationToSeconds(
+  value: DurationValue | undefined,
+): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value))
+    return Math.max(0, value);
   if (typeof value === "string") {
     const parts = value.split(":").map(Number);
     if (parts.some((part) => !Number.isFinite(part))) return undefined;
@@ -14,7 +27,10 @@ export function durationToSeconds(value: DurationValue | undefined): number | un
   if (value && typeof value === "object") {
     return Math.max(
       0,
-      Object.entries(UNIT_SECONDS).reduce((sum, [unit, factor]) => sum + (Number(value[unit]) || 0) * factor, 0),
+      Object.entries(UNIT_SECONDS).reduce(
+        (sum, [unit, factor]) => sum + (Number(value[unit]) || 0) * factor,
+        0,
+      ),
     );
   }
   return undefined;
@@ -25,7 +41,7 @@ export function toCanonicalAlert(alert: Alert): AlertsConfig["alerts"][number] {
   return canonical as AlertsConfig["alerts"][number];
 }
 
-export interface Duration {
+interface Duration {
   days: number;
   hours: number;
   minutes: number;
@@ -35,7 +51,9 @@ export interface Duration {
 // ---- Durations ----
 
 export function toDuration(value: unknown, fallbackSeconds = 0): Duration {
-  let total = durationToSeconds(value as Parameters<typeof durationToSeconds>[0]);
+  let total = durationToSeconds(
+    value as Parameters<typeof durationToSeconds>[0],
+  );
   if (total === undefined) total = fallbackSeconds;
   total = Math.max(0, Math.floor(total));
   return {
@@ -55,8 +73,11 @@ function hasRecipients(target: NotificationTarget | undefined): boolean {
   if (!target) return false;
   return Object.values(target).some((values) => {
     if (typeof values === "string") return values.trim().length > 0;
-    return Array.isArray(values) && values.some(
-      (value) => typeof value === "string" && value.trim().length > 0,
+    return (
+      Array.isArray(values) &&
+      values.some(
+        (value) => typeof value === "string" && value.trim().length > 0,
+      )
     );
   });
 }
@@ -68,12 +89,17 @@ export function finalizeAlert(draft: Alert, validate = true): Alert {
   if (validate) {
     if (!alert.name.trim()) throw new Error("Name is required.");
     for (const delivery of [notification, confirmation.notification]) {
-      if (delivery.action !== undefined && !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(delivery.action)) {
+      if (
+        delivery.action !== undefined &&
+        !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(delivery.action)
+      ) {
         throw new Error("Notification action must be a domain.service name.");
       }
     }
     if (!notification.action && !hasRecipients(notification.target)) {
-      throw new Error("Select at least one device, area, label, or notification entity in Recipients.");
+      throw new Error(
+        "Select at least one device, area, label, or notification entity in Recipients.",
+      );
     }
     const forgetAfter = confirmation.reminders.forget_after;
     if (forgetAfter.enabled && fromDuration(forgetAfter.value) <= 0) {
@@ -83,7 +109,11 @@ export function finalizeAlert(draft: Alert, validate = true): Alert {
   delete alert.runtime;
   alert.name = alert.name.trim();
   alert.icon = alert.icon?.trim() || "mdi:bell-outline";
-  if (alert.post_send_actions && !alert.post_send_actions.enabled && !alert.post_send_actions.items?.length) {
+  if (
+    alert.post_send_actions &&
+    !alert.post_send_actions.enabled &&
+    !alert.post_send_actions.items?.length
+  ) {
     delete alert.post_send_actions;
   }
   return alert;

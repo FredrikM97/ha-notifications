@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Set as AbstractSet
 from typing import Any
 from uuid import uuid4
 
 import voluptuous as vol
-from homeassistant.components import automation as ha_automation
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
@@ -17,21 +17,29 @@ from ..automation import (
     automation_id,
 )
 from ..automation_runtime import (
-    async_reconcile_automations,
-    automation_status,
+    async_cancel_run,
+    automation_changes,
+    automation_entity_id,
+    automation_runtime_status,
+    stale_automation_ids,
 )
-from ..configuration import validate_config
-from ..const import COMMAND_CANCEL_RUN, DOMAIN, EVENT_COMMAND
+from ..configuration import (
+    empty_config,
+    find_alert,
+    stored_config,
+    upsert_alert,
+    validate_config,
+)
+from ..const import DOMAIN
 from ..history import history_store
 from ..mobile_app import resolve_platforms
 
 ERROR_CODE = "ha_notifications_error"
 _WEBSOCKET_REGISTERED: set[int] = set()
-
-
-def _empty_config() -> dict[str, Any]:
-    """Return the canonical empty configuration document."""
-    return validate_config({"version": 1, "alerts": []})
+_CONFIG_OR_ALERT = {
+    vol.Exclusive("config", "payload"): dict,
+    vol.Exclusive("alert", "payload"): dict,
+}
 
 
 def _entry(hass: HomeAssistant) -> Any | None:
@@ -40,109 +48,57 @@ def _entry(hass: HomeAssistant) -> Any | None:
     return entries[0] if entries else None
 
 
-def _entry_config(entry: Any) -> dict[str, Any]:
-    """Read persisted configuration, preferring options over entry data."""
-    return dict(entry.options or entry.data)
+def _raw_config_for(hass: HomeAssistant) -> dict[str, Any]:
+    """Return persisted configuration without blocking the recovery editor."""
+    entry = _entry(hass)
+    return stored_config(entry) if entry is not None else empty_config()
 
 
 def _config_for(hass: HomeAssistant) -> dict[str, Any]:
     """Return the validated persisted configuration for the integration."""
-    entry = _entry(hass)
-    return (
-        validate_config(_entry_config(entry))
-        if entry is not None
-        else _empty_config()
-    )
+    return validate_config(_raw_config_for(hass))
 
 
-def _raw_config_for(hass: HomeAssistant) -> dict[str, Any]:
-    """Return persisted configuration without blocking the recovery editor."""
-    entry = _entry(hass)
-    return _entry_config(entry) if entry is not None else _empty_config()
+def _validated_alert(alert: dict[str, Any]) -> dict[str, Any]:
+    """Validate one alert with the canonical configuration schema."""
+    return validate_config({"alerts": [alert]})["alerts"][0]
 
 
-async def _automation_document(hass: HomeAssistant) -> list[dict[str, Any]]:
-    """Return the in-memory generated automation document."""
-    entry = _entry(hass)
-    runtime_document = getattr(
-        getattr(entry, "runtime_data", None),
-        "automations",
-        None,
-    )
-    return runtime_document or []
+def _automation_document(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return the generated automations prepared by the loaded entry."""
+    runtime = getattr(_entry(hass), "runtime_data", None)
+    return getattr(runtime, "automations", None) or []
 
 
-def _notification_activity(entries: list[dict[str, Any]]) -> dict[str, bool]:
-    """Project the latest send, clear, or inactive event into active view state."""
-    activity: dict[str, bool] = {}
-    for entry in entries:
-        config = entry.get("config")
-        event = entry.get("event")
-        if not isinstance(config, Mapping) or not isinstance(event, Mapping):
-            continue
-        alert_id = config.get("id")
-        event_type = event.get("type")
-        if not isinstance(alert_id, str) or alert_id in activity:
-            continue
-        if event_type == "notification_sent":
-            activity[alert_id] = True
-        elif event_type in {"notification_cleared", "inactive"}:
-            activity[alert_id] = False
-    return activity
+def _requested_config(hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
+    """Return the full config from ``config`` or saved alerts plus one ``alert``."""
+    if "config" in msg:
+        return msg["config"]
+    if "alert" in msg:
+        return upsert_alert(_config_for(hass), _validated_alert(msg["alert"]))
+    raise ValueError("Provide either config or alert")
 
 
-def _triggered_activity(entries: list[dict[str, Any]]) -> dict[str, bool]:
-    """Project the latest successful condition outcome for each alert."""
-    activity: dict[str, bool] = {}
-    for entry in entries:
-        config = entry.get("config")
-        event = entry.get("event")
-        if not isinstance(config, Mapping) or not isinstance(event, Mapping):
-            continue
-        alert_id = config.get("id")
-        event_type = event.get("type")
-        if not isinstance(alert_id, str) or alert_id in activity:
-            continue
-        if event_type == "notification_sent":
-            activity[alert_id] = True
-        elif event_type == "inactive":
-            activity[alert_id] = False
-    return activity
-
-
-def _active_flow_ids(
+def _latest_activity(
     entries: list[dict[str, Any]],
-    alert_id: str,
-) -> list[str]:
-    """Return the latest active history flow IDs for one alert."""
-    active_statuses = {"started", "waiting", "running"}
-    terminal_statuses = {
-        "cancelled",
-        "completed",
-        "inactive",
-        "confirmation_completed",
-        "confirmation_timeout",
-    }
-    latest: dict[str, bool] = {}
+    inactive_events: set[str],
+) -> dict[str, bool]:
+    """Project each alert's newest sent or inactive history event to a flag."""
+    activity: dict[str, bool] = {}
     for entry in entries:
         config = entry.get("config")
         event = entry.get("event")
         if not isinstance(config, Mapping) or not isinstance(event, Mapping):
             continue
-        if config.get("id") != alert_id:
-            continue
-        flow_id = event.get("flow_id")
+        alert_id = config.get("id")
         event_type = event.get("type")
-        if (
-            not isinstance(flow_id, str)
-            or not flow_id
-            or event_type not in active_statuses | terminal_statuses
-            or flow_id in latest
-        ):
+        if not isinstance(alert_id, str) or alert_id in activity:
             continue
-        is_active = event_type in active_statuses
-        latest[flow_id] = is_active
-    return [flow_id for flow_id, is_active in latest.items() if is_active]
+        if event_type == "notification_sent":
+            activity[alert_id] = True
+        elif event_type in inactive_events:
+            activity[alert_id] = False
+    return activity
 
 
 def _json_safe(value: Any) -> Any:
@@ -152,19 +108,6 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
     return value
-
-
-def _automation_entity_for(
-    hass: HomeAssistant,
-    alert: dict[str, Any],
-) -> str:
-    """Resolve the current entity ID from the generated automation unique ID."""
-    unique_id = automation_id(alert)
-    component = getattr(hass, "data", {}).get(ha_automation.DATA_COMPONENT)
-    for entity in getattr(component, "entities", ()):
-        if getattr(entity, "unique_id", None) == unique_id:
-            return entity.entity_id
-    return f"automation.{unique_id}"
 
 
 class WebsocketDispatcher:
@@ -185,38 +128,31 @@ class WebsocketDispatcher:
             return
         connection.send_result(msg["id"], _json_safe(result))
 
-    async def get_config(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def get_config(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
         """Return canonical config, a new alert, or raw config for YAML recovery."""
         if msg.get("new", False):
             return validate_config({"alerts": [{"id": f"alert_{uuid4().hex}"}]})
         return _config_for(hass) if msg.get("validate", True) else _raw_config_for(hass)
 
-    async def mobile_platforms(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def mobile_platforms(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
         return resolve_platforms(hass, msg["target"])
 
-    async def validate_config(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, Any]:
-        validated = validate_config(msg["config"])
+    async def validate_config(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
+        """Validate a full config, or one draft alert with the saved alerts."""
+        validated = validate_config(_requested_config(hass, msg))
         await async_validate_alerts(hass, validated["alerts"])
         return validated
 
-    async def automation_status(
-        self, hass: HomeAssistant, _msg: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def automation_status(self, hass: HomeAssistant, _msg: dict[str, Any]) -> dict[str, Any]:
         config = _config_for(hass)
-        document = await _automation_document(hass)
+        document = _automation_document(hass)
         entries = await history_store(hass, _entry(hass)).async_entries()
-        notification_activity = _notification_activity(entries)
-        triggered_activity = _triggered_activity(entries)
+        notification_activity = _latest_activity(entries, {"notification_cleared", "inactive"})
+        triggered_activity = _latest_activity(entries, {"inactive"})
         result = {}
         for alert in config["alerts"]:
             alert_id = alert["id"]
-            runtime_status = _automation_runtime_status(hass, document, alert)
+            runtime_status = automation_runtime_status(hass, document, alert)
             status = {
                 **runtime_status,
                 "running": runtime_status["current"] > 0,
@@ -227,119 +163,73 @@ class WebsocketDispatcher:
             result[alert_id] = status
         return result
 
-    async def get_history(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        return await history_store(hass, _entry(hass)).async_entries(
-            msg.get("alert_id")
-        )
+    async def get_automations(self, hass: HomeAssistant, _msg: dict[str, Any]) -> dict[str, Any]:
+        """Prepare explicit Reload recovery; never called by panel refresh."""
+        self._require_entry(hass)
+        automations = _automation_document(hass)
+        return automation_changes(automations, stale_automation_ids(hass, automations))
 
-    async def test_alert(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, bool]:
+    async def get_history(self, hass: HomeAssistant, msg: dict[str, Any]) -> list[dict[str, Any]]:
+        return await history_store(hass, _entry(hass)).async_entries(msg.get("alert_id"))
+
+    async def test_alert(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, bool]:
         """Schedule the saved alert's actions without checking conditions."""
         self._require_entry(hass)
-        alert = next(
-            (item for item in _config_for(hass)["alerts"] if item["id"] == msg["alert_id"]),
-            None,
-        )
-        if alert is None:
-            raise ValueError(f"unknown alert_id: {msg['alert_id']}")
-        entity_id = _automation_entity_for(hass, alert)
+        alert = self._require_alert(hass, msg["alert_id"])
+        entity_id = automation_entity_id(hass, alert)
         if hass.states.get(entity_id) is None:
             raise ValueError("Save an alert with enabled triggers before testing it")
         await hass.services.async_call(
-            "automation", "trigger",
+            "automation",
+            "trigger",
             {"entity_id": entity_id, "skip_condition": True},
             blocking=False,
         )
         return {"started": True}
 
-    async def cancel_run(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, bool]:
+    async def cancel_run(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, bool]:
         """Stop current automation actions without changing saved enablement."""
         entry = self._require_entry(hass)
-        alert_id = msg["alert_id"]
+        alert = self._require_alert(hass, msg["alert_id"])
+        return {"cancelled": await async_cancel_run(hass, entry, alert)}
+
+    async def save_config(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
+        """Persist a full config, or one alert and only its automation document."""
+        config = _requested_config(hass, msg)
+        upsert_ids = None if "config" in msg else {automation_id(msg["alert"])}
+        return await self._save(hass, config, upsert_ids)
+
+    async def delete(self, hass: HomeAssistant, msg: dict[str, Any]) -> dict[str, Any]:
+        alert = self._require_alert(hass, msg["alert_id"])
         config = _config_for(hass)
-        alert = next(
-            (item for item in config["alerts"] if item["id"] == alert_id),
-            None,
-        )
-        if alert is None:
-            raise ValueError(f"unknown alert_id: {alert_id}")
+        alerts = [item for item in config["alerts"] if item["id"] != alert["id"]]
+        return await self._save(hass, {**config, "alerts": alerts}, set(), {automation_id(alert)})
 
-        history = history_store(hass, entry)
-        entries = await history.async_entries(alert_id)
-        running = bool(_active_flow_ids(entries, alert_id))
-        document = await _automation_document(hass)
-        runtime_status = _automation_runtime_status(hass, document, alert)
-        if not running and runtime_status["current"] == 0:
-            return {"cancelled": False}
-
-        hass.bus.async_fire(
-            EVENT_COMMAND,
-            {"alert_id": alert_id, "command": COMMAND_CANCEL_RUN},
-        )
-        entity_id = _automation_entity_for(hass, alert)
-        await hass.services.async_call(
-            "automation",
-            "turn_off",
-            {"entity_id": entity_id, "stop_actions": True},
-            blocking=True,
-        )
-        if alert.get("enabled", True):
-            await hass.services.async_call(
-                "automation",
-                "turn_on",
-                {"entity_id": entity_id},
-                blocking=True,
-            )
-
-        entries = await history.async_entries(alert_id)
-        for flow_id in _active_flow_ids(entries, alert_id):
-            await history.async_record(
-                alert_id,
-                str(alert.get("name", alert_id)),
-                "cancelled",
-                "Automation run cancelled",
-                {"action": "automation_cancelled"},
-                flow_id=flow_id,
-            )
-        return {"cancelled": True}
-
-    async def save_config(
-        self, hass: HomeAssistant, msg: dict[str, Any]
+    async def _save(
+        self,
+        hass: HomeAssistant,
+        config: dict[str, Any],
+        upsert_ids: set[str] | None,
+        deleted_ids: AbstractSet[str] = frozenset(),
     ) -> dict[str, Any]:
+        """Persist config and return the automation API operations it requires."""
         from .. import async_save_config
 
         entry = self._require_entry(hass)
+        previous_ids = {item["id"] for item in _automation_document(hass)}
+        saved = await async_save_config(hass, entry, config)
+        document = _automation_document(hass)
+        current_ids = {item["id"] for item in document}
         return {
             "saved": True,
-            "config": await async_save_config(hass, entry, msg["config"]),
+            "config": saved,
+            "automation_changes": automation_changes(
+                document
+                if upsert_ids is None
+                else [item for item in document if item["id"] in upsert_ids],
+                sorted((previous_ids | deleted_ids) - current_ids),
+            ),
         }
-
-    async def delete(
-        self, hass: HomeAssistant, msg: dict[str, Any]
-    ) -> dict[str, Any]:
-        from .. import async_save_config
-
-        entry = self._require_entry(hass)
-        config = _config_for(hass)
-        alert_id = msg["alert_id"]
-        alerts = [alert for alert in config["alerts"] if alert["id"] != alert_id]
-        if len(alerts) == len(config["alerts"]):
-            raise ValueError(f"unknown alert_id: {alert_id}")
-        return await async_save_config(
-            hass, entry, {"version": config["version"], "alerts": alerts}
-        )
-
-    async def reload(
-        self, hass: HomeAssistant, _msg: dict[str, Any]
-    ) -> dict[str, Any]:
-        config = _config_for(hass)
-        await async_reconcile_automations(hass, config["alerts"])
-        return config
 
     @staticmethod
     def _require_entry(hass: HomeAssistant) -> Any:
@@ -348,55 +238,27 @@ class WebsocketDispatcher:
             raise ValueError("HA Notifications has no config entry")
         return entry
 
-
-def _automation_runtime_status(
-    hass: HomeAssistant,
-    document: list[dict[str, Any]],
-    alert: dict[str, Any],
-) -> dict[str, Any]:
-    """Combine ownership metadata with non-invasive HA runtime metadata."""
-    automation_entity = _automation_entity_for(hass, alert)
-    states = getattr(hass, "states", None)
-    state = states.get(automation_entity) if states is not None else None
-    generated = next(
-        (
-            item
-            for item in document
-            if item.get("id") == automation_id(alert)
-        ),
-        {},
-    )
-    current = state.attributes.get("current", 0) if state is not None else 0
-    status = automation_status(document, alert)
-    if status == "managed" and state is None:
-        status = "missing"
-    runtime_status = {
-        "status": status,
-        "enabled": state is not None and state.state == "on",
-        "mode": generated.get("mode", "single"),
-        "current": current if isinstance(current, int) else 0,
-    }
-    if generated:
-        runtime_status["automation_id"] = generated["id"]
-    return runtime_status
+    @staticmethod
+    def _require_alert(hass: HomeAssistant, alert_id: str) -> dict[str, Any]:
+        alert = find_alert(_config_for(hass), alert_id)
+        if alert is None:
+            raise ValueError(f"unknown alert_id: {alert_id}")
+        return alert
 
 
 def _handler(
     dispatcher: WebsocketDispatcher,
     handler: Callable[[HomeAssistant, dict[str, Any]], Awaitable[Any]],
     schema: dict[Any, Any],
-    *,
-    require_admin: bool = False,
 ) -> Any:
     """Build a Home Assistant websocket handler for a command."""
+
     @websocket_api.websocket_command(schema)
     @websocket_api.async_response
-    async def handle(
-        hass: HomeAssistant, connection: Any, msg: dict[str, Any]
-    ) -> None:
+    async def handle(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> None:
         await dispatcher.dispatch(hass, connection, msg, handler)
 
-    return websocket_api.require_admin(handle) if require_admin else handle
+    return websocket_api.require_admin(handle)
 
 
 def register(hass: HomeAssistant) -> None:
@@ -406,10 +268,13 @@ def register(hass: HomeAssistant) -> None:
 
     dispatcher = WebsocketDispatcher()
     commands = {
-        "get_config": (dispatcher.get_config, {
-            vol.Optional("new", default=False): bool,
-            vol.Optional("validate", default=True): bool,
-        }),
+        "get_config": (
+            dispatcher.get_config,
+            {
+                vol.Optional("new", default=False): bool,
+                vol.Optional("validate", default=True): bool,
+            },
+        ),
         "mobile_platforms": (
             dispatcher.mobile_platforms,
             {
@@ -423,21 +288,18 @@ def register(hass: HomeAssistant) -> None:
             },
         ),
         "automation_status": (dispatcher.automation_status, {}),
+        "get_automations": (dispatcher.get_automations, {}),
         "get_history": (dispatcher.get_history, {vol.Optional("alert_id"): str}),
         "cancel_run": (dispatcher.cancel_run, {vol.Required("alert_id"): str}),
         "test_alert": (dispatcher.test_alert, {vol.Required("alert_id"): str}),
-        "validate_config": (dispatcher.validate_config, {vol.Required("config"): dict}),
-        "save_config": (dispatcher.save_config, {vol.Required("config"): dict}),
+        "validate_config": (dispatcher.validate_config, _CONFIG_OR_ALERT),
+        "save_config": (dispatcher.save_config, _CONFIG_OR_ALERT),
         "delete": (dispatcher.delete, {vol.Required("alert_id"): str}),
-        "reload": (dispatcher.reload, {}),
     }
     for command, (handler, arguments) in commands.items():
         schema = {vol.Required("type"): f"{DOMAIN}/{command}", **arguments}
         websocket_api.async_register_command(
             hass,
-            _handler(
-                dispatcher, handler, schema,
-                require_admin=command in {"mobile_platforms", "test_alert"},
-            ),
+            _handler(dispatcher, handler, schema),
         )
     _WEBSOCKET_REGISTERED.add(id(hass))

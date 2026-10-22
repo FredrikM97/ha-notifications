@@ -27,9 +27,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
 
     brand_path = panel_path.parent.parent / "brand"
     if not (brand_path / "icon.png").is_file():
-        raise FileNotFoundError(
-            f"Packaged frontend icon is missing: {brand_path / 'icon.png'}"
-        )
+        raise FileNotFoundError(f"Packaged frontend icon is missing: {brand_path / 'icon.png'}")
 
     await hass.http.async_register_static_paths(
         [

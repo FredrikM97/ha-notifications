@@ -3,9 +3,12 @@
     "step": {
       "user": {
         "title": "HA Notifications",
-        "description": "HA Notifications manages condition-based notifications and actionable reminders.",
+        "description": "HA Notifications manages condition-based notifications and actionable reminders. Generated automations are stored with your Home Assistant automations.",
         "data": {
           "show_sidebar": "Show in sidebar"
+        },
+        "data_description": {
+          "show_sidebar": "Add HA Notifications to the Home Assistant sidebar. It remains available as a dashboard card either way."
         }
       },
       "reconfigure": {

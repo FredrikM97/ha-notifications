@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -51,7 +51,7 @@ class HistoryStore:
         """Record one successful delivery event."""
         await self.async_load()
         async with self._lock:
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
             event = {
                 "event_id": str(uuid4()),
                 "timestamp": timestamp,
@@ -61,10 +61,13 @@ class HistoryStore:
             }
             if flow_id:
                 event["flow_id"] = flow_id
-            self._entries.insert(0, {
-                "config": {"id": alert_id, "name": alert_name},
-                "event": event,
-            })
+            self._entries.insert(
+                0,
+                {
+                    "config": {"id": alert_id, "name": alert_name},
+                    "event": event,
+                },
+            )
             self._prune()
             self._schedule_save()
 
@@ -96,7 +99,7 @@ class HistoryStore:
             if previous_state == "inactive":
                 return False
             active_transition = previous_state in {"started", "notification_sent"}
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
             event = {
                 "event_id": str(uuid4()),
                 "timestamp": timestamp,
@@ -106,10 +109,13 @@ class HistoryStore:
             }
             if flow_id:
                 event["flow_id"] = flow_id
-            self._entries.insert(0, {
-                "config": {"id": alert_id, "name": alert_name},
-                "event": event,
-            })
+            self._entries.insert(
+                0,
+                {
+                    "config": {"id": alert_id, "name": alert_name},
+                    "event": event,
+                },
+            )
             self._prune()
             self._schedule_save()
             return active_transition
@@ -125,23 +131,22 @@ class HistoryStore:
             if alert_id is None:
                 return list(self._entries)
             return [
-                entry
-                for entry in self._entries
-                if entry.get("config", {}).get("id") == alert_id
+                entry for entry in self._entries if entry.get("config", {}).get("id") == alert_id
             ]
 
     def _prune(self) -> None:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=_RETENTION_DAYS)
+        cutoff = datetime.now(UTC) - timedelta(days=_RETENTION_DAYS)
         retained: list[dict[str, Any]] = []
         for entry in self._entries:
             timestamp = entry.get("event", {}).get("timestamp")
             try:
                 keep = datetime.fromisoformat(timestamp) >= cutoff
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 keep = False
             if keep:
                 retained.append(entry)
         self._entries = retained[:_MAX_ENTRIES]
+
 
 def history_store(hass: HomeAssistant, entry: Any = None) -> HistoryStore:
     """Return the entry-owned history store, creating it when missing."""

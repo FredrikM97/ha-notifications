@@ -13,21 +13,20 @@ from custom_components.ha_notifications.const import CONFIG_ENTRY_VERSION, DOMAI
 from tests.backend.conftest import MockConfigEntry
 
 
-@pytest.mark.asyncio
-async def test_migrate_entry_removes_retired_mode_from_data_and_options(
-    hass: HomeAssistant,
-) -> None:
-    legacy_alert = {
-        "id": "low_water",
+def _legacy_alert(alert_id: str) -> dict:
+    return {
+        "id": alert_id,
         "monitor": {
             "automation_mode": "parallel",
             "triggers": {
                 "enabled": True,
-                "items": [{
-                    "trigger": "state",
-                    "entity_id": "sensor.water",
-                    "to": "low",
-                }],
+                "items": [
+                    {
+                        "trigger": "state",
+                        "entity_id": "sensor.water",
+                        "to": "low",
+                    }
+                ],
             },
             "conditions": {"enabled": True, "items": []},
         },
@@ -37,32 +36,65 @@ async def test_migrate_entry_removes_retired_mode_from_data_and_options(
         },
         "confirmation": {"enabled": True},
     }
-    data = {"version": 1, "alerts": [legacy_alert]}
-    options = {"version": 1, "alerts": [{**legacy_alert, "id": "option_alert"}]}
-    original_data = deepcopy(data)
-    original_options = deepcopy(options)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("version", "data", "options", "expected_id"),
+    [
+        (
+            1,
+            {"version": 1, "alerts": [_legacy_alert("data_alert")]},
+            {"version": 1, "alerts": [_legacy_alert("option_alert")]},
+            "option_alert",
+        ),
+        (4, {"version": 1, "alerts": [_legacy_alert("never_saved")]}, {}, "never_saved"),
+    ],
+    ids=["saved-options-win", "unsaved-data-moves"],
+)
+async def test_migrate_entry_keeps_alerts_only_in_options(
+    hass: HomeAssistant,
+    version: int,
+    data: dict,
+    options: dict,
+    expected_id: str,
+) -> None:
+    originals = deepcopy((data, options))
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="HA Notifications",
         data=data,
         options=options,
+        version=version,
     )
     entry.add_to_hass(hass)
 
     assert await ha_notifications.async_migrate_entry(hass, entry)
 
     assert entry.version == CONFIG_ENTRY_VERSION
-    assert entry.data["version"] == 1
-    assert entry.options["version"] == 1
-    assert all("automation_mode" not in alert["monitor"] for alert in entry.data["alerts"])
-    assert all("automation_mode" not in alert["monitor"] for alert in entry.options["alerts"])
-    assert entry.data["alerts"][0]["monitor"]["triggers"] == original_data["alerts"][0]["monitor"]["triggers"]
-    assert entry.options["alerts"][0]["notification"] == original_options["alerts"][0]["notification"]
-    assert data == original_data
-    assert options == original_options
-    migrated_data = validate_config(dict(entry.data))
-    migrated_options = validate_config(dict(entry.options))
-    assert migrated_data["alerts"][0]["notification"]["target"] == {
-        "label_id": ["phone"],
-    }
-    assert migrated_options["alerts"][0]["monitor"]["triggers"] == original_options["alerts"][0]["monitor"]["triggers"]
+    assert entry.minor_version == 0
+    assert entry.data == {}
+    assert (data, options) == originals
+    migrated = validate_config(dict(entry.options))
+    assert [alert["id"] for alert in migrated["alerts"]] == [expected_id]
+    assert "automation_mode" not in entry.options["alerts"][0]["monitor"]
+    assert migrated["alerts"][0]["notification"]["target"] == {"label_id": ["phone"]}
+
+
+@pytest.mark.asyncio
+async def test_migrate_previous_entry_version(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        options={"version": 1, "alerts": []},
+        version=3,
+        minor_version=1,
+    )
+    entry.add_to_hass(hass)
+
+    assert await ha_notifications.async_migrate_entry(hass, entry)
+
+    assert entry.version == CONFIG_ENTRY_VERSION
+    assert entry.minor_version == 0

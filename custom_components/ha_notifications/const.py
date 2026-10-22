@@ -2,8 +2,8 @@
 
 DOMAIN = "ha_notifications"
 CONFIG_VERSION = 1
-CONFIG_ENTRY_VERSION = 2
-AUTOMATION_FILE = "ha_notifications_automations.yaml"
+CONFIG_ENTRY_VERSION = 5
+CONFIG_ENTRY_MINOR_VERSION = 0
 AUTOMATION_LABEL = "HA Notifications"
 AUTOMATION_CATEGORY = "HA Notifications"
 AUTOMATION_CATEGORY_SCOPE = "automation"

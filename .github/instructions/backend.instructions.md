@@ -5,8 +5,9 @@ applyTo: "custom_components/ha_notifications/**/*.py, tests/backend/**/*.py"
 
 `ConfigEntry.data`/`options` persist configuration; `ConfigEntry.runtime_data`
 (`RuntimeData` in `domain.py`) owns runtime state. Do not mix them.
-Nested Pydantic feature models in `configuration.py` own runtime defaults;
-frontend owns editor draft initialization. Do not add a backend defaults endpoint.
+Nested Pydantic feature models in `configuration.py` are the only source of
+defaults. `get_config` with `new: true` returns a validated starting alert and
+persists nothing; all writes go through `save_config`/`delete`.
 Preserve native HA trigger, condition, template, action, and extra fields
 through validation/rendering; generated automations derive from canonical alerts.
 Preserve disabled configured values in storage. Apply feature and notification

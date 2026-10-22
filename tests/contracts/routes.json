@@ -3,11 +3,11 @@
     "get_config",
     "mobile_platforms",
     "automation_status",
+    "get_automations",
     "get_history",
     "test_alert",
     "validate_config",
     "save_config",
-    "delete",
-    "reload"
+    "delete"
   ]
 }
