@@ -159,22 +159,6 @@ Removing the config entry does not remove its automations. Delete the alerts
 from the panel before uninstalling, or remove their generated automations from
 Home Assistant's automation UI afterward.
 
-### Upgrading from the dedicated automation file
-
-Releases that stored generated automations in `ha_notifications_automations.yaml`
-are cleaned up automatically by the config-entry migration (`migration.py`):
-
-1. The `automation ha_notifications: !include ha_notifications_automations.yaml`
-   line is removed from `configuration.yaml`; other lines are left unchanged.
-2. `ha_notifications_automations.yaml` is deleted.
-3. Its generated automations are added to the standard `automations.yaml` unless
-   an automation with the same ID is already there.
-4. Automations are reloaded once after Home Assistant has started.
-
-If the dedicated file cannot be read, nothing is changed and a warning is
-logged. Remove the include line and file manually, restart Home Assistant, then
-use **YAML > Reload** in the panel to write the saved alerts' automations.
-
 ### Standard automation store
 
 The API writes HA's standard `automations.yaml`, but HA must also load that file.
