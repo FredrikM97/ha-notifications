@@ -17,9 +17,7 @@ The panel is available to administrators only. Generated automations are saved
 through Home Assistant's admin automation API into its standard automation
 store, next to automations created in the UI. Home Assistant's default
 configuration needs no changes; see [setup details](docs/automation-flow.md#standard-automation-store).
-Upgrading from a release that used `ha_notifications_automations.yaml` moves
-its automations to the standard store and removes the old file and include
-automatically; see [upgrade details](docs/automation-flow.md#upgrading-from-the-dedicated-automation-file).
+
 
 ## Using the Panel
 
