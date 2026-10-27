@@ -18,12 +18,12 @@
     "package:hacs": "npm run build && sh scripts/package_hacs.sh"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.2",
+    "@biomejs/biome": "^2.6.3",
     "@mdi/js": "^7.4.47",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/user-event": "^14.6.8",
     "esbuild": "^0.28.2",
-    "happy-dom": "^21.0.3",
+    "happy-dom": "^21.0.4",
     "home-assistant-js-websocket": "^9.7.1",
     "lit": "^3.3.3",
     "typescript": "^7.0.2",
