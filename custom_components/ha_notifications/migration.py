@@ -32,6 +32,15 @@ def migrate_config(config: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def _has_legacy_automation_configuration(legacy_file: Path, configuration_file: Path) -> bool:
+    """Detect legacy automation files and includes without changing them."""
+    has_legacy_include = configuration_file.is_file() and any(
+        "!include" in line and _LEGACY_AUTOMATION_FILE in line
+        for line in configuration_file.read_text(encoding="utf-8").splitlines()
+    )
+    return legacy_file.exists() or has_legacy_include
+
+
 async def async_migrate_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -49,11 +58,9 @@ async def async_migrate_entry(
 
     legacy_file = Path(hass.config.path(_LEGACY_AUTOMATION_FILE))
     configuration_file = Path(hass.config.path("configuration.yaml"))
-    has_legacy_include = configuration_file.is_file() and any(
-        "!include" in line and _LEGACY_AUTOMATION_FILE in line
-        for line in configuration_file.read_text(encoding="utf-8").splitlines()
-    )
-    if legacy_file.exists() or has_legacy_include:
+    if await hass.async_add_executor_job(
+        _has_legacy_automation_configuration, legacy_file, configuration_file
+    ):
         _LOGGER.warning(
             "Legacy HA Notifications automation configuration detected. To finish "
             "upgrading, manually remove the `automation ha_notifications: !include "
