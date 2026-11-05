@@ -28,8 +28,10 @@ Consolidate overlapping tests at the strongest real boundary, preferring officia
 only after their distinct cases/invariants are covered by the retained test.
 Parameterize genuinely different behavior; do not multiply cases or add tests
 solely to repeat defaults, individual keys, or an already snapshotted contract.
-Do not reduce coverage just to reduce test counts. Normalize only unstable IDs or
-timestamps, preserving meaningful types, fields, ordering, and values. Review
+Do not reduce coverage just to reduce test counts. Normalize only unstable IDs,
+timestamps, or dependency-version metadata (such as the version segment in a
+Pydantic error documentation URL), preserving error details and meaningful types,
+fields, ordering, and values. Review
 snapshot changes against the intended behavior; never blindly accept updates.
 
 In backend integration tests, use the `automation_api` fixture: it serves

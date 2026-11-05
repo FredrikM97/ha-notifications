@@ -1,6 +1,7 @@
 """Tests for the Home Assistant websocket boundary."""
 
 import json
+import re
 from pathlib import Path
 from weakref import WeakSet
 
@@ -369,7 +370,16 @@ async def test_get_config_can_skip_validation_for_yaml_repair(
     raw = await client.receive_json()
     await client.send_json({"id": 2, "type": "ha_notifications/get_config"})
     response = await client.receive_json()
-    assert {"raw": raw, "validated": response} == snapshot
+    matcher = path_type(
+        {r"validated\.error\.message": (str,)},
+        regex=True,
+        replacer=lambda data, match: re.sub(
+            r"https://errors\.pydantic\.dev/\d+\.\d+/v/",
+            "https://errors.pydantic.dev/<version>/v/",
+            data,
+        ),
+    )
+    assert {"raw": raw, "validated": response} == snapshot(matcher=matcher)
     assert dict(entry.options) == persisted
 
 
