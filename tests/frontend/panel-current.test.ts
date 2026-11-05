@@ -479,9 +479,12 @@ describe("panel view", () => {
     const panel = mountPanel();
     await ready(panel);
 
-    expect(panel.shadowRoot.querySelector(".nc-alert-list")).not.toBeNull();
-    expect(panel.shadowRoot.querySelector(".nc-alert-name")?.textContent).toBe(alert.name);
-    expect(panel.shadowRoot.querySelector(".nc-alert-secondary")?.textContent).toContain("Idle");
+    expect([...panel.shadowRoot.querySelectorAll(".nc-alert")].map(row => ({
+      name: row.querySelector(".nc-alert-name")?.textContent,
+      status: row.querySelector(".nc-alert-secondary")?.textContent?.replace(/\s+/g, " ").trim(),
+      disabled: row.classList.contains("disabled"),
+      enabled: (row.querySelector("ha-switch") as HTMLElement & { checked: boolean }).checked,
+    }))).toMatchSnapshot();
   });
 
   it("filters the Active tab to alerts with running automation instances", async () => {
@@ -506,32 +509,41 @@ describe("panel view", () => {
 
     toggle.dispatchEvent(new Event("change", { bubbles: true }));
 
-    await vi.waitFor(() => expect(messages("save_config")).toEqual([{
-      type: "ha_notifications/save_config",
-      alert: { ...alert, enabled: false },
-    }]));
+    await vi.waitFor(() => expect(messages("save_config")).toHaveLength(1));
+    expect(messages("save_config")).toMatchSnapshot();
     await vi.waitFor(() => expect(
       panel.shadowRoot.querySelector(".nc-alert")?.classList.contains("disabled"),
     ).toBe(true));
   });
 
   it.each([false, true])("opens the local editor without loading users with create=%s", async create => {
-    const panel = mountPanel();
+    const panel = mountPanel({}, {
+      "config/auth/list": [
+        { id: "admin", name: "Admin" },
+        { id: "inactive", name: "Inactive", is_active: false },
+        { id: "system", name: "System", system_generated: true },
+        { id: "operator", name: "Operator", is_active: true },
+      ],
+    });
     await ready(panel);
 
     expect(messages("alert_defaults")).toHaveLength(0);
     client.callWS.mockClear();
+    const transport = client.callWS.getMockImplementation()!;
+    client.callWS.mockImplementation(async message => {
+      if (message.type === "config/auth/list") throw new Error("Unavailable");
+      return transport(message);
+    });
+    const notification = vi.fn();
+    panel.addEventListener("hass-notification", notification);
     const options = await openPanelEditor(panel, create);
 
     expect(messages("config/auth/list")).toHaveLength(0);
     expect(messages("alert_defaults")).toHaveLength(0);
     expect(messages("save_config")).toHaveLength(0);
-    expect(client.callWS.mock.calls.map(([message]) => message)).toEqual(create ? [
-      { type: "ha_notifications/get_config", new: true },
-      { type: "ha_notifications/mobile_platforms", target: {} },
-    ] : [
-      { type: "ha_notifications/mobile_platforms", target: alert.notification.target },
-    ]);
+    expect(client.callWS.mock.calls.map(([message]) => message)).toMatchSnapshot("opening requests");
+    expect(options).not.toHaveProperty("users");
+    expect(notification).not.toHaveBeenCalled();
     const openingOrder = editor.openEditor.mock.invocationCallOrder[0];
     if (create) expect(client.callWS.mock.invocationCallOrder[0]).toBeLessThan(openingOrder);
     else expect(client.callWS.mock.invocationCallOrder[0]).toBeGreaterThan(openingOrder);
@@ -547,31 +559,9 @@ describe("panel view", () => {
     } else {
       expect(host.alert.id).toBe(alert.id);
       expect(host.alert).toBe(options.alert);
-      expect(host.alert).toMatchObject(alert);
-      expect(host.alert.monitor.conditions.interval).toEqual(draftAlertFixture().monitor.conditions.interval);
     }
+    expect(host.alert).toMatchSnapshot("editor draft");
   });
-
-  it.each([false, true])(
-    "opens despite unavailable user-list permissions with create=%s",
-    async create => {
-      const panel = mountPanel();
-      await ready(panel);
-      const notification = vi.fn();
-      panel.addEventListener("hass-notification", notification);
-      const transport = client.callWS.getMockImplementation()!;
-      client.callWS.mockImplementation(async (message) => {
-        if (message.type === "config/auth/list") throw new Error("Unavailable");
-        return transport(message);
-      });
-      const options = await openPanelEditor(panel, create);
-      if (create) expect(options.alert).toEqual(draftAlertFixture({ id: options.alert.id }));
-      else expect(options.alert).toMatchObject(alert);
-      expect(messages("alert_defaults")).toHaveLength(0);
-      expect(messages("config/auth/list")).toHaveLength(0);
-      expect(notification).not.toHaveBeenCalled();
-    },
-  );
 
   it("uses a fresh backend draft id for every opening without loading users", async () => {
     const responses: Record<string, unknown> = {
@@ -634,8 +624,7 @@ describe("panel view", () => {
       getStubConfig(): { type: string };
     };
 
-    expect(card.getCardSize()).toBe(12);
-    expect(constructor.getStubConfig()).toEqual({ type: "custom:ha-notifications-card" });
+    expect({ size: card.getCardSize(), config: constructor.getStubConfig() }).toMatchSnapshot();
   });
 });
 
@@ -652,9 +641,7 @@ describe("panel configuration workflows", () => {
     });
     await expect(options.onSave(draft)).resolves.toEqual(draft);
 
-    expect(messages("save_config")).toEqual([{
-      type: "ha_notifications/save_config", alert: draft,
-    }]);
+    expect(messages("save_config")).toMatchSnapshot();
     expect(config.alerts).toEqual([alert, other]);
   });
 
@@ -678,9 +665,7 @@ describe("panel configuration workflows", () => {
     }
 
     const endpoint = operation === "save" ? "save_config" : "validate_config";
-    expect(messages(endpoint)).toEqual([
-      { type: `ha_notifications/${endpoint}`, alert: canonical },
-    ]);
+    expect(messages(endpoint)).toMatchSnapshot();
     expect(messages(operation === "save" ? "validate_config" : "save_config")).toHaveLength(0);
     expect(draft).toEqual(original);
     expect(messages(endpoint)[0].alert).not.toHaveProperty("runtime");
@@ -789,20 +774,4 @@ describe("panel configuration workflows", () => {
     });
   });
 
-  it("does not pass an unused user list to the editor", async () => {
-    const panel = mountPanel({}, {
-      "config/auth/list": [
-        { id: "admin", name: "Admin" },
-        { id: "inactive", name: "Inactive", is_active: false },
-        { id: "system", name: "System", system_generated: true },
-        { id: "operator", name: "Operator", is_active: true },
-      ],
-    });
-    await ready(panel);
-
-    const options = await openPanelEditor(panel);
-
-    expect(options).not.toHaveProperty("users");
-    expect(messages("config/auth/list")).toHaveLength(0);
-  });
 });

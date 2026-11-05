@@ -1,0 +1,59 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`YAML view > combines the title, help, icon actions and Save in one toolbar 1`] = `
+{
+  "actions": [
+    {
+      "label": "Validate",
+      "tooltip": "Check this YAML configuration without saving it",
+    },
+    {
+      "label": "Reload",
+      "tooltip": "Reload automations and restore the saved configuration",
+    },
+  ],
+  "count": 1,
+  "help": {
+    "describedBy": "yaml-help-tooltip",
+    "label": "About the YAML editor",
+  },
+  "primary": "Save YAML",
+  "title": "HA Notifications YAML",
+  "tooltip": {
+    "for": "yaml-help",
+    "text": "Advanced editor. Copy this YAML to another system or import a validated configuration into Home Assistant.",
+  },
+}
+`;
+
+exports[`YAML view > loads config into Home Assistant's YAML editor 1`] = `
+{
+  "ariaLabel": "HA Notifications YAML",
+  "copyClipboard": false,
+  "defaultValue": {
+    "alerts": [],
+    "version": 1,
+  },
+  "label": "",
+}
+`;
+
+exports[`YAML view > sends only one save request for repeated Save clicks in the same turn 1`] = `
+[
+  {
+    "endpoint": "get_config",
+    "payload": {
+      "validate": false,
+    },
+  },
+  {
+    "endpoint": "save_config",
+    "payload": {
+      "config": {
+        "alerts": [],
+        "version": 1,
+      },
+    },
+  },
+]
+`;

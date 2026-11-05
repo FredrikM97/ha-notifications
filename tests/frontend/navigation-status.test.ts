@@ -48,14 +48,12 @@ describe("section navigation status", () => {
   it.each([false, true])("renders both status icons in narrow=%s navigation", narrow => {
     const container = renderTemplate(navMenu(items, "basic", vi.fn(), narrow, "Sections"));
     const icons = [...container.querySelectorAll<HTMLElement & { path: string }>(".nc-dot")];
-    expect(icons).toHaveLength(2);
-    expect(icons[0].path).toBe(mdiCheckCircle);
-    expect(icons[0].classList.contains("on")).toBe(true);
-    expect(icons[0].getAttribute("aria-label")).toBe("Enabled");
-    expect(icons[1].path).toBe(mdiCloseCircle);
-    expect(icons[1].classList.contains("on")).toBe(false);
-    expect(icons[1].getAttribute("aria-label")).toBe("Disabled");
-    if (narrow) expect(icons.every(icon => icon.slot === "icon")).toBe(true);
+    expect(icons.map(icon => ({
+      path: icon.path,
+      enabled: icon.classList.contains("on"),
+      label: icon.getAttribute("aria-label"),
+      slot: icon.slot,
+    }))).toMatchSnapshot();
   });
 
   it("updates the selected dropdown icon and supports localized status labels", () => {

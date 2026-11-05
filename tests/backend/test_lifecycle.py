@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.components import automation as ha_automation
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import category_registry as cr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 from homeassistant.setup import async_setup_component
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications import RuntimeData
@@ -22,17 +24,109 @@ from custom_components.ha_notifications.automation import (
 )
 from custom_components.ha_notifications.bridge.websocket import WebsocketDispatcher
 from custom_components.ha_notifications.const import (
-    AUTOMATION_CATEGORY,
     AUTOMATION_CATEGORY_SCOPE,
     AUTOMATION_LABEL,
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
     DOMAIN,
 )
-from tests.backend.conftest import MockConfigEntry
+
+
+@pytest.fixture
+def mock_register_panel(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
+
+
+@pytest.mark.parametrize("version", [3, CONFIG_ENTRY_VERSION], ids=["migrated", "current"])
+async def test_config_entry_manager_setup_reload_and_unload(
+    hass: HomeAssistant,
+    alert_factory,
+    mock_notification_dependencies,
+    hass_storage,
+    version: int,
+) -> None:
+    alert = alert_factory("base")
+    config = {"version": 1, "alerts": [alert]}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=version,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        data=config if version == 3 else {},
+        options={} if version == 3 else config,
+    )
+    entry.add_to_hass(hass)
+    history_entry = {
+        "config": {"id": alert["id"], "name": alert["name"]},
+        "event": {
+            "event_id": "persisted-event",
+            "type": "notification_sent",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "message": "Sent",
+            "details": {},
+        },
+    }
+    hass_storage["ha_notifications.history"] = {
+        "version": 1,
+        "data": {"entries": [history_entry]},
+    }
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.version == CONFIG_ENTRY_VERSION
+    assert entry.data == {}
+    assert isinstance(entry.runtime_data, RuntimeData)
+    first_runtime = entry.runtime_data
+    assert first_runtime.automations
+    assert await first_runtime.history.async_entries() == [history_entry]
+    for service in ("send", "clear", "report", "command"):
+        assert hass.services.has_service(DOMAIN, service)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data is not first_runtime
+    assert entry.runtime_data.config == first_runtime.config
+    assert await entry.runtime_data.history.async_entries() == [history_entry]
+
+    last_runtime = entry.runtime_data
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.NOT_LOADED
+    assert not hasattr(entry, "runtime_data")
+    for service in ("send", "clear", "report", "command"):
+        assert not hass.services.has_service(DOMAIN, service)
+    hass.config_entries.async_update_entry(entry, options={"version": 1, "alerts": []})
+    await hass.async_block_till_done()
+    assert last_runtime.config == first_runtime.config
+
+
+async def test_config_entry_manager_keeps_invalid_config_available_for_repair(
+    hass: HomeAssistant, mock_notification_dependencies
+) -> None:
+    invalid = {"version": 1, "alerts": [{"id": "broken", "triggers": []}]}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options=invalid,
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert dict(entry.options) == invalid
+    assert entry.runtime_data.config == {"version": 1, "alerts": []}
+    assert entry.runtime_data.automations == []
+    assert entry.runtime_data.remove_update_listener is not None
 
 
 async def test_native_automation_api_loads_by_id_and_recovers_unloaded_record(
     hass,
     automation_api,
+    snapshot,
 ) -> None:
     """Exercise HA's real config API persistence and targeted reload hook."""
     unrelated = {
@@ -69,7 +163,7 @@ async def test_native_automation_api_loads_by_id_and_recovers_unloaded_record(
     entity_id = "automation.api_test"
     assert hass.states.get(entity_id).state == "off"
     assert component.get_entity(entity_id).raw_config == document
-    assert reloads == [{"id": document["id"]}]
+    assert len(reloads) == 1
     stored = automation_api.stored()
     assert document in stored
 
@@ -88,7 +182,7 @@ async def test_native_automation_api_loads_by_id_and_recovers_unloaded_record(
     assert hass.states.get(entity_id).state == "off"
     assert component.get_entity("automation.unrelated") is original_entity
     assert automation_api.stored() == stored
-    assert reloads == [{"id": document["id"]}, {"id": document["id"]}]
+    assert {"stored": stored, "reloads": reloads} == snapshot
 
 
 def _monitor(
@@ -131,76 +225,12 @@ async def _wait_for_history_events(
             await asyncio.sleep(0)
 
 
-async def test_invalid_config_entry_still_loads_panel(
-    hass: HomeAssistant,
-    monkeypatch,
-    enable_custom_integrations,
-) -> None:
-    """Keep the recovery editor available when persisted config is invalid."""
-
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={
-            "version": 1,
-            "alerts": [
-                {
-                    "id": "door",
-                    "triggers": [],
-                }
-            ],
-        },
-    )
-
-    assert await ha_notifications.async_setup_entry(hass, entry)
-    assert entry.runtime_data.config == {"version": 1, "alerts": []}
-    assert entry.runtime_data.automations == []
-    assert entry.runtime_data.remove_update_listener is not None
-
-
-async def test_setup_does_not_read_or_write_automation_files(
-    hass: HomeAssistant,
-    alert_factory,
-    monkeypatch,
-    enable_custom_integrations,
-) -> None:
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
-    configuration_path = Path(hass.config.path("configuration.yaml"))
-    automations_path = Path(hass.config.path("automations.yaml"))
-    configuration_path.write_text("automation: !include automations.yaml\n")
-    automations_path.write_text("- id: user_automation\n  alias: User\n")
-    originals = (configuration_path.read_bytes(), automations_path.read_bytes())
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        options={"version": 1, "alerts": [alert_factory("base")]},
-    )
-    entry.add_to_hass(hass)
-
-    assert await ha_notifications.async_setup_entry(hass, entry)
-
-    assert (configuration_path.read_bytes(), automations_path.read_bytes()) == originals
-    assert entry.runtime_data.automations
-
-
 async def test_config_entry_updates_prepare_automations_without_api_or_file_io(
     hass: HomeAssistant,
-    monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
 ) -> None:
     """Prepare documents for the frontend API without backend file access."""
-
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
 
     reload_calls: list[object] = []
     hass.services.async_register(
@@ -210,18 +240,24 @@ async def test_config_entry_updates_prepare_automations_without_api_or_file_io(
     )
     alert = alert_factory("base")
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
     )
     entry.add_to_hass(hass)
     automations_path = Path(hass.config.path("automations.yaml"))
-    original_automations = automations_path.read_bytes() if automations_path.exists() else None
+    configuration_path = Path(hass.config.path("configuration.yaml"))
+    configuration_path.write_text("automation: !include automations.yaml\n")
+    automations_path.write_text("- id: user_automation\n  alias: User\n")
+    originals = (configuration_path.read_bytes(), automations_path.read_bytes())
 
     assert await ha_notifications.async_setup_entry(hass, entry)
     await hass.async_block_till_done()
     generated_id = automation_id(alert)
     assert reload_calls == []
+    assert (configuration_path.read_bytes(), automations_path.read_bytes()) == originals
     assert entry.runtime_data.automations[0]["id"] == generated_id
     assert hass.services.has_service(DOMAIN, "send")
     assert hass.services.has_service(DOMAIN, "clear")
@@ -239,9 +275,7 @@ async def test_config_entry_updates_prepare_automations_without_api_or_file_io(
     assert await ha_notifications.async_unload_entry(hass, entry)
     await hass.async_block_till_done()
     assert reload_calls == []
-    assert (
-        automations_path.read_bytes() if automations_path.exists() else None
-    ) == original_automations
+    assert (configuration_path.read_bytes(), automations_path.read_bytes()) == originals
     assert not hass.services.has_service(DOMAIN, "send")
     assert not hass.services.has_service(DOMAIN, "clear")
     assert await ha_notifications.async_unload_entry(hass, entry)
@@ -255,15 +289,11 @@ async def test_config_entry_updates_prepare_automations_without_api_or_file_io(
 async def test_config_entry_update_targets_changed_and_deleted_alerts(
     hass: HomeAssistant,
     monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
 ) -> None:
     """Prepare complete generated documents when persisted alerts change."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     prepared: list[list[dict[str, object]]] = []
 
     async def prepare(_hass, alerts):
@@ -272,6 +302,8 @@ async def test_config_entry_update_targets_changed_and_deleted_alerts(
 
     monkeypatch.setattr(ha_notifications, "async_validate_alerts", prepare)
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={
@@ -295,20 +327,27 @@ async def test_config_entry_update_targets_changed_and_deleted_alerts(
     assert prepared == [entry.runtime_data.config["alerts"]]
 
 
+@pytest.mark.parametrize(
+    "failure_phase,error",
+    [
+        ("validation", "automation validation failed"),
+        ("entry_update", "Entry update failed"),
+    ],
+)
 async def test_async_save_config_rolls_back_entry_and_runtime_on_failure(
     hass: HomeAssistant,
     monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
+    failure_phase,
+    error,
 ) -> None:
     """Keep persisted configuration unchanged when automation validation fails."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     alert = alert_factory("base")
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -316,17 +355,23 @@ async def test_async_save_config_rolls_back_entry_and_runtime_on_failure(
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
     previous = entry.runtime_data.config
+    previous_automations = entry.runtime_data.automations
     previous_options = dict(entry.options)
-    entry.runtime_data.remove_update_listener()
+    if failure_phase == "validation":
+        entry.runtime_data.remove_update_listener()
+        monkeypatch.setattr(
+            ha_notifications, "async_validate_alerts", AsyncMock(side_effect=RuntimeError(error))
+        )
+    else:
 
-    async def fail_prepare(*_args, **_kwargs) -> None:
-        raise RuntimeError("automation validation failed")
+        def fail_update(*_args, **_kwargs):
+            raise RuntimeError(error)
 
-    monkeypatch.setattr(ha_notifications, "async_validate_alerts", fail_prepare)
+        monkeypatch.setattr(hass.config_entries, "async_update_entry", fail_update)
     updated = alert_factory("base")
     updated["name"] = "Updated alert"
 
-    with pytest.raises(RuntimeError, match="automation validation failed"):
+    with pytest.raises(RuntimeError, match=error):
         await ha_notifications.async_save_config(
             hass,
             entry,
@@ -335,17 +380,19 @@ async def test_async_save_config_rolls_back_entry_and_runtime_on_failure(
 
     assert dict(entry.options) == previous_options
     assert isinstance(entry.runtime_data, RuntimeData)
-    assert entry.runtime_data.config == previous
+    assert entry.runtime_data.config is previous
+    assert entry.runtime_data.automations is previous_automations
 
 
 async def test_save_response_and_update_listener_reuse_validated_automations(
     hass: HomeAssistant,
     monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
 ) -> None:
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         options={"version": 1, "alerts": [alert_factory("base")]},
     )
@@ -372,16 +419,21 @@ async def test_save_response_and_update_listener_reuse_validated_automations(
 async def test_mutations_return_only_explicit_automation_operations(
     hass: HomeAssistant,
     monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
     operation,
+    snapshot,
 ) -> None:
     from custom_components.ha_notifications.bridge import websocket
 
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     first = alert_factory("base")
     other = alert_factory("persisted")
-    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [first, other]})
+    entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        domain=DOMAIN,
+        options={"version": 1, "alerts": [first, other]},
+    )
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
     original_other = entry.runtime_data.automations[1]
@@ -393,13 +445,6 @@ async def test_mutations_return_only_explicit_automation_operations(
     dispatcher = WebsocketDispatcher()
     if operation == "save_alert":
         result = await dispatcher.save_config(hass, {"alert": {**first, "enabled": False}})
-        assert [item["id"] for item in result["automation_changes"]["upsert"]] == [
-            automation_id(first)
-        ]
-        assert result["automation_changes"]["upsert"][0]["initial_state"] is False
-        assert result["automation_changes"]["delete"] == []
-        assert result["config"]["alerts"][0]["enabled"] is False
-        assert result["config"]["alerts"][1]["id"] == other["id"]
         assert entry.runtime_data.automations[1] == original_other
     else:
         result = await (
@@ -407,24 +452,26 @@ async def test_mutations_return_only_explicit_automation_operations(
             if operation == "delete"
             else dispatcher.save_config(hass, {"config": {"version": 1, "alerts": [other]}})
         )
-        assert result["automation_changes"]["delete"] == [automation_id(first)]
-        assert [item["id"] for item in result["automation_changes"]["upsert"]] == (
-            [] if operation == "delete" else [automation_id(other)]
-        )
-        assert [item["id"] for item in result["config"]["alerts"]] == [other["id"]]
     await hass.async_block_till_done()
+    assert result == snapshot
+    assert dict(entry.options) == result["config"]
+    assert entry.runtime_data.config == result["config"]
 
 
 async def test_validate_config_checks_draft_alert_with_saved_alerts_without_persisting(
     hass: HomeAssistant,
-    monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
+    snapshot,
 ) -> None:
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     first = alert_factory("base")
     other = alert_factory("persisted")
-    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [first, other]})
+    entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        domain=DOMAIN,
+        options={"version": 1, "alerts": [first, other]},
+    )
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
     stored = dict(entry.options)
@@ -433,8 +480,7 @@ async def test_validate_config_checks_draft_alert_with_saved_alerts_without_pers
     validated = await dispatcher.validate_config(hass, {"alert": {**first, "name": "Draft"}})
     added = await dispatcher.validate_config(hass, {"alert": {**first, "id": "new_alert"}})
 
-    assert [alert["name"] for alert in validated["alerts"]] == ["Draft", other["name"]]
-    assert [alert["id"] for alert in added["alerts"]] == [first["id"], other["id"], "new_alert"]
+    assert {"updated": validated, "added": added} == snapshot
     assert dict(entry.options) == stored
     with pytest.raises(ValueError):
         await dispatcher.validate_config(hass, {"alert": {**first, "id": "Bad ID"}})
@@ -446,13 +492,17 @@ async def test_validate_config_checks_draft_alert_with_saved_alerts_without_pers
 
 async def test_explicit_reload_recovers_stale_ids_after_a_failed_deletion(
     hass: HomeAssistant,
-    monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
+    snapshot,
 ) -> None:
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     alert = alert_factory("base")
-    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [alert]})
+    entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        domain=DOMAIN,
+        options={"version": 1, "alerts": [alert]},
+    )
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
     registry = er.async_get(hass)
@@ -463,22 +513,25 @@ async def test_explicit_reload_recovers_stale_ids_after_a_failed_deletion(
 
     result = await dispatcher.get_automations(hass, {})
 
-    assert result["upsert"] == []
-    assert result["delete"] == [automation_id(alert)]
+    assert result == snapshot
     await hass.async_block_till_done()
 
 
 @pytest.mark.parametrize("registered_before_setup", [False, True])
 async def test_backend_tags_actual_entities_without_frontend_polling(
     hass: HomeAssistant,
-    monkeypatch,
+    mock_register_panel,
     alert_factory,
-    enable_custom_integrations,
     registered_before_setup,
+    snapshot,
 ) -> None:
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     alert = alert_factory("base")
-    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [alert]})
+    entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        domain=DOMAIN,
+        options={"version": 1, "alerts": [alert]},
+    )
     entry.add_to_hass(hass)
     registry = er.async_get(hass)
     personal = lr.async_get(hass).async_create(name="Personal")
@@ -508,48 +561,19 @@ async def test_backend_tags_actual_entities_without_frontend_polling(
     await hass.async_block_till_done()
     entity = registry.async_get(entity_id)
     managed_label = lr.async_get(hass).async_get_label_by_name(AUTOMATION_LABEL)
-    assert entity.labels == {personal.label_id, managed_label.label_id}
-    assert entity.categories["custom"] == "retained"
+    assert {
+        "labels": entity.labels,
+        "managed_label": managed_label.label_id,
+        "personal_label": personal.label_id,
+        "custom_category": entity.categories["custom"],
+        "hidden_by": entity.hidden_by,
+        "unrelated_labels": registry.async_get(user_entity.entity_id).labels,
+    } == snapshot
     assert AUTOMATION_CATEGORY_SCOPE in entity.categories
-    assert entity.hidden_by is None
-    assert registry.async_get(user_entity.entity_id).labels == set()
 
     listeners = hass.bus.async_listeners()[er.EVENT_ENTITY_REGISTRY_UPDATED]
     assert await ha_notifications.async_unload_entry(hass, entry)
     assert hass.bus.async_listeners().get(er.EVENT_ENTITY_REGISTRY_UPDATED, 0) == listeners - 1
-
-
-async def test_failed_entry_update_restores_runtime_configuration(
-    hass: HomeAssistant,
-    monkeypatch,
-    alert_factory,
-    enable_custom_integrations,
-) -> None:
-    monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        options={"version": 1, "alerts": [alert_factory("base")]},
-    )
-    entry.add_to_hass(hass)
-    assert await ha_notifications.async_setup_entry(hass, entry)
-    previous_options = dict(entry.options)
-    previous_config = entry.runtime_data.config
-    previous_automations = entry.runtime_data.automations
-
-    def fail_update(*_args, **_kwargs):
-        raise RuntimeError("Entry update failed")
-
-    monkeypatch.setattr(hass.config_entries, "async_update_entry", fail_update)
-    with pytest.raises(RuntimeError, match="Entry update failed"):
-        await ha_notifications.async_save_config(
-            hass,
-            entry,
-            {"version": 1, "alerts": [{**alert_factory("base"), "name": "Updated"}]},
-        )
-
-    assert entry.options == previous_options
-    assert entry.runtime_data.config is previous_config
-    assert entry.runtime_data.automations is previous_automations
 
 
 @pytest.mark.parametrize(
@@ -560,18 +584,14 @@ async def test_generated_automation_executes_lifecycle_delivery(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
     condition_state: str,
     skip_condition: bool,
     should_deliver: bool,
+    snapshot,
 ) -> None:
     """Respect conditions unless an explicit manual trigger bypasses them."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -595,6 +615,8 @@ async def test_generated_automation_executes_lifecycle_delivery(
         ),
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -605,21 +627,6 @@ async def test_generated_automation_executes_lifecycle_delivery(
     await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
     assert hass.states.get("automation.ha_notifications_test_alert") is not None
-    automation_registry = er.async_get(hass)
-    generated_entity = automation_registry.async_get("automation.ha_notifications_test_alert")
-    category = next(
-        item
-        for item in cr.async_get(hass).async_list_categories(
-            scope=AUTOMATION_CATEGORY_SCOPE,
-        )
-        if item.name == AUTOMATION_CATEGORY
-    )
-    assert generated_entity is not None
-    assert generated_entity.hidden_by is None
-    assert generated_entity.categories[AUTOMATION_CATEGORY_SCOPE] == category.category_id
-    label = lr.async_get(hass).async_get_label_by_name(AUTOMATION_LABEL)
-    assert label is not None and label.label_id in generated_entity.labels
-
     await hass.services.async_call(
         "automation",
         "trigger",
@@ -631,23 +638,19 @@ async def test_generated_automation_executes_lifecycle_delivery(
     )
     await hass.async_block_till_done()
 
-    expected = [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
-    assert delivered == (expected if should_deliver else [])
+    assert bool(delivered) is should_deliver
+    assert delivered == snapshot
 
 
 async def test_generated_automation_reports_inactive_without_clearing(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Execute an inactive detector without clearing prior notifications."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -693,6 +696,8 @@ async def test_generated_automation_reports_inactive_without_clearing(
         "clear_notification": False,
     }
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -713,29 +718,22 @@ async def test_generated_automation_reports_inactive_without_clearing(
     hass.states.async_set("binary_sensor.door", "off")
     await hass.async_block_till_done()
 
-    assert delivered == [{"title": "", "message": "Door open", "data": {"tag": "base_alert"}}]
     history = await entry.runtime_data.history.async_entries("base_alert")
-    assert [item["event"]["type"] for item in history] == [
-        "inactive",
-        "completed",
-        "notification_sent",
-        "started",
-    ]
+    assert {
+        "notifications": delivered,
+        "history_events": [item["event"]["type"] for item in history],
+    } == snapshot
 
 
 async def test_generated_automation_executes_startup_trigger(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Execute a generated automation from the Home Assistant start event."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -749,6 +747,8 @@ async def test_generated_automation_executes_startup_trigger(
         monitor=_monitor(startup=True),
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -761,22 +761,21 @@ async def test_generated_automation_executes_startup_trigger(
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await hass.async_block_till_done()
 
-    assert delivered == [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
+    assert delivered == snapshot
 
 
 async def test_generated_automation_executes_interval_trigger(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    freezer,
+    snapshot,
 ) -> None:
     """Execute a generated automation from a time-pattern trigger."""
+    start = (datetime.now(UTC) + timedelta(minutes=1)).replace(second=1, microsecond=0)
+    freezer.move_to(start)
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -787,9 +786,11 @@ async def test_generated_automation_executes_interval_trigger(
     assert await async_setup_component(hass, "automation", {})
     alert = alert_factory(
         "base",
-        monitor=_monitor(interval_enabled=True, interval=1),
+        monitor=_monitor(interval_enabled=True, interval=10),
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -800,30 +801,27 @@ async def test_generated_automation_executes_interval_trigger(
     await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
     delivered.clear()
-    # The real time_pattern trigger fires on the next whole second.
-    async with asyncio.timeout(5):
-        while not delivered:
-            await asyncio.sleep(0.05)
+    async_fire_time_changed(hass, start + timedelta(seconds=8))
+    await hass.async_block_till_done()
+    assert delivered == []
+    async_fire_time_changed(hass, start + timedelta(seconds=9))
+    freezer.move_to(start + timedelta(seconds=9))
     await hass.async_block_till_done()
     await ha_notifications.async_unload_entry(hass, entry)
     await hass.async_block_till_done()
 
-    assert delivered == [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
+    assert delivered == snapshot
 
 
 async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Use native HA timing across an automation reload."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -854,6 +852,8 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -867,22 +867,27 @@ async def test_generated_native_for_trigger_uses_ha_clock_across_reload(
     await hass.services.async_call("automation", "reload", blocking=True)
     hass.states.async_set("sensor.temperature", "31")
     await hass.async_block_till_done()
-    assert delivered == [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
+    assert delivered == snapshot
 
 
-async def test_configured_triggers_run_with_multiple_condition_entities(
+@pytest.mark.parametrize(
+    "entity_ids",
+    [
+        ["sensor.first_dependency", "sensor.second_dependency"],
+        ["sensor.repeated_dependency", "sensor.repeated_dependency"],
+    ],
+    ids=["distinct-entities", "repeated-state"],
+)
+async def test_configured_triggers_deliver_once_per_changed_entity(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    entity_ids,
+    snapshot,
 ) -> None:
-    """Configured triggers evaluate the native multi-entity condition."""
+    """Distinct entities trigger independently; repeating an unchanged state does not."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -891,35 +896,29 @@ async def test_configured_triggers_run_with_multiple_condition_entities(
     hass.services.async_register("notify", "mobile_app_phone", handle_notification)
     automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
-    hass.states.async_set("sensor.first_dependency", "off")
-    hass.states.async_set("sensor.second_dependency", "off")
+    for entity_id in set(entity_ids):
+        hass.states.async_set(entity_id, "off")
     alert = alert_factory(
         "base",
         monitor=_monitor(
             triggers=[
-                {"trigger": "state", "entity_id": "sensor.first_dependency"},
-                {"trigger": "state", "entity_id": "sensor.second_dependency"},
+                {"trigger": "state", "entity_id": entity_id}
+                for entity_id in dict.fromkeys(entity_ids)
             ],
             conditions=[
                 {
                     "condition": "or",
                     "conditions": [
-                        {
-                            "condition": "state",
-                            "entity_id": "sensor.first_dependency",
-                            "state": "on",
-                        },
-                        {
-                            "condition": "state",
-                            "entity_id": "sensor.second_dependency",
-                            "state": "on",
-                        },
+                        {"condition": "state", "entity_id": entity_id, "state": "on"}
+                        for entity_id in dict.fromkeys(entity_ids)
                     ],
                 }
             ],
         ),
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -929,71 +928,12 @@ async def test_configured_triggers_run_with_multiple_condition_entities(
     assert await ha_notifications.async_setup_entry(hass, entry)
     await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
-    hass.states.async_set("sensor.first_dependency", "on")
-    hass.states.async_set("sensor.second_dependency", "on")
+    for entity_id in entity_ids:
+        hass.states.async_set(entity_id, "on")
     await hass.async_block_till_done()
 
-    assert delivered == [
-        {"title": "", "message": "Message", "data": {"tag": "base_alert"}},
-        {"title": "", "message": "Message", "data": {"tag": "base_alert"}},
-    ]
-
-
-async def test_generated_automation_deduplicates_repeated_condition_entities(
-    hass: HomeAssistant,
-    alert_factory,
-    automation_api,
-    enable_custom_integrations,
-    monkeypatch,
-) -> None:
-    """Do not deliver twice for duplicate condition entities or same state."""
-
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
-    delivered: list[dict[str, object]] = []
-
-    async def handle_notification(call) -> None:
-        delivered.append(dict(call.data))
-
-    hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    automation_api.prepare()
-    assert await async_setup_component(hass, "automation", {})
-    hass.states.async_set("sensor.repeated_dependency", "off")
-    alert = alert_factory(
-        "base",
-        monitor=_monitor(
-            triggers=[
-                {
-                    "trigger": "state",
-                    "entity_id": "sensor.repeated_dependency",
-                }
-            ],
-            conditions=[
-                {
-                    "condition": "state",
-                    "entity_id": "sensor.repeated_dependency",
-                    "state": "on",
-                }
-            ],
-        ),
-    )
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={"version": 1, "alerts": [alert]},
-    )
-    entry.add_to_hass(hass)
-
-    assert await ha_notifications.async_setup_entry(hass, entry)
-    await automation_api.sync_entry(entry)
-    await hass.async_block_till_done()
-    hass.states.async_set("sensor.repeated_dependency", "on")
-    hass.states.async_set("sensor.repeated_dependency", "on")
-    await hass.async_block_till_done()
-
-    assert delivered == [{"title": "", "message": "Message", "data": {"tag": "base_alert"}}]
+    assert len(delivered) == len(set(entity_ids))
+    assert delivered == snapshot
 
 
 @pytest.mark.parametrize("enabled", [True, False])
@@ -1001,16 +941,12 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
     hass: HomeAssistant,
     full_feature_alert,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
     enabled: bool,
+    snapshot,
 ) -> None:
     """Return before confirmation while preserving saved and runtime enablement."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     full_feature_alert["enabled"] = enabled
     full_feature_alert["monitor"] = _monitor(
         triggers=[{"trigger": "state", "entity_id": "binary_sensor.door"}],
@@ -1043,6 +979,8 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
     automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [full_feature_alert]},
@@ -1074,27 +1012,12 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
             hass,
             {"alert_id": full_feature_alert["id"]},
         )
-    assert result == {"started": True}
     await _wait_for_history_events(
         entry.runtime_data,
         full_feature_alert["id"],
         "waiting",
     )
-    assert delivered == [
-        {
-            "title": "",
-            "message": "Door open",
-            "data": {
-                "tag": "full_feature",
-                "actions": [
-                    {
-                        "action": "ha_notifications_full_feature_confirmation_confirm",
-                        "title": "Confirm",
-                    }
-                ],
-            },
-        }
-    ]
+    assert len(delivered) == 1
     assert post_send_calls == []
     assert confirmation_calls == []
     assert hass.states.get(main.entity_id).attributes["current"] == 1
@@ -1105,13 +1028,12 @@ async def test_dispatcher_test_alert_runs_saved_actions_without_conditions(
         {"action": delivered[0]["data"]["actions"][0]["action"]},
     )
     await hass.async_block_till_done()
-    assert delivered[-1] == {
-        "title": "",
-        "message": "Confirmed by Unknown device",
-        "data": {"tag": "full_feature"},
-    }
     assert len(delivered) == 2
-    assert confirmation_calls == [{"entity_id": ["light.hall"]}]
+    assert {
+        "response": result,
+        "notifications": delivered,
+        "confirmation_actions": confirmation_calls,
+    } == snapshot
     assert hass.states.get(main.entity_id).attributes["current"] == 0
     assert hass.states.get(main.entity_id).state == expected_state
     assert entry.options == saved_config
@@ -1124,16 +1046,12 @@ async def test_full_flow_uses_native_automation(
     hass: HomeAssistant,
     full_feature_alert,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Exercise validation, persistence, native execution, and reconciliation."""
     full_feature_alert["confirmation"]["notification"]["message"] = "Confirmed by {{confirmed_by}}"
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     post_send_calls: list[dict[str, object]] = []
     confirmation_calls: list[dict[str, object]] = []
@@ -1160,6 +1078,8 @@ async def test_full_flow_uses_native_automation(
     assert await async_setup_component(hass, "automation", {})
 
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": []},
@@ -1191,21 +1111,7 @@ async def test_full_flow_uses_native_automation(
 
     hass.states.async_set("binary_sensor.window", "on")
     await asyncio.sleep(0)
-    assert delivered == [
-        {
-            "title": "",
-            "message": "Door open",
-            "data": {
-                "tag": "full_feature",
-                "actions": [
-                    {
-                        "action": "ha_notifications_full_feature_confirmation_confirm",
-                        "title": "Confirm",
-                    }
-                ],
-            },
-        }
-    ]
+    assert len(delivered) == 1
 
     confirmation_execution_order.clear()
     hass.bus.async_fire(
@@ -1214,13 +1120,11 @@ async def test_full_flow_uses_native_automation(
     )
     await hass.async_block_till_done()
     assert confirmation_execution_order == ["notification", "action"]
-    assert delivered[-1] == {
-        "title": "",
-        "message": "Confirmed by Unknown device",
-        "data": {"tag": "full_feature"},
-    }
     assert post_send_calls == []
-    assert confirmation_calls == [{"entity_id": ["light.hall"]}]
+    assert {
+        "notifications": delivered,
+        "confirmation_actions": confirmation_calls,
+    } == snapshot
     history_entries = await entry.runtime_data.history.async_entries("full_feature")
     assert any(
         entry.get("event", {}).get("type") == "confirmation_completed" for entry in history_entries
@@ -1291,89 +1195,15 @@ async def test_full_flow_uses_native_automation(
     assert document == []
 
 
-async def test_confirmation_response_completes_without_follow_ups(
-    hass: HomeAssistant,
-    alert_factory,
-    automation_api,
-    enable_custom_integrations,
-    monkeypatch,
-) -> None:
-    """A matching mobile action is the sole terminal confirmation outcome."""
-
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
-    delivered: list[dict[str, object]] = []
-
-    async def handle_notification(call) -> None:
-        delivered.append(dict(call.data))
-
-    hass.services.async_register("notify", "mobile_app_phone", handle_notification)
-    automation_api.prepare()
-    assert await async_setup_component(hass, "automation", {})
-
-    hass.states.async_set("binary_sensor.confirmation", "off")
-    alert = alert_factory(
-        "base",
-        monitor=_monitor(
-            triggers=[{"trigger": "state", "entity_id": "binary_sensor.confirmation"}],
-            conditions=[
-                {
-                    "condition": "state",
-                    "entity_id": "binary_sensor.confirmation",
-                    "state": "on",
-                }
-            ],
-        ),
-        confirmation={
-            "enabled": True,
-            "buttons": [{"id": "confirm", "label": "Confirm"}],
-            "notification": {"enabled": False},
-            "reminders": {"enabled": False, "interval": 60},
-        },
-    )
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={"version": 1, "alerts": [alert]},
-    )
-    entry.add_to_hass(hass)
-
-    assert await ha_notifications.async_setup_entry(hass, entry)
-    await automation_api.sync_entry(entry)
-    await hass.async_block_till_done()
-    hass.states.async_set("binary_sensor.confirmation", "on")
-    await asyncio.sleep(0)
-
-    action = delivered[0]["data"]["actions"][0]["action"]
-    hass.bus.async_fire(
-        "mobile_app_notification_action",
-        {"action": action},
-    )
-    await hass.async_block_till_done()
-
-    history_entries = await entry.runtime_data.history.async_entries(alert["id"])
-    event_types = [item.get("event", {}).get("type") for item in history_entries]
-    assert "confirmation_completed" in event_types
-    assert "confirmation_timeout" not in event_types
-    assert "confirmation_resumed" not in event_types
-    assert "automation_completed" not in event_types
-
-
 async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Stopping parallel runs never emits the removed event or clears notifications."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     commands = []
     inactive_events = []
@@ -1416,6 +1246,8 @@ async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -1458,6 +1290,10 @@ async def test_last_parallel_run_stopping_does_not_emit_inactive_or_clear(
     assert hass.states.get(main.entity_id).attributes["current"] == 0
     assert not any(item["event"]["type"] == "inactive" for item in entries)
     assert not any(item["event"]["type"] == "confirmation_timeout" for item in entries)
+    assert {
+        "notifications": delivered,
+        "history_events": [item["event"]["type"] for item in entries],
+    } == snapshot
 
 
 @pytest.mark.parametrize(
@@ -1474,18 +1310,14 @@ async def test_explicit_door_close_uses_shared_trigger_without_stopping_parallel
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
     inactive_enabled: bool,
     has_items: bool,
     clear_notification: bool,
+    snapshot,
 ) -> None:
     """Configured inactive triggers clear state without stopping active flows."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     commands = []
     hass.bus.async_listen(
@@ -1549,6 +1381,8 @@ async def test_explicit_door_close_uses_shared_trigger_without_stopping_parallel
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -1562,21 +1396,7 @@ async def test_explicit_door_close_uses_shared_trigger_without_stopping_parallel
     assert len(generated) == 1
     active_automation = generated[0]
     assert active_automation["id"] == automation_id(alert)
-    assert active_automation["triggers"] == [
-        {**trigger, "id": str(index)} for index, trigger in enumerate(active_triggers)
-    ] + (
-        [
-            {
-                "trigger": "state",
-                "entity_id": "binary_sensor.door",
-                "from": "on",
-                "to": "off",
-                "id": "inactive_0",
-            }
-        ]
-        if has_handler
-        else []
-    )
+    assert active_automation["triggers"] == snapshot(name="native-triggers")
     main = next(
         state
         for state in hass.states.async_all("automation")
@@ -1641,11 +1461,7 @@ async def test_explicit_door_close_uses_shared_trigger_without_stopping_parallel
         assert not any(item["event"]["type"] in {"inactive", "cancelled"} for item in entries)
     cleared = has_handler and clear_notification
     assert len(delivered) == (3 if cleared else 2)
-    assert [item for item in delivered if item["message"] == "clear_notification"] == (
-        [{"title": "", "message": "clear_notification", "data": {"tag": alert["id"]}}]
-        if cleared
-        else []
-    )
+    assert delivered == snapshot(name="notifications")
     cleared_events = [item for item in entries if item["event"]["type"] == "notification_cleared"]
     assert len(cleared_events) == int(cleared)
     assert all(item["event"]["flow_id"] not in waiting_flows for item in cleared_events)
@@ -1665,15 +1481,11 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
+    snapshot,
 ) -> None:
     """Confirmation finishes a single main run without automatic notification clearing."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     commands = []
     inactive_events = []
@@ -1709,6 +1521,8 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -1720,8 +1534,7 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
     await hass.async_block_till_done()
     generated = automation_api.stored()
     assert len(generated) == 1
-    assert generated[0]["triggers"][-1]["id"] == "1"
-    assert len(generated[0]["triggers"]) == 2
+    assert generated[0]["triggers"] == snapshot(name="native-triggers")
 
     hass.states.async_set("input_boolean.alert_button", "on")
     await _wait_for_history_events(entry.runtime_data, alert["id"], "waiting")
@@ -1730,10 +1543,7 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
     waiting_flow_id = waiting["event"]["flow_id"]
     started = next(item for item in entries if item["event"]["type"] == "started")
     started_by = started["event"]["details"]["started_by"]
-    assert started_by["platform"] == "state"
-    assert started_by["entity_id"] == "input_boolean.alert_button"
-    assert started_by["from_state"] == "off"
-    assert started_by["to_state"] == "on"
+    assert started_by == snapshot(name="trigger-context")
     assert len(delivered) == 1
 
     hass.states.async_set("input_boolean.alert_button", "off")
@@ -1764,6 +1574,15 @@ async def test_confirmation_finishing_does_not_emit_inactive_or_clear(
         if state.attributes.get("id") == automation_id(alert)
     )
     assert main.attributes["current"] == 0
+    assert not any(
+        item["event"]["type"]
+        in {"confirmation_timeout", "confirmation_resumed", "automation_completed"}
+        for item in entries
+    )
+    assert {
+        "notifications": delivered,
+        "history_events": [item["event"]["type"] for item in entries],
+    } == snapshot(name="completed-run")
 
 
 @pytest.mark.parametrize("operation", ["update", "delete", "unchanged"])
@@ -1771,16 +1590,11 @@ async def test_saving_alert_cancels_only_changed_active_runs(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
     operation,
 ) -> None:
     """Cancel changed/deleted runs before removing their config, not in the API client."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
 
     async def handle_notification(call) -> None:
@@ -1811,6 +1625,8 @@ async def test_saving_alert_cancels_only_changed_active_runs(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -1867,15 +1683,10 @@ async def test_active_trigger_with_false_conditions_is_ignored(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
 ) -> None:
     """An active trigger whose configured conditions fail does not start a flow."""
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     commands = []
     inactive_events = []
@@ -1918,6 +1729,8 @@ async def test_active_trigger_with_false_conditions_is_ignored(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -1948,17 +1761,16 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     hass: HomeAssistant,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
-    monkeypatch,
+    mock_register_panel,
     show_attempts: bool,
     title: str,
+    freezer,
+    snapshot,
 ) -> None:
     """Timeouts repeat reminders finitely and skip response-only actions."""
+    start = (datetime.now(UTC) + timedelta(seconds=1)).replace(microsecond=0)
+    freezer.move_to(start)
 
-    async def register_panel(_hass: HomeAssistant) -> None:
-        return None
-
-    monkeypatch.setattr(ha_notifications, "async_register_panel", register_panel)
     delivered: list[dict[str, object]] = []
     follow_up_delivered: list[dict[str, object]] = []
     post_send_calls: list[dict[str, object]] = []
@@ -2007,7 +1819,7 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
             "buttons": [{"id": "confirm", "label": "Confirm"}],
             "reminders": {
                 "enabled": True,
-                "interval": 0.01,
+                "interval": 10,
                 "max_attempts": 2,
                 "show_attempts": show_attempts,
             },
@@ -2026,6 +1838,8 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
         },
     )
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
@@ -2036,24 +1850,24 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     await automation_api.sync_entry(entry)
     await hass.async_block_till_done()
     hass.states.async_set("binary_sensor.confirmation", "on")
-    await hass.async_block_till_done()
-    await asyncio.sleep(0.1)
+    await _wait_for_history_events(entry.runtime_data, "base_alert", "waiting")
+    assert len(delivered) == 1
+    async_fire_time_changed(hass, start + timedelta(seconds=9))
+    assert len(delivered) == 1
+    for seconds, expected_count in ((10, 2), (20, 3), (30, 3), (60, 3)):
+        future = start + timedelta(seconds=seconds)
+        async_fire_time_changed(hass, future)
+        freezer.move_to(future)
+        await _wait_for_history_events(
+            entry.runtime_data,
+            "base_alert",
+            "waiting" if seconds < 30 else "confirmation_timeout",
+            expected_count if seconds < 30 else 1,
+        )
+        assert len(delivered) == expected_count
     await hass.async_block_till_done()
 
-    assert len(delivered) == 3
-    assert [item["message"] for item in delivered] == ["Original main message"] * 3
-    expected_titles = [title] * 3
-    if show_attempts:
-        expected_titles = [
-            title,
-            *[
-                f"{title} - Attempt {attempt}/2" if title else f"Attempt {attempt}/2"
-                for attempt in (2, 3)
-            ],
-        ]
-    assert [item.get("title", "") for item in delivered] == expected_titles
     assert follow_up_delivered == []
-    assert post_send_calls == [{"name": "sent"}]
     assert confirmation_calls == []
     history_entries = await entry.runtime_data.history.async_entries("base_alert")
     event_types = [item.get("event", {}).get("type") for item in history_entries]
@@ -2061,3 +1875,8 @@ async def test_confirmation_timeout_retries_are_bounded_without_follow_ups(
     assert "confirmation_completed" not in event_types
     assert "confirmation_resumed" not in event_types
     assert "automation_completed" not in event_types
+    assert {
+        "notifications": delivered,
+        "post_send_actions": post_send_calls,
+        "history_events": event_types,
+    } == snapshot

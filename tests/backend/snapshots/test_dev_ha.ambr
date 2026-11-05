@@ -1,0 +1,487 @@
+# serializer version: 1
+# name: test_ensure_mock_mobile_app_repairs_entry_and_registers_once
+  dict({
+    'deletes': list([
+      'http://localhost:8124/api/config/config_entries/entry/old-entry',
+    ]),
+    'posts': list([
+      tuple(
+        'http://localhost:8124/api/mobile_app/registrations',
+        dict({
+          'headers': dict({
+            'Authorization': 'Bearer token',
+          }),
+          'json': dict({
+            'app_data': dict({
+              'push_token': 'ha-notifications-dev',
+              'push_url': 'http://127.0.0.1:8126/notify',
+            }),
+            'app_id': 'io.homeassistant.ha_notifications_dev',
+            'app_name': 'HA Notifications Dev',
+            'app_version': '1.0',
+            'device_id': 'ha_notifications_dev_phone',
+            'device_name': 'HA Notifications Dev Phone',
+            'manufacturer': 'HA Notifications',
+            'model': 'Development Simulator',
+            'os_name': 'Android',
+            'os_version': '1.0',
+            'supports_encryption': False,
+          }),
+        }),
+      ),
+      tuple(
+        'http://localhost:8124/api/mobile_app/registrations',
+        dict({
+          'headers': dict({
+            'Authorization': 'Bearer token',
+          }),
+          'json': dict({
+            'app_data': dict({
+              'push_token': 'ha-notifications-dev',
+              'push_url': 'http://127.0.0.1:8126/notify',
+            }),
+            'app_id': 'io.homeassistant.ha_notifications_dev',
+            'app_name': 'HA Notifications Dev',
+            'app_version': '1.0',
+            'device_id': 'ha_notifications_dev_phone',
+            'device_name': 'HA Notifications Dev Phone',
+            'manufacturer': 'HA Notifications',
+            'model': 'Development Simulator',
+            'os_name': 'Android',
+            'os_version': '1.0',
+            'supports_encryption': False,
+          }),
+        }),
+      ),
+    ]),
+  })
+# ---
+# name: test_onboard_uses_requested_port
+  list([
+    tuple(
+      'http://127.0.0.1:8125/api/onboarding/users',
+      dict({
+        'json': dict({
+          'client_id': 'http://localhost:8125/',
+          'language': 'en',
+          'name': 'Developer',
+          'password': 'dev',
+          'username': 'dev',
+        }),
+      }),
+    ),
+    tuple(
+      'http://127.0.0.1:8125/auth/token',
+      dict({
+        'data': dict({
+          'client_id': 'http://localhost:8125/',
+          'code': 'auth-code',
+          'grant_type': 'authorization_code',
+        }),
+      }),
+    ),
+    tuple(
+      'http://127.0.0.1:8125/api/onboarding/core_config',
+      dict({
+        'headers': dict({
+          'Authorization': 'Bearer access-token',
+        }),
+        'json': None,
+      }),
+    ),
+    tuple(
+      'http://127.0.0.1:8125/api/onboarding/analytics',
+      dict({
+        'headers': dict({
+          'Authorization': 'Bearer access-token',
+        }),
+        'json': None,
+      }),
+    ),
+    tuple(
+      'http://127.0.0.1:8125/api/onboarding/integration',
+      dict({
+        'headers': dict({
+          'Authorization': 'Bearer access-token',
+        }),
+        'json': dict({
+          'client_id': 'http://localhost:8125/',
+          'redirect_uri': 'http://localhost:8125/?auth_callback=1',
+        }),
+      }),
+    ),
+  ])
+# ---
+# name: test_seed_populates_only_empty_alert_config[saved_alerts0-0]
+  list([
+    dict({
+      'config': dict({
+        'alerts': list([
+          dict({
+            'enabled': True,
+            'id': 'front_door_switch',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                ]),
+                'startup': False,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'input_boolean.front_door',
+                    'to': 'off',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'input_boolean.front_door',
+                    'from': 'off',
+                    'to': 'on',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+            }),
+            'name': 'Front door switch',
+            'notification': dict({
+              'message': 'The front door is open.',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.phone',
+                ]),
+              }),
+              'title': 'Front door',
+            }),
+          }),
+          dict({
+            'confirmation': dict({
+              'actions': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'action': 'light.turn_on',
+                    'target': dict({
+                      'entity_id': 'light.hall',
+                    }),
+                  }),
+                ]),
+              }),
+              'buttons': list([
+                dict({
+                  'id': 'confirm',
+                  'label': 'Confirm',
+                }),
+              ]),
+              'enabled': True,
+              'notification': dict({
+                'action': 'notify.mobile_app_phone',
+                'enabled': True,
+                'message': 'Confirmed',
+                'options': dict({
+                }),
+                'title': '',
+              }),
+              'reminders': dict({
+                'enabled': True,
+                'interval': dict({
+                  'minutes': 15,
+                }),
+                'max_attempts': 5,
+                'show_attempts': True,
+              }),
+            }),
+            'id': 'full_feature',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                  dict({
+                    'condition': 'and',
+                    'conditions': list([
+                      dict({
+                        'condition': 'or',
+                        'conditions': list([
+                          dict({
+                            'condition': 'state',
+                            'entity_id': 'binary_sensor.door',
+                            'state': 'on',
+                          }),
+                          dict({
+                            'above': 30,
+                            'condition': 'numeric_state',
+                            'entity_id': 'sensor.temperature',
+                          }),
+                        ]),
+                      }),
+                      dict({
+                        'condition': 'state',
+                        'entity_id': 'binary_sensor.window',
+                        'state': 'on',
+                      }),
+                    ]),
+                  }),
+                ]),
+                'startup': True,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'binary_sensor.door',
+                    'trigger': 'state',
+                  }),
+                  dict({
+                    'entity_id': 'binary_sensor.window',
+                    'trigger': 'state',
+                  }),
+                  dict({
+                    'entity_id': 'sensor.temperature',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+            }),
+            'name': 'Full feature',
+            'notification': dict({
+              'message': 'Door open',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.phone',
+                ]),
+              }),
+              'title': '',
+            }),
+          }),
+        ]),
+        'version': 1,
+      }),
+      'type': 'ha_notifications/save_config',
+    }),
+  ])
+# ---
+# name: test_seed_populates_only_empty_alert_config[saved_alerts1-2]
+  list([
+    dict({
+      'config': dict({
+        'alerts': list([
+          dict({
+            'enabled': True,
+            'id': 'front_door_switch',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                ]),
+                'startup': False,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'input_boolean.front_door',
+                    'to': 'off',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'input_boolean.front_door',
+                    'from': 'off',
+                    'to': 'on',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+            }),
+            'name': 'Front door switch',
+            'notification': dict({
+              'message': 'The front door is open.',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.phone',
+                ]),
+              }),
+              'title': 'Front door',
+            }),
+          }),
+          dict({
+            'confirmation': dict({
+              'actions': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'action': 'light.turn_on',
+                    'target': dict({
+                      'entity_id': 'light.hall',
+                    }),
+                  }),
+                ]),
+              }),
+              'buttons': list([
+                dict({
+                  'id': 'confirm',
+                  'label': 'Confirm',
+                }),
+              ]),
+              'enabled': True,
+              'notification': dict({
+                'action': 'notify.mobile_app_phone',
+                'enabled': True,
+                'message': 'Confirmed',
+                'options': dict({
+                }),
+                'title': '',
+              }),
+              'reminders': dict({
+                'enabled': True,
+                'interval': dict({
+                  'minutes': 15,
+                }),
+                'max_attempts': 5,
+                'show_attempts': True,
+              }),
+            }),
+            'id': 'full_feature',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                  dict({
+                    'condition': 'and',
+                    'conditions': list([
+                      dict({
+                        'condition': 'or',
+                        'conditions': list([
+                          dict({
+                            'condition': 'state',
+                            'entity_id': 'binary_sensor.door',
+                            'state': 'on',
+                          }),
+                          dict({
+                            'above': 30,
+                            'condition': 'numeric_state',
+                            'entity_id': 'sensor.temperature',
+                          }),
+                        ]),
+                      }),
+                      dict({
+                        'condition': 'state',
+                        'entity_id': 'binary_sensor.window',
+                        'state': 'on',
+                      }),
+                    ]),
+                  }),
+                ]),
+                'startup': True,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                  dict({
+                    'entity_id': 'binary_sensor.door',
+                    'trigger': 'state',
+                  }),
+                  dict({
+                    'entity_id': 'binary_sensor.window',
+                    'trigger': 'state',
+                  }),
+                  dict({
+                    'entity_id': 'sensor.temperature',
+                    'trigger': 'state',
+                  }),
+                ]),
+              }),
+            }),
+            'name': 'Full feature',
+            'notification': dict({
+              'message': 'Door open',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.phone',
+                ]),
+              }),
+              'title': '',
+            }),
+          }),
+        ]),
+        'version': 1,
+      }),
+      'type': 'ha_notifications/save_config',
+    }),
+  ])
+# ---
+# name: test_with_http_port_preserves_other_configuration[existing-http]
+  '''
+  http:
+    use_x_forwarded_for: true
+    server_port: 8125
+  frontend:
+  
+  '''
+# ---
+# name: test_with_http_port_preserves_other_configuration[missing-http]
+  '''
+  frontend:
+  
+  http:
+    server_port: 8125
+  
+  '''
+# ---
+# name: test_with_http_port_preserves_other_configuration[replace-only-http]
+  '''
+  http:
+    server_port: 8125
+  other:
+    server_port: 9000
+  
+  '''
+# ---

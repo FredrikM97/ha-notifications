@@ -1,0 +1,541 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`panel configuration workflows > preserves native durations and omits runtime on save 1`] = `
+[
+  {
+    "alert": {
+      "confirmation": {
+        "actions": {
+          "enabled": true,
+          "items": [
+            {
+              "action": "light.turn_on",
+              "target": {
+                "entity_id": [
+                  "light.hall",
+                ],
+              },
+            },
+          ],
+        },
+        "buttons": [
+          {
+            "id": "confirm",
+            "label": "Close door",
+          },
+        ],
+        "enabled": true,
+        "notification": {
+          "action": "notify.mobile_app_phone",
+          "enabled": true,
+          "message": "Front door closed by {{confirmed_by}}.",
+          "options": {},
+          "title": "Front door",
+        },
+        "reminders": {
+          "enabled": true,
+          "forget_after": {
+            "enabled": false,
+            "value": "00:15:00",
+          },
+          "interval": {
+            "minutes": 30,
+          },
+          "max_attempts": 3,
+          "show_attempts": true,
+        },
+      },
+      "description": "Notify when the front door stays open.",
+      "enabled": true,
+      "icon": "mdi:door-open",
+      "id": "door",
+      "monitor": {
+        "conditions": {
+          "enabled": true,
+          "interval": {
+            "enabled": true,
+            "value": 3600,
+          },
+          "items": [
+            {
+              "condition": "state",
+              "entity_id": "binary_sensor.front_door",
+              "for": "00:05:00",
+              "state": "on",
+            },
+          ],
+          "startup": true,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [
+            {
+              "entity_id": "binary_sensor.front_door",
+              "trigger": "state",
+            },
+          ],
+        },
+      },
+      "name": "Front door open",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "message": "The front door is still open.",
+        "options": {
+          "data": {
+            "ttl": 0,
+          },
+          "tag": "{{ trigger.entity_id }}",
+        },
+        "target": {
+          "device_id": [
+            "device_phone",
+          ],
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+        "title": "Front door",
+      },
+      "post_send_actions": {
+        "enabled": true,
+        "items": [
+          {
+            "action": "logbook.log",
+            "data": {
+              "name": "Front door alert",
+            },
+          },
+        ],
+      },
+    },
+    "type": "ha_notifications/save_config",
+  },
+]
+`;
+
+exports[`panel configuration workflows > preserves native durations and omits runtime on validate 1`] = `
+[
+  {
+    "alert": {
+      "confirmation": {
+        "actions": {
+          "enabled": true,
+          "items": [
+            {
+              "action": "light.turn_on",
+              "target": {
+                "entity_id": [
+                  "light.hall",
+                ],
+              },
+            },
+          ],
+        },
+        "buttons": [
+          {
+            "id": "confirm",
+            "label": "Close door",
+          },
+        ],
+        "enabled": true,
+        "notification": {
+          "action": "notify.mobile_app_phone",
+          "enabled": true,
+          "message": "Front door closed by {{confirmed_by}}.",
+          "options": {},
+          "title": "Front door",
+        },
+        "reminders": {
+          "enabled": true,
+          "forget_after": {
+            "enabled": false,
+            "value": "00:15:00",
+          },
+          "interval": {
+            "minutes": 30,
+          },
+          "max_attempts": 3,
+          "show_attempts": true,
+        },
+      },
+      "description": "Notify when the front door stays open.",
+      "enabled": true,
+      "icon": "mdi:door-open",
+      "id": "door",
+      "monitor": {
+        "conditions": {
+          "enabled": true,
+          "interval": {
+            "enabled": true,
+            "value": 3600,
+          },
+          "items": [
+            {
+              "condition": "state",
+              "entity_id": "binary_sensor.front_door",
+              "for": "00:05:00",
+              "state": "on",
+            },
+          ],
+          "startup": true,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [
+            {
+              "entity_id": "binary_sensor.front_door",
+              "trigger": "state",
+            },
+          ],
+        },
+      },
+      "name": "Front door open",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "message": "The front door is still open.",
+        "options": {
+          "data": {
+            "ttl": 0,
+          },
+          "tag": "{{ trigger.entity_id }}",
+        },
+        "target": {
+          "device_id": [
+            "device_phone",
+          ],
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+        "title": "Front door",
+      },
+      "post_send_actions": {
+        "enabled": true,
+        "items": [
+          {
+            "action": "logbook.log",
+            "data": {
+              "name": "Front door alert",
+            },
+          },
+        ],
+      },
+    },
+    "type": "ha_notifications/validate_config",
+  },
+]
+`;
+
+exports[`panel configuration workflows > saves a existing alert while preserving other configuration entries 1`] = `
+[
+  {
+    "alert": {
+      "enabled": true,
+      "id": "door",
+      "monitor": {
+        "conditions": {
+          "enabled": true,
+          "interval": {
+            "enabled": false,
+            "value": 43200,
+          },
+          "items": [
+            {
+              "condition": "template",
+              "value_template": "{{ true }}",
+            },
+          ],
+          "startup": true,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [],
+        },
+      },
+      "name": "Updated alert",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "message": "",
+        "options": {},
+        "target": {
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+        "title": "",
+      },
+    },
+    "type": "ha_notifications/save_config",
+  },
+]
+`;
+
+exports[`panel configuration workflows > saves a new alert while preserving other configuration entries 1`] = `
+[
+  {
+    "alert": {
+      "enabled": true,
+      "id": "garage",
+      "monitor": {
+        "conditions": {
+          "enabled": true,
+          "interval": {
+            "enabled": false,
+            "value": 43200,
+          },
+          "items": [
+            {
+              "condition": "template",
+              "value_template": "{{ true }}",
+            },
+          ],
+          "startup": true,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [],
+        },
+      },
+      "name": "Updated alert",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "message": "",
+        "options": {},
+        "target": {
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+        "title": "",
+      },
+    },
+    "type": "ha_notifications/save_config",
+  },
+]
+`;
+
+exports[`panel view > opens the local editor without loading users with create=false > editor draft 1`] = `
+{
+  "enabled": true,
+  "id": "door",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [
+        {
+          "condition": "template",
+          "value_template": "{{ true }}",
+        },
+      ],
+      "startup": true,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [],
+    },
+  },
+  "name": "Front door",
+  "notification": {
+    "action": "notify.mobile_app_phone",
+    "message": "",
+    "options": {},
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+  },
+}
+`;
+
+exports[`panel view > opens the local editor without loading users with create=false > opening requests 1`] = `
+[
+  {
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "type": "ha_notifications/mobile_platforms",
+  },
+]
+`;
+
+exports[`panel view > opens the local editor without loading users with create=true > editor draft 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": 900,
+      },
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_00000000000000000000000000000001",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [],
+    },
+  },
+  "name": "",
+  "notification": {
+    "message": "",
+    "options": {},
+    "target": {},
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`panel view > opens the local editor without loading users with create=true > opening requests 1`] = `
+[
+  {
+    "new": true,
+    "type": "ha_notifications/get_config",
+  },
+  {
+    "target": {},
+    "type": "ha_notifications/mobile_platforms",
+  },
+]
+`;
+
+exports[`panel view > registers the Lovelace card contract 1`] = `
+{
+  "config": {
+    "type": "custom:ha-notifications-card",
+  },
+  "size": 12,
+}
+`;
+
+exports[`panel view > renders alert rows and their runtime status 1`] = `
+[
+  {
+    "disabled": false,
+    "enabled": true,
+    "name": "Front door",
+    "status": "Idle",
+  },
+]
+`;
+
+exports[`panel view > saves the enabled state when the row switch changes 1`] = `
+[
+  {
+    "alert": {
+      "enabled": false,
+      "id": "door",
+      "monitor": {
+        "conditions": {
+          "enabled": true,
+          "interval": {
+            "enabled": false,
+            "value": 43200,
+          },
+          "items": [
+            {
+              "condition": "template",
+              "value_template": "{{ true }}",
+            },
+          ],
+          "startup": true,
+        },
+        "inactive": {
+          "clear_notification": false,
+          "enabled": false,
+          "items": [],
+        },
+        "triggers": {
+          "enabled": true,
+          "items": [],
+        },
+      },
+      "name": "Front door",
+      "notification": {
+        "action": "notify.mobile_app_phone",
+        "message": "",
+        "options": {},
+        "target": {
+          "entity_id": [
+            "notify.phone",
+          ],
+        },
+        "title": "",
+      },
+    },
+    "type": "ha_notifications/save_config",
+  },
+]
+`;

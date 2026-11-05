@@ -1,0 +1,111 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`history helpers > groups events by flow while keeping standalone events separate 1`] = `
+[
+  {
+    "entries": [
+      {
+        "config": {
+          "id": "garage",
+          "name": "Garage door",
+        },
+        "event": {
+          "details": {
+            "source": "sensor",
+          },
+          "event_id": "event_garage",
+          "flow_id": "flow_garage",
+          "message": "The garage is open",
+          "timestamp": "2026-01-01T00:00:00+00:00",
+          "type": "notification_sent",
+        },
+      },
+      {
+        "config": {
+          "id": "garage",
+          "name": "Garage door",
+        },
+        "event": {
+          "details": {
+            "source": "sensor",
+          },
+          "event_id": "event_garage_2",
+          "flow_id": "flow_garage",
+          "message": "The garage is open",
+          "timestamp": "2026-10-06T12:34:56+00:00",
+          "type": "notification_sent",
+        },
+      },
+    ],
+    "flowId": "flow_garage",
+  },
+  {
+    "entries": [
+      {
+        "config": {
+          "id": "water",
+          "name": "Water leak",
+        },
+        "event": {
+          "details": {
+            "error": "Device unavailable",
+          },
+          "event_id": "event_water",
+          "message": "Could not notify",
+          "timestamp": "2026-01-01T00:00:00+00:00",
+          "type": "delivery_failed",
+        },
+      },
+    ],
+  },
+]
+`;
+
+exports[`history view > emits alert selection from the current row link 1`] = `
+{
+  "alertId": "garage",
+  "alertName": "Garage door",
+}
+`;
+
+exports[`history view > expands nonempty details as formatted JSON 1`] = `
+"{
+  "source": "sensor"
+}"
+`;
+
+exports[`history view > groups flows when the saved view preference is enabled 1`] = `
+[
+  {
+    "items": [
+      {
+        "flowId": null,
+        "title": "Garage door notification sent",
+      },
+      {
+        "flowId": null,
+        "title": "Garage door notification sent",
+      },
+    ],
+    "latestActivity": "2026-01-01T00:00:00+00:00",
+    "open": false,
+    "summary": "Flow flow_garage Alert: Garage door Latest activity: 2026/01/01, 00:00:00 2 events",
+  },
+]
+`;
+
+exports[`history view > persists both toolbar preferences for a newly mounted view > disabled preferences 1`] = `
+{
+  "groupByFlow": false,
+  "showFilters": false,
+}
+`;
+
+exports[`history view > persists both toolbar preferences for a newly mounted view > enabled preferences 1`] = `
+{
+  "groupByFlow": true,
+  "showFilters": true,
+}
+`;
+
+exports[`history view > shows trigger and confirmation reason summaries 1`] = `"2026/01/01, 00:00:00 · Started by input_boolean.alert_button (off -> on) · Reason: Confirmation notification"`;

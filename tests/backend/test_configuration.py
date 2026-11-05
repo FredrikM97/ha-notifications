@@ -1,13 +1,13 @@
 """Tests for the canonical configuration contract."""
 
-import asyncio
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.ha_notifications import RuntimeData, async_save_config
 from custom_components.ha_notifications.configuration import (
@@ -25,6 +25,11 @@ from custom_components.ha_notifications.configuration import (
     upsert_alert,
     validate_config,
 )
+from custom_components.ha_notifications.const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
+    DOMAIN,
+)
 
 
 def test_feature_model_defaults_match_shared_contract_and_are_independent() -> None:
@@ -41,7 +46,6 @@ def test_feature_model_defaults_match_shared_contract_and_are_independent() -> N
 
     assert first.model_dump(exclude_none=True) == expected
     assert second.model_dump(exclude_none=True) == expected
-    assert validate_config({"alerts": [expected]})["alerts"][0] == expected
 
     first.monitor.triggers.items.append({"trigger": "event", "event_type": "changed"})
     first.monitor.conditions.items.append({"condition": "template", "value_template": "{{ true }}"})
@@ -68,37 +72,14 @@ def test_feature_model_defaults_match_shared_contract_and_are_independent() -> N
     )
 
 
-def test_validate_config_minimal_alert_defaults_confirmation_and_interval() -> None:
-    alert = validate_config({"alerts": [{"id": "minimal", "notification": {}}]})["alerts"][0]
-
-    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
-    assert alert["monitor"]["conditions"]["interval"] == {"enabled": False, "value": 43200}
-
-
-def test_alert_requires_id_and_defaults_notification_and_confirmation() -> None:
+def test_alert_requires_id() -> None:
     with pytest.raises(ValidationError, match="id"):
         AlertConfig()
-    alert = AlertConfig(id="minimal")
-    assert alert.notification.model_dump(exclude_none=True) == NotificationConfig().model_dump(
-        exclude_none=True
-    )
-    assert alert.confirmation.model_dump()["buttons"] == [
-        {"id": "confirm", "label": "Done"},
-    ]
-    assert alert.model_dump(exclude_none=True)["confirmation"]["buttons"] == [
-        {"id": "confirm", "label": "Done"},
-    ]
 
 
-def test_reminder_model_serializes_declared_defaults() -> None:
+def test_reminder_model_serializes_declared_defaults(snapshot) -> None:
     reminders = ReminderConfig()
-    assert reminders.model_dump() == {
-        "enabled": True,
-        "interval": 1800,
-        "max_attempts": 5,
-        "show_attempts": False,
-        "forget_after": {"enabled": False, "value": 900},
-    }
+    assert reminders.model_dump() == snapshot
     assert "forget_after_enabled" not in ReminderConfig.model_fields
     assert ReminderConfig.model_validate(reminders.model_dump()) == reminders
 
@@ -246,19 +227,18 @@ def test_confirmation_buttons_preserve_explicit_values(buttons: list[dict]) -> N
     )
 
 
-def test_missing_confirmation_buttons_use_the_shared_default() -> None:
-    alert = validate_config(
-        {
-            "alerts": [
-                {
-                    "id": "minimal",
-                    "notification": {},
-                    "confirmation": {"enabled": True},
-                }
-            ]
-        }
-    )["alerts"][0]
-    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
+@pytest.mark.parametrize(
+    "fields",
+    [{}, {"notification": {}}, {"notification": {}, "confirmation": {"enabled": True}}],
+    ids=["id-only", "empty-notification", "enabled-confirmation"],
+)
+def test_minimal_alert_expands_complete_model_defaults(fields, snapshot) -> None:
+    raw = {"alerts": [{"id": "minimal", **fields}]}
+    original = deepcopy(raw)
+    validated = validate_config(raw)
+    assert validated == snapshot
+    assert validate_config(validated) == validated
+    assert raw == original
 
 
 @pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
@@ -275,6 +255,7 @@ def test_missing_confirmation_buttons_use_the_shared_default() -> None:
 def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
     reminders: dict,
     conditions: dict,
+    snapshot,
 ) -> None:
     raw = {
         "alerts": [
@@ -288,21 +269,7 @@ def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
     }
     original = deepcopy(raw)
     validated = validate_config(raw)
-    alert = validated["alerts"][0]
-
-    assert alert["monitor"]["conditions"]["interval"] == {
-        "enabled": False,
-        "value": 43200,
-        **conditions.get("interval", {}),
-    }
-    assert alert["confirmation"]["reminders"] == {
-        "enabled": True,
-        "interval": 1800,
-        "max_attempts": 5,
-        "show_attempts": False,
-        "forget_after": {"enabled": False, "value": 900},
-        **reminders,
-    }
+    assert validated == snapshot
     assert validate_config(validated) == validated
     assert raw == original
 
@@ -320,13 +287,14 @@ def test_shared_alert_fixtures_use_canonical_configuration(backend_alerts, name:
 
 @pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
 @pytest.mark.parametrize("enabled", [None, True, False])
-def test_notification_default_tag_is_metadata_with_a_deterministic_default(model, enabled) -> None:
+def test_notification_default_tag_is_metadata_with_a_deterministic_default(
+    model, enabled, snapshot
+) -> None:
     raw = {"options": {"tag": "custom", "native_extra": True}}
     if enabled is not None:
         raw["use_default_tag"] = enabled
     stored = model.model_validate(raw).model_dump(exclude_none=True)
-    assert stored["use_default_tag"] is (True if enabled is None else enabled)
-    assert stored["options"] == raw["options"]
+    assert stored == snapshot
     assert model.model_validate(stored).model_dump(exclude_none=True) == stored
 
 
@@ -343,16 +311,21 @@ def test_notification_models_define_canonical_content_fields(model) -> None:
     assert "data" not in model.model_fields
 
 
-def test_shared_option_controls_contract(option_controls_contract) -> None:
+def test_shared_option_controls_contract(option_controls_contract, snapshot) -> None:
     original = deepcopy(option_controls_contract["notification"])
     notification = NotificationConfig.model_validate(original)
     assert notification.delivery_options() == option_controls_contract["delivery_options"]
     assert notification.model_dump(exclude_none=True) == original
+    assert {
+        "stored": notification.model_dump(exclude_none=True),
+        "delivered": notification.delivery_options(),
+    } == snapshot
 
 
 @pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
 def test_validate_config_retains_notification_option_controls_and_disabled_values(
     confirmation: bool,
+    snapshot,
 ) -> None:
     notification = {
         "options": {
@@ -376,11 +349,7 @@ def test_validate_config_retains_notification_option_controls_and_disabled_value
     original = deepcopy(raw)
 
     validated = validate_config(raw)
-    stored = validated["alerts"][0]
-    if confirmation:
-        stored = stored["confirmation"]
-    assert stored["notification"]["options"] == notification["options"]
-    assert stored["notification"]["option_controls"] == notification["option_controls"]
+    assert validated == snapshot
     assert validate_config(validated) == validated
     assert raw == original
 
@@ -396,6 +365,7 @@ def test_notification_delivery_options_filters_only_declared_disabled_paths(
     group: str,
     group_enabled: bool,
     field_enabled: bool,
+    snapshot,
 ) -> None:
     raw = {
         "options": {
@@ -412,14 +382,8 @@ def test_notification_delivery_options_filters_only_declared_disabled_paths(
     original = deepcopy(raw)
     notification = model.model_validate(raw)
     stored = notification.model_dump(exclude_none=True)
-    expected = deepcopy(raw["options"])
-    if not group_enabled or not field_enabled:
-        del expected["push"]["sound"]
-
     delivered = notification.delivery_options()
-    assert delivered == expected
-    assert delivered["ttl"] == 0
-    assert delivered["sticky"] is False
+    assert {"stored": stored, "delivered": delivered} == snapshot
     delivered["push"]["custom"]["values"].append("changed")
     assert notification.model_dump(exclude_none=True) == stored
     assert raw == original
@@ -515,6 +479,7 @@ def test_notification_option_controls_reject_unknown_groups_and_control_fields(c
 def test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message(
     confirmation: bool,
     content: dict,
+    snapshot,
 ) -> None:
     notification = {"action": "notify.mobile_app_phone", **content}
     alert = {"id": "content_alert", "notification": {}}
@@ -524,14 +489,10 @@ def test_validate_config_defaults_absent_content_and_preserves_explicit_empty_me
         alert["notification"] = notification
 
     validated = validate_config({"alerts": [alert]})["alerts"][0]
-    stored = validated["confirmation"] if confirmation else validated
-
-    assert stored["notification"]["message"] == content.get("message", "")
-    assert stored["notification"]["title"] == content.get("title", "")
-    assert stored["notification"]["options"] == {}
+    assert validated == snapshot
 
 
-def test_validate_config_accepts_canonical_monitor_object() -> None:
+def test_validate_config_accepts_canonical_monitor_object(snapshot) -> None:
     config = validate_config(
         {
             "alerts": [
@@ -554,18 +515,7 @@ def test_validate_config_accepts_canonical_monitor_object() -> None:
             ]
         }
     )
-    alert = config["alerts"][0]
-    assert config["version"] == 1
-    assert alert["monitor"]["triggers"]["items"] == [
-        {"trigger": "state", "entity_id": "sensor.water"}
-    ]
-    assert alert["monitor"]["conditions"]["items"][0]["entity_id"] == "sensor.water"
-    assert alert["notification"]["target"] == {"entity_id": ["notify.phone"]}
-    assert alert["monitor"]["inactive"] == {
-        "enabled": False,
-        "items": [],
-        "clear_notification": False,
-    }
+    assert config == snapshot
 
 
 @pytest.mark.parametrize("removed_value", [False, True])
@@ -609,7 +559,7 @@ def test_validate_config_rejects_unknown_monitor_fields(unknown_field: str) -> N
         )
 
 
-def test_validate_config_preserves_independent_trigger_and_condition_enablement() -> None:
+def test_validate_config_preserves_independent_trigger_and_condition_enablement(snapshot) -> None:
     config = validate_config(
         {
             "alerts": [
@@ -626,10 +576,7 @@ def test_validate_config_preserves_independent_trigger_and_condition_enablement(
         }
     )
 
-    alert = config["alerts"][0]
-    assert alert["enabled"] is True
-    assert alert["monitor"]["triggers"]["enabled"] is False
-    assert alert["monitor"]["conditions"]["enabled"] is True
+    assert config == snapshot
 
 
 def test_validate_config_rejects_persisted_mobile_options_groups() -> None:
@@ -660,6 +607,7 @@ def test_validate_config_rejects_persisted_mobile_options_groups() -> None:
 def test_validate_config_preserves_native_notification_data_without_mutating_input(
     confirmation: bool,
     content_field: str,
+    snapshot,
 ) -> None:
     notification = {
         "action": "notify.mobile_app_phone",
@@ -675,11 +623,7 @@ def test_validate_config_preserves_native_notification_data_without_mutating_inp
     original = deepcopy(raw)
 
     validated = validate_config(raw)
-    stored = validated["alerts"][0]
-    if confirmation:
-        stored = stored["confirmation"]
-    assert stored["notification"]["options"] == notification["options"]
-    assert stored["notification"][content_field] == "Canonical content"
+    assert validated == snapshot
     assert validate_config(validated) == validated
     assert raw == original
 
@@ -704,6 +648,7 @@ def test_validate_config_rejects_non_mapping_notification_options(
 @pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
 def test_validate_config_preserves_canonical_notification_content_and_native_extras(
     confirmation: bool,
+    snapshot,
 ) -> None:
     notification = {
         "action": "notify.mobile_app_phone",
@@ -727,10 +672,7 @@ def test_validate_config_preserves_canonical_notification_content_and_native_ext
     original = deepcopy(raw)
 
     validated = validate_config(raw)
-    stored = validated["alerts"][0]
-    if confirmation:
-        stored = stored["confirmation"]
-    assert all(stored["notification"][key] == value for key, value in notification.items())
+    assert validated == snapshot
     assert validate_config(validated) == validated
     assert raw == original
 
@@ -787,7 +729,7 @@ def test_validate_config_rejects_retired_clear_on_inactive_option() -> None:
         )
 
 
-def test_validate_config_preserves_native_inactive_triggers() -> None:
+def test_validate_config_preserves_native_inactive_triggers(snapshot) -> None:
     inactive = {
         "enabled": True,
         "items": [
@@ -809,7 +751,7 @@ def test_validate_config_preserves_native_inactive_triggers() -> None:
 
     config = validate_config(raw)
 
-    assert config["alerts"][0]["monitor"]["inactive"] == inactive
+    assert config == snapshot
     assert raw == original
     assert validate_config(config) == config
 
@@ -874,7 +816,7 @@ def test_validate_config_rejects_invalid_trigger_entries() -> None:
         )
 
 
-def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
+def test_validate_config_accepts_confirmation_and_post_send_actions(snapshot) -> None:
     config = validate_config(
         {
             "alerts": [
@@ -893,9 +835,7 @@ def test_validate_config_accepts_confirmation_and_post_send_actions() -> None:
             ]
         }
     )
-    alert = config["alerts"][0]
-    assert alert["confirmation"]["buttons"][0]["id"] == "confirm"
-    assert alert["post_send_actions"]["items"][0]["action"] == "logbook.log"
+    assert config == snapshot
 
 
 @pytest.mark.parametrize("actions", [[], [{"action": "light.turn_on"}]])
@@ -923,7 +863,7 @@ def test_confirmation_actions_default_to_independent_disabled_groups() -> None:
     assert confirmation.actions.items is not other_confirmation.actions.items
 
 
-def test_validate_config_preserves_native_confirmation_action_list(alert_factory) -> None:
+def test_validate_config_preserves_native_confirmation_action_list(alert_factory, snapshot) -> None:
     actions = [
         {
             "action": "light.turn_on",
@@ -956,13 +896,12 @@ def test_validate_config_preserves_native_confirmation_action_list(alert_factory
     confirmation = Configuration.model_validate(validated).alerts[0].confirmation
 
     assert confirmation is not None
-    assert confirmation.actions.items == actions
-    assert validated["alerts"][0]["confirmation"]["actions"] == {"enabled": True, "items": actions}
+    assert validated == snapshot
     assert validate_config(validated) == validated
     assert raw == original
 
 
-def test_validate_config_preserves_confirmation_notification_opt_out() -> None:
+def test_validate_config_preserves_confirmation_notification_opt_out(snapshot) -> None:
     config = validate_config(
         {
             "alerts": [
@@ -982,14 +921,7 @@ def test_validate_config_preserves_confirmation_notification_opt_out() -> None:
         }
     )
 
-    assert config["alerts"][0]["confirmation"]["notification"] == {
-        "enabled": False,
-        "action": "notify.mobile_app_phone",
-        "title": "",
-        "message": "Confirmed",
-        "use_default_tag": True,
-        "options": {},
-    }
+    assert config == snapshot
 
 
 def test_validate_config_rejects_nonpositive_confirmation_attempts() -> None:
@@ -1033,7 +965,7 @@ def test_validate_config_rejects_zero_forget_after_timeout(timeout: object) -> N
         )
 
 
-def test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled() -> None:
+def test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled(snapshot) -> None:
     config = validate_config(
         {
             "alerts": [
@@ -1049,13 +981,10 @@ def test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled() -> N
         }
     )
 
-    assert config["alerts"][0]["confirmation"]["reminders"]["forget_after"] == {
-        "enabled": False,
-        "value": 0,
-    }
+    assert config == snapshot
 
 
-def test_configuration_preserves_native_extensions_on_canonical_models() -> None:
+def test_configuration_preserves_native_extensions_on_canonical_models(snapshot) -> None:
     raw = {
         "alerts": [
             {
@@ -1089,98 +1018,70 @@ def test_configuration_preserves_native_extensions_on_canonical_models() -> None
 
     alert = Configuration.model_validate(raw).alerts[0]
 
-    assert alert.notification.options == {
-        "notification_native": {"priority": "high"},
-    }
-    assert alert.confirmation is not None
-    assert alert.confirmation.buttons[0].__pydantic_extra__ == {
-        "button_native": "value",
-    }
-    assert alert.confirmation.notification.options == {
-        "confirmation_native": {"channel": "alerts"},
-    }
-    assert alert.confirmation.reminders.__pydantic_extra__ == {
-        "reminder_native": True,
-    }
-    assert alert.confirmation.__pydantic_extra__ == {
-        "confirmation_native": "value",
-    }
+    assert alert.model_dump(exclude_none=True) == snapshot
 
 
 def test_full_feature_configuration_preserves_confirmation_actions_without_post_send_action(
     full_feature_alert: dict[str, object],
+    snapshot,
 ) -> None:
     validated = validate_config({"alerts": [full_feature_alert]})
     alert = Configuration.model_validate(validated).alerts[0]
 
     assert alert.model_dump(mode="python", exclude_none=True) == validated["alerts"][0]
-    assert alert.confirmation is not None
-    assert alert.confirmation.actions.items == [
-        {
-            "action": "light.turn_on",
-            "target": {"entity_id": "light.hall"},
-        }
-    ]
-    assert alert.post_send_actions is None
+    assert validated == snapshot
 
 
 @pytest.mark.asyncio
-async def test_async_save_config_rejects_invalid_data_before_entry_update() -> None:
-    updates: list[dict[str, object]] = []
-
-    class ConfigEntries:
-        def async_update_entry(self, entry: object, **kwargs: object) -> None:
-            updates.append(kwargs)
-
-    class Hass:
-        config_entries = ConfigEntries()
-        data: ClassVar[dict[str, object]] = {}
-
-    class Entry:
-        options: ClassVar[dict[str, object]] = {}
+async def test_async_save_config_rejects_invalid_data_before_entry_update(hass) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options={"version": 1, "alerts": []},
+    )
+    entry.add_to_hass(hass)
+    runtime = RuntimeData(config=dict(entry.options), automations=[])
+    entry.runtime_data = runtime
+    original_options = entry.options
+    original_config = runtime.config
+    original_automations = runtime.automations
 
     with pytest.raises(ValidationError):
-        await async_save_config(Hass(), Entry(), {"version": 1, "alerts": [{"id": "Bad-ID"}]})
-    assert updates == []
+        await async_save_config(hass, entry, {"version": 1, "alerts": [{"id": "Bad-ID"}]})
+    assert entry.options is original_options
+    assert entry.runtime_data is runtime
+    assert runtime.config is original_config
+    assert runtime.automations is original_automations
 
 
 @pytest.mark.asyncio
 async def test_async_save_config_updates_entry_runtime_data(
-    monkeypatch: pytest.MonkeyPatch,
+    hass,
+    snapshot,
 ) -> None:
-    updates: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        "custom_components.ha_notifications.async_validate_alerts",
-        lambda *_args, **_kwargs: asyncio.sleep(0, result=[]),
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options={"version": 1, "alerts": []},
     )
-
-    class ConfigEntries:
-        def async_update_entry(self, entry: object, **kwargs: object) -> None:
-            updates.append(kwargs)
-
-    class Hass:
-        config_entries = ConfigEntries()
-
-    class Entry:
-        options: ClassVar[dict[str, object]] = {}
-        runtime_data = RuntimeData(config={"version": 1, "alerts": []}, automations=[])
-
-    hass = Hass()
-    entry = Entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = RuntimeData(config=dict(entry.options), automations=[])
     saved = await async_save_config(hass, entry, {"version": 1, "alerts": []})
     assert entry.runtime_data.config == saved
-    assert updates == [{"options": saved}]
+    assert entry.options == saved
     assert entry.runtime_data.automations == []
+    assert saved == snapshot
 
 
-def test_alert_helpers_find_replace_and_append_by_id() -> None:
+def test_alert_helpers_find_replace_and_append_by_id(snapshot) -> None:
     config = {"version": 1, "alerts": [{"id": "door"}, {"id": "window"}]}
 
     replaced = upsert_alert(config, {"id": "door", "name": "Door"})
     appended = upsert_alert(config, {"id": "garage"})
 
-    assert replaced["alerts"] == [{"id": "door", "name": "Door"}, {"id": "window"}]
-    assert [alert["id"] for alert in appended["alerts"]] == ["door", "window", "garage"]
+    assert {"replaced": replaced, "appended": appended} == snapshot
     assert config["alerts"] == [{"id": "door"}, {"id": "window"}]
-    assert find_alert(replaced, "door") == {"id": "door", "name": "Door"}
+    assert find_alert(replaced, "door") is replaced["alerts"][0]
     assert find_alert(config, "missing") is None

@@ -115,14 +115,42 @@ backend equivalent, configured in `pyproject.toml`. Fix formatting and safe lint
 findings with `npm run format` (frontend) and `npm run format:backend`
 (backend). The validation gate checks both Biome and Ruff formatting and lint.
 
-Backend tests run a real Home Assistant core (see `tests/backend/conftest.py`)
-using the `homeassistant` package directly; there is no
-`pytest-homeassistant-custom-component` dependency. Snapshots use Syrupy;
+Backend tests use Home Assistant's official `pytest-homeassistant` plugin.
+Its release pins the matching Home Assistant and pytest dependencies; upgrade
+them together by updating the plugin pin in `pyproject.toml`. Do not install
+`pytest-homeassistant-custom-component` alongside it: their fixtures overlap.
+The plugin loads automatically, and pytest disables the separate `respx`
+plugin so Home Assistant can initialize its HTTP compatibility layer first.
+
+Use the upstream `hass` fixture and import `MockConfigEntry` and
+`async_mock_service` from `pytest_homeassistant.common`. Custom integrations
+are enabled by default. Our `tests/backend/conftest.py` gives each test an
+isolated writable config directory and retains the alert and automation API
+fixtures. The automation API fixture uses the upstream authenticated HTTP client
+and removes its generated automations on teardown. Specify config-entry versions
+explicitly; upstream helper defaults
+are not our integration's current schema version.
+
+Snapshots use the plugin's Syrupy extension and live in `tests/backend/snapshots/`;
 review changes with:
 
 ```bash
 python3 -m pytest --snapshot-update
 ```
+
+Boundary tests use the upstream authenticated HTTP/WebSocket clients and user
+fixtures, plus HA's flow and config-entry managers. Time-dependent tests use
+`freezer` and `async_fire_time_changed` instead of real-time sleeps.
+History tests use `hass_storage` to check delayed writes, shutdown flushing,
+recreation, the 30-day retention boundary, and the 500-entry limit. The upstream
+socket and task/timer leak checks remain enabled.
+
+Tests are snapshot-first for complete payloads, response envelopes, and service
+sequences. Keep explicit assertions for timing, authorization, identity, and
+no-write/no-delivery guarantees. Consolidate weaker overlapping tests into real
+HA boundary tests while preserving their distinct scenarios; a smaller test
+count is not a reason to drop coverage. Review snapshot diffs before accepting
+them, then validate without update mode.
 
 The mobile delivery test runs generated automations through real Home Assistant
 core and device registries, using Android and iOS registration metadata and a

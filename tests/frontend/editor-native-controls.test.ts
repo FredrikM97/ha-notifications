@@ -170,11 +170,7 @@ describe("section data bindings", () => {
       setSectionEnabled(alert, findSection(key), enabled);
       expect(isSectionEnabled(alert, findSection(key)), key).toBe(enabled);
     }
-    expect(alert.post_send_actions).toEqual({ enabled });
-    expect(alert.confirmation.actions).toEqual({ enabled, items: [] });
-    expect(alert.confirmation.notification.enabled).toBe(enabled);
-    expect(alert.notification.option_controls?.android?.enabled).toBe(enabled);
-    expect(alert.notification.option_controls?.ios?.enabled).toBe(enabled);
+    expect(alert).toMatchSnapshot();
   });
 
   it("combines child status with every ancestor switch without changing child flags", () => {
@@ -197,20 +193,13 @@ describe("section data bindings", () => {
     write(alert, "conditions", "interval", { hours: 2 });
     write(alert, "triggers", "items", undefined);
     write(alert, "recipients", "target", { device_id: ["phone"] });
-    expect(alert.monitor.conditions.interval.value).toBe(7200);
-    expect(alert.monitor.triggers.items).toEqual([]);
-    expect(alert.notification.target).toEqual({ device_id: ["phone"], user_id: ["user-1"] });
-    expect(readField(alert, field("recipients", "target", alert))).toEqual({ device_id: ["phone"] });
-    expect(readField(alert, field("conditions", "interval", alert))).toEqual({ days: 0, hours: 2, minutes: 0, seconds: 0 });
-  });
-
-  it("keeps trigger, condition and inactive sections directly navigable without a mode setting", async () => {
-    const { editor } = await mount();
-    const labels = navigationLabels(editor);
-    expect(labels).toEqual(expect.arrayContaining(["Triggers", "Conditions", "Inactive"]));
-    expect(labels).not.toContain("When");
-    expect(labels).not.toContain("Automation mode");
-    expect(editor.shadowRoot!.querySelector('[data-editor-field="automation_mode"]')).toBeNull();
+    expect({
+      conditions: alert.monitor.conditions,
+      triggers: alert.monitor.triggers,
+      target: alert.notification.target,
+      recipientField: readField(alert, field("recipients", "target", alert)),
+      intervalField: readField(alert, field("conditions", "interval", alert)),
+    }).toMatchSnapshot();
   });
 
   it("removes cleared native options, prunes empty push options and keeps unknown extras", () => {
@@ -249,10 +238,7 @@ describe("section data bindings", () => {
     expect(alert.notification).not.toHaveProperty("option_controls");
     setSectionEnabled(alert, section, false);
     const control = alert.notification.option_controls![key]!;
-    expect(control.enabled).toBe(false);
-    expect(control.fields).toMatchObject(key === "android"
-      ? { sticky: true, timeout: true, channel: false }
-      : { "push.sound": true, "push.badge": true, subtitle: false });
+    expect(control).toMatchSnapshot();
     const fields = structuredClone(control.fields);
     setSectionEnabled(alert, section, true);
     expect(control.fields).toEqual(fields);
@@ -266,9 +252,7 @@ describe("section data bindings", () => {
     expect(isFieldEnabled(alert, section, group)).toBe(true);
     setFieldEnabled(alert, section, group, false);
     expect(isFieldEnabled(alert, section, group)).toBe(false);
-    expect(alert.notification.option_controls?.mobile).toEqual({
-      enabled: true, fields: { group: false, color: false, notification_icon: false, icon_url: false },
-    });
+    expect(alert.notification.option_controls?.mobile).toMatchSnapshot();
     write(alert, "mobile", "group", "windows");
     expect(isFieldEnabled(alert, section, group)).toBe(false);
     expect(alert.notification.options).toEqual({ group: "windows" });
@@ -289,15 +273,13 @@ describe("section data bindings", () => {
 describe("alert editor", () => {
   it("renders navigation from the section list and embeds common mobile options", async () => {
     const { editor } = await mount();
-    expect(navigationLabels(editor)).toEqual([
-      "Basics", "Triggers", "Conditions", "Inactive", "Recipients", "Notification", "Post-send actions",
-      "Android", "iOS / macOS", "Confirmation", "Reminder policy", "Notify recipients when confirmed", "Post-confirmation actions",
-    ]);
+    expect(navigationLabels(editor)).toMatchSnapshot("navigation");
+    expect(editor.shadowRoot!.querySelector('[data-editor-field="automation_mode"]')).toBeNull();
+    await select(editor, "triggers");
+    expect(editor.shadowRoot!.querySelector('[data-section="triggers"]')).not.toBeNull();
     await select(editor, "notification");
     expect(editor.shadowRoot!.querySelector("[data-embedded-section]")!.getAttribute("data-embedded-section")).toBe("mobile");
-    expect(forms(editor).map(item => item.schema[0].name)).toEqual([
-      "title", "message", "group", "notification_icon", "icon_url",
-    ]);
+    expect(forms(editor).map(item => item.schema)).toMatchSnapshot("notification forms");
   });
 
   it("edits hex colors with a native picker and seeds the theme color when enabled", async () => {
@@ -329,13 +311,6 @@ describe("alert editor", () => {
     expect(form(editor, "interval").data.interval).toEqual({ days: 0, hours: 12, minutes: 0, seconds: 0 });
   });
 
-  it("keeps the direct trigger section visible in the navigation", async () => {
-    const { editor } = await mount();
-    expect(navigationLabels(editor)).toContain("Triggers");
-    await select(editor, "triggers");
-    expect(editor.shadowRoot!.querySelector('[data-section="triggers"]')).not.toBeNull();
-  });
-
   it("toggles sections and option fields through feature switches", async () => {
     const { editor } = await mount();
     await select(editor, "android");
@@ -345,7 +320,7 @@ describe("alert editor", () => {
     expect(channelSwitch.checked).toBe(false);
     await toggle(editor, channelSwitch, true);
     const alert = (editor as unknown as { alert: Alert }).alert;
-    expect(alert.notification.option_controls?.android).toMatchObject({ enabled: true, fields: { channel: true } });
+    expect(alert.notification.option_controls?.android).toMatchSnapshot();
   });
 
   it("puts boolean help after the label and keeps the switch separate", async () => {
@@ -353,31 +328,30 @@ describe("alert editor", () => {
     await select(editor, "notification");
     const tag = row(editor, "use_default_tag");
     const heading = settingRowHeading(tag);
-    expect([...heading.querySelectorAll("slot")].map(slot => slot.name)).toEqual(["label", "help"]);
+    expect({
+      headingSlots: [...heading.querySelectorAll("slot")].map(slot => slot.name),
+      label: settingRowSlot(tag, "label").assignedElements()[0].textContent,
+      help: settingRowSlot(tag, "help").assignedElements()[0].tagName,
+      toggle: settingRowSlot(tag, "toggle").assignedElements()[0].tagName,
+    }).toMatchSnapshot();
     expect(settingRowSlot(tag, "toggle").closest(".nc-heading")).toBeNull();
-    expect(settingRowSlot(tag, "label").assignedElements()[0].textContent).toBe("Replace previous notifications");
-    expect(settingRowSlot(tag, "help").assignedElements()[0].tagName).toBe("HA-NOTIFICATIONS-HELP-ICON");
-    expect(settingRowSlot(tag, "toggle").assignedElements()[0].tagName).toBe("HA-SWITCH");
   });
 
   it("collects section and large-editor help in the heading dialog", async () => {
     const { editor } = await mount();
     await select(editor, "triggers");
     const help = await openHelp(editor, editor.shadowRoot!.querySelector(".card-header ha-notifications-help-icon")!);
-    expect(help.title).toBe("Triggers");
-    expect(help.topics).toHaveLength(2);
-    expect(help.topics[0]).toMatch(/^Controls custom triggers/);
-    expect(help.topics[1]).toMatch(/^Triggers Optional\. Use the native Home Assistant trigger editor/);
-    expect(form(editor, "items").computeLabel()).toBe("");
-    expect(form(editor, "items").getAttribute("aria-label")).toBe("Triggers");
+    expect({
+      help,
+      label: form(editor, "items").computeLabel(),
+      ariaLabel: form(editor, "items").getAttribute("aria-label"),
+    }).toMatchSnapshot();
   });
 
   it("shows scalar help beside the field and helper placeholders inside text fields", async () => {
     const { editor } = await mount();
     expect(row(editor, "description").querySelector("ha-notifications-help-icon")).toBeNull();
-    expect(form(editor, "description").schema[0]).toMatchObject({
-      selector: { text: { multiline: true } }, default: expect.stringMatching(/^An optional note/),
-    });
+    expect(form(editor, "description").schema).toMatchSnapshot();
     expect(row(editor, "name").querySelector(".nc-field-input")!.classList.contains("nc-wide")).toBe(true);
     expect(navigationLabels(editor)).not.toContain("Automation mode");
   });
@@ -412,7 +386,7 @@ describe("alert editor", () => {
     saveButton(editor).click();
     saveButton(editor).click();
     expect(onSave).toHaveBeenCalledOnce();
-    expect(onSave.mock.calls[0][0]).toMatchObject({ name: "Door alert", notification: { target: { entity_id: ["notify.phone"] } } });
+    expect(onSave.mock.calls[0][0]).toMatchSnapshot();
     resolve();
     await vi.waitFor(() => expect(onClosed).toHaveBeenCalledOnce());
     expect(editor.isConnected).toBe(false);

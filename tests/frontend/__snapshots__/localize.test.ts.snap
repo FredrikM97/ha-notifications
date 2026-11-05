@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`frontend localizer > falls back to the bundled catalog 1`] = `
+{
+  "editor.basic.label": "Basics",
+  "editor.conditions.interval.helper": "Evaluate the conditions on this schedule, even when no custom trigger fires.",
+  "editor.conditions.items.helper": "Conditions are optional and gate each run started by an enabled trigger; they do not start the alert when an entity changes. Configure triggers separately, or enable startup or periodic checks. Use the native Home Assistant condition editor. For numeric_state, include at least one of above or below. Home Assistant's numeric_state condition does not support for; use a state condition when you need a duration.",
+  "editor.confirmation.buttons.label": "Buttons",
+  "editor.confirmation.label": "Confirmation",
+  "editor.mobile.label": "Mobile options",
+  "editor.notification.label": "Notification",
+  "editor.notification.message.label": "Message",
+  "editor.postConfirmationActions.helper": "Configure actions with Home Assistant's native action editor. They run after a recipient confirms the alert.",
+  "editor.postSendActions.helper": "Configure actions with Home Assistant's native action editor. They run after every notification send.",
+  "editor.recipients.label": "Recipients",
+  "editor.triggers.helper": "Controls custom triggers that start the alert. When off, these settings are preserved and do not start the alert.",
+  "editor.triggers.items.helper": "Optional. Use the native Home Assistant trigger editor to add event, state, or template triggers that should start the alert. Startup and periodic checks are configured separately.",
+  "history.no_activity.helper": "Notification and automation activity will appear here.",
+  "panel.create_first": "Create your first alert. Add a Home Assistant trigger, or enable startup or periodic checks to evaluate its conditions.",
+}
+`;

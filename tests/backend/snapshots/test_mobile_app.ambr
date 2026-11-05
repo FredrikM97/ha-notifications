@@ -1,0 +1,94 @@
+# serializer version: 1
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[area_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[device_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[entity_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[floor_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[label_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_platform_discovery_and_service_delivery_share_target_resolution[user_id]
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---
+# name: test_registered_websocket_contract_is_admin_only_and_runtime_only
+  dict({
+    'initial': dict({
+      'id': 1,
+      'result': dict({
+        'platforms': list([
+          'android',
+        ]),
+        'unknown': False,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+    'missing_target': dict({
+      'error': dict({
+        'code': 'invalid_format',
+        'message': "required key not provided at 'target'. Got None",
+      }),
+      'id': 2,
+      'success': False,
+      'type': 'result',
+    }),
+    'non_admin': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 1,
+      'success': False,
+      'type': 'result',
+    }),
+    'updated_registration': dict({
+      'id': 3,
+      'result': dict({
+        'platforms': list([
+          'ios',
+        ]),
+        'unknown': False,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+  })
+# ---
+# name: test_registration_device_id_fallback_matches_service_delivery
+  list([
+    dict({
+      'message': 'Test',
+    }),
+  ])
+# ---

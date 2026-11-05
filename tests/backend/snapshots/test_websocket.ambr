@@ -1,0 +1,1079 @@
+# serializer version: 1
+# name: test_async_register_panel_registers_packaged_static_asset[custom panel]
+  list([
+    dict({
+      'frontend_url_path': 'ha_notifications',
+      'module_url': '/ha_notifications/panel.js?v=4536164321889251',
+      'require_admin': True,
+      'sidebar_icon': 'mdi:bell-outline',
+      'sidebar_title': 'HA Notifications',
+      'webcomponent_name': 'ha-notifications-panel',
+    }),
+  ])
+# ---
+# name: test_async_register_panel_registers_packaged_static_asset[updated panel]
+  list([
+    dict({
+      'frontend_url_path': 'ha_notifications',
+      'module_url': '/ha_notifications/panel.js?v=4e7d1d76abcf97d9',
+      'require_admin': True,
+      'sidebar_icon': 'mdi:bell-outline',
+      'sidebar_title': 'HA Notifications',
+      'webcomponent_name': 'ha-notifications-panel',
+    }),
+  ])
+# ---
+# name: test_automation_runtime_status_contract
+  dict({
+    'missing': dict({
+      'automation_id': 'ha_notifications_base_alert',
+      'current': 0,
+      'enabled': False,
+      'mode': 'single',
+      'status': 'missing',
+    }),
+    'running': dict({
+      'current': 2,
+      'enabled': True,
+      'mode': 'single',
+      'status': 'missing',
+    }),
+    'unregistered': dict({
+      'automation_id': 'ha_notifications_base_alert',
+      'current': 0,
+      'enabled': False,
+      'mode': 'single',
+      'status': 'missing',
+    }),
+  })
+# ---
+# name: test_automation_status_projects_generated_automation_ownership
+  dict({
+    'id': 1,
+    'result': dict({
+      'base_alert': dict({
+        'automation_id': 'ha_notifications_base_alert',
+        'current': 0,
+        'enabled': True,
+        'mode': 'parallel',
+        'notification_active': True,
+        'running': False,
+        'status': 'managed',
+        'triggered': True,
+      }),
+      'configuration_alert': dict({
+        'current': 0,
+        'enabled': False,
+        'mode': 'single',
+        'notification_active': False,
+        'running': False,
+        'status': 'missing',
+      }),
+      'demo': dict({
+        'automation_id': 'ha_notifications_demo',
+        'current': 0,
+        'enabled': False,
+        'mode': 'parallel',
+        'notification_active': False,
+        'running': False,
+        'status': 'disabled',
+        'triggered': False,
+      }),
+      'history_waiting_alert': dict({
+        'automation_id': 'ha_notifications_history_waiting_alert',
+        'current': 0,
+        'enabled': False,
+        'mode': 'parallel',
+        'notification_active': False,
+        'running': False,
+        'status': 'missing',
+      }),
+      'inactive_notification_alert': dict({
+        'automation_id': 'ha_notifications_inactive_notification_alert',
+        'current': 0,
+        'enabled': False,
+        'mode': 'parallel',
+        'notification_active': False,
+        'running': False,
+        'status': 'managed',
+        'triggered': False,
+      }),
+      'notification_alert': dict({
+        'automation_id': 'ha_notifications_notification_alert',
+        'current': 1,
+        'enabled': True,
+        'mode': 'parallel',
+        'notification_active': True,
+        'running': True,
+        'status': 'conflict',
+        'triggered': True,
+      }),
+    }),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_cancel_run_stops_actions_and_preserves_enabled_alert[False-False]
+  dict({
+    'commands': list([
+      dict({
+        'alert_id': 'door',
+        'command': 'cancel_run',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        'event': dict({
+          'details': dict({
+          }),
+          'event_id': '<event-id>',
+          'flow_id': 'run-1',
+          'message': 'Automation run cancelled',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'cancelled',
+        }),
+      }),
+      dict({
+        'config': dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        'event': dict({
+          'details': dict({
+          }),
+          'event_id': '<event-id>',
+          'flow_id': 'run-1',
+          'message': 'Waiting for confirmation',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'waiting',
+        }),
+      }),
+    ]),
+    'result': dict({
+      'cancelled': True,
+    }),
+    'turn_off': list([
+      dict({
+        'entity_id': 'automation.ha_notifications_door',
+        'stop_actions': True,
+      }),
+    ]),
+    'turn_on': list([
+    ]),
+  })
+# ---
+# name: test_cancel_run_stops_actions_and_preserves_enabled_alert[True-True]
+  dict({
+    'commands': list([
+      dict({
+        'alert_id': 'door',
+        'command': 'cancel_run',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        'event': dict({
+          'details': dict({
+          }),
+          'event_id': '<event-id>',
+          'flow_id': 'run-1',
+          'message': 'Automation run cancelled',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'cancelled',
+        }),
+      }),
+      dict({
+        'config': dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        'event': dict({
+          'details': dict({
+          }),
+          'event_id': '<event-id>',
+          'flow_id': 'run-1',
+          'message': 'Waiting for confirmation',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'waiting',
+        }),
+      }),
+    ]),
+    'result': dict({
+      'cancelled': True,
+    }),
+    'turn_off': list([
+      dict({
+        'entity_id': 'automation.ha_notifications_door',
+        'stop_actions': True,
+      }),
+    ]),
+    'turn_on': list([
+      dict({
+        'entity_id': 'automation.ha_notifications_door',
+      }),
+    ]),
+  })
+# ---
+# name: test_get_config_can_skip_validation_for_yaml_repair
+  dict({
+    'raw': dict({
+      'id': 1,
+      'result': dict({
+        'alerts': list([
+          dict({
+            'id': 'door',
+            'triggers': list([
+            ]),
+          }),
+        ]),
+        'version': 1,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+    'validated': dict({
+      'error': dict({
+        'code': 'ha_notifications_error',
+        'message': '''
+          1 validation error for Configuration
+          alerts.0.triggers
+            Extra inputs are not permitted [type=extra_forbidden, input_value=[], input_type=list]
+              For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+        ''',
+      }),
+      'id': 2,
+      'success': False,
+      'type': 'result',
+    }),
+  })
+# ---
+# name: test_get_config_creates_a_backend_default_alert
+  dict({
+    'id': 1,
+    'result': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'actions': dict({
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'buttons': list([
+              dict({
+                'id': 'confirm',
+                'label': 'Done',
+              }),
+            ]),
+            'enabled': False,
+            'notification': dict({
+              'enabled': False,
+              'message': '',
+              'options': dict({
+              }),
+              'title': '',
+              'use_default_tag': True,
+            }),
+            'reminders': dict({
+              'enabled': True,
+              'forget_after': dict({
+                'enabled': False,
+                'value': 900,
+              }),
+              'interval': 1800,
+              'max_attempts': 5,
+              'show_attempts': False,
+            }),
+          }),
+          'description': '',
+          'enabled': True,
+          'icon': 'mdi:bell-outline',
+          'id': '<alert-id>',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'interval': dict({
+                'enabled': False,
+                'value': 43200,
+              }),
+              'items': list([
+              ]),
+              'startup': False,
+            }),
+            'inactive': dict({
+              'clear_notification': False,
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+          }),
+          'name': '',
+          'notification': dict({
+            'message': '',
+            'options': dict({
+            }),
+            'target': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_get_config_creates_a_backend_default_alert.1
+  dict({
+    'id': 2,
+    'result': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'actions': dict({
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'buttons': list([
+              dict({
+                'id': 'confirm',
+                'label': 'Done',
+              }),
+            ]),
+            'enabled': False,
+            'notification': dict({
+              'enabled': False,
+              'message': '',
+              'options': dict({
+              }),
+              'title': '',
+              'use_default_tag': True,
+            }),
+            'reminders': dict({
+              'enabled': True,
+              'forget_after': dict({
+                'enabled': False,
+                'value': 900,
+              }),
+              'interval': 1800,
+              'max_attempts': 5,
+              'show_attempts': False,
+            }),
+          }),
+          'description': '',
+          'enabled': True,
+          'icon': 'mdi:bell-outline',
+          'id': '<alert-id>',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'interval': dict({
+                'enabled': False,
+                'value': 43200,
+              }),
+              'items': list([
+              ]),
+              'startup': False,
+            }),
+            'inactive': dict({
+              'clear_notification': False,
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+          }),
+          'name': '',
+          'notification': dict({
+            'message': '',
+            'options': dict({
+            }),
+            'target': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_get_config_returns_canonical_defaults
+  dict({
+    'id': 1,
+    'result': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'actions': dict({
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'buttons': list([
+              dict({
+                'id': 'confirm',
+                'label': 'Done',
+              }),
+            ]),
+            'enabled': False,
+            'notification': dict({
+              'enabled': False,
+              'message': '',
+              'options': dict({
+              }),
+              'title': '',
+              'use_default_tag': True,
+            }),
+            'reminders': dict({
+              'enabled': True,
+              'forget_after': dict({
+                'enabled': False,
+                'value': 900,
+              }),
+              'interval': 1800,
+              'max_attempts': 5,
+              'show_attempts': False,
+            }),
+          }),
+          'description': '',
+          'enabled': True,
+          'icon': 'mdi:bell-outline',
+          'id': 'door',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'interval': dict({
+                'enabled': False,
+                'value': 43200,
+              }),
+              'items': list([
+              ]),
+              'startup': False,
+            }),
+            'inactive': dict({
+              'clear_notification': False,
+              'enabled': False,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+          }),
+          'name': '',
+          'notification': dict({
+            'message': '',
+            'options': dict({
+            }),
+            'target': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_get_history_returns_persisted_entries
+  dict({
+    'id': 1,
+    'result': list([
+      dict({
+        'config': dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        'event': dict({
+          'details': dict({
+          }),
+          'event_id': '<event-id>',
+          'message': 'Sent',
+          'timestamp': '2026-11-06T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_registered_test_alert_route_requires_admin_and_alert_id
+  dict({
+    'calls': list([
+      dict({
+        'entity_id': 'automation.ha_notifications_demo',
+        'skip_condition': True,
+      }),
+    ]),
+    'invalid_arguments': list([
+      dict({
+        'error': dict({
+          'code': 'invalid_format',
+          'message': "required key not provided at 'alert_id'. Got None",
+        }),
+        'id': 8,
+        'success': False,
+        'type': 'result',
+      }),
+      dict({
+        'error': dict({
+          'code': 'invalid_format',
+          'message': "expected str at 'alert_id'. Got 5",
+        }),
+        'id': 9,
+        'success': False,
+        'type': 'result',
+      }),
+      dict({
+        'error': dict({
+          'code': 'invalid_format',
+          'message': "expected str at 'alert_id'. Got ['demo']",
+        }),
+        'id': 10,
+        'success': False,
+        'type': 'result',
+      }),
+    ]),
+    'started': dict({
+      'id': 7,
+      'result': dict({
+        'started': True,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+  })
+# ---
+# name: test_registered_websocket_routes_require_admin
+  dict({
+    'automation_status': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 3,
+      'success': False,
+      'type': 'result',
+    }),
+    'cancel_run': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 6,
+      'success': False,
+      'type': 'result',
+    }),
+    'delete': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 10,
+      'success': False,
+      'type': 'result',
+    }),
+    'get_automations': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 4,
+      'success': False,
+      'type': 'result',
+    }),
+    'get_config': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 1,
+      'success': False,
+      'type': 'result',
+    }),
+    'get_history': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 5,
+      'success': False,
+      'type': 'result',
+    }),
+    'mobile_platforms': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 2,
+      'success': False,
+      'type': 'result',
+    }),
+    'save_config': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 9,
+      'success': False,
+      'type': 'result',
+    }),
+    'test_alert': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 7,
+      'success': False,
+      'type': 'result',
+    }),
+    'validate_config': dict({
+      'error': dict({
+        'code': 'unauthorized',
+        'message': 'Unauthorized',
+      }),
+      'id': 8,
+      'success': False,
+      'type': 'result',
+    }),
+  })
+# ---
+# name: test_test_alert_errors_do_not_trigger_automation[missing_state]
+  dict({
+    'error': dict({
+      'code': 'ha_notifications_error',
+      'message': 'Save an alert with enabled triggers before testing it',
+    }),
+    'id': 9,
+    'success': False,
+    'type': 'result',
+  })
+# ---
+# name: test_test_alert_errors_do_not_trigger_automation[no_entry]
+  dict({
+    'error': dict({
+      'code': 'ha_notifications_error',
+      'message': 'HA Notifications has no config entry',
+    }),
+    'id': 9,
+    'success': False,
+    'type': 'result',
+  })
+# ---
+# name: test_test_alert_errors_do_not_trigger_automation[unknown_alert]
+  dict({
+    'error': dict({
+      'code': 'ha_notifications_error',
+      'message': 'unknown alert_id: missing',
+    }),
+    'id': 9,
+    'success': False,
+    'type': 'result',
+  })
+# ---
+# name: test_websocket_allows_owner
+  dict({
+    'id': 1,
+    'result': dict({
+      'alerts': list([
+      ]),
+      'version': 1,
+    }),
+    'success': True,
+    'type': 'result',
+  })
+# ---
+# name: test_websocket_save_validate_and_delete_round_trip
+  dict({
+    'deleted': dict({
+      'id': 4,
+      'result': dict({
+        'automation_changes': dict({
+          'delete': list([
+            'ha_notifications_base_alert',
+          ]),
+          'description': 'Generated by HA Notifications. Do not edit manually.',
+          'upsert': list([
+          ]),
+        }),
+        'config': dict({
+          'alerts': list([
+          ]),
+          'version': 1,
+        }),
+        'saved': True,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+    'fetched': dict({
+      'id': 3,
+      'result': dict({
+        'alerts': list([
+          dict({
+            'confirmation': dict({
+              'actions': dict({
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'buttons': list([
+                dict({
+                  'id': 'confirm',
+                  'label': 'Done',
+                }),
+              ]),
+              'enabled': False,
+              'notification': dict({
+                'enabled': False,
+                'message': '',
+                'options': dict({
+                }),
+                'title': '',
+                'use_default_tag': True,
+              }),
+              'reminders': dict({
+                'enabled': True,
+                'forget_after': dict({
+                  'enabled': False,
+                  'value': 900,
+                }),
+                'interval': 1800,
+                'max_attempts': 5,
+                'show_attempts': False,
+              }),
+            }),
+            'description': '',
+            'enabled': True,
+            'icon': 'mdi:bell-outline',
+            'id': 'base_alert',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                ]),
+                'startup': True,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                ]),
+              }),
+            }),
+            'name': 'Test alert',
+            'notification': dict({
+              'action': 'notify.mobile_app_phone',
+              'message': 'Message',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.mobile_app_phone',
+                ]),
+              }),
+              'title': '',
+              'use_default_tag': True,
+            }),
+          }),
+        ]),
+        'version': 1,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+    'saved': dict({
+      'id': 2,
+      'result': dict({
+        'automation_changes': dict({
+          'delete': list([
+          ]),
+          'description': 'Generated by HA Notifications. Do not edit manually.',
+          'upsert': list([
+            dict({
+              'actions': list([
+                dict({
+                  'action': 'ha_notifications.report',
+                  'data': dict({
+                    'alert_id': 'base_alert',
+                    'alert_name': 'Test alert',
+                    'details': dict({
+                      'action': 'automation_started',
+                      'started_by': dict({
+                        'description': "{{ (trigger | default({})).description | default('', true) }}",
+                        'entity_id': "{{ trigger.entity_id if trigger is defined and trigger.entity_id is defined else '' }}",
+                        'event_type': "{{ trigger.event.event_type if trigger is defined and trigger.platform == 'event' and trigger.event is defined and trigger.event else '' }}",
+                        'from_state': "{{ trigger.from_state.state if trigger is defined and trigger.from_state is defined and trigger.from_state else '' }}",
+                        'id': "{{ trigger.id if trigger is defined and trigger.id is defined else '' }}",
+                        'platform': "{{ trigger.platform if trigger is defined and trigger.platform is defined else '' }}",
+                        'to_state': "{{ trigger.to_state.state if trigger is defined and trigger.to_state is defined and trigger.to_state else '' }}",
+                      }),
+                    }),
+                    'flow_id': '{{ context.parent_id or context.id }}',
+                    'run_id': '{{ context.parent_id or context.id }}',
+                    'status': 'started',
+                  }),
+                }),
+                dict({
+                  'action': 'ha_notifications.send',
+                  'data': dict({
+                    'action': 'notify.mobile_app_phone',
+                    'alert_id': 'base_alert',
+                    'alert_name': 'Test alert',
+                    'flow_id': '{{ context.parent_id or context.id }}',
+                    'payload': dict({
+                      'data': dict({
+                      }),
+                      'message': 'Message',
+                      'title': '',
+                    }),
+                    'target': dict({
+                      'entity_id': list([
+                        'notify.mobile_app_phone',
+                      ]),
+                    }),
+                    'use_default_tag': True,
+                  }),
+                }),
+                dict({
+                  'action': 'ha_notifications.report',
+                  'data': dict({
+                    'alert_id': 'base_alert',
+                    'alert_name': 'Test alert',
+                    'details': dict({
+                      'action': 'automation_completed',
+                    }),
+                    'flow_id': '{{ context.parent_id or context.id }}',
+                    'run_id': '{{ context.parent_id or context.id }}',
+                    'status': 'completed',
+                  }),
+                }),
+              ]),
+              'alias': 'HA Notifications: Test alert',
+              'conditions': list([
+              ]),
+              'description': 'Generated by HA Notifications. Do not edit manually.',
+              'id': 'ha_notifications_base_alert',
+              'initial_state': True,
+              'mode': 'parallel',
+              'triggers': list([
+                dict({
+                  'event': 'start',
+                  'id': '0',
+                  'trigger': 'homeassistant',
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        'config': dict({
+          'alerts': list([
+            dict({
+              'confirmation': dict({
+                'actions': dict({
+                  'enabled': False,
+                  'items': list([
+                  ]),
+                }),
+                'buttons': list([
+                  dict({
+                    'id': 'confirm',
+                    'label': 'Done',
+                  }),
+                ]),
+                'enabled': False,
+                'notification': dict({
+                  'enabled': False,
+                  'message': '',
+                  'options': dict({
+                  }),
+                  'title': '',
+                  'use_default_tag': True,
+                }),
+                'reminders': dict({
+                  'enabled': True,
+                  'forget_after': dict({
+                    'enabled': False,
+                    'value': 900,
+                  }),
+                  'interval': 1800,
+                  'max_attempts': 5,
+                  'show_attempts': False,
+                }),
+              }),
+              'description': '',
+              'enabled': True,
+              'icon': 'mdi:bell-outline',
+              'id': 'base_alert',
+              'monitor': dict({
+                'conditions': dict({
+                  'enabled': True,
+                  'interval': dict({
+                    'enabled': False,
+                    'value': 43200,
+                  }),
+                  'items': list([
+                  ]),
+                  'startup': True,
+                }),
+                'inactive': dict({
+                  'clear_notification': False,
+                  'enabled': False,
+                  'items': list([
+                  ]),
+                }),
+                'triggers': dict({
+                  'enabled': True,
+                  'items': list([
+                  ]),
+                }),
+              }),
+              'name': 'Test alert',
+              'notification': dict({
+                'action': 'notify.mobile_app_phone',
+                'message': 'Message',
+                'options': dict({
+                }),
+                'target': dict({
+                  'entity_id': list([
+                    'notify.mobile_app_phone',
+                  ]),
+                }),
+                'title': '',
+                'use_default_tag': True,
+              }),
+            }),
+          ]),
+          'version': 1,
+        }),
+        'saved': True,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+    'validated': dict({
+      'id': 1,
+      'result': dict({
+        'alerts': list([
+          dict({
+            'confirmation': dict({
+              'actions': dict({
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'buttons': list([
+                dict({
+                  'id': 'confirm',
+                  'label': 'Done',
+                }),
+              ]),
+              'enabled': False,
+              'notification': dict({
+                'enabled': False,
+                'message': '',
+                'options': dict({
+                }),
+                'title': '',
+                'use_default_tag': True,
+              }),
+              'reminders': dict({
+                'enabled': True,
+                'forget_after': dict({
+                  'enabled': False,
+                  'value': 900,
+                }),
+                'interval': 1800,
+                'max_attempts': 5,
+                'show_attempts': False,
+              }),
+            }),
+            'description': '',
+            'enabled': True,
+            'icon': 'mdi:bell-outline',
+            'id': 'base_alert',
+            'monitor': dict({
+              'conditions': dict({
+                'enabled': True,
+                'interval': dict({
+                  'enabled': False,
+                  'value': 43200,
+                }),
+                'items': list([
+                ]),
+                'startup': True,
+              }),
+              'inactive': dict({
+                'clear_notification': False,
+                'enabled': False,
+                'items': list([
+                ]),
+              }),
+              'triggers': dict({
+                'enabled': True,
+                'items': list([
+                ]),
+              }),
+            }),
+            'name': 'Test alert',
+            'notification': dict({
+              'action': 'notify.mobile_app_phone',
+              'message': 'Message',
+              'options': dict({
+              }),
+              'target': dict({
+                'entity_id': list([
+                  'notify.mobile_app_phone',
+                ]),
+              }),
+              'title': '',
+              'use_default_tag': True,
+            }),
+          }),
+        ]),
+        'version': 1,
+      }),
+      'success': True,
+      'type': 'result',
+    }),
+  })
+# ---

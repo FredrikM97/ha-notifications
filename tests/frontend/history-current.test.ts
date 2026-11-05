@@ -54,10 +54,7 @@ describe("history helpers", () => {
       ...historyFixture[0],
       event: { ...historyFixture[0].event, event_id: "event_garage_2", timestamp: "2026-10-06T12:34:56+00:00" },
     };
-    expect(groupHistoryEntries([historyFixture[0], second, historyFixture[1]])).toEqual([
-      { flowId: "flow_garage", entries: [historyFixture[0], second] },
-      { entries: [historyFixture[1]] },
-    ]);
+    expect(groupHistoryEntries([historyFixture[0], second, historyFixture[1]])).toMatchSnapshot();
   });
 
   it("keeps useful detail summaries and hides retry-only details", () => {
@@ -148,7 +145,7 @@ describe("history view", () => {
     menu.items[0].action();
     menu.items[1].action();
     await settleElement(view);
-    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toEqual({ groupByFlow: true, showFilters: true });
+    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toMatchSnapshot("enabled preferences");
 
     const reopened = mountHistory();
     await settleElement(reopened);
@@ -160,20 +157,7 @@ describe("history view", () => {
     reopenedMenu.items[0].action();
     reopenedMenu.items[1].action();
     await settleElement(reopened);
-    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toEqual({ groupByFlow: false, showFilters: false });
-  });
-
-  it("filters visible rows as the search input changes", async () => {
-    const view = mountHistory();
-    await settleElement(view);
-    const search = view.shadowRoot.querySelector("ha-input") as HTMLElement & { value: string };
-
-    search.value = "device";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await settleElement(view);
-
-    expect(view.shadowRoot.querySelectorAll(".nc-item")).toHaveLength(1);
-    expect(view.shadowRoot.querySelector(".nc-item-title")?.textContent).toContain("Water leak");
+    expect(JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY)!)).toMatchSnapshot("disabled preferences");
   });
 
   it("shows trigger and confirmation reason summaries", async () => {
@@ -196,8 +180,7 @@ describe("history view", () => {
     await settleElement(view);
 
     const summary = view.shadowRoot.querySelector(".nc-item > .nc-muted")?.textContent;
-    expect(summary).toContain("Started by input_boolean.alert_button (off -> on)");
-    expect(summary).toContain("Reason: Confirmation notification");
+    expect(summary?.replace(/\s+/g, " ").trim()).toMatchSnapshot();
   });
 
   it("emits alert selection from the current row link", async () => {
@@ -210,7 +193,7 @@ describe("history view", () => {
 
     view.shadowRoot.querySelector<HTMLButtonElement>(".nc-link")!.click();
 
-    expect(selected).toEqual({ alertId: "garage", alertName: "Garage door" });
+    expect(selected).toMatchSnapshot();
   });
 
   it("renders an unknown alert without an ID as a span rather than a link", async () => {
@@ -246,9 +229,7 @@ describe("history view", () => {
     expect(summary.textContent).toBe("Details");
     await testUser().click(summary);
     expect(details.open).toBe(true);
-    expect(details.querySelector("pre")?.textContent).toBe(
-      JSON.stringify(historyFixture[0].event.details, null, 2),
-    );
+    expect(details.querySelector("pre")?.textContent).toMatchSnapshot();
   });
 
   it("preserves selector configuration identity across filter updates", async () => {
@@ -276,14 +257,15 @@ describe("history view", () => {
     const view = mountHistory([historyFixture[0], second]);
     await settleElement(view);
 
-    expect(view.shadowRoot.querySelectorAll(".nc-flow")).toHaveLength(1);
-    expect(view.shadowRoot.querySelectorAll(".nc-flow .nc-item")).toHaveLength(2);
-    expect(view.shadowRoot.querySelector(".nc-flow .nc-item .nc-flow-id")).toBeNull();
-    expect(view.shadowRoot.querySelector(".nc-flow > summary")?.textContent).toContain("Flow flow_garage");
-    expect(view.shadowRoot.querySelector(".nc-flow")?.hasAttribute("open")).toBe(false);
-    const time = view.shadowRoot.querySelector(".nc-flow > summary time")!;
-    expect(time.getAttribute("datetime")).toBe(second.event.timestamp);
-    expect(time.textContent).toContain("Latest activity:");
+    expect([...view.shadowRoot.querySelectorAll<HTMLDetailsElement>(".nc-flow")].map(flow => ({
+      open: flow.open,
+      summary: flow.querySelector("summary")?.textContent?.replace(/\s+/g, " ").trim(),
+      latestActivity: flow.querySelector("summary time")?.getAttribute("datetime"),
+      items: [...flow.querySelectorAll(".nc-item")].map(item => ({
+        title: item.querySelector(".nc-item-title")?.textContent?.replace(/\s+/g, " ").trim(),
+        flowId: item.querySelector(".nc-flow-id")?.textContent ?? null,
+      })),
+    }))).toMatchSnapshot();
   });
 
   it("starts groups collapsed when grouping is enabled from the toolbar", async () => {

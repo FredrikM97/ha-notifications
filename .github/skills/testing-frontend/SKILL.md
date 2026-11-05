@@ -8,9 +8,12 @@ Use this skill for TypeScript, Lit, editor, dashboard, and transport tests.
 Reuse `tests/frontend/conftest.ts`, JSON fixtures, shared query helpers, and
 `user-event`.
 
-Use ordinary assertions for focused invariants and side effects. Use Vitest
-snapshots for complete serialized payloads, rendered contracts, and stable UI
-structures. Mock only the transport boundary when testing UI behavior, and keep
+Follow the snapshot-first and overlap-consolidation policy in `tests/AGENTS.md`.
+Prefer Vitest snapshots for complete serialized payloads, rendered contracts,
+and stable UI structures instead of duplicated field-by-field expectations.
+Retain focused assertions for behavior snapshots cannot prove, and preserve
+distinct cases when removing weaker duplicate tests.
+Mock only the transport boundary when testing UI behavior, and keep
 frontend payloads aligned with the backend canonical schema.
 
 Finish related frontend implementation and test edits before running checks.

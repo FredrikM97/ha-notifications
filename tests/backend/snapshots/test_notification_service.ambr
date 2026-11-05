@@ -1,0 +1,1393 @@
+# serializer version: 1
+# name: test_action_executed_report_records_history_without_run_id
+  dict({
+    'args': tuple(
+      'water',
+      'water',
+      'action_executed',
+      'Action Executed',
+      dict({
+        'action': 'light.turn_on',
+      }),
+    ),
+    'kwargs': dict({
+    }),
+  })
+# ---
+# name: test_clear_uses_canonical_action_and_clear_message
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'tag': 'water',
+        }),
+        'message': 'clear_notification',
+      }),
+    ]),
+    'history_args': tuple(
+      'water',
+      'water',
+      'notification_cleared',
+      'Notification cleared',
+      dict({
+        'service': 'notify.mobile_app_phone',
+      }),
+    ),
+    'history_kwargs': dict({
+    }),
+  })
+# ---
+# name: test_command_fires_alert_scoped_event[cancel_run]
+  list([
+    dict({
+      'data': dict({
+        'alert_id': 'water',
+        'command': 'cancel_run',
+      }),
+      'event_type': 'ha_notifications_command',
+    }),
+  ])
+# ---
+# name: test_command_fires_alert_scoped_event[skip_confirmation]
+  list([
+    dict({
+      'data': dict({
+        'alert_id': 'water',
+        'command': 'skip_confirmation',
+      }),
+      'event_type': 'ha_notifications_command',
+    }),
+  ])
+# ---
+# name: test_delivery_debug_log_matches_notify_payload[clear]
+  list([
+    "Notification clear: action=notify.mobile_app_phone alert_id=None flow_id=None payload={'message': 'clear_notification', 'data': {'priority': 'high', 'ttl': 0, 'actions': []}}",
+    'Notification clear completed: action=notify.mobile_app_phone',
+  ])
+# ---
+# name: test_delivery_debug_log_matches_notify_payload[send]
+  list([
+    "Notification send: action=notify.mobile_app_phone alert_id=None flow_id=None payload={'message': 'Debug notification', 'data': {'priority': 'high', 'ttl': 0, 'actions': []}}",
+    'Notification send completed: action=notify.mobile_app_phone',
+  ])
+# ---
+# name: test_delivery_keeps_integration_metadata_out_of_native_payload[clear]
+  list([
+    dict({
+      'data': dict({
+        'priority': 'high',
+        'tag': 'base_alert',
+      }),
+      'message': 'clear_notification',
+      'title': 'Water',
+    }),
+  ])
+# ---
+# name: test_delivery_keeps_integration_metadata_out_of_native_payload[send]
+  list([
+    dict({
+      'data': dict({
+        'priority': 'high',
+        'tag': 'base_alert',
+      }),
+      'message': 'Low water',
+      'title': 'Water',
+    }),
+  ])
+# ---
+# name: test_inactive_reports_are_deduplicated_per_explicit_flow[explicit-flow]
+  list([
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-2',
+        'message': 'Condition inactive',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'inactive',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-1',
+        'message': 'Condition inactive',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'inactive',
+      }),
+    }),
+  ])
+# ---
+# name: test_inactive_reports_are_deduplicated_per_explicit_flow[started-run]
+  list([
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-2',
+        'message': 'Condition inactive',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'inactive',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-1',
+        'message': 'Condition inactive',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'inactive',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-1',
+        'message': 'Started',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'started',
+      }),
+    }),
+  ])
+# ---
+# name: test_native_delivery_contract
+  dict({
+    'absent-message': list([
+      dict({
+      }),
+    ]),
+    'color': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'color': '#2DF56D',
+            'persistent': True,
+            'subject': 'Motion details',
+            'subtitle': 'Backyard',
+            'tag': 'base_alert',
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+      ]),
+      'mapped': dict({
+        'action': 'notify.mobile_app_phone',
+        'payload': dict({
+          'data': dict({
+            'color': '#2DF56D',
+            'persistent': True,
+            'subject': 'Motion details',
+            'subtitle': 'Backyard',
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+        'target': dict({
+          'entity_id': list([
+            'notify.mobile_app_phone',
+          ]),
+        }),
+        'use_default_tag': True,
+      }),
+    }),
+    'direct': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'channel': 'Alerts',
+            'group': 'water',
+            'priority': 'high',
+            'push': dict({
+              'sound': dict({
+                'critical': 1,
+                'name': 'default',
+                'volume': 1.0,
+              }),
+            }),
+            'tag': 'base_alert',
+            'ttl': 0,
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+      ]),
+      'mapped': dict({
+        'action': 'notify.mobile_app_phone',
+        'payload': dict({
+          'data': dict({
+            'channel': 'Alerts',
+            'group': 'water',
+            'priority': 'high',
+            'push': dict({
+              'sound': dict({
+                'critical': 1,
+                'name': 'default',
+                'volume': 1.0,
+              }),
+            }),
+            'ttl': 0,
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+        'target': dict({
+          'entity_id': list([
+            'notify.mobile_app_phone',
+          ]),
+        }),
+        'use_default_tag': True,
+      }),
+    }),
+    'nested-data': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'data': dict({
+              'channel': 'Alerts',
+              'group': 'water',
+              'priority': 'high',
+              'push': dict({
+                'sound': dict({
+                  'critical': 1,
+                  'name': 'default',
+                  'volume': 1.0,
+                }),
+              }),
+              'ttl': 0,
+            }),
+            'tag': 'base_alert',
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+      ]),
+      'mapped': dict({
+        'action': 'notify.mobile_app_phone',
+        'payload': dict({
+          'data': dict({
+            'data': dict({
+              'channel': 'Alerts',
+              'group': 'water',
+              'priority': 'high',
+              'push': dict({
+                'sound': dict({
+                  'critical': 1,
+                  'name': 'default',
+                  'volume': 1.0,
+                }),
+              }),
+              'ttl': 0,
+            }),
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+        'target': dict({
+          'entity_id': list([
+            'notify.mobile_app_phone',
+          ]),
+        }),
+        'use_default_tag': True,
+      }),
+    }),
+    'title-only': list([
+      dict({
+        'title': 'Title only',
+      }),
+    ]),
+  })
+# ---
+# name: test_native_payload_contract
+  dict({
+    'absent': dict({
+    }),
+    'absent-with-alert': dict({
+      'data': dict({
+        'tag': 'alert',
+      }),
+    }),
+    'device-content': dict({
+      'data': dict({
+        'message': 'Device message',
+        'title': 'Device title',
+      }),
+      'message': 'Canonical message',
+      'title': 'Canonical title',
+    }),
+    'empty-message': dict({
+      'data': dict({
+        'tag': 'alert',
+      }),
+      'message': '',
+    }),
+    'explicit-tag': dict({
+      'clear': dict({
+        'data': dict({
+          'tag': 'custom',
+        }),
+        'message': 'clear_notification',
+      }),
+      'send': dict({
+        'data': dict({
+          'tag': 'custom',
+        }),
+        'message': 'Separate notification',
+      }),
+    }),
+    'native-content': dict({
+      'custom': 'value',
+      'data': dict({
+        'color': '#c7a600',
+        'group': 'water',
+        'native_extra': dict({
+          'priority': 'high',
+        }),
+        'subject': 'Details',
+        'tag': 'alert',
+      }),
+      'message': 'Low water',
+      'title': 'Water',
+    }),
+    'native-metadata': dict({
+      'data': dict({
+        'alert_id': 'native-alert',
+        'confirmation_device_id': 'native-device',
+        'confirmation_user_id': 'native-user',
+        'history_reason': 'native-reason',
+        'template_message': 'Native metadata',
+      }),
+    }),
+    'no-tag': dict({
+      'clear': dict({
+        'data': dict({
+        }),
+        'message': 'clear_notification',
+      }),
+      'send': dict({
+        'data': dict({
+        }),
+        'message': 'Separate notification',
+      }),
+    }),
+    'subject-only': dict({
+      'subject': 'Native extra',
+    }),
+    'subject-only-with-alert': dict({
+      'data': dict({
+        'tag': 'alert',
+      }),
+      'subject': 'Native extra',
+    }),
+    'title-only': dict({
+      'title': 'Title only',
+    }),
+    'title-only-with-alert': dict({
+      'data': dict({
+        'tag': 'alert',
+      }),
+      'title': 'Title only',
+    }),
+  })
+# ---
+# name: test_report_resolves_confirmation_identity[authenticated-user]
+  dict({
+    'args': tuple(
+      'water',
+      'water',
+      'confirmation_completed',
+      'Confirmation Completed',
+      dict({
+        'confirmed_by': 'Authenticated Alice',
+      }),
+    ),
+    'kwargs': dict({
+      'flow_id': 'run-1',
+    }),
+  })
+# ---
+# name: test_report_resolves_confirmation_identity[device]
+  dict({
+    'args': tuple(
+      'water',
+      'water',
+      'confirmation_completed',
+      'Confirmation Completed',
+      dict({
+        'confirmed_by': 'user-1',
+      }),
+    ),
+    'kwargs': dict({
+      'flow_id': 'run-1',
+    }),
+  })
+# ---
+# name: test_report_resolves_confirmation_identity[person]
+  dict({
+    'args': tuple(
+      'water',
+      'water',
+      'confirmation_completed',
+      'Confirmation Completed',
+      dict({
+        'confirmed_by': 'Alice',
+      }),
+    ),
+    'kwargs': dict({
+      'flow_id': 'run-1',
+    }),
+  })
+# ---
+# name: test_report_resolves_confirmation_identity[unresolved]
+  dict({
+    'args': tuple(
+      'water',
+      'water',
+      'confirmation_completed',
+      'Confirmation Completed',
+      dict({
+        'confirmed_by': 'Unknown device',
+      }),
+    ),
+    'kwargs': dict({
+      'flow_id': 'run-1',
+    }),
+  })
+# ---
+# name: test_send_nests_mobile_app_actions_in_notify_data
+  list([
+    dict({
+      'data': dict({
+        'actions': list([
+          dict({
+            'action': 'ha_notifications_alert_confirmation_confirm',
+            'title': 'Confirm',
+          }),
+        ]),
+      }),
+      'message': 'Confirm this alert',
+    }),
+  ])
+# ---
+# name: test_send_preserves_dynamic_target_selectors
+  list([
+    dict({
+      'message': 'Kitchen alert',
+    }),
+  ])
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[android-confirmation-off]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'alert_once': False,
+          'channel': 'Water alerts',
+          'clickAction': '/lovelace/water',
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'importance': 'high',
+          'ledColor': '#00ff00',
+          'notification_icon': 'mdi:water',
+          'persistent': True,
+          'priority': 'high',
+          'sticky': False,
+          'tag': 'user-water-tag',
+          'timeout': 0,
+          'ttl': 0,
+          'vibrationPattern': '100, 1000, 100, 1000, 100',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'alert_once': False,
+          'channel': 'Water alerts',
+          'clickAction': '/lovelace/water',
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'importance': 'high',
+          'ledColor': '#00ff00',
+          'notification_icon': 'mdi:water',
+          'persistent': True,
+          'priority': 'high',
+          'sticky': False,
+          'tag': 'user-water-tag',
+          'timeout': 0,
+          'ttl': 0,
+          'vibrationPattern': '100, 1000, 100, 1000, 100',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[android-confirmation-on]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'alert_once': False,
+          'channel': 'Water alerts',
+          'clickAction': '/lovelace/water',
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'importance': 'high',
+          'ledColor': '#00ff00',
+          'notification_icon': 'mdi:water',
+          'persistent': True,
+          'priority': 'high',
+          'sticky': False,
+          'tag': 'user-water-tag',
+          'timeout': 0,
+          'ttl': 0,
+          'vibrationPattern': '100, 1000, 100, 1000, 100',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'alert_once': False,
+          'channel': 'Water alerts',
+          'clickAction': '/lovelace/water',
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'importance': 'high',
+          'ledColor': '#00ff00',
+          'notification_icon': 'mdi:water',
+          'persistent': True,
+          'priority': 'high',
+          'sticky': False,
+          'tag': 'user-water-tag',
+          'timeout': 0,
+          'ttl': 0,
+          'vibrationPattern': '100, 1000, 100, 1000, 100',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[general-confirmation-off]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[general-confirmation-on]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[ios-confirmation-off]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'push': dict({
+            'badge': 0,
+            'custom': dict({
+              'count': 0,
+              'enabled': False,
+            }),
+            'interruption-level': 'critical',
+            'sound': dict({
+              'critical': 1,
+              'name': 'default',
+              'volume': 0.5,
+            }),
+          }),
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'push': dict({
+            'badge': 0,
+            'custom': dict({
+              'count': 0,
+              'enabled': False,
+            }),
+            'interruption-level': 'critical',
+            'sound': dict({
+              'critical': 1,
+              'name': 'default',
+              'volume': 0.5,
+            }),
+          }),
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_preserves_mobile_data_from_generated_confirmation_notification[ios-confirmation-on]
+  dict({
+    'delivered': list([
+      dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'push': dict({
+            'badge': 0,
+            'custom': dict({
+              'count': 0,
+              'enabled': False,
+            }),
+            'interruption-level': 'critical',
+            'sound': dict({
+              'critical': 1,
+              'name': 'default',
+              'volume': 0.5,
+            }),
+          }),
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'history': list([
+      dict({
+        'config': dict({
+          'id': 'base_alert',
+          'name': 'Test alert',
+        }),
+        'event': dict({
+          'details': dict({
+            'service': 'notify.mobile_app_phone',
+          }),
+          'event_id': '<event-id>',
+          'message': 'Notification sent',
+          'timestamp': '2026-11-05T12:00:00+00:00',
+          'type': 'notification_sent',
+        }),
+      }),
+    ]),
+    'mapped': dict({
+      'action': 'notify.mobile_app_phone',
+      'payload': dict({
+        'data': dict({
+          'actions': list([
+            dict({
+              'action': 'ha_notifications_base_alert_confirmation_confirm',
+              'title': 'Confirm',
+            }),
+          ]),
+          'color': '#123456',
+          'custom': dict({
+            'count': 0,
+            'enabled': False,
+            'values': list([
+              'water',
+              0,
+              False,
+            ]),
+          }),
+          'group': 'water',
+          'notification_icon': 'mdi:water',
+          'push': dict({
+            'badge': 0,
+            'custom': dict({
+              'count': 0,
+              'enabled': False,
+            }),
+            'interruption-level': 'critical',
+            'sound': dict({
+              'critical': 1,
+              'name': 'default',
+              'volume': 0.5,
+            }),
+          }),
+          'tag': 'user-water-tag',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.mobile_app_phone',
+        ]),
+      }),
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_send_records_managed_alert_history
+  dict({
+    'args': tuple(
+      'water',
+      'Water alert',
+      'notification_sent',
+      'Notification sent',
+      dict({
+        'service': 'notify.mobile_app_phone',
+      }),
+    ),
+    'kwargs': dict({
+      'flow_id': 'flow-1',
+    }),
+  })
+# ---
+# name: test_send_renders_deferred_confirmation_message
+  list([
+    dict({
+      'data': dict({
+        'color': '#2DF56D',
+        'confirmation_device_id': 'native-device',
+        'confirmation_user_id': 'native-user',
+        'tag': 'water',
+        'template_message': 'Native metadata',
+      }),
+      'message': 'Confirmed by user-1 (user-1)',
+      'title': 'Confirmation',
+    }),
+  ])
+# ---
+# name: test_send_resolves_explicit_notify_targets
+  dict({
+    'phone': list([
+      dict({
+        'data': dict({
+          'tag': 'low_water',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+    'tablet': list([
+      dict({
+        'data': dict({
+          'tag': 'low_water',
+        }),
+        'message': 'Low water',
+        'title': 'Water',
+      }),
+    ]),
+  })
+# ---
+# name: test_service_manifest_passes_home_assistant_description_validation
+  dict({
+    'descriptions': dict({
+      'clear': dict({
+        'description': 'Clear a notification using its configured Home Assistant action. Requires a tag matching the earlier push; without a default or custom tag, a previous push cannot be identified.',
+        'fields': NodeDictClass({
+          'action': NodeDictClass({
+            'name': 'Notify action',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'alert_id': NodeDictClass({
+            'name': 'Alert ID',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'alert_name': NodeDictClass({
+            'name': 'Alert name',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'confirmation': NodeDictClass({
+            'name': 'Confirmation context',
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'flow_id': NodeDictClass({
+            'name': 'Flow ID',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'history_reason': NodeDictClass({
+            'name': 'History reason',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'payload': NodeDictClass({
+            'description': 'Native notify payload; data contains device options and an optional custom tag. Message is replaced with clear_notification.',
+            'name': 'Payload',
+            'required': True,
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'target': NodeDictClass({
+            'name': 'Recipients',
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'use_default_tag': NodeDictClass({
+            'default': True,
+            'description': 'Defaults to true. Use the same setting as the original send. A custom payload.data.tag is always preserved; disabling without a custom tag cannot identify a previous push.',
+            'name': 'Use alert ID as default tag',
+            'selector': dict({
+              'boolean': dict({
+              }),
+            }),
+          }),
+        }),
+        'name': 'Clear notification',
+      }),
+      'command': dict({
+        'description': 'Send an alert-scoped command event to HA Notifications automations.',
+        'fields': NodeDictClass({
+          'alert_id': NodeDictClass({
+            'description': 'Alert that receives the command.',
+            'name': 'Alert ID',
+            'required': True,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'command': NodeDictClass({
+            'description': 'Command to send, such as skip_confirmation.',
+            'name': 'Command',
+            'required': True,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+        }),
+        'name': 'Send alert command',
+      }),
+      'report': dict({
+        'description': 'Record an automation lifecycle or action event and optional metadata.',
+        'fields': NodeDictClass({
+          'alert_id': NodeDictClass({
+            'description': 'Alert that owns the reported event.',
+            'name': 'Alert ID',
+            'required': True,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'alert_name': NodeDictClass({
+            'description': 'Display name of the alert.',
+            'name': 'Alert name',
+            'required': False,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'details': NodeDictClass({
+            'description': 'Optional structured report metadata.',
+            'name': 'Details',
+            'required': False,
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'message': NodeDictClass({
+            'description': 'Optional human-readable report message.',
+            'name': 'Message',
+            'required': False,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'run_id': NodeDictClass({
+            'description': 'Required for started, waiting, running, and completed states.',
+            'name': 'Run ID',
+            'required': False,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'status': NodeDictClass({
+            'description': 'Lifecycle or action event being reported, such as action_executed.',
+            'name': 'Status',
+            'required': True,
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+        }),
+        'name': 'Report automation state',
+      }),
+      'send': dict({
+        'description': 'Send a notification using HA Notifications.',
+        'fields': NodeDictClass({
+          'action': NodeDictClass({
+            'name': 'Notify action',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'alert_id': NodeDictClass({
+            'name': 'Alert ID',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'alert_name': NodeDictClass({
+            'name': 'Alert name',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'confirmation': NodeDictClass({
+            'name': 'Confirmation context',
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'flow_id': NodeDictClass({
+            'name': 'Flow ID',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'history_reason': NodeDictClass({
+            'name': 'History reason',
+            'selector': dict({
+              'text': dict({
+                'multiline': False,
+                'multiple': False,
+              }),
+            }),
+          }),
+          'payload': NodeDictClass({
+            'description': 'Native notify service payload with title, message, and data containing device options.',
+            'name': 'Payload',
+            'required': True,
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'target': NodeDictClass({
+            'name': 'Recipients',
+            'selector': dict({
+              'object': dict({
+                'multiple': False,
+              }),
+            }),
+          }),
+          'use_default_tag': NodeDictClass({
+            'default': True,
+            'description': 'Defaults to true. Add alert_id as the tag only when payload.data.tag is absent. Disable for separate notifications; custom tags are always preserved. Android persistent notifications require a tag.',
+            'name': 'Use alert ID as default tag',
+            'selector': dict({
+              'boolean': dict({
+              }),
+            }),
+          }),
+        }),
+        'name': 'Send notification',
+      }),
+    }),
+    'registered': list([
+      'clear',
+      'command',
+      'report',
+      'send',
+    ]),
+  })
+# ---

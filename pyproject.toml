@@ -15,9 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 all = [
-    "pytest==9.2.0",
-    "pytest-asyncio==1.4.1",
-    "homeassistant==2026.10.4",
+    "pytest-homeassistant==2026.11.0",
     "home-assistant-frontend==20261028.2",
     "syrupy==6.1.1",
     "ruff==0.17.3",
@@ -29,7 +27,7 @@ include = ["custom_components.ha_notifications*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/backend"]
-addopts = "-ra"
+addopts = "-ra -p no:respx"
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

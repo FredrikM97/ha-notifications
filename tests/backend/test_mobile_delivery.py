@@ -7,11 +7,15 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry
 from homeassistant.setup import async_setup_component
+from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications.automation import automation_id
-from custom_components.ha_notifications.const import DOMAIN
-from tests.backend.conftest import MockConfigEntry, async_mock_service
+from custom_components.ha_notifications.const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
+    DOMAIN,
+)
 
 
 @pytest.fixture(
@@ -22,6 +26,8 @@ async def notify_phone(hass: HomeAssistant, request: pytest.FixtureRequest):
     os_name, manufacturer, os_version = request.param
     user = await hass.auth.async_create_user("Notify test user", local_only=True)
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain="mobile_app",
         title="Test Phone",
         data={
@@ -58,7 +64,6 @@ async def test_generated_alert_reaches_mobile_notify_service(
     notify_phone,
     alert_factory,
     automation_api,
-    enable_custom_integrations,
     monkeypatch,
     snapshot,
     use_default_tag,
@@ -92,6 +97,8 @@ async def test_generated_alert_reaches_mobile_notify_service(
     automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         options={"version": 1, "alerts": [alert]},
     )
@@ -115,17 +122,6 @@ async def test_generated_alert_reaches_mobile_notify_service(
 
     assert len(calls) == 1
     sent = dict(calls[0].data)
-    assert sent["message"] == "testtest"
-    assert sent["title"] == "TEst text test"
-    expected_tag = custom_tag or (alert["id"] if use_default_tag else None)
-    assert sent["data"] == {
-        **device_data,
-        **({"tag": expected_tag} if expected_tag is not None else {}),
-    }
-    assert "use_default_tag" not in sent
-    assert "use_default_tag" not in sent["data"]
-    assert "message" not in sent["data"]
-    assert "title" not in sent["data"]
     assert notification == original
 
     await hass.services.async_call(
@@ -145,11 +141,6 @@ async def test_generated_alert_reaches_mobile_notify_service(
     )
     assert len(calls) == 2
     cleared = dict(calls[1].data)
-    assert cleared["message"] == "clear_notification"
-    assert cleared["data"] == sent["data"]
-    if expected_tag is None:
-        assert "tag" not in sent["data"]
-        assert "tag" not in cleared["data"]
     assert notification == original
     assert {"sent": sent, "cleared": cleared} == snapshot
 
@@ -160,8 +151,8 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
     alert_factory,
     option_controls_contract,
     automation_api,
-    enable_custom_integrations,
     monkeypatch,
+    snapshot,
 ) -> None:
     monkeypatch.setattr(ha_notifications, "async_register_panel", AsyncMock())
     device, calls = notify_phone
@@ -171,7 +162,12 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
     original = deepcopy(alert)
     automation_api.prepare()
     assert await async_setup_component(hass, "automation", {})
-    entry = MockConfigEntry(domain=DOMAIN, options={"version": 1, "alerts": [alert]})
+    entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        domain=DOMAIN,
+        options={"version": 1, "alerts": [alert]},
+    )
     entry.add_to_hass(hass)
     assert await ha_notifications.async_setup_entry(hass, entry)
     await automation_api.sync_entry(entry)
@@ -189,10 +185,6 @@ async def test_disabled_option_values_are_saved_but_filtered_by_backend_delivery
     )
     await hass.async_block_till_done()
     assert len(calls) == 1
-    assert dict(calls[0].data) == {
-        "title": notification["title"],
-        "message": notification["message"],
-        "data": {**option_controls_contract["delivery_options"], "tag": alert["id"]},
-    }
+    assert [dict(call.data) for call in calls] == snapshot
     assert entry.options["alerts"][0]["notification"] == original["notification"]
     assert alert == original

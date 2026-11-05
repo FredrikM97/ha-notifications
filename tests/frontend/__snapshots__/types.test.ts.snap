@@ -121,3 +121,18 @@ exports[`canonical frontend configuration types > snapshots the canonical versio
   "version": 1,
 }
 `;
+
+exports[`canonical frontend configuration types > types canonical content and opaque native options 1`] = `
+{
+  "message": "Open",
+  "options": {
+    "native_extra": [
+      "opaque",
+    ],
+    "push": {
+      "sound": "default",
+    },
+  },
+  "title": "Door",
+}
+`;

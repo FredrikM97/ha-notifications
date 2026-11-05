@@ -32,17 +32,15 @@ it.each([false, true])("uses native responsive row actions with narrow=%s", narr
   };
   expect(menu.narrow).toBe(narrow);
   expect(menu.items.every(item => item.tooltip === item.label)).toBe(true);
-  expect(menu.items.map(item => item.label)).toEqual([
-    "View history", "Edit alert", "Open automation", "Test alert", "Cancel active runs", "Delete alert",
-  ]);
   const labelledButtons = [...container.querySelectorAll(".nc-alert-labelled-actions ha-button")];
-  if (!narrow) {
-    expect(labelledButtons.every(button => button.getAttribute("appearance") === "outlined")).toBe(true);
-  }
-  expect(labelledButtons.map(button => button.textContent?.trim())).toEqual(narrow ? [] : [
-    "View history", "Edit alert", "Open automation", "Test alert", "Cancel active runs", "Delete alert",
-  ]);
-  expect(container.querySelectorAll('.nc-alert-labelled-actions ha-svg-icon[slot="start"]')).toHaveLength(narrow ? 0 : 6);
+  expect({
+    menu: menu.items.map(({ label, tooltip, path }) => ({ label, tooltip, path })),
+    buttons: labelledButtons.map(button => ({
+      label: button.textContent?.trim(),
+      appearance: button.getAttribute("appearance"),
+      icon: (button.querySelector('ha-svg-icon[slot="start"]') as HTMLElement & { path: string } | null)?.path,
+    })),
+  }).toMatchSnapshot();
   if (!narrow) {
     labelledButtons[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(on.history).toHaveBeenCalledWith(alert);
@@ -107,12 +105,11 @@ it("scopes theme contrast and keyboard focus to native row controls", () => {
   sheet.replaceSync(alertListStyles.cssText);
   const rules = [...sheet.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
   const controls = rules.find(rule => rule.selectorText === ".nc-alert-controls")!;
-  expect(controls.style.gap).toBe("var(--ha-space-2, 8px)");
-  expect(controls.style.color).toBe("var(--primary-text-color)");
-  expect(controls.style.getPropertyValue("--wa-focus-ring")).toBe("2px solid var(--primary-color)");
   const buttons = rules.find(rule => rule.selectorText === '.nc-alert-labelled-actions ha-button[variant="neutral"]')!;
-  expect(buttons.style.getPropertyValue("--wa-color-on-quiet")).toBe("var(--primary-text-color)");
-  expect(buttons.style.getPropertyValue("--wa-color-fill-quiet")).toBe("color-mix(in srgb, var(--primary-text-color) 12%, transparent)");
+  expect({
+    controls: controls.cssText,
+    buttons: buttons.cssText,
+  }).toMatchSnapshot();
   expect(alertListStyles.cssText).toContain(`.nc-alert-labelled-actions ha-button[variant="neutral"]::part(base):focus-visible {
     background-color: var(--wa-color-fill-quiet);
   }`);

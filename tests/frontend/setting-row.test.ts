@@ -17,14 +17,16 @@ describe("feature switch", () => {
     const component = container.querySelector<FeatureSwitch>("ha-notifications-feature-switch")!;
     await settleElement(component);
     const control = component.shadowRoot!.querySelector<HTMLElement & { checked: boolean; disabled: boolean }>("ha-switch")!;
-    expect(control.checked).toBe(enabled);
-    expect(control.disabled).toBe(false);
-    expect(control.getAttribute("aria-label")).toBe("Enable Android");
+    expect({
+      checked: control.checked,
+      disabled: control.disabled,
+      label: control.getAttribute("aria-label"),
+    }).toMatchSnapshot("native control");
     control.checked = !enabled;
     control.dispatchEvent(new Event("change"));
     expect(changed).toHaveBeenCalledOnce();
     const event = changed.mock.calls[0][0] as CustomEvent<EnabledChangedDetail>;
-    expect(event.detail).toEqual({ enabled: !enabled });
+    expect(event.detail).toMatchSnapshot("change payload");
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
     expect(event.target).toBe(component);
@@ -99,7 +101,7 @@ describe("setting row", () => {
     expect(bubbled).toHaveBeenCalledExactlyOnceWith(change);
     expect(helpRequested).toHaveBeenCalledOnce();
     expect((helpRequested.mock.calls[0][0] as CustomEvent<HelpRequestDetail>).detail)
-      .toEqual({ title: "Persistent notification", entries });
+      .toMatchSnapshot();
   });
 });
 
@@ -114,17 +116,20 @@ describe("help icon", () => {
     await settleElement(help);
     const button = help.shadowRoot!.querySelector<HTMLElement & { path: string; label: string }>("ha-icon-button")!;
     expect(help.querySelector("ha-icon-button")).toBeNull();
+    expect({
+      path: button.path,
+      label: button.label,
+      tooltip: help.title,
+    }).toMatchSnapshot("accessible button");
     expect(button.path).toBe(mdiInformationOutline);
-    expect(button.label).toBe("More information: Basics");
     expect(button.title).toBe(help.title);
-    expect(help.title).toBe("More information: Basics");
     await testUser().click(button);
     expect(requested).toHaveBeenCalledOnce();
     const event = requested.mock.calls[0][0] as CustomEvent<HelpRequestDetail>;
     expect(event.target).toBe(help);
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
-    expect(event.detail).toEqual({ title: "Basics", entries });
+    expect(event.detail).toMatchSnapshot("help payload");
     expect(event.detail.entries).toBe(entries);
     expect(container.querySelector("ha-dialog")).toBeNull();
     expect(HelpIcon.styles.toString()).toContain("--mdc-icon-button-size: 32px;");
@@ -148,13 +153,13 @@ describe("help icon", () => {
     help.entries = entries;
     await settleElement(help);
     expect(help.shadowRoot!.querySelector("ha-icon-button")).toBe(button);
-    expect(help.title).toBe(`${moreInfo}: ${heading}`);
     expect(button.title).toBe(help.title);
     expect(button.label).toBe(help.title);
+    expect({ tooltip: help.title, label: button.label }).toMatchSnapshot("updated accessible button");
     const requested = vi.fn();
     container.addEventListener("help-request", requested);
     await testUser().click(button);
     expect(requested).toHaveBeenCalledOnce();
-    expect((requested.mock.calls[0][0] as CustomEvent<HelpRequestDetail>).detail).toEqual({ title: heading, entries });
+    expect((requested.mock.calls[0][0] as CustomEvent<HelpRequestDetail>).detail).toMatchSnapshot("updated help payload");
   });
 });

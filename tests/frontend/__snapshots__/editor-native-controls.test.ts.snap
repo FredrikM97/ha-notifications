@@ -1,0 +1,473 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`alert editor > collects section and large-editor help in the heading dialog 1`] = `
+{
+  "ariaLabel": "Triggers",
+  "help": {
+    "title": "Triggers",
+    "topics": [
+      "Controls custom triggers that start the alert. When off, these settings are preserved and do not start the alert.",
+      "Triggers Optional. Use the native Home Assistant trigger editor to add event, state, or template triggers that should start the alert. Startup and periodic checks are configured separately.",
+    ],
+  },
+  "label": "",
+}
+`;
+
+exports[`alert editor > puts boolean help after the label and keeps the switch separate 1`] = `
+{
+  "headingSlots": [
+    "label",
+    "help",
+  ],
+  "help": "HA-NOTIFICATIONS-HELP-ICON",
+  "label": "Replace previous notifications",
+  "toggle": "HA-SWITCH",
+}
+`;
+
+exports[`alert editor > renders navigation from the section list and embeds common mobile options > navigation 1`] = `
+[
+  "Basics",
+  "Triggers",
+  "Conditions",
+  "Inactive",
+  "Recipients",
+  "Notification",
+  "Post-send actions",
+  "Android",
+  "iOS / macOS",
+  "Confirmation",
+  "Reminder policy",
+  "Notify recipients when confirmed",
+  "Post-confirmation actions",
+]
+`;
+
+exports[`alert editor > renders navigation from the section list and embeds common mobile options > notification forms 1`] = `
+[
+  [
+    {
+      "name": "title",
+      "selector": {
+        "text": {},
+      },
+    },
+  ],
+  [
+    {
+      "name": "message",
+      "selector": {
+        "template": {},
+      },
+    },
+  ],
+  [
+    {
+      "name": "group",
+      "selector": {
+        "text": {},
+      },
+    },
+  ],
+  [
+    {
+      "name": "notification_icon",
+      "selector": {
+        "icon": {},
+      },
+    },
+  ],
+  [
+    {
+      "name": "icon_url",
+      "selector": {
+        "text": {},
+      },
+    },
+  ],
+]
+`;
+
+exports[`alert editor > saves once while pending, then closes 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": 900,
+      },
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [],
+    },
+  },
+  "name": "Door alert",
+  "notification": {
+    "message": "",
+    "options": {},
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`alert editor > shows scalar help beside the field and helper placeholders inside text fields 1`] = `
+[
+  {
+    "default": "An optional note describing this alert and why it exists. It is saved with the alert, not included in notifications sent to recipients.",
+    "name": "description",
+    "selector": {
+      "text": {
+        "multiline": true,
+      },
+    },
+  },
+]
+`;
+
+exports[`alert editor > toggles sections and option fields through feature switches 1`] = `
+{
+  "enabled": true,
+  "fields": {
+    "alert_once": false,
+    "channel": true,
+    "clickAction": false,
+    "importance": false,
+    "ledColor": false,
+    "persistent": false,
+    "sticky": false,
+    "timeout": false,
+    "vibrationPattern": false,
+    "visibility": false,
+  },
+}
+`;
+
+exports[`section data bindings > converts durations, list defaults and recipient users at the binding boundary 1`] = `
+{
+  "conditions": {
+    "enabled": true,
+    "interval": {
+      "enabled": true,
+      "value": 7200,
+    },
+    "items": [],
+    "startup": false,
+  },
+  "intervalField": {
+    "days": 0,
+    "hours": 2,
+    "minutes": 0,
+    "seconds": 0,
+  },
+  "recipientField": {
+    "device_id": [
+      "phone",
+    ],
+  },
+  "target": {
+    "device_id": [
+      "phone",
+    ],
+    "user_id": [
+      "user-1",
+    ],
+  },
+  "triggers": {
+    "enabled": true,
+    "items": [],
+  },
+}
+`;
+
+exports[`section data bindings > infers android enablement from values and snapshots field flags when disabled 1`] = `
+{
+  "enabled": false,
+  "fields": {
+    "alert_once": false,
+    "channel": false,
+    "clickAction": false,
+    "importance": false,
+    "ledColor": false,
+    "persistent": false,
+    "sticky": true,
+    "timeout": true,
+    "vibrationPattern": false,
+    "visibility": false,
+  },
+}
+`;
+
+exports[`section data bindings > infers ios enablement from values and snapshots field flags when disabled 1`] = `
+{
+  "enabled": false,
+  "fields": {
+    "notification_icon_color": false,
+    "presentation_options": false,
+    "push.badge": true,
+    "push.interruption-level": false,
+    "push.sound": true,
+    "subtitle": false,
+    "url": false,
+  },
+}
+`;
+
+exports[`section data bindings > toggles option fields without touching their configured values 1`] = `
+{
+  "enabled": true,
+  "fields": {
+    "color": false,
+    "group": false,
+    "icon_url": false,
+    "notification_icon": false,
+  },
+}
+`;
+
+exports[`section data bindings > writes definite section flags at their canonical paths with enabled=false 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": false,
+      "forget_after": {
+        "enabled": false,
+        "value": 900,
+      },
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": false,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": false,
+      "items": [],
+    },
+  },
+  "name": "",
+  "notification": {
+    "message": "",
+    "option_controls": {
+      "android": {
+        "enabled": false,
+        "fields": {
+          "alert_once": false,
+          "channel": false,
+          "clickAction": false,
+          "importance": false,
+          "ledColor": false,
+          "persistent": false,
+          "sticky": false,
+          "timeout": false,
+          "vibrationPattern": false,
+          "visibility": false,
+        },
+      },
+      "ios": {
+        "enabled": false,
+        "fields": {
+          "notification_icon_color": false,
+          "presentation_options": false,
+          "push.badge": false,
+          "push.interruption-level": false,
+          "push.sound": false,
+          "subtitle": false,
+          "url": false,
+        },
+      },
+    },
+    "options": {},
+    "target": {},
+    "title": "",
+    "use_default_tag": true,
+  },
+  "post_send_actions": {
+    "enabled": false,
+  },
+}
+`;
+
+exports[`section data bindings > writes definite section flags at their canonical paths with enabled=true 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": true,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": true,
+    "notification": {
+      "enabled": true,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": 900,
+      },
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": true,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [],
+    },
+  },
+  "name": "",
+  "notification": {
+    "message": "",
+    "option_controls": {
+      "android": {
+        "enabled": true,
+        "fields": {
+          "alert_once": false,
+          "channel": false,
+          "clickAction": false,
+          "importance": false,
+          "ledColor": false,
+          "persistent": false,
+          "sticky": false,
+          "timeout": false,
+          "vibrationPattern": false,
+          "visibility": false,
+        },
+      },
+      "ios": {
+        "enabled": true,
+        "fields": {
+          "notification_icon_color": false,
+          "presentation_options": false,
+          "push.badge": false,
+          "push.interruption-level": false,
+          "push.sound": false,
+          "subtitle": false,
+          "url": false,
+        },
+      },
+    },
+    "options": {},
+    "target": {},
+    "title": "",
+    "use_default_tag": true,
+  },
+  "post_send_actions": {
+    "enabled": true,
+  },
+}
+`;

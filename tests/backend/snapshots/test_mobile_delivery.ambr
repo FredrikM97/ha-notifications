@@ -1,4 +1,36 @@
 # serializer version: 1
+# name: test_disabled_option_values_are_saved_but_filtered_by_backend_delivery[android]
+  list([
+    dict({
+      'data': dict({
+        'push': dict({
+          'badge': 0,
+          'custom': 'keep',
+        }),
+        'tag': 'base_alert',
+        'ttl': 0,
+      }),
+      'message': 'Disabled values remain configured',
+      'title': 'Saved settings',
+    }),
+  ])
+# ---
+# name: test_disabled_option_values_are_saved_but_filtered_by_backend_delivery[ios]
+  list([
+    dict({
+      'data': dict({
+        'push': dict({
+          'badge': 0,
+          'custom': 'keep',
+        }),
+        'tag': 'base_alert',
+        'ttl': 0,
+      }),
+      'message': 'Disabled values remain configured',
+      'title': 'Saved settings',
+    }),
+  ])
+# ---
 # name: test_generated_alert_reaches_mobile_notify_service[android-custom-tag-default-tag]
   dict({
     'cleared': dict({

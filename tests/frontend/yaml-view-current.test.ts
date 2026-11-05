@@ -165,29 +165,19 @@ describe("YAML view", () => {
     await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
     await settleElement(view);
     const toolbar = view.shadowRoot!.querySelector(".nc-toolbar")!;
-    expect(toolbar.querySelector(".nc-yaml-title strong")?.textContent).toBe("HA Notifications YAML");
     const help = toolbar.querySelector("#yaml-help") as HTMLElement & { label: string };
-    expect(help.label).toBe("About the YAML editor");
-    expect(help.getAttribute("aria-describedby")).toBe("yaml-help-tooltip");
     const tooltip = toolbar.querySelector("ha-tooltip")!;
-    expect(tooltip.getAttribute("for")).toBe("yaml-help");
-    expect(tooltip.textContent).toContain("Advanced editor");
-    expect(toolbar.querySelector("ha-icon-overflow-menu")).not.toBeNull();
-    expect(toolbar.querySelector("ha-button")?.textContent?.trim()).toBe("Save YAML");
-    expect(view.shadowRoot!.querySelectorAll(".nc-toolbar")).toHaveLength(1);
-  });
-
-  it("provides descriptive native tooltips for YAML toolbar actions", async () => {
-    const view = mountYamlView();
-    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
-    await settleElement(view);
-    const menu = view.shadowRoot!.querySelector("ha-icon-overflow-menu") as HTMLElement & {
+    const menu = toolbar.querySelector("ha-icon-overflow-menu") as HTMLElement & {
       items: { label: string; tooltip: string }[];
     };
-    expect(menu.items.map(({ label, tooltip }) => ({ label, tooltip }))).toEqual([
-      { label: "Validate", tooltip: "Check this YAML configuration without saving it" },
-      { label: "Reload", tooltip: "Reload automations and restore the saved configuration" },
-    ]);
+    expect({
+      count: view.shadowRoot!.querySelectorAll(".nc-toolbar").length,
+      title: toolbar.querySelector(".nc-yaml-title strong")?.textContent,
+      help: { label: help.label, describedBy: help.getAttribute("aria-describedby") },
+      tooltip: { for: tooltip.getAttribute("for"), text: tooltip.textContent?.trim() },
+      actions: menu.items.map(({ label, tooltip }) => ({ label, tooltip })),
+      primary: toolbar.querySelector("ha-button")?.textContent?.trim(),
+    }).toMatchSnapshot();
   });
 
   it("loads config into Home Assistant's YAML editor", async () => {
@@ -197,9 +187,12 @@ describe("YAML view", () => {
     const editor = editorFor(view);
 
     expect(editor.defaultValue).toEqual(configFixture);
-    expect(editor.label).toBe("");
-    expect(editor.getAttribute("aria-label")).toBe("HA Notifications YAML");
-    expect(editor.hasAttribute("copy-clipboard")).toBe(false);
+    expect({
+      defaultValue: editor.defaultValue,
+      label: editor.label,
+      ariaLabel: editor.getAttribute("aria-label"),
+      copyClipboard: editor.hasAttribute("copy-clipboard"),
+    }).toMatchSnapshot();
   });
 
   it("validates the parsed value and reports the result with HA's snackbar event", async () => {
@@ -219,22 +212,6 @@ describe("YAML view", () => {
 
     expect(api.request).toHaveBeenCalledWith(view.hass, "validate_config", { config: value });
     await vi.waitFor(() => expect(notification).toEqual({ message: "YAML is valid." }));
-  });
-
-  it("saves the parsed config and emits yaml-saved", async () => {
-    const view = mountYamlView();
-    await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
-    const value = { version: 1, alerts: [] };
-    changeYaml(editorFor(view), value);
-    let saved = false;
-    view.addEventListener("yaml-saved", () => { saved = true; });
-
-    view.shadowRoot!.querySelector("ha-button")!.dispatchEvent(
-      new Event("click", { bubbles: true, composed: true }),
-    );
-
-    await vi.waitFor(() => expect(api.request).toHaveBeenCalledWith(view.hass, "save_config", { config: value }));
-    await vi.waitFor(() => expect(saved).toBe(true));
   });
 
   it("keeps invalid drafts in the editor and disables Save", async () => {
@@ -279,6 +256,7 @@ describe("YAML view", () => {
 
     await vi.waitFor(() => expect(api.request.mock.calls.filter(([, endpoint]) => endpoint === "save_config"))
       .toEqual([[view.hass, "save_config", { config: value }]]));
+    expect(api.request.mock.calls.map(([, endpoint, payload]) => ({ endpoint, payload }))).toMatchSnapshot();
     expect(saved).not.toHaveBeenCalled();
     pending.resolve({ saved: true, automation_changes: automationChanges });
     await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());

@@ -8,12 +8,16 @@ from threading import get_ident
 
 import pytest
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components import ha_notifications
 from custom_components.ha_notifications import migration
 from custom_components.ha_notifications.configuration import validate_config
-from custom_components.ha_notifications.const import CONFIG_ENTRY_VERSION, DOMAIN
-from tests.backend.conftest import MockConfigEntry
+from custom_components.ha_notifications.const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
+    DOMAIN,
+)
 
 
 def _legacy_alert(alert_id: str) -> dict:
@@ -43,28 +47,29 @@ def _legacy_alert(alert_id: str) -> dict:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("version", "data", "options", "expected_id"),
+    ("version", "data", "options"),
     [
         (
             1,
             {"version": 1, "alerts": [_legacy_alert("data_alert")]},
             {"version": 1, "alerts": [_legacy_alert("option_alert")]},
-            "option_alert",
         ),
-        (4, {"version": 1, "alerts": [_legacy_alert("never_saved")]}, {}, "never_saved"),
-        (5, {}, {"version": 1, "alerts": [_legacy_alert("current")]}, "current"),
+        (4, {"version": 1, "alerts": [_legacy_alert("never_saved")]}, {}),
+        (5, {}, {"version": 1, "alerts": [_legacy_alert("current")]}),
+        (3, {}, {"version": 1, "alerts": []}),
     ],
-    ids=["saved-options-win", "unsaved-data-moves", "options-only"],
+    ids=["saved-options-win", "unsaved-data-moves", "options-only", "previous-minor-version"],
 )
 async def test_migrate_entry_keeps_alerts_only_in_options(
     hass: HomeAssistant,
     version: int,
     data: dict,
     options: dict,
-    expected_id: str,
+    snapshot,
 ) -> None:
     originals = deepcopy((data, options))
     entry = MockConfigEntry(
+        minor_version=1 if version == 3 else CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         data=data,
@@ -75,31 +80,14 @@ async def test_migrate_entry_keeps_alerts_only_in_options(
 
     assert await ha_notifications.async_migrate_entry(hass, entry)
 
-    assert entry.version == CONFIG_ENTRY_VERSION
-    assert entry.minor_version == 0
-    assert entry.data == {}
+    assert {
+        "version": entry.version,
+        "minor_version": entry.minor_version,
+        "data": dict(entry.data),
+        "options": dict(entry.options),
+    } == snapshot
+    validate_config(dict(entry.options))
     assert (data, options) == originals
-    migrated = validate_config(dict(entry.options))
-    assert [alert["id"] for alert in migrated["alerts"]] == [expected_id]
-    assert "automation_mode" not in entry.options["alerts"][0]["monitor"]
-    assert migrated["alerts"][0]["notification"]["target"] == {"label_id": ["phone"]}
-
-
-@pytest.mark.asyncio
-async def test_migrate_previous_entry_version(hass: HomeAssistant) -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={"version": 1, "alerts": []},
-        version=3,
-        minor_version=1,
-    )
-    entry.add_to_hass(hass)
-
-    assert await ha_notifications.async_migrate_entry(hass, entry)
-
-    assert entry.version == CONFIG_ENTRY_VERSION
-    assert entry.minor_version == 0
 
 
 @pytest.mark.asyncio
@@ -113,6 +101,7 @@ async def test_migrate_entry_warns_about_legacy_automation_files(
     caplog: pytest.LogCaptureFixture,
     legacy_file_exists: bool,
     legacy_include_exists: bool,
+    snapshot,
 ) -> None:
     legacy_file = Path(hass.config.path("ha_notifications_automations.yaml"))
     configuration_file = Path(hass.config.path("configuration.yaml"))
@@ -126,6 +115,7 @@ async def test_migrate_entry_warns_about_legacy_automation_files(
         legacy_file.write_text(legacy_contents, encoding="utf-8")
     configuration_file.write_text(configuration_contents, encoding="utf-8")
     entry = MockConfigEntry(
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": []},
@@ -141,11 +131,7 @@ async def test_migrate_entry_warns_about_legacy_automation_files(
         for record in caplog.records
         if record.name == "custom_components.ha_notifications.migration"
     ]
-    assert len(warnings) == 1
-    assert "remove the `automation ha_notifications: !include" in warnings[0]
-    assert "delete `ha_notifications_automations.yaml`" in warnings[0]
-    assert "Reload in the YAML editor" in warnings[0]
-    assert "through the API" in warnings[0]
+    assert warnings == snapshot
     assert configuration_file.read_text(encoding="utf-8") == configuration_contents
     assert legacy_file.exists() is legacy_file_exists
     if legacy_file_exists:
@@ -165,6 +151,7 @@ async def test_migrate_entry_does_not_warn_without_legacy_automation_files(
             encoding="utf-8",
         )
     entry = MockConfigEntry(
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": []},
@@ -203,6 +190,7 @@ async def test_migrate_entry_checks_legacy_files_in_executor(
     configuration_file = Path(hass.config.path("configuration.yaml"))
     configuration_file.write_text("automation: !include automations.yaml\n", encoding="utf-8")
     entry = MockConfigEntry(
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         options={"version": 1, "alerts": []},
         version=3,

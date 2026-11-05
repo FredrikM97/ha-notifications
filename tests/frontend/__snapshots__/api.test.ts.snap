@@ -1,0 +1,70 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`frontend API transport > preserves the cancel_run transport contract without mutating its payload 1`] = `
+[
+  [
+    {
+      "alert_id": "door",
+      "type": "ha_notifications/cancel_run",
+    },
+  ],
+]
+`;
+
+exports[`frontend API transport > preserves the get_history transport contract without mutating its payload 1`] = `
+[
+  [
+    {
+      "type": "ha_notifications/get_history",
+    },
+  ],
+]
+`;
+
+exports[`frontend API transport > preserves the get_states transport contract without mutating its payload 1`] = `
+[
+  [
+    {
+      "type": "get_states",
+    },
+  ],
+]
+`;
+
+exports[`frontend API transport > preserves the other/action transport contract without mutating its payload 1`] = `
+[
+  [
+    {
+      "enabled": true,
+      "type": "other/action",
+    },
+  ],
+]
+`;
+
+exports[`frontend API transport > preserves the search_alerts transport contract without mutating its payload 1`] = `
+[
+  [
+    {
+      "limit": 10,
+      "query": {
+        "enabled": true,
+      },
+      "type": "ha_notifications/search_alerts",
+    },
+  ],
+]
+`;
+
+exports[`frontend API transport > uses the supplied client callWS at the fixture API boundary 1`] = `
+[
+  [
+    {
+      "config": {
+        "alerts": [],
+      },
+      "type": "ha_notifications/validate_config",
+    },
+  ],
+]
+`;

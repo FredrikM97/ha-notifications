@@ -69,6 +69,12 @@ function automationClient(
   return { ...client, documents, loaded, states };
 }
 
+function automationCommands(client: ReturnType<typeof automationClient>) {
+  return client.callWS.mock.calls.filter(([message]) =>
+    message.type !== "get_states" && message.type !== "automation/config",
+  );
+}
+
 describe("automation API operations", () => {
   it("verifies unchanged ordinary saves without writing or requesting another reload", async () => {
     const automation = document("door");
@@ -95,16 +101,11 @@ describe("automation API operations", () => {
 
     await reloadAutomations(client.hass);
 
-    expect(client.callApi.mock.calls).toEqual([
-      ["GET", `config/automation/config/${first.id}`, undefined],
-      ["GET", `config/automation/config/${second.id}`, undefined],
-    ]);
-    expect(client.callWS.mock.calls.filter(([message]) => message.type === "call_service")).toEqual(
-      [first, second].map(item => [{
-        type: "call_service", domain: "automation", service: "reload",
-        service_data: { id: item.id },
-      }]),
-    );
+    expect({
+      api: client.callApi.mock.calls,
+      websocket: automationCommands(client),
+    }).toMatchSnapshot();
+    expect(client.callApi.mock.calls.every(([method]) => method === "GET")).toBe(true);
   });
 
   it("reloads only the changed ID through its config API update, including on repeated Reload", async () => {
@@ -117,13 +118,12 @@ describe("automation API operations", () => {
     await reloadAutomations(client.hass);
     await reloadAutomations(client.hass);
 
-    expect(client.callApi.mock.calls.filter(([method]) => method !== "GET")).toEqual([
-      ["POST", `config/automation/config/${updated.id}`, updated],
-    ]);
-    expect(client.callWS.mock.calls.filter(([message]) => message.type === "call_service")
-      .map(([message]) => message.service_data)).toEqual([
-      { id: first.id }, { id: first.id }, { id: updated.id },
-    ]);
+    const writes = client.callApi.mock.calls.filter(([method]) => method !== "GET");
+    expect(writes).toHaveLength(1);
+    expect({
+      writes,
+      reloads: client.callWS.mock.calls.filter(([message]) => message.type === "call_service"),
+    }).toMatchSnapshot();
   });
 
   it("recovers a stored but unloaded automation using only a targeted reload", async () => {
@@ -278,18 +278,14 @@ describe("automation API operations", () => {
 
     await saveConfiguration(client.hass, {});
 
-    expect(client.callApi.mock.calls.filter(([method]) => method !== "GET")).toEqual([
-      ["POST", "config/automation/config/ha_notifications_changed", changed],
-      ["POST", "config/automation/config/ha_notifications_new", added],
-      ["DELETE", "config/automation/config/ha_notifications_stale", undefined],
-    ]);
+    expect({
+      api: client.callApi.mock.calls,
+      websocket: automationCommands(client),
+    }).toMatchSnapshot();
     expect(client.documents.get(unowned.id)).toEqual(unowned);
     expect(client.documents.has("ha_notifications_unrelated")).toBe(true);
     expect(client.callApi.mock.calls.some(([, path]) => path.endsWith("/ha_notifications_unrelated")))
       .toBe(false);
-    expect(client.callWS).toHaveBeenCalledWith({
-      type: "ha_notifications/save_config", config: {},
-    });
   });
 
   it("checks unloaded automation ownership before any writes", async () => {
@@ -335,15 +331,11 @@ describe("automation API operations", () => {
     const unrelated = document("window");
     const client = automationClient({ ...changes, upsert: [automation] }, [unrelated]);
 
-    await expect(saveAlert(client.hass, alert)).resolves.toEqual(alert);
-
-    expect(client.callWS).toHaveBeenCalledWith({
-      type: "ha_notifications/save_config", alert,
-    });
-    expect(client.callApi.mock.calls).toEqual([
-      ["GET", `config/automation/config/${automation.id}`, undefined],
-      ["POST", `config/automation/config/${automation.id}`, automation],
-    ]);
+    expect(await saveAlert(client.hass, alert)).toBe(alert);
+    expect({
+      api: client.callApi.mock.calls,
+      websocket: automationCommands(client),
+    }).toMatchSnapshot();
     expect(client.documents.get(unrelated.id)).toEqual(unrelated);
   });
 

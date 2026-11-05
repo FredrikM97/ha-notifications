@@ -1,0 +1,583 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`alert draft model > preserves explicit inactive triggers when enabled is false without inferring triggers 1`] = `
+{
+  "conditions": {
+    "enabled": true,
+    "interval": {
+      "enabled": false,
+      "value": 43200,
+    },
+    "items": [
+      {
+        "condition": "state",
+        "entity_id": "binary_sensor.door",
+        "state": "on",
+      },
+    ],
+    "startup": false,
+  },
+  "inactive": {
+    "clear_notification": true,
+    "enabled": false,
+    "items": [
+      {
+        "alias": "Door closed",
+        "custom": {
+          "keep": true,
+        },
+        "enabled": false,
+        "entity_id": "binary_sensor.door",
+        "for": {
+          "seconds": 5,
+        },
+        "id": "closed",
+        "to": "off",
+        "trigger": "state",
+      },
+    ],
+  },
+  "triggers": {
+    "enabled": true,
+    "items": [],
+  },
+}
+`;
+
+exports[`alert draft model > preserves explicit inactive triggers when enabled is true without inferring triggers 1`] = `
+{
+  "conditions": {
+    "enabled": true,
+    "interval": {
+      "enabled": false,
+      "value": 43200,
+    },
+    "items": [
+      {
+        "condition": "state",
+        "entity_id": "binary_sensor.door",
+        "state": "on",
+      },
+    ],
+    "startup": false,
+  },
+  "inactive": {
+    "clear_notification": true,
+    "enabled": true,
+    "items": [
+      {
+        "alias": "Door closed",
+        "custom": {
+          "keep": true,
+        },
+        "enabled": false,
+        "entity_id": "binary_sensor.door",
+        "for": {
+          "seconds": 5,
+        },
+        "id": "closed",
+        "to": "off",
+        "trigger": "state",
+      },
+    ],
+  },
+  "triggers": {
+    "enabled": true,
+    "items": [],
+  },
+}
+`;
+
+exports[`alert draft model > preserves opaque data without using it as notification text with canonical text false 1`] = `
+{
+  "confirmationNotification": {
+    "enabled": true,
+    "message": "",
+    "options": {
+      "custom": {
+        "keep": true,
+      },
+      "message": "Opaque confirmation message",
+      "native_extra": {
+        "keep": true,
+      },
+      "title": "Opaque confirmation title",
+    },
+    "title": "",
+    "use_default_tag": true,
+  },
+  "notification": {
+    "message": "",
+    "options": {
+      "custom": {
+        "keep": true,
+      },
+      "message": "Opaque message",
+      "native_extra": {
+        "keep": true,
+      },
+      "title": "Opaque title",
+    },
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`alert draft model > preserves opaque data without using it as notification text with canonical text true 1`] = `
+{
+  "confirmationNotification": {
+    "enabled": true,
+    "message": "Door closed",
+    "options": {
+      "custom": {
+        "keep": true,
+      },
+      "message": "Opaque confirmation message",
+      "native_extra": {
+        "keep": true,
+      },
+      "title": "Opaque confirmation title",
+    },
+    "title": "Confirmed",
+    "use_default_tag": true,
+  },
+  "notification": {
+    "message": "Door open",
+    "options": {
+      "custom": {
+        "keep": true,
+      },
+      "message": "Opaque message",
+      "native_extra": {
+        "keep": true,
+      },
+      "title": "Opaque title",
+    },
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "Door",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`alert draft model > saves and reopens a disabled interval without normalizing its native value "00:08:00" > disabled conditions 1`] = `
+{
+  "enabled": true,
+  "interval": {
+    "enabled": false,
+    "value": "00:08:00",
+  },
+  "items": [],
+  "startup": false,
+}
+`;
+
+exports[`alert draft model > saves and reopens a disabled interval without normalizing its native value {"minutes":8} > disabled conditions 1`] = `
+{
+  "enabled": true,
+  "interval": {
+    "enabled": false,
+    "value": {
+      "minutes": 8,
+    },
+  },
+  "items": [],
+  "startup": false,
+}
+`;
+
+exports[`alert draft model > saves and reopens a disabled interval without normalizing its native value 0 > disabled conditions 1`] = `
+{
+  "enabled": true,
+  "interval": {
+    "enabled": false,
+    "value": 0,
+  },
+  "items": [],
+  "startup": false,
+}
+`;
+
+exports[`alert draft model > saves and reopens a disabled interval without normalizing its native value 480 > disabled conditions 1`] = `
+{
+  "enabled": true,
+  "interval": {
+    "enabled": false,
+    "value": 480,
+  },
+  "items": [],
+  "startup": false,
+}
+`;
+
+exports[`finalizeAlert > accepts a scalar area_id target from the Home Assistant target selector 1`] = `
+{
+  "area_id": "notify.mobile_app_phone",
+}
+`;
+
+exports[`finalizeAlert > accepts a scalar device_id target from the Home Assistant target selector 1`] = `
+{
+  "device_id": "notify.mobile_app_phone",
+}
+`;
+
+exports[`finalizeAlert > accepts a scalar entity_id target from the Home Assistant target selector 1`] = `
+{
+  "entity_id": "notify.mobile_app_phone",
+}
+`;
+
+exports[`finalizeAlert > keeps confirmation delivery disabled by default and inherits recipients when enabled > disabled 1`] = `
+{
+  "enabled": false,
+  "message": "",
+  "options": {},
+  "title": "",
+  "use_default_tag": true,
+}
+`;
+
+exports[`finalizeAlert > keeps confirmation delivery disabled by default and inherits recipients when enabled > enabled with inherited recipients 1`] = `
+{
+  "confirmationNotification": {
+    "enabled": true,
+    "message": "",
+    "options": {},
+    "title": "",
+    "use_default_tag": true,
+  },
+  "target": {
+    "entity_id": [
+      "notify.phone",
+    ],
+  },
+}
+`;
+
+exports[`finalizeAlert > omits empty disabled post-send actions but preserves populated actions 1`] = `
+{
+  "enabled": false,
+  "items": [
+    {
+      "action": "light.turn_on",
+    },
+  ],
+}
+`;
+
+exports[`finalizeAlert > preserves canonical automation data and strips runtime state 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": 900,
+      },
+      "interval": 1800,
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [
+        {
+          "condition": "state",
+          "entity_id": "binary_sensor.door",
+          "state": "on",
+        },
+      ],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [
+        {
+          "event_type": "door_opened",
+          "trigger": "event",
+        },
+      ],
+    },
+  },
+  "name": "Door open",
+  "notification": {
+    "message": "",
+    "options": {},
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`finalizeAlert > preserves confirmation actions with section enabled=false 1`] = `
+{
+  "enabled": false,
+  "items": [
+    {
+      "action": "light.turn_on",
+    },
+  ],
+}
+`;
+
+exports[`finalizeAlert > preserves confirmation actions with section enabled=true 1`] = `
+{
+  "enabled": true,
+  "items": [
+    {
+      "action": "light.turn_on",
+    },
+  ],
+}
+`;
+
+exports[`finalizeAlert > preserves native duration forms on the working draft 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [
+        {
+          "action": "light.turn_on",
+        },
+      ],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": "00:02:00",
+      },
+      "interval": {
+        "minutes": 7,
+      },
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [
+        {
+          "entity_id": "binary_sensor.door",
+          "for": {
+            "seconds": 0,
+          },
+          "native": {
+            "enabled": false,
+          },
+          "trigger": "state",
+        },
+      ],
+    },
+  },
+  "name": "Door",
+  "notification": {
+    "message": "",
+    "option_controls": {
+      "android": {
+        "enabled": false,
+        "fields": {
+          "sticky": false,
+          "timeout": false,
+        },
+      },
+      "ios": {
+        "enabled": true,
+        "fields": {
+          "push.badge": false,
+          "push.sound": false,
+        },
+      },
+    },
+    "options": {
+      "native": {
+        "enabled": false,
+      },
+      "push": {
+        "badge": 0,
+        "custom": false,
+        "sound": {
+          "critical": 1,
+          "name": "default",
+          "volume": 0.8,
+        },
+      },
+      "sticky": false,
+      "timeout": 0,
+      "ttl": 0,
+    },
+    "target": {
+      "entity_id": [
+        "notify.phone",
+      ],
+    },
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;
+
+exports[`toCanonicalAlert > preserves reminder values and omits runtime from the canonical result 1`] = `
+{
+  "confirmation": {
+    "actions": {
+      "enabled": false,
+      "items": [],
+    },
+    "buttons": [
+      {
+        "id": "confirm",
+        "label": "Done",
+      },
+    ],
+    "enabled": false,
+    "notification": {
+      "enabled": false,
+      "message": "",
+      "options": {},
+      "title": "",
+      "use_default_tag": true,
+    },
+    "reminders": {
+      "enabled": true,
+      "forget_after": {
+        "enabled": false,
+        "value": "00:02:00",
+      },
+      "interval": {
+        "minutes": 7,
+      },
+      "max_attempts": 5,
+      "show_attempts": false,
+    },
+  },
+  "description": "",
+  "enabled": true,
+  "icon": "mdi:bell-outline",
+  "id": "alert_draft",
+  "monitor": {
+    "conditions": {
+      "enabled": true,
+      "interval": {
+        "enabled": false,
+        "value": 43200,
+      },
+      "items": [],
+      "startup": false,
+    },
+    "inactive": {
+      "clear_notification": false,
+      "enabled": false,
+      "items": [],
+    },
+    "triggers": {
+      "enabled": true,
+      "items": [
+        {
+          "enabled": false,
+          "for": {
+            "seconds": 0,
+          },
+          "trigger": "state",
+        },
+      ],
+    },
+  },
+  "name": "",
+  "notification": {
+    "message": "",
+    "options": {
+      "native": {
+        "enabled": false,
+      },
+      "ttl": 0,
+    },
+    "target": {},
+    "title": "",
+    "use_default_tag": true,
+  },
+}
+`;

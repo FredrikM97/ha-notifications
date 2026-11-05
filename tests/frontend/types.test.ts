@@ -65,7 +65,7 @@ describe("canonical frontend configuration types", () => {
     const notification: Notification = {
       title: "Door", message: "Open", options: { native_extra: ["opaque"], push: { sound: "default" } },
     };
-    expect(notification.options.native_extra).toEqual(["opaque"]);
+    expect(notification).toMatchSnapshot();
   });
 
   it("names nested objects without changing their canonical value shapes", () => {
@@ -89,8 +89,8 @@ describe("canonical frontend configuration types", () => {
     const alert = draftAlertFixture();
     expect(typeof alert.confirmation.enabled).toBe("boolean");
     expect(Array.isArray(alert.confirmation.buttons)).toBe(true);
-    expect(duration).toEqual({ minutes: 5 });
-    expect(button).toEqual({ id: "confirm", label: "Done" });
+    expectTypeOf(duration).toEqualTypeOf<DurationParts>();
+    expectTypeOf(button).toEqualTypeOf<ConfirmationButton>();
   });
 
   it("includes explicit inactive configuration without a concurrency setting", () => {

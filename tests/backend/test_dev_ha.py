@@ -133,28 +133,17 @@ async def test_prepare_config_preserves_existing_automation_configuration_and_st
     assert store.read_text() == stored
 
 
-def test_with_http_port_updates_only_http_server_port() -> None:
-    configuration = "http:\n  server_port: 8124\nother:\n  server_port: 9000\n"
-
-    updated = _with_http_port(configuration, 8125)
-
-    assert updated == "http:\n  server_port: 8125\nother:\n  server_port: 9000\n"
-
-
-def test_with_http_port_adds_port_to_existing_http_section() -> None:
-    configuration = "http:\n  use_x_forwarded_for: true\nfrontend:\n"
-
-    updated = _with_http_port(configuration, 8125)
-
-    assert updated == "http:\n  use_x_forwarded_for: true\n  server_port: 8125\nfrontend:\n"
-
-
-def test_with_http_port_adds_http_section_when_missing() -> None:
-    configuration = "frontend:\n"
-
-    updated = _with_http_port(configuration, 8125)
-
-    assert updated == "frontend:\n\nhttp:\n  server_port: 8125\n"
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        "http:\n  server_port: 8124\nother:\n  server_port: 9000\n",
+        "http:\n  use_x_forwarded_for: true\nfrontend:\n",
+        "frontend:\n",
+    ],
+    ids=["replace-only-http", "existing-http", "missing-http"],
+)
+def test_with_http_port_preserves_other_configuration(configuration, snapshot) -> None:
+    assert _with_http_port(configuration, 8125) == snapshot
 
 
 def test_notify_entities_returns_sorted_unique_notify_ids() -> None:
@@ -174,7 +163,7 @@ def test_notify_entities_handles_unavailable_state_payload() -> None:
     assert _notify_entities({"states": []}) == []
 
 
-async def test_onboard_uses_requested_port(monkeypatch, tmp_path) -> None:
+async def test_onboard_uses_requested_port(monkeypatch, tmp_path, snapshot) -> None:
     class Response:
         def __init__(self, data):
             self.data = data
@@ -217,12 +206,7 @@ async def test_onboard_uses_requested_port(monkeypatch, tmp_path) -> None:
 
     assert token == "long-lived-token"
     assert token_file.read_text() == token
-    assert session.posts[0][1]["json"]["client_id"] == "http://localhost:8125/"
-    assert session.posts[1][1]["data"]["client_id"] == "http://localhost:8125/"
-    assert session.posts[4][1]["json"] == {
-        "client_id": "http://localhost:8125/",
-        "redirect_uri": "http://localhost:8125/?auth_callback=1",
-    }
+    assert session.posts == snapshot
 
 
 @pytest.mark.parametrize(
@@ -233,6 +217,7 @@ async def test_seed_populates_only_empty_alert_config(
     monkeypatch,
     saved_alerts,
     route_failures,
+    snapshot,
 ) -> None:
     class Response:
         async def __aenter__(self):
@@ -279,17 +264,11 @@ async def test_seed_populates_only_empty_alert_config(
     if saved_alerts:
         assert save_calls == []
     else:
-        assert [alert["id"] for alert in save_calls[0]["config"]["alerts"]] == [
-            "front_door_switch",
-            "full_feature",
-        ]
-        assert save_calls[0]["config"]["alerts"][0]["notification"]["target"] == {
-            "entity_id": ["notify.phone"],
-        }
+        assert save_calls == snapshot
 
 
 async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, snapshot
 ) -> None:
     class Response:
         def __init__(self, data, status=200):
@@ -356,12 +335,5 @@ async def test_ensure_mock_mobile_app_repairs_entry_and_registers_once(
     await ensure_mock_mobile_app("http://localhost:8124", session, "token", push_url)
 
     assert push_url_file.read_text() == push_url
-    assert session.deletes == ["http://localhost:8124/api/config/config_entries/entry/old-entry"]
     assert len(session.posts) == 2
-    assert session.posts[0][0] == "http://localhost:8124/api/mobile_app/registrations"
-    assert session.posts[0][1]["json"]["device_name"] == MOCK_DEVICE_NAME
-    assert session.posts[0][1]["json"]["os_name"] == "Android"
-    assert session.posts[1][1]["json"]["app_data"] == {
-        "push_token": "ha-notifications-dev",
-        "push_url": push_url,
-    }
+    assert {"posts": session.posts, "deletes": session.deletes} == snapshot

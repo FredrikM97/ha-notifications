@@ -1,0 +1,131 @@
+# serializer version: 1
+# name: test_history_batches_writes_and_survives_recreation
+  dict({
+    'data': dict({
+      'entries': list([
+        dict({
+          'config': dict({
+            'id': 'water',
+            'name': 'Water',
+          }),
+          'event': dict({
+            'details': dict({
+              'service': 'notify.phone',
+            }),
+            'event_id': '<event-id>',
+            'message': 'Sent',
+            'timestamp': '2026-11-05T12:00:00+00:00',
+            'type': 'notification_sent',
+          }),
+        }),
+        dict({
+          'config': dict({
+            'id': 'door',
+            'name': 'Door',
+          }),
+          'event': dict({
+            'details': dict({
+            }),
+            'event_id': '<event-id>',
+            'flow_id': 'run-1',
+            'message': 'Started',
+            'timestamp': '2026-11-05T12:00:00+00:00',
+            'type': 'started',
+          }),
+        }),
+      ]),
+    }),
+    'key': 'ha_notifications.history',
+    'minor_version': 1,
+    'version': 1,
+  })
+# ---
+# name: test_history_flushes_pending_write_on_home_assistant_stop
+  dict({
+    'data': dict({
+      'entries': list([
+        dict({
+          'config': dict({
+            'id': 'door',
+            'name': 'Door',
+          }),
+          'event': dict({
+            'details': dict({
+            }),
+            'event_id': '<event-id>',
+            'message': 'Started',
+            'timestamp': '2026-11-05T12:00:00+00:00',
+            'type': 'started',
+          }),
+        }),
+      ]),
+    }),
+    'key': 'ha_notifications.history',
+    'minor_version': 1,
+    'version': 1,
+  })
+# ---
+# name: test_inactive_deduplication_survives_recreation
+  list([
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'Door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-2',
+        'message': 'Inactive',
+        'timestamp': '2026-11-05T12:00:01+00:00',
+        'type': 'inactive',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'Door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-2',
+        'message': 'Started',
+        'timestamp': '2026-11-05T12:00:01+00:00',
+        'type': 'started',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'Door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-1',
+        'message': 'Inactive',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'inactive',
+      }),
+    }),
+    dict({
+      'config': dict({
+        'id': 'door',
+        'name': 'Door',
+      }),
+      'event': dict({
+        'details': dict({
+        }),
+        'event_id': '<event-id>',
+        'flow_id': 'run-1',
+        'message': 'Started',
+        'timestamp': '2026-11-05T12:00:00+00:00',
+        'type': 'started',
+      }),
+    }),
+  ])
+# ---

@@ -1,0 +1,170 @@
+# serializer version: 1
+# name: test_migrate_entry_keeps_alerts_only_in_options[options-only]
+  dict({
+    'data': dict({
+    }),
+    'minor_version': 0,
+    'options': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'enabled': True,
+          }),
+          'id': 'current',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+                dict({
+                  'entity_id': 'sensor.water',
+                  'to': 'low',
+                  'trigger': 'state',
+                }),
+              ]),
+            }),
+          }),
+          'notification': dict({
+            'options': dict({
+              'persistent': True,
+              'sticky': True,
+            }),
+            'target': dict({
+              'label_id': list([
+                'phone',
+              ]),
+            }),
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'version': 6,
+  })
+# ---
+# name: test_migrate_entry_keeps_alerts_only_in_options[previous-minor-version]
+  dict({
+    'data': dict({
+    }),
+    'minor_version': 0,
+    'options': dict({
+      'alerts': list([
+      ]),
+      'version': 1,
+    }),
+    'version': 6,
+  })
+# ---
+# name: test_migrate_entry_keeps_alerts_only_in_options[saved-options-win]
+  dict({
+    'data': dict({
+    }),
+    'minor_version': 0,
+    'options': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'enabled': True,
+          }),
+          'id': 'option_alert',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+                dict({
+                  'entity_id': 'sensor.water',
+                  'to': 'low',
+                  'trigger': 'state',
+                }),
+              ]),
+            }),
+          }),
+          'notification': dict({
+            'options': dict({
+              'persistent': True,
+              'sticky': True,
+            }),
+            'target': dict({
+              'label_id': list([
+                'phone',
+              ]),
+            }),
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'version': 6,
+  })
+# ---
+# name: test_migrate_entry_keeps_alerts_only_in_options[unsaved-data-moves]
+  dict({
+    'data': dict({
+    }),
+    'minor_version': 0,
+    'options': dict({
+      'alerts': list([
+        dict({
+          'confirmation': dict({
+            'enabled': True,
+          }),
+          'id': 'never_saved',
+          'monitor': dict({
+            'conditions': dict({
+              'enabled': True,
+              'items': list([
+              ]),
+            }),
+            'triggers': dict({
+              'enabled': True,
+              'items': list([
+                dict({
+                  'entity_id': 'sensor.water',
+                  'to': 'low',
+                  'trigger': 'state',
+                }),
+              ]),
+            }),
+          }),
+          'notification': dict({
+            'options': dict({
+              'persistent': True,
+              'sticky': True,
+            }),
+            'target': dict({
+              'label_id': list([
+                'phone',
+              ]),
+            }),
+          }),
+        }),
+      ]),
+      'version': 1,
+    }),
+    'version': 6,
+  })
+# ---
+# name: test_migrate_entry_warns_about_legacy_automation_files[both]
+  list([
+    'Legacy HA Notifications automation configuration detected. To finish upgrading, manually remove the `automation ha_notifications: !include ha_notifications_automations.yaml` line from configuration.yaml and delete `ha_notifications_automations.yaml`, then use Reload in the YAML editor so the automations are created through the API. No legacy files were changed.',
+  ])
+# ---
+# name: test_migrate_entry_warns_about_legacy_automation_files[include]
+  list([
+    'Legacy HA Notifications automation configuration detected. To finish upgrading, manually remove the `automation ha_notifications: !include ha_notifications_automations.yaml` line from configuration.yaml and delete `ha_notifications_automations.yaml`, then use Reload in the YAML editor so the automations are created through the API. No legacy files were changed.',
+  ])
+# ---
+# name: test_migrate_entry_warns_about_legacy_automation_files[old-file]
+  list([
+    'Legacy HA Notifications automation configuration detected. To finish upgrading, manually remove the `automation ha_notifications: !include ha_notifications_automations.yaml` line from configuration.yaml and delete `ha_notifications_automations.yaml`, then use Reload in the YAML editor so the automations are created through the API. No legacy files were changed.',
+  ])
+# ---

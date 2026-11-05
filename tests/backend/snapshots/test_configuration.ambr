@@ -1,0 +1,4398 @@
+# serializer version: 1
+# name: test_alert_helpers_find_replace_and_append_by_id
+  dict({
+    'appended': dict({
+      'alerts': list([
+        dict({
+          'id': 'door',
+        }),
+        dict({
+          'id': 'window',
+        }),
+        dict({
+          'id': 'garage',
+        }),
+      ]),
+      'version': 1,
+    }),
+    'replaced': dict({
+      'alerts': list([
+        dict({
+          'id': 'door',
+          'name': 'Door',
+        }),
+        dict({
+          'id': 'window',
+        }),
+      ]),
+      'version': 1,
+    }),
+  })
+# ---
+# name: test_async_save_config_updates_entry_runtime_data
+  dict({
+    'alerts': list([
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_configuration_preserves_native_extensions_on_canonical_models
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'button_native': 'value',
+          'id': 'confirm',
+          'label': 'Confirm',
+        }),
+      ]),
+      'confirmation_native': 'value',
+      'enabled': True,
+      'notification': dict({
+        'action': 'notify.mobile_app_phone',
+        'enabled': False,
+        'message': '',
+        'options': dict({
+          'confirmation_native': dict({
+            'channel': 'alerts',
+          }),
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'reminder_native': True,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'extended_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'action': 'notify.mobile_app_phone',
+      'message': '',
+      'options': dict({
+        'notification_native': dict({
+          'priority': 'high',
+        }),
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_full_feature_configuration_preserves_confirmation_actions_without_post_send_action
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': True,
+            'items': list([
+              dict({
+                'action': 'light.turn_on',
+                'target': dict({
+                  'entity_id': 'light.hall',
+                }),
+              }),
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'action': 'notify.mobile_app_phone',
+            'enabled': True,
+            'message': 'Confirmed',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': dict({
+              'minutes': 15,
+            }),
+            'max_attempts': 5,
+            'show_attempts': True,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'full_feature',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+              dict({
+                'condition': 'and',
+                'conditions': list([
+                  dict({
+                    'condition': 'or',
+                    'conditions': list([
+                      dict({
+                        'condition': 'state',
+                        'entity_id': 'binary_sensor.door',
+                        'state': 'on',
+                      }),
+                      dict({
+                        'above': 30,
+                        'condition': 'numeric_state',
+                        'entity_id': 'sensor.temperature',
+                      }),
+                    ]),
+                  }),
+                  dict({
+                    'condition': 'state',
+                    'entity_id': 'binary_sensor.window',
+                    'state': 'on',
+                  }),
+                ]),
+              }),
+            ]),
+            'startup': True,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+              dict({
+                'entity_id': 'binary_sensor.door',
+                'trigger': 'state',
+              }),
+              dict({
+                'entity_id': 'binary_sensor.window',
+                'trigger': 'state',
+              }),
+              dict({
+                'entity_id': 'sensor.temperature',
+                'trigger': 'state',
+              }),
+            ]),
+          }),
+        }),
+        'name': 'Full feature',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': 'Door open',
+          'options': dict({
+          }),
+          'target': dict({
+            'entity_id': list([
+              'notify.mobile_app_phone',
+            ]),
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_minimal_alert_expands_complete_model_defaults[empty-notification]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_minimal_alert_expands_complete_model_defaults[enabled-confirmation]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_minimal_alert_expands_complete_model_defaults[id-only]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[False-ConfirmationNotificationConfig]
+  dict({
+    'enabled': False,
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'title': '',
+    'use_default_tag': False,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[False-NotificationConfig]
+  dict({
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'target': dict({
+    }),
+    'title': '',
+    'use_default_tag': False,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[None-ConfirmationNotificationConfig]
+  dict({
+    'enabled': False,
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'title': '',
+    'use_default_tag': True,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[None-NotificationConfig]
+  dict({
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'target': dict({
+    }),
+    'title': '',
+    'use_default_tag': True,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[True-ConfirmationNotificationConfig]
+  dict({
+    'enabled': False,
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'title': '',
+    'use_default_tag': True,
+  })
+# ---
+# name: test_notification_default_tag_is_metadata_with_a_deterministic_default[True-NotificationConfig]
+  dict({
+    'message': '',
+    'options': dict({
+      'native_extra': True,
+      'tag': 'custom',
+    }),
+    'target': dict({
+    }),
+    'title': '',
+    'use_default_tag': True,
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-android-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-android-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-ios-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-ios-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-mobile-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-False-mobile-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-android-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-android-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-ios-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-ios-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-mobile-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[False-True-mobile-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': False,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-android-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-android-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-ios-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-ios-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-mobile-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-False-mobile-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-android-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-android-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-ios-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-ios-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'ios': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-mobile-ConfirmationNotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'enabled': False,
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_notification_delivery_options_filters_only_declared_disabled_paths[True-True-mobile-NotificationConfig]
+  dict({
+    'delivered': dict({
+      'channel': 'Saved channel',
+      'native_empty': dict({
+      }),
+      'push': dict({
+        'custom': dict({
+          'values': list([
+            False,
+            0,
+          ]),
+        }),
+        'sound': 'saved.aiff',
+      }),
+      'sticky': False,
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': '',
+      'option_controls': dict({
+        'mobile': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.sound': True,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Saved channel',
+        'native_empty': dict({
+        }),
+        'push': dict({
+          'custom': dict({
+            'values': list([
+              False,
+              0,
+            ]),
+          }),
+          'sound': 'saved.aiff',
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_reminder_model_serializes_declared_defaults
+  dict({
+    'enabled': True,
+    'forget_after': dict({
+      'enabled': False,
+      'value': 900,
+    }),
+    'interval': 1800,
+    'max_attempts': 5,
+    'show_attempts': False,
+  })
+# ---
+# name: test_shared_option_controls_contract
+  dict({
+    'delivered': dict({
+      'push': dict({
+        'badge': 0,
+        'custom': 'keep',
+      }),
+      'ttl': 0,
+    }),
+    'stored': dict({
+      'message': 'Disabled values remain configured',
+      'option_controls': dict({
+        'android': dict({
+          'enabled': False,
+          'fields': dict({
+            'channel': True,
+            'sticky': True,
+          }),
+        }),
+        'ios': dict({
+          'enabled': True,
+          'fields': dict({
+            'push.badge': True,
+            'push.sound': False,
+          }),
+        }),
+      }),
+      'options': dict({
+        'channel': 'Security',
+        'push': dict({
+          'badge': 0,
+          'custom': 'keep',
+          'sound': dict({
+            'critical': 1,
+            'name': 'default',
+          }),
+        }),
+        'sticky': False,
+        'ttl': 0,
+      }),
+      'target': dict({
+        'entity_id': list([
+          'notify.phone',
+        ]),
+      }),
+      'title': 'Saved settings',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_accepts_canonical_monitor_object
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'low_water',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+              dict({
+                'condition': 'state',
+                'entity_id': 'sensor.water',
+                'state': 'low',
+              }),
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+              dict({
+                'entity_id': 'sensor.water',
+                'trigger': 'state',
+              }),
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': 'Low water',
+          'options': dict({
+          }),
+          'target': dict({
+            'entity_id': list([
+              'notify.phone',
+            ]),
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_accepts_confirmation_and_post_send_actions
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Confirm',
+            }),
+          ]),
+          'enabled': True,
+          'follow_up': dict({
+            'actions': list([
+              dict({
+                'action': 'light.turn_on',
+              }),
+            ]),
+          }),
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 15,
+            'max_attempts': 3,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'confirm_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': True,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+        'post_send_actions': dict({
+          'enabled': True,
+          'items': list([
+            dict({
+              'action': 'logbook.log',
+            }),
+          ]),
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content0-confirmation]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': True,
+      'notification': dict({
+        'action': 'notify.mobile_app_phone',
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content0-main]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': False,
+      'notification': dict({
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'action': 'notify.mobile_app_phone',
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content1-confirmation]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': True,
+      'notification': dict({
+        'action': 'notify.mobile_app_phone',
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': 'Title only',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content1-main]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': False,
+      'notification': dict({
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'action': 'notify.mobile_app_phone',
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': 'Title only',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content2-confirmation]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': True,
+      'notification': dict({
+        'action': 'notify.mobile_app_phone',
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message[content2-main]
+  dict({
+    'confirmation': dict({
+      'actions': dict({
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'buttons': list([
+        dict({
+          'id': 'confirm',
+          'label': 'Done',
+        }),
+      ]),
+      'enabled': False,
+      'notification': dict({
+        'enabled': False,
+        'message': '',
+        'options': dict({
+        }),
+        'title': '',
+        'use_default_tag': True,
+      }),
+      'reminders': dict({
+        'enabled': True,
+        'forget_after': dict({
+          'enabled': False,
+          'value': 900,
+        }),
+        'interval': 1800,
+        'max_attempts': 5,
+        'show_attempts': False,
+      }),
+    }),
+    'description': '',
+    'enabled': True,
+    'icon': 'mdi:bell-outline',
+    'id': 'content_alert',
+    'monitor': dict({
+      'conditions': dict({
+        'enabled': True,
+        'interval': dict({
+          'enabled': False,
+          'value': 43200,
+        }),
+        'items': list([
+        ]),
+        'startup': False,
+      }),
+      'inactive': dict({
+        'clear_notification': False,
+        'enabled': False,
+        'items': list([
+        ]),
+      }),
+      'triggers': dict({
+        'enabled': True,
+        'items': list([
+        ]),
+      }),
+    }),
+    'name': '',
+    'notification': dict({
+      'action': 'notify.mobile_app_phone',
+      'message': '',
+      'options': dict({
+      }),
+      'target': dict({
+      }),
+      'title': '',
+      'use_default_tag': True,
+    }),
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions0-reminders0]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions0-reminders1]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 60,
+            'max_attempts': 2,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions1-reminders0]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions1-reminders1]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 60,
+            'max_attempts': 2,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions2-reminders0]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 60,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions2-reminders1]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 60,
+            'max_attempts': 2,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 60,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions3-reminders0]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': True,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions3-reminders1]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 60,
+            'max_attempts': 2,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': True,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions4-reminders0]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': True,
+              'value': 60,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_expands_model_owned_interval_and_reminder_defaults[conditions4-reminders1]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 60,
+            'max_attempts': 2,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'minimal',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': True,
+              'value': 60,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_keeps_zero_timeout_when_forget_after_is_disabled
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 0,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'confirm_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_canonical_notification_content_and_native_extras[confirmation]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'action': 'notify.mobile_app_phone',
+            'enabled': False,
+            'message': 'Canonical message',
+            'options': dict({
+              'color': '#00ff00',
+              'data': dict({
+                'title': 'Device-specific nested title',
+              }),
+              'push': dict({
+                'sound': 'default',
+              }),
+              'subject': 'Subject',
+              'subtitle': 'Subtitle',
+              'template_message': 'Opaque native metadata',
+            }),
+            'title': 'Canonical title',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_canonical_notification_content_and_native_extras[main]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': 'Canonical message',
+          'options': dict({
+            'color': '#00ff00',
+            'data': dict({
+              'title': 'Device-specific nested title',
+            }),
+            'push': dict({
+              'sound': 'default',
+            }),
+            'subject': 'Subject',
+            'subtitle': 'Subtitle',
+            'template_message': 'Opaque native metadata',
+          }),
+          'target': dict({
+          }),
+          'title': 'Canonical title',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_confirmation_notification_opt_out
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'action': 'notify.mobile_app_phone',
+            'enabled': False,
+            'message': 'Confirmed',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'confirm_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_independent_trigger_and_condition_enablement
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'section_flags',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_confirmation_action_list
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': True,
+            'items': list([
+              dict({
+                'action': 'light.turn_on',
+                'alias': 'Turn on the hall light',
+                'continue_on_error': True,
+                'data': dict({
+                  'brightness': '{{ brightness }}',
+                  'transition': 2,
+                }),
+                'enabled': '{{ lights_enabled }}',
+                'target': dict({
+                  'area_id': 'hall',
+                  'entity_id': list([
+                    'light.hall',
+                  ]),
+                }),
+              }),
+              dict({
+                'choose': list([
+                  dict({
+                    'conditions': '{{ notify_again }}',
+                    'sequence': list([
+                      dict({
+                        'action': 'logbook.log',
+                        'data': dict({
+                          'message': 'Confirmed',
+                        }),
+                      }),
+                    ]),
+                  }),
+                ]),
+                'default': list([
+                  dict({
+                    'delay': dict({
+                      'seconds': '{{ delay_seconds }}',
+                    }),
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'base_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': True,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': 'Test alert',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': 'Message',
+          'options': dict({
+          }),
+          'target': dict({
+            'entity_id': list([
+              'notify.mobile_app_phone',
+            ]),
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_inactive_triggers
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'door',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': True,
+            'enabled': True,
+            'items': list([
+              dict({
+                'alias': 'Door closed',
+                'enabled': '{{ enabled }}',
+                'entity_id': list([
+                  'binary_sensor.door',
+                ]),
+                'for': dict({
+                  'seconds': '{{ hold_seconds }}',
+                }),
+                'from': 'on',
+                'id': 'door_closed',
+                'to': 'off',
+                'trigger': 'state',
+              }),
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_notification_data_without_mutating_input[message-confirmation]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'action': 'notify.mobile_app_phone',
+            'enabled': False,
+            'message': 'Canonical content',
+            'options': dict({
+              'color': '#00ff00',
+              'message': 'Native device content',
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_notification_data_without_mutating_input[message-main]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': 'Canonical content',
+          'options': dict({
+            'color': '#00ff00',
+            'message': 'Native device content',
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_notification_data_without_mutating_input[title-confirmation]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': True,
+          'notification': dict({
+            'action': 'notify.mobile_app_phone',
+            'enabled': False,
+            'message': '',
+            'options': dict({
+              'color': '#00ff00',
+              'title': 'Native device content',
+            }),
+            'title': 'Canonical content',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_preserves_native_notification_data_without_mutating_input[title-main]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'content_alert',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'action': 'notify.mobile_app_phone',
+          'message': '',
+          'options': dict({
+            'color': '#00ff00',
+            'title': 'Native device content',
+          }),
+          'target': dict({
+          }),
+          'title': 'Canonical content',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_retains_notification_option_controls_and_disabled_values[confirmation]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'option_controls': dict({
+              'android': dict({
+                'enabled': False,
+                'fields': dict({
+                  'channel': True,
+                  'ttl': False,
+                }),
+              }),
+              'ios': dict({
+                'enabled': True,
+                'fields': dict({
+                  'push.sound': False,
+                }),
+              }),
+              'mobile': dict({
+                'enabled': True,
+                'fields': dict({
+                  'sticky': True,
+                }),
+              }),
+            }),
+            'options': dict({
+              'channel': 'Saved channel',
+              'push': dict({
+                'custom': dict({
+                  'values': list([
+                    False,
+                    0,
+                  ]),
+                }),
+                'sound': 'saved.aiff',
+              }),
+              'sticky': False,
+              'ttl': 0,
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'option_controls',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'options': dict({
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---
+# name: test_validate_config_retains_notification_option_controls_and_disabled_values[main]
+  dict({
+    'alerts': list([
+      dict({
+        'confirmation': dict({
+          'actions': dict({
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'buttons': list([
+            dict({
+              'id': 'confirm',
+              'label': 'Done',
+            }),
+          ]),
+          'enabled': False,
+          'notification': dict({
+            'enabled': False,
+            'message': '',
+            'options': dict({
+            }),
+            'title': '',
+            'use_default_tag': True,
+          }),
+          'reminders': dict({
+            'enabled': True,
+            'forget_after': dict({
+              'enabled': False,
+              'value': 900,
+            }),
+            'interval': 1800,
+            'max_attempts': 5,
+            'show_attempts': False,
+          }),
+        }),
+        'description': '',
+        'enabled': True,
+        'icon': 'mdi:bell-outline',
+        'id': 'option_controls',
+        'monitor': dict({
+          'conditions': dict({
+            'enabled': True,
+            'interval': dict({
+              'enabled': False,
+              'value': 43200,
+            }),
+            'items': list([
+            ]),
+            'startup': False,
+          }),
+          'inactive': dict({
+            'clear_notification': False,
+            'enabled': False,
+            'items': list([
+            ]),
+          }),
+          'triggers': dict({
+            'enabled': True,
+            'items': list([
+            ]),
+          }),
+        }),
+        'name': '',
+        'notification': dict({
+          'message': '',
+          'option_controls': dict({
+            'android': dict({
+              'enabled': False,
+              'fields': dict({
+                'channel': True,
+                'ttl': False,
+              }),
+            }),
+            'ios': dict({
+              'enabled': True,
+              'fields': dict({
+                'push.sound': False,
+              }),
+            }),
+            'mobile': dict({
+              'enabled': True,
+              'fields': dict({
+                'sticky': True,
+              }),
+            }),
+          }),
+          'options': dict({
+            'channel': 'Saved channel',
+            'push': dict({
+              'custom': dict({
+                'values': list([
+                  False,
+                  0,
+                ]),
+              }),
+              'sound': 'saved.aiff',
+            }),
+            'sticky': False,
+            'ttl': 0,
+          }),
+          'target': dict({
+          }),
+          'title': '',
+          'use_default_tag': True,
+        }),
+      }),
+    ]),
+    'version': 1,
+  })
+# ---

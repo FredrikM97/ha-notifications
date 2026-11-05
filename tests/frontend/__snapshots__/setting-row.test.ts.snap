@@ -1,0 +1,114 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`feature switch > renders enabled=false and emits a composed value without owning configuration > change payload 1`] = `
+{
+  "enabled": true,
+}
+`;
+
+exports[`feature switch > renders enabled=false and emits a composed value without owning configuration > native control 1`] = `
+{
+  "checked": false,
+  "disabled": false,
+  "label": "Enable Android",
+}
+`;
+
+exports[`feature switch > renders enabled=true and emits a composed value without owning configuration > change payload 1`] = `
+{
+  "enabled": false,
+}
+`;
+
+exports[`feature switch > renders enabled=true and emits a composed value without owning configuration > native control 1`] = `
+{
+  "checked": true,
+  "disabled": false,
+  "label": "Enable Android",
+}
+`;
+
+exports[`help icon > owns the accessible native info button and emits a bubbling composed help request > accessible button 1`] = `
+{
+  "label": "More information: Basics",
+  "path": "M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z",
+  "tooltip": "More information: Basics",
+}
+`;
+
+exports[`help icon > owns the accessible native info button and emits a bubbling composed help request > help payload 1`] = `
+{
+  "entries": [
+    {
+      "text": "An optional note.",
+      "title": "Description",
+    },
+  ],
+  "title": "Basics",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for More information: Notification without rebuilding the button > updated accessible button 1`] = `
+{
+  "label": "More information: Notification",
+  "tooltip": "More information: Notification",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for More information: Notification without rebuilding the button > updated help payload 1`] = `
+{
+  "entries": [
+    {
+      "text": "Updated help.",
+    },
+  ],
+  "title": "Notification",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for Weitere Informationen: Basics without rebuilding the button > updated accessible button 1`] = `
+{
+  "label": "Weitere Informationen: Basics",
+  "tooltip": "Weitere Informationen: Basics",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for Weitere Informationen: Basics without rebuilding the button > updated help payload 1`] = `
+{
+  "entries": [
+    {
+      "text": "Updated help.",
+    },
+  ],
+  "title": "Basics",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for Weitere Informationen: Notification without rebuilding the button > updated accessible button 1`] = `
+{
+  "label": "Weitere Informationen: Notification",
+  "tooltip": "Weitere Informationen: Notification",
+}
+`;
+
+exports[`help icon > updates the tooltip, native label and help payload for Weitere Informationen: Notification without rebuilding the button > updated help payload 1`] = `
+{
+  "entries": [
+    {
+      "text": "Updated help.",
+    },
+  ],
+  "title": "Notification",
+}
+`;
+
+exports[`setting row > places label and help before a separate boolean toggle and preserves parent events 1`] = `
+{
+  "entries": [
+    {
+      "text": "Keep the notification visible.",
+    },
+  ],
+  "title": "Persistent notification",
+}
+`;

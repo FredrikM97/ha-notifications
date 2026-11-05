@@ -21,5 +21,6 @@ Parent disablement must preserve child enablement and values.
 Use existing integration modules; establish frontend-visible contracts across
 both owners and `tests/contracts/`, not ad hoc response shapes.
 For owners, nearest tests, and pytest/ruff/gate commands, use the root table.
-For backend test work, load `testing` and `testing-backend`; use real HA core
-fixtures in `tests/backend/conftest.py` before pure units or local stubs.
+For backend test work, load `testing` and `testing-backend`; use the official
+`pytest-homeassistant` fixtures and helpers before local stubs. Shared
+integration-specific fixtures live in `tests/backend/conftest.py`.

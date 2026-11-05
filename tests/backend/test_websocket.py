@@ -1,19 +1,16 @@
 """Tests for the Home Assistant websocket boundary."""
 
-import asyncio
 import json
-from hashlib import sha256
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, ClassVar
-from unittest.mock import AsyncMock
 
 import pytest
-import voluptuous as vol
 from homeassistant.core import callback
-from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant.common import MockConfigEntry, async_mock_service
+from syrupy.matchers import path_type
 
+from custom_components.ha_notifications import RuntimeData
+from custom_components.ha_notifications.automation import generate_automation
 from custom_components.ha_notifications.automation_runtime import (
     active_flow_ids,
     automation_runtime_status,
@@ -24,20 +21,91 @@ from custom_components.ha_notifications.bridge import (
     async_register_panel,
     websocket,
 )
-from custom_components.ha_notifications.const import DOMAIN
-from tests.backend.conftest import MockConfigEntry, async_mock_service
+from custom_components.ha_notifications.const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
+    DOMAIN,
+)
+from custom_components.ha_notifications.history import HistoryStore
+
+_HISTORY_MATCHER = path_type(
+    {r".*\.event\.event_id": (str,)},
+    regex=True,
+    replacer=lambda data, match: "<event-id>",
+)
 
 
-async def _dispatch(
-    hass: Any,
-    connection: Any,
-    msg: dict[str, Any],
-    handler: Any,
+@pytest.fixture
+def registered_websocket_api(hass, hass_ws_client):
+    websocket.register(hass)
+    return hass_ws_client
+
+
+async def test_websocket_requires_authentication(hass, hass_client_no_auth) -> None:
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "websocket_api", {})
+    websocket.register(hass)
+    client = await hass_client_no_auth()
+    connection = await client.ws_connect("/api/websocket")
+    assert (await connection.receive_json())["type"] == "auth_required"
+    await connection.close()
+    await client.close()
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+async def test_websocket_allows_owner(
+    hass, hass_owner_user, registered_websocket_api, snapshot
 ) -> None:
-    await websocket.WebsocketDispatcher().dispatch(hass, connection, msg, handler)
+    token = await hass.auth.async_create_refresh_token(
+        hass_owner_user, client_id="https://ha-notifications.test"
+    )
+    client = await registered_websocket_api(access_token=hass.auth.async_create_access_token(token))
+    await client.send_json({"id": 1, "type": "ha_notifications/get_config"})
+    assert await client.receive_json() == snapshot
+
+
+async def test_websocket_save_validate_and_delete_round_trip(
+    hass, alert_factory, registered_websocket_api, mock_notification_dependencies, snapshot
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options={"version": 1, "alerts": []},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    client = await registered_websocket_api()
+    alert = alert_factory("base")
+
+    await client.send_json({"id": 1, "type": "ha_notifications/validate_config", "alert": alert})
+    validated = await client.receive_json()
+    assert entry.options == {"version": 1, "alerts": []}
+
+    await client.send_json({"id": 2, "type": "ha_notifications/save_config", "alert": alert})
+    saved = await client.receive_json()
+    assert dict(entry.options) == validated["result"]
+    assert entry.runtime_data.config == validated["result"]
+    assert saved["result"]["config"] == validated["result"]
+
+    await client.send_json({"id": 3, "type": "ha_notifications/get_config"})
+    fetched = await client.receive_json()
+    assert fetched["result"] == dict(entry.options)
+
+    await client.send_json({"id": 4, "type": "ha_notifications/delete", "alert_id": alert["id"]})
+    deleted = await client.receive_json()
+    assert dict(entry.options) == {"version": 1, "alerts": []}
+    assert {
+        "validated": validated,
+        "saved": saved,
+        "fetched": fetched,
+        "deleted": deleted,
+    } == snapshot
 
 
 def test_registers_only_supported_namespaced_commands(
+    hass,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registered: list[object] = []
@@ -48,7 +116,6 @@ def test_registers_only_supported_namespaced_commands(
         lambda hass, handler: registered.append(handler),
     )
 
-    hass = SimpleNamespace(data={})
     websocket.register(hass)
     websocket.register(hass)
 
@@ -62,10 +129,13 @@ def test_registers_only_supported_namespaced_commands(
 async def test_registered_test_alert_route_requires_admin_and_alert_id(
     hass,
     alert_factory,
-    monkeypatch: pytest.MonkeyPatch,
+    registered_websocket_api,
+    snapshot,
 ) -> None:
     """Validate route arguments and schedule only the requested alert as an admin."""
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         options={"version": 1, "alerts": [alert_factory("base"), alert_factory("persisted")]},
     )
@@ -73,67 +143,35 @@ async def test_registered_test_alert_route_requires_admin_and_alert_id(
     entity_id = "automation.ha_notifications_demo"
     hass.states.async_set(entity_id, "on")
     calls = async_mock_service(hass, "automation", "trigger")
-    trigger = AsyncMock(wraps=hass.services.async_call)
-    monkeypatch.setattr(type(hass.services), "async_call", trigger)
-    monkeypatch.setattr(websocket, "_WEBSOCKET_REGISTERED", set())
-    websocket.register(hass)
-    handler, schema = hass.data["websocket_api"]["ha_notifications/test_alert"]
-    msg = schema({"id": 7, "type": "ha_notifications/test_alert", "alert_id": "demo"})
-    result = asyncio.get_running_loop().create_future()
-    admin = await hass.auth.async_create_user("Admin", group_ids=["system-admin"])
-    connection = SimpleNamespace(
-        user=admin,
-        send_result=lambda message_id, response: result.set_result((message_id, response)),
-        send_error=lambda *_args: pytest.fail("testing the saved alert must succeed"),
-    )
-
-    handler(hass, connection, msg)
-    assert await asyncio.wait_for(result, 1) == (7, {"started": True})
+    client = await registered_websocket_api()
+    await client.send_json({"id": 7, "type": "ha_notifications/test_alert", "alert_id": "demo"})
+    started = await client.receive_json()
     await hass.async_block_till_done()
-    trigger.assert_awaited_once_with(
-        "automation",
-        "trigger",
-        {"entity_id": entity_id, "skip_condition": True},
-        blocking=False,
-    )
-    assert [dict(call.data) for call in calls] == [
-        {
-            "entity_id": entity_id,
-            "skip_condition": True,
-        }
-    ]
 
-    for user in (None, await hass.auth.async_create_user("Non-admin")):
-        connection.user = user
-        with pytest.raises(Unauthorized):
-            handler(hass, connection, msg)
-    assert trigger.await_count == 1
-    for arguments in ({}, {"alert_id": 5}, {"alert_id": ["demo"]}):
-        with pytest.raises(vol.Invalid):
-            schema({"id": 7, "type": "ha_notifications/test_alert", **arguments})
-    routes = json.loads((Path(__file__).parents[1] / "contracts" / "routes.json").read_text())
-    assert "test_alert" in routes["commands"]
+    errors = []
+    for message_id, arguments in enumerate(({}, {"alert_id": 5}, {"alert_id": ["demo"]}), 8):
+        await client.send_json(
+            {"id": message_id, "type": "ha_notifications/test_alert", **arguments}
+        )
+        response = await client.receive_json()
+        assert response["error"]["code"] == "invalid_format"
+        errors.append(response)
+    assert len(calls) == 1
+    assert {
+        "started": started,
+        "calls": [dict(call.data) for call in calls],
+        "invalid_arguments": errors,
+    } == snapshot
 
 
-@pytest.mark.parametrize("authenticated", [True, False])
 async def test_registered_websocket_routes_require_admin(
     hass,
-    monkeypatch: pytest.MonkeyPatch,
-    authenticated: bool,
+    registered_websocket_api,
+    hass_read_only_access_token,
+    snapshot,
 ) -> None:
     """Protect every registered command at the websocket boundary."""
-    monkeypatch.setattr(websocket, "_WEBSOCKET_REGISTERED", set())
-    websocket.register(hass)
-    await hass.auth.async_create_user("Admin", group_ids=["system-admin"])
-    user = await hass.auth.async_create_user("Non-admin")
-    assert not user.is_admin
-    results: list[object] = []
-    errors: list[tuple[object, ...]] = []
-    connection = SimpleNamespace(
-        user=user if authenticated else None,
-        send_result=lambda *_args: results.append(_args),
-        send_error=lambda *args: errors.append(args),
-    )
+    client = await registered_websocket_api(access_token=hass_read_only_access_token)
     route_arguments = {
         "get_config": {},
         "mobile_platforms": {"target": {}},
@@ -149,122 +187,115 @@ async def test_registered_websocket_routes_require_admin(
     routes = json.loads((Path(__file__).parents[1] / "contracts" / "routes.json").read_text())
     assert set(route_arguments) == {*routes["commands"], "cancel_run"}
 
-    for command, arguments in route_arguments.items():
-        handler, _ = hass.data["websocket_api"][f"ha_notifications/{command}"]
+    responses = {}
+    for message_id, (command, arguments) in enumerate(route_arguments.items(), 1):
         message = {
-            "id": 1,
+            "id": message_id,
             "type": f"ha_notifications/{command}",
             **arguments,
         }
-        try:
-            handler(hass, connection, message)
-        except Unauthorized:
-            continue
-        pytest.fail(f"{command} did not require admin")
-    assert results == []
-    assert errors == []
+        await client.send_json(message)
+        response = await client.receive_json()
+        assert response["error"]["code"] == "unauthorized", command
+        responses[command] = response
+    assert not hass.config_entries.async_entries(DOMAIN)
+    assert responses == snapshot
 
 
 @pytest.mark.parametrize(
-    ("scenario", "error"),
-    [
-        ("no_entry", "HA Notifications has no config entry"),
-        ("unknown_alert", "unknown alert_id: missing"),
-        ("missing_state", "Save an alert with enabled triggers before testing it"),
-    ],
+    "scenario",
+    ["no_entry", "unknown_alert", "missing_state"],
 )
 async def test_test_alert_errors_do_not_trigger_automation(
     hass,
     alert_factory,
     scenario: str,
-    error: str,
+    registered_websocket_api,
+    snapshot,
 ) -> None:
     """Return websocket errors rather than start a missing alert or automation."""
     if scenario != "no_entry":
         entry = MockConfigEntry(
+            version=CONFIG_ENTRY_VERSION,
+            minor_version=CONFIG_ENTRY_MINOR_VERSION,
             domain=DOMAIN,
             options={"version": 1, "alerts": [alert_factory("base")]},
         )
         entry.add_to_hass(hass)
     calls = async_mock_service(hass, "automation", "trigger")
-    errors: list[tuple[object, ...]] = []
-    connection = SimpleNamespace(
-        send_result=lambda *_args: pytest.fail("testing a missing alert must fail"),
-        send_error=lambda *args: errors.append(args),
+    client = await registered_websocket_api()
+    await client.send_json(
+        {
+            "id": 9,
+            "type": "ha_notifications/test_alert",
+            "alert_id": "missing" if scenario == "unknown_alert" else "base_alert",
+        }
     )
-    dispatcher = websocket.WebsocketDispatcher()
-    await dispatcher.dispatch(
-        hass,
-        connection,
-        {"id": 9, "alert_id": "missing" if scenario == "unknown_alert" else "base_alert"},
-        dispatcher.test_alert,
-    )
+    assert await client.receive_json() == snapshot
     await hass.async_block_till_done()
-    assert errors == [(9, websocket.ERROR_CODE, error)]
     assert calls == []
 
 
 @pytest.mark.asyncio
-async def test_get_history_returns_persisted_entries() -> None:
-    entry = SimpleNamespace(options={"version": 1, "alerts": []}, data={})
-    history = SimpleNamespace(
-        async_entries=None,
+async def test_get_history_returns_persisted_entries(
+    hass, registered_websocket_api, hass_owner_user, freezer, snapshot
+) -> None:
+    freezer.move_to("2026-11-06T12:00:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
     )
-
-    async def entries(alert_id=None):
-        return [{"config": {"id": alert_id or "door"}}]
-
-    history.async_entries = entries
-    entry.runtime_data = SimpleNamespace(history=history)
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
+    entry.add_to_hass(hass)
+    history = HistoryStore(hass)
+    entry.runtime_data = RuntimeData(config={"version": 1, "alerts": []}, history=history)
+    await history.async_record("door", "Door", "notification_sent", "Sent")
+    await history.async_record("water", "Water", "notification_sent", "Sent")
+    token = await hass.auth.async_create_refresh_token(
+        hass_owner_user, client_id="https://ha-notifications.test"
     )
-    results: list[object] = []
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: results.append(result),
-        send_error=lambda *_args: pytest.fail("get_history should not fail"),
-    )
+    client = await registered_websocket_api(access_token=hass.auth.async_create_access_token(token))
+    await client.send_json({"id": 1, "type": "ha_notifications/get_history", "alert_id": "door"})
 
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "alert_id": "door"},
-        websocket.WebsocketDispatcher().get_history,
-    )
-
-    assert results == [[{"config": {"id": "door"}}]]
+    response = await client.receive_json()
+    assert response["result"] == await history.async_entries("door")
+    assert response == snapshot(matcher=_HISTORY_MATCHER)
+    assert len(await history.async_entries("door")) == 1
 
 
-def test_config_resolution_reads_options_not_runtime_cache() -> None:
-    entry = SimpleNamespace(
+def test_config_resolution_reads_options_not_runtime_cache(hass) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         options={"version": 1, "alerts": []},
-        runtime_data=SimpleNamespace(config={"version": 1, "alerts": [{"id": "stale"}]}),
     )
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(
-            async_entries=lambda domain: [entry],
-        )
-    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = RuntimeData(config={"version": 1, "alerts": [{"id": "stale"}]})
 
     assert websocket._config_for(hass) == {"version": 1, "alerts": []}
 
 
-def test_automation_document_is_empty_without_loaded_entry() -> None:
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: []),
-    )
-
+def test_automation_document_is_empty_without_loaded_entry(hass) -> None:
     assert websocket._automation_document(hass) == []
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("panel_contents", ["custom panel", "updated panel"])
 async def test_async_register_panel_registers_packaged_static_asset(
+    hass,
+    hass_client,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    panel_contents: str,
+    snapshot,
 ) -> None:
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "http", {})
     panel_path = tmp_path / "frontend" / "panel.js"
     panel_path.parent.mkdir()
-    panel_path.write_text("custom panel")
+    panel_path.write_text(panel_contents)
     brand_path = tmp_path / "brand"
     brand_path.mkdir()
     (brand_path / "icon.png").write_bytes(b"icon")
@@ -273,138 +304,96 @@ async def test_async_register_panel_registers_packaged_static_asset(
 
     monkeypatch.setattr(bridge, "__file__", str(tmp_path / "bridge" / "__init__.py"))
     monkeypatch.setattr(bridge, "_PANEL_REGISTERED", set())
-    static_paths: list[object] = []
     panels: list[dict[str, object]] = []
-
-    class Http:
-        async def async_register_static_paths(self, configs: list[object]) -> None:
-            static_paths.extend(configs)
-
-    class Hass:
-        data: ClassVar[dict[str, object]] = {}
-        http = Http()
-
-        async def async_add_executor_job(self, function):
-            return function()
 
     async def register_panel(hass: object, **kwargs: object) -> None:
         panels.append(kwargs)
 
     monkeypatch.setattr(bridge.panel_custom, "async_register_panel", register_panel)
 
-    first_hass = Hass()
-    await async_register_panel(first_hass)
-
-    assert len(static_paths) == 2
-    assert static_paths[0].url_path == PANEL_URL
-    assert static_paths[0].path == str(panel_path)
-    assert static_paths[1].url_path == BRAND_URL
-    assert static_paths[1].path == str(brand_path)
-    assert panels == [
-        {
-            "webcomponent_name": "ha-notifications-panel",
-            "sidebar_title": "HA Notifications",
-            "sidebar_icon": "mdi:bell-outline",
-            "frontend_url_path": "ha_notifications",
-            "module_url": f"{PANEL_URL}?v={sha256(b'custom panel').hexdigest()[:16]}",
-            "require_admin": True,
-        }
-    ]
-    panel_path.write_text("updated panel")
-    second_hass = Hass()
-    await async_register_panel(second_hass)
-    assert panels[-1]["module_url"] == f"{PANEL_URL}?v={sha256(b'updated panel').hexdigest()[:16]}"
-    assert panels[-1]["module_url"] != panels[0]["module_url"]
+    await async_register_panel(hass)
+    await async_register_panel(hass)
+    client = await hass_client()
+    panel_response = await client.get(PANEL_URL)
+    assert panel_response.status == 200
+    assert await panel_response.text() == panel_contents
+    icon_response = await client.get(f"{BRAND_URL}/icon.png")
+    assert icon_response.status == 200
+    assert await icon_response.read() == b"icon"
+    assert panels == snapshot
 
 
 @pytest.mark.asyncio
-async def test_get_config_can_skip_validation_for_yaml_repair() -> None:
+async def test_get_config_can_skip_validation_for_yaml_repair(
+    hass, registered_websocket_api, snapshot
+) -> None:
     persisted = {
         "version": 1,
         "alerts": [{"id": "door", "triggers": []}],
     }
-    entry = SimpleNamespace(options=persisted, data={})
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options=persisted,
     )
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("raw config retrieval should not fail"),
-    )
+    entry.add_to_hass(hass)
+    client = await registered_websocket_api()
 
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "validate": False},
-        websocket.WebsocketDispatcher().get_config,
-    )
-
-    assert connection.result == persisted
+    await client.send_json({"id": 1, "type": "ha_notifications/get_config", "validate": False})
+    raw = await client.receive_json()
+    await client.send_json({"id": 2, "type": "ha_notifications/get_config"})
+    response = await client.receive_json()
+    assert {"raw": raw, "validated": response} == snapshot
+    assert dict(entry.options) == persisted
 
 
 @pytest.mark.asyncio
-async def test_get_config_returns_canonical_defaults() -> None:
-    entry = SimpleNamespace(
-        options={"version": 1, "alerts": [{"id": "door", "notification": {}}]}, data={}
+async def test_get_config_returns_canonical_defaults(
+    hass, registered_websocket_api, snapshot
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        options={"version": 1, "alerts": [{"id": "door", "notification": {}}]},
     )
-    hass = SimpleNamespace(config_entries=SimpleNamespace(async_entries=lambda domain: [entry]))
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("valid canonical config should load"),
-    )
+    entry.add_to_hass(hass)
+    client = await registered_websocket_api()
 
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1},
-        websocket.WebsocketDispatcher().get_config,
-    )
-
-    alert = connection.result["alerts"][0]
-    assert alert["description"] == ""
-    assert alert["icon"] == "mdi:bell-outline"
-    assert alert["notification"]["use_default_tag"] is True
-    assert alert["confirmation"]["buttons"] == [{"id": "confirm", "label": "Done"}]
-    assert alert["monitor"]["conditions"]["interval"] == {"enabled": False, "value": 43200}
+    await client.send_json({"id": 1, "type": "ha_notifications/get_config"})
+    response = await client.receive_json()
+    assert response == snapshot
 
 
 @pytest.mark.asyncio
-async def test_get_config_creates_a_backend_default_alert() -> None:
-    hass = SimpleNamespace()
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("new alert config should be valid"),
-    )
+async def test_get_config_creates_a_backend_default_alert(
+    hass, registered_websocket_api, snapshot
+) -> None:
+    client = await registered_websocket_api()
+    await client.send_json({"id": 1, "type": "ha_notifications/get_config", "new": True})
+    response = await client.receive_json()
+    config = response["result"]
+    assert len(config["alerts"]) == 1
+    assert config["alerts"][0]["id"].startswith("alert_")
+    matcher = path_type({"result.alerts.0.id": (str,)}, replacer=lambda data, match: "<alert-id>")
+    assert response == snapshot(matcher=matcher)
+    first_id = config["alerts"][0]["id"]
+    await client.send_json({"id": 2, "type": "ha_notifications/get_config", "new": True})
+    response = await client.receive_json()
 
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "new": True},
-        websocket.WebsocketDispatcher().get_config,
-    )
-
-    assert connection.result["version"] == 1
-    assert len(connection.result["alerts"]) == 1
-    assert connection.result["alerts"][0]["id"].startswith("alert_")
-    assert connection.result["alerts"][0]["confirmation"]["buttons"] == [
-        {"id": "confirm", "label": "Done"},
-    ]
-    first_id = connection.result["alerts"][0]["id"]
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 2, "new": True},
-        websocket.WebsocketDispatcher().get_config,
-    )
-
-    assert connection.result["alerts"][0]["id"] != first_id
+    assert response["result"]["alerts"][0]["id"] != first_id
+    assert response == snapshot(matcher=matcher)
+    assert not hass.config_entries.async_entries(DOMAIN)
 
 
 @pytest.mark.asyncio
 async def test_automation_status_projects_generated_automation_ownership(
     hass,
     alert_factory,
+    snapshot,
+    registered_websocket_api,
+    history_mock,
 ) -> None:
     """Report managed, disabled, conflicting, and missing automation states."""
     alerts = [
@@ -464,83 +453,26 @@ async def test_automation_status_projects_generated_automation_ownership(
         ]
 
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         options={"version": 1, "alerts": alerts},
     )
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(
-        history=SimpleNamespace(async_entries=history_entries),
+    history_mock.async_entries.return_value = await history_entries()
+    document = [generate_automation(alert) for alert in alerts[:-1]]
+    document[1]["initial_state"] = False
+    document[2]["description"] = "User-owned automation"
+    entry.runtime_data = RuntimeData(
+        config=dict(entry.options), automations=document, history=history_mock
     )
+    hass.states.async_set("automation.ha_notifications_base_alert", "on")
+    hass.states.async_set("automation.ha_notifications_demo", "off")
     hass.states.async_set("automation.ha_notifications_notification_alert", "on", {"current": 1})
-    results: list[dict[str, object]] = []
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: results.append(result),
-        send_error=lambda *_args: None,
-    )
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1},
-        websocket.WebsocketDispatcher().automation_status,
-    )
-
-    assert results == [
-        {
-            "base_alert": {
-                "status": "missing",
-                "enabled": False,
-                "mode": "single",
-                "current": 0,
-                "running": False,
-                "triggered": True,
-                "notification_active": True,
-            },
-            "demo": {
-                "status": "missing",
-                "enabled": False,
-                "mode": "single",
-                "current": 0,
-                "running": False,
-                "triggered": False,
-                "notification_active": False,
-            },
-            "notification_alert": {
-                "status": "missing",
-                "enabled": True,
-                "mode": "single",
-                "current": 1,
-                "running": True,
-                "triggered": True,
-                "notification_active": True,
-            },
-            "inactive_notification_alert": {
-                "status": "missing",
-                "enabled": False,
-                "mode": "single",
-                "current": 0,
-                "running": False,
-                "triggered": False,
-                "notification_active": False,
-            },
-            "history_waiting_alert": {
-                "status": "missing",
-                "enabled": False,
-                "mode": "single",
-                "current": 0,
-                "running": False,
-                "notification_active": False,
-            },
-            "configuration_alert": {
-                "status": "missing",
-                "enabled": False,
-                "mode": "single",
-                "current": 0,
-                "running": False,
-                "notification_active": False,
-            },
-        }
-    ]
+    hass.states.async_set("automation.ha_notifications_inactive_notification_alert", "off")
+    client = await registered_websocket_api()
+    await client.send_json({"id": 1, "type": "ha_notifications/automation_status"})
+    assert await client.receive_json() == snapshot
 
 
 def test_active_flow_ids_track_parallel_runs_independently() -> None:
@@ -580,24 +512,27 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
     alert_factory,
     enabled: bool,
     should_reenable: bool,
+    snapshot,
+    freezer,
 ) -> None:
     from custom_components.ha_notifications.const import (
         COMMAND_CANCEL_RUN,
         DOMAIN,
         EVENT_COMMAND,
     )
-    from custom_components.ha_notifications.history import HistoryStore
-    from tests.backend.conftest import MockConfigEntry, async_mock_service
 
+    freezer.move_to("2026-11-05T12:00:00+00:00")
     alert = alert_factory("base", id="door", enabled=enabled)
     entry = MockConfigEntry(
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
         domain=DOMAIN,
         title="HA Notifications",
         options={"version": 1, "alerts": [alert]},
     )
     entry.add_to_hass(hass)
     history = HistoryStore(hass)
-    entry.runtime_data = SimpleNamespace(history=history, automations=[])
+    entry.runtime_data = RuntimeData(config=dict(entry.options), history=history)
     hass.states.async_set("automation.ha_notifications_door", "on")
     await history.async_record(
         "door", "Door", "waiting", "Waiting for confirmation", flow_id="run-1"
@@ -625,27 +560,22 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
     )
     await hass.async_block_till_done()
 
-    assert result == {"cancelled": True}
-    assert [event.data for event in command_events] == [
-        {
-            "alert_id": "door",
-            "command": COMMAND_CANCEL_RUN,
-        }
-    ]
-    assert turn_off[0].data == {
-        "entity_id": "automation.ha_notifications_door",
-        "stop_actions": True,
-    }
-    if should_reenable:
-        assert turn_on[0].data == {"entity_id": "automation.ha_notifications_door"}
-    else:
+    assert len(turn_off) == 1
+    assert len(turn_on) == int(should_reenable)
+    if not should_reenable:
         assert turn_on == []
-    assert history._entries[0]["event"]["type"] == "cancelled"
-    assert history._entries[0]["event"]["flow_id"] == "run-1"
+    entries = await history.async_entries("door")
+    assert {
+        "result": result,
+        "commands": [dict(event.data) for event in command_events],
+        "turn_off": [dict(call.data) for call in turn_off],
+        "turn_on": [dict(call.data) for call in turn_on],
+        "history": entries,
+    } == snapshot(matcher=_HISTORY_MATCHER)
     assert (
         sum(
             item["event"]["type"] == "cancelled"
-            for item in history._entries
+            for item in entries
             if item["event"].get("flow_id") == "run-1"
         )
         == 1
@@ -659,11 +589,19 @@ async def test_cancel_run_stops_actions_and_preserves_enabled_alert(
     )
 
 
-async def test_automation_runtime_status_reports_native_current_runs(
+async def test_automation_runtime_status_contract(
     hass,
     alert_factory,
+    snapshot,
 ) -> None:
     alert = alert_factory("base")
+    document = [
+        {
+            "id": "ha_notifications_base_alert",
+            "description": "Generated by HA Notifications. Do not edit manually.",
+        }
+    ]
+    unregistered = automation_runtime_status(hass, document, alert)
     entity = er.async_get(hass).async_get_or_create(
         "automation",
         "automation",
@@ -672,76 +610,12 @@ async def test_automation_runtime_status_reports_native_current_runs(
     )
     hass.states.async_set(entity.entity_id, "on", {"current": 2})
 
-    result = automation_runtime_status(hass, [], alert)
-
-    assert result["current"] == 2
-    assert "automation_id" not in result
-    assert result["enabled"] is True
-    assert "last_triggered" not in result
-
-
-async def test_automation_runtime_status_reports_missing_loaded_entity(
-    hass,
-    alert_factory,
-) -> None:
-    alert = alert_factory("base")
-    result = automation_runtime_status(
+    running = automation_runtime_status(hass, [], alert)
+    hass.states.async_remove(entity.entity_id)
+    missing = automation_runtime_status(
         hass,
-        [
-            {
-                "id": "ha_notifications_base_alert",
-                "description": "Generated by HA Notifications. Do not edit manually.",
-            }
-        ],
+        document,
         alert,
     )
 
-    assert result["status"] == "missing"
-    assert result["automation_id"] == "ha_notifications_base_alert"
-
-
-@pytest.mark.asyncio
-async def test_save_config_returns_frontend_response_envelope(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    saved = {"version": 1, "alerts": []}
-    entry = SimpleNamespace(
-        options=saved,
-        data=saved,
-        runtime_data=SimpleNamespace(automations=[]),
-    )
-    hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_entries=lambda domain: [entry]),
-    )
-    connection = SimpleNamespace(
-        send_result=lambda _id, result: setattr(connection, "result", result),
-        send_error=lambda *_args: pytest.fail("save_config should not fail"),
-    )
-
-    async def save_config(_hass, _entry, config):
-        assert config == saved
-        return saved
-
-    config = {"upsert": [], "delete": [], "description": "marker"}
-    monkeypatch.setattr(
-        "custom_components.ha_notifications.async_save_config",
-        save_config,
-    )
-    monkeypatch.setattr(
-        websocket,
-        "automation_changes",
-        lambda _automations, _deleted_ids: config,
-    )
-
-    await _dispatch(
-        hass,
-        connection,
-        {"id": 1, "config": saved},
-        websocket.WebsocketDispatcher().save_config,
-    )
-
-    assert connection.result == {
-        "saved": True,
-        "config": saved,
-        "automation_changes": config,
-    }
+    assert {"unregistered": unregistered, "running": running, "missing": missing} == snapshot

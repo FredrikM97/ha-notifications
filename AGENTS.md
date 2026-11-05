@@ -40,6 +40,7 @@ Paths below use `B = custom_components/ha_notifications`, `F = frontend`,
 	explain why no implementation change is needed. Respect explicit instruction-only
 	requests and keep the review scoped to the behavior that prompted the rule.
 - Finish implementation first, then author/update tests, then validate once per coherent slice; do not rerun unchanged checks after minor edits.
+- Prefer snapshots for complete test outputs/contracts over field-by-field assertions. Consolidate overlapping tests at the strongest real boundary; keep focused assertions for timing, authorization, side effects, identity, and other invariants snapshots cannot prove. See `tests/AGENTS.md`.
 - Backend: `python3 -m pytest tests/backend/test_<owner>.py`; `npm run check:backend` (Ruff format and lint).
 - Frontend: `npx vitest run tests/frontend/<owner>.test.ts`; `npm run typecheck`; `npm run build`. Check UI behavior in real HA with `npm run dev`.
 - Implementation handoff: `sh scripts/validate.sh`. Instruction-only changes: read-only syntax/scope checks, not application tests/builds.
