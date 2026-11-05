@@ -152,6 +152,19 @@ HA boundary tests while preserving their distinct scenarios; a smaller test
 count is not a reason to drop coverage. Review snapshot diffs before accepting
 them, then validate without update mode.
 
+For coverage-guided consolidation, compare executed lines and branches before
+and after removing tests, not just the overall percentage. If needed, install
+`coverage` into the isolated test environment, then run:
+
+```bash
+python3 -m coverage run --branch --source=custom_components.ha_notifications -m pytest tests/backend
+python3 -m coverage report
+```
+
+Keep distinct behavioral assertions even when their tests execute the same code.
+Websocket registration is tracked with weak references to HA instances, so
+discarded test instances cannot block registration when Python reuses an object ID.
+
 The mobile delivery test runs generated automations through real Home Assistant
 core and device registries, using Android and iOS registration metadata and a
 recording `notify` service:

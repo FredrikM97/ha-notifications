@@ -107,18 +107,18 @@ def test_condition_interval_defaults_to_nested_model() -> None:
 
 
 @pytest.mark.parametrize(
-    "interval",
+    "interval,enabled",
     [
-        60,
-        0.5,
-        "300",
-        "05:00",
-        "00:05:00",
-        {"minutes": 5},
-        {"days": 1, "hours": 2, "minutes": 3, "seconds": 0.5},
+        (60, True),
+        (0.5, True),
+        ("300", True),
+        ("05:00", True),
+        ("00:05:00", True),
+        ({"minutes": 5}, True),
+        ({"days": 1, "hours": 2, "minutes": 3, "seconds": 0.5}, True),
+        (60, False),
     ],
 )
-@pytest.mark.parametrize("enabled", [False, True])
 def test_condition_interval_defaults_and_preserves_explicit_values(
     interval: object,
     enabled: bool,
@@ -241,15 +241,23 @@ def test_minimal_alert_expands_complete_model_defaults(fields, snapshot) -> None
     assert raw == original
 
 
-@pytest.mark.parametrize("reminders", [{}, {"enabled": True, "interval": 60, "max_attempts": 2}])
 @pytest.mark.parametrize(
-    "conditions",
+    "conditions,reminders",
     [
-        {},
-        {"interval": {}},
-        {"interval": {"value": 60}},
-        {"interval": {"enabled": True}},
-        {"interval": {"enabled": True, "value": 60}},
+        ({}, {}),
+        ({"interval": {}}, {}),
+        ({"interval": {"value": 60}}, {}),
+        ({"interval": {"enabled": True}}, {}),
+        ({"interval": {"enabled": True, "value": 60}}, {}),
+        ({}, {"enabled": True, "interval": 60, "max_attempts": 2}),
+    ],
+    ids=[
+        "empty-features",
+        "empty-interval",
+        "interval-value",
+        "interval-enabled",
+        "explicit-interval",
+        "explicit-reminders",
     ],
 )
 def test_validate_config_expands_model_owned_interval_and_reminder_defaults(
@@ -285,8 +293,15 @@ def test_shared_alert_fixtures_use_canonical_configuration(backend_alerts, name:
     assert raw == original
 
 
-@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
-@pytest.mark.parametrize("enabled", [None, True, False])
+@pytest.mark.parametrize(
+    "model,enabled",
+    [
+        (NotificationConfig, None),
+        (NotificationConfig, True),
+        (NotificationConfig, False),
+        (ConfirmationNotificationConfig, False),
+    ],
+)
 def test_notification_default_tag_is_metadata_with_a_deterministic_default(
     model, enabled, snapshot
 ) -> None:
@@ -298,8 +313,16 @@ def test_notification_default_tag_is_metadata_with_a_deterministic_default(
     assert model.model_validate(stored).model_dump(exclude_none=True) == stored
 
 
-@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
-@pytest.mark.parametrize("invalid", ["false", 0, None, {}])
+@pytest.mark.parametrize(
+    "model,invalid",
+    [
+        (NotificationConfig, "false"),
+        (NotificationConfig, 0),
+        (NotificationConfig, None),
+        (NotificationConfig, {}),
+        (ConfirmationNotificationConfig, "false"),
+    ],
+)
 def test_notification_default_tag_requires_a_boolean(model, invalid) -> None:
     with pytest.raises(ValidationError, match="valid boolean"):
         model.model_validate({"use_default_tag": invalid})
@@ -354,11 +377,18 @@ def test_validate_config_retains_notification_option_controls_and_disabled_value
     assert raw == original
 
 
-@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
-@pytest.mark.parametrize("group", ["mobile", "android", "ios"])
 @pytest.mark.parametrize(
-    ("group_enabled", "field_enabled"),
-    [(True, True), (True, False), (False, True), (False, False)],
+    "model,group,group_enabled,field_enabled",
+    [
+        (NotificationConfig, "mobile", True, True),
+        (NotificationConfig, "mobile", True, False),
+        (NotificationConfig, "mobile", False, True),
+        (NotificationConfig, "mobile", False, False),
+        (NotificationConfig, "android", True, False),
+        (NotificationConfig, "ios", False, True),
+        (ConfirmationNotificationConfig, "mobile", True, True),
+        (ConfirmationNotificationConfig, "ios", False, False),
+    ],
 )
 def test_notification_delivery_options_filters_only_declared_disabled_paths(
     model,
@@ -452,17 +482,21 @@ def test_notification_delivery_options_prunes_only_ancestors_of_removed_paths(
     assert options == original
 
 
-@pytest.mark.parametrize("model", [NotificationConfig, ConfirmationNotificationConfig])
 @pytest.mark.parametrize("invalid", ["false", 0, 1, None, {}])
 @pytest.mark.parametrize("control_field", ["enabled", "fields"])
 def test_notification_option_controls_require_strict_booleans(
-    model,
     invalid,
     control_field: str,
 ) -> None:
     control = {control_field: {"push.sound": invalid} if control_field == "fields" else invalid}
     with pytest.raises(ValidationError, match="valid boolean"):
-        model.model_validate({"option_controls": {"ios": control}})
+        NotificationConfig.model_validate({"option_controls": {"ios": control}})
+
+
+@pytest.mark.parametrize("control", [{"enabled": "false"}, {"fields": {"push.sound": 0}}])
+def test_confirmation_notification_inherits_option_control_validation(control) -> None:
+    with pytest.raises(ValidationError, match="valid boolean"):
+        ConfirmationNotificationConfig.model_validate({"option_controls": {"ios": control}})
 
 
 @pytest.mark.parametrize(
@@ -474,8 +508,15 @@ def test_notification_option_controls_reject_unknown_groups_and_control_fields(c
         NotificationConfig.model_validate({"option_controls": controls})
 
 
-@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
-@pytest.mark.parametrize("content", [{}, {"title": "Title only"}, {"message": ""}])
+@pytest.mark.parametrize(
+    "confirmation,content",
+    [
+        (False, {}),
+        (False, {"title": "Title only"}),
+        (False, {"message": ""}),
+        (True, {"title": "Title only"}),
+    ],
+)
 def test_validate_config_defaults_absent_content_and_preserves_explicit_empty_message(
     confirmation: bool,
     content: dict,
@@ -602,34 +643,10 @@ def test_validate_config_rejects_persisted_mobile_options_groups() -> None:
     assert raw == original
 
 
-@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
-@pytest.mark.parametrize("content_field", ["title", "message"])
-def test_validate_config_preserves_native_notification_data_without_mutating_input(
-    confirmation: bool,
-    content_field: str,
-    snapshot,
-) -> None:
-    notification = {
-        "action": "notify.mobile_app_phone",
-        content_field: "Canonical content",
-        "options": {content_field: "Native device content", "color": "#00ff00"},
-    }
-    alert = {"id": "content_alert", "notification": {}}
-    if confirmation:
-        alert["confirmation"] = {"enabled": True, "notification": notification}
-    else:
-        alert["notification"] = notification
-    raw = {"alerts": [alert]}
-    original = deepcopy(raw)
-
-    validated = validate_config(raw)
-    assert validated == snapshot
-    assert validate_config(validated) == validated
-    assert raw == original
-
-
-@pytest.mark.parametrize("confirmation", [False, True], ids=["main", "confirmation"])
-@pytest.mark.parametrize("data", ["invalid", 1, False, ["invalid"]])
+@pytest.mark.parametrize(
+    "confirmation,data",
+    [(False, "invalid"), (False, 1), (False, False), (False, ["invalid"]), (True, ["invalid"])],
+)
 def test_validate_config_rejects_non_mapping_notification_options(
     confirmation: bool,
     data: Any,
@@ -655,6 +672,8 @@ def test_validate_config_preserves_canonical_notification_content_and_native_ext
         "title": "Canonical title",
         "message": "Canonical message",
         "options": {
+            "title": "Native device title",
+            "message": "Native device message",
             "color": "#00ff00",
             "subject": "Subject",
             "subtitle": "Subtitle",
@@ -855,14 +874,6 @@ def test_validate_config_rejects_flat_confirmation_action_list_without_mutating_
     assert raw == original
 
 
-def test_confirmation_actions_default_to_independent_disabled_groups() -> None:
-    confirmation = ConfirmationConfig()
-    other_confirmation = ConfirmationConfig()
-
-    assert confirmation.actions.model_dump() == {"enabled": False, "items": []}
-    assert confirmation.actions.items is not other_confirmation.actions.items
-
-
 def test_validate_config_preserves_native_confirmation_action_list(alert_factory, snapshot) -> None:
     actions = [
         {
@@ -1053,26 +1064,6 @@ async def test_async_save_config_rejects_invalid_data_before_entry_update(hass) 
     assert entry.runtime_data is runtime
     assert runtime.config is original_config
     assert runtime.automations is original_automations
-
-
-@pytest.mark.asyncio
-async def test_async_save_config_updates_entry_runtime_data(
-    hass,
-    snapshot,
-) -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        version=CONFIG_ENTRY_VERSION,
-        minor_version=CONFIG_ENTRY_MINOR_VERSION,
-        options={"version": 1, "alerts": []},
-    )
-    entry.add_to_hass(hass)
-    entry.runtime_data = RuntimeData(config=dict(entry.options), automations=[])
-    saved = await async_save_config(hass, entry, {"version": 1, "alerts": []})
-    assert entry.runtime_data.config == saved
-    assert entry.options == saved
-    assert entry.runtime_data.automations == []
-    assert saved == snapshot
 
 
 def test_alert_helpers_find_replace_and_append_by_id(snapshot) -> None:

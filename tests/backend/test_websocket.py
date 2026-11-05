@@ -2,9 +2,10 @@
 
 import json
 from pathlib import Path
+from weakref import WeakSet
 
 import pytest
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 from syrupy.matchers import path_type
@@ -96,6 +97,9 @@ async def test_websocket_save_validate_and_delete_round_trip(
     await client.send_json({"id": 4, "type": "ha_notifications/delete", "alert_id": alert["id"]})
     deleted = await client.receive_json()
     assert dict(entry.options) == {"version": 1, "alerts": []}
+    assert entry.runtime_data.config == deleted["result"]["config"]
+    assert dict(entry.options) == deleted["result"]["config"]
+    assert entry.runtime_data.automations == []
     assert {
         "validated": validated,
         "saved": saved,
@@ -124,6 +128,27 @@ def test_registers_only_supported_namespaced_commands(
     assert len(registered) == len(expected)
     assert {handler._ws_command for handler in registered} == expected
     assert "ha_notifications/alert_defaults" not in expected
+
+
+async def test_websocket_registration_tracks_instances_with_weak_references(
+    hass, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registrations = []
+    monkeypatch.setattr(
+        websocket.websocket_api,
+        "async_register_command",
+        lambda _hass, handler: registrations.append(handler),
+    )
+    other_hass = HomeAssistant(hass.config.config_dir)
+    websocket.register(other_hass)
+    first_count = len(registrations)
+    assert first_count > 0
+    websocket.register(other_hass)
+    assert len(registrations) == first_count
+    assert other_hass in websocket._WEBSOCKET_REGISTERED
+    assert isinstance(websocket._WEBSOCKET_REGISTERED, WeakSet)
+    websocket.register(hass)
+    assert len(registrations) == first_count * 2
 
 
 async def test_registered_test_alert_route_requires_admin_and_alert_id(

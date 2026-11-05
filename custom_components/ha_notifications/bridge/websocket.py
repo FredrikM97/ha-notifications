@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from collections.abc import Set as AbstractSet
 from typing import Any
 from uuid import uuid4
+from weakref import WeakSet
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
@@ -35,7 +36,7 @@ from ..history import history_store
 from ..mobile_app import resolve_platforms
 
 ERROR_CODE = "ha_notifications_error"
-_WEBSOCKET_REGISTERED: set[int] = set()
+_WEBSOCKET_REGISTERED: WeakSet[HomeAssistant] = WeakSet()
 _CONFIG_OR_ALERT = {
     vol.Exclusive("config", "payload"): dict,
     vol.Exclusive("alert", "payload"): dict,
@@ -263,7 +264,7 @@ def _handler(
 
 def register(hass: HomeAssistant) -> None:
     """Register supported namespaced websocket commands with Home Assistant."""
-    if id(hass) in _WEBSOCKET_REGISTERED:
+    if hass in _WEBSOCKET_REGISTERED:
         return
 
     dispatcher = WebsocketDispatcher()
@@ -302,4 +303,4 @@ def register(hass: HomeAssistant) -> None:
             hass,
             _handler(dispatcher, handler, schema),
         )
-    _WEBSOCKET_REGISTERED.add(id(hass))
+    _WEBSOCKET_REGISTERED.add(hass)

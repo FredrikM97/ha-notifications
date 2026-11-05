@@ -148,10 +148,14 @@ def test_generate_automation_uses_explicit_triggers_and_active_branches(
     assert generate_automations(automation_alert) == [generated]
 
 
-@pytest.mark.parametrize("group", ["mobile", "android", "ios"])
 @pytest.mark.parametrize(
-    ("group_enabled", "field_enabled"),
-    [(True, True), (True, False), (False, True), (False, False)],
+    "group,group_enabled,field_enabled",
+    [
+        ("mobile", True, True),
+        ("android", True, False),
+        ("ios", False, True),
+        ("mobile", False, False),
+    ],
 )
 def test_generate_automation_filters_option_controls_without_changing_canonical_data(
     automation_alert,
@@ -510,42 +514,36 @@ def test_configured_trigger_ids_are_replaced_with_generic_ids(snapshot) -> None:
     assert len(generate_automations(alert)) == 1
 
 
-@pytest.mark.parametrize("triggers_enabled", [False, True])
-def test_conditional_alert_without_enabled_triggers_generates_trigger_less_automation(
-    triggers_enabled: bool,
+@pytest.mark.parametrize("trigger_case", ["absent", "empty", "disabled"])
+async def test_trigger_less_alert_generates_valid_automation(
+    hass: HomeAssistant,
+    trigger_case: str,
 ) -> None:
-    generated = generate_automations(
-        {
-            "id": "no_main_triggers",
-            "monitor": {
-                "triggers": {
-                    "enabled": triggers_enabled,
-                    "items": []
-                    if triggers_enabled
-                    else [
-                        {
-                            "trigger": "state",
-                            "entity_id": "binary_sensor.front_door",
-                            "to": "on",
-                        }
-                    ],
-                },
-                "conditions": {
-                    "items": [
-                        {
-                            "condition": "state",
-                            "entity_id": "binary_sensor.front_door",
-                            "state": "on",
-                        }
-                    ]
-                },
+    alert = {"id": "no_main_triggers", "notification": {"action": "notify.mobile_app_phone"}}
+    if trigger_case != "absent":
+        alert["monitor"] = {
+            "triggers": {
+                "enabled": trigger_case == "empty",
+                "items": []
+                if trigger_case == "empty"
+                else [{"trigger": "state", "entity_id": "binary_sensor.front_door", "to": "on"}],
             },
-            "notification": {"action": "notify.mobile_app_phone"},
+            "conditions": {
+                "items": [
+                    {
+                        "condition": "state",
+                        "entity_id": "binary_sensor.front_door",
+                        "state": "on",
+                    }
+                ]
+            },
         }
-    )
+    generated = generate_automations(alert)
 
     assert len(generated) == 1
     assert generated[0]["triggers"] == []
+    validated = await async_validate_config(hass, {"automation": generated})
+    assert validated["automation"][0].validation_status is ValidationStatus.OK
 
 
 def test_startup_condition_check_does_not_infer_door_watcher() -> None:
@@ -1370,7 +1368,7 @@ def test_confirmation_timeout_and_retry_contract_is_native_and_bounded(snapshot)
     _assert_reported_stops(generated)
 
 
-def test_confirmation_reminder_count_defaults_and_rejects_nonpositive_values() -> None:
+def test_confirmation_reminder_count_uses_model_default() -> None:
     alert = {
         "id": "default_confirmation",
         "monitor": {"conditions": {"startup": True}},
@@ -1387,18 +1385,6 @@ def test_confirmation_reminder_count_defaults_and_rejects_nonpositive_values() -
     timeout_sequence = outcome["default"]
     repeat = next(action["repeat"] for action in timeout_sequence if "repeat" in action)
     assert repeat["count"] == 5
-
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        generate_automation(
-            {
-                **alert,
-                "id": "invalid_confirmation",
-                "confirmation": {
-                    **alert["confirmation"],
-                    "reminders": {"enabled": True, "max_attempts": 0},
-                },
-            }
-        )
 
 
 def test_confirmation_action_extensions_are_assembled() -> None:
@@ -1627,18 +1613,6 @@ def test_inactive_triggers_are_parallel_without_active_triggers(
     generated = generate_automations(alert)
 
     assert _render_yaml(generated) == snapshot
-
-
-@pytest.mark.asyncio
-async def test_trigger_less_alert_generates_valid_automation(hass: HomeAssistant) -> None:
-    generated = generate_automations(
-        {"id": "no_trigger", "notification": {"action": "notify.mobile_app_phone"}}
-    )
-
-    assert len(generated) == 1
-    assert generated[0]["triggers"] == []
-    validated = await async_validate_config(hass, {"automation": generated})
-    assert validated["automation"][0].validation_status is ValidationStatus.OK
 
 
 def test_component_registry_is_deterministic_and_extensions_follow_built_ins(

@@ -486,8 +486,9 @@ async def test_send_preserves_mobile_data_from_generated_confirmation_notificati
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service", ["send", "clear"])
-async def test_delivery_keeps_integration_metadata_out_of_native_payload(
+async def test_managed_delivery_records_history_and_isolates_metadata(
     hass: HomeAssistant,
+    history_mock,
     alert_factory,
     service: str,
     snapshot,
@@ -514,13 +515,17 @@ async def test_delivery_keeps_integration_metadata_out_of_native_payload(
         data=config,
     )
     entry.add_to_hass(hass)
-    entry.runtime_data = RuntimeData(config=config, history=HistoryStore(hass))
+    entry.runtime_data = RuntimeData(config=config, history=history_mock)
     calls = async_mock_service(hass, "notify", "mobile_app_phone")
 
-    await hass.services.async_call(
-        DOMAIN,
-        service,
-        {
+    scenarios = {
+        "empty-payload": {
+            "alert_id": "water",
+            "action": "notify.mobile_app_phone",
+            "payload": {},
+            **({"alert_name": "Water alert", "flow_id": "flow-1"} if service == "send" else {}),
+        },
+        "integration-metadata": {
             "alert_id": alert.id,
             "alert_name": alert.name,
             "flow_id": "flow-1",
@@ -528,11 +533,23 @@ async def test_delivery_keeps_integration_metadata_out_of_native_payload(
             "confirmation": {"user_id": "test-user"},
             **mapped,
         },
-        blocking=True,
-    )
+    }
+    results = {}
+    for name, service_data in scenarios.items():
+        calls.clear()
+        history_mock.reset_mock()
+        original = deepcopy(service_data)
+        await hass.services.async_call(DOMAIN, service, service_data, blocking=True)
 
-    assert len(calls) == 1
-    assert [dict(call.data) for call in calls] == snapshot
+        assert len(calls) == 1
+        history_mock.async_record.assert_awaited_once()
+        results[name] = {
+            "delivered": [dict(call.data) for call in calls],
+            "history_args": history_mock.async_record.await_args.args,
+            "history_kwargs": history_mock.async_record.await_args.kwargs,
+        }
+        assert service_data == original
+    assert results == snapshot
     assert alert.model_dump(mode="python") == before
 
 
@@ -575,37 +592,6 @@ async def test_send_preserves_dynamic_target_selectors(
 
 
 @pytest.mark.asyncio
-async def test_send_nests_mobile_app_actions_in_notify_data(
-    hass: HomeAssistant,
-    snapshot,
-) -> None:
-    await async_setup_services(hass)
-    calls = async_mock_service(hass, "notify", "mobile_app_phone")
-
-    await hass.services.async_call(
-        DOMAIN,
-        "send",
-        {
-            "action": "notify.mobile_app_phone",
-            "payload": {
-                "message": "Confirm this alert",
-                "data": {
-                    "actions": [
-                        {
-                            "action": "ha_notifications_alert_confirmation_confirm",
-                            "title": "Confirm",
-                        }
-                    ]
-                },
-            },
-        },
-        blocking=True,
-    )
-
-    assert [dict(call.data) for call in calls] == snapshot
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("service", ["send", "clear"])
 async def test_delivery_debug_log_matches_notify_payload(
     hass: HomeAssistant,
@@ -635,45 +621,6 @@ async def test_delivery_debug_log_matches_notify_payload(
     assert len(calls) == 1
     assert records[0].args[-1] == calls[0].data
     assert [record.getMessage() for record in records] == snapshot
-
-
-@pytest.mark.asyncio
-async def test_send_records_managed_alert_history(
-    history_mock,
-    hass: HomeAssistant,
-    snapshot,
-) -> None:
-    await async_setup_services(hass)
-    async_mock_service(hass, "notify", "mobile_app_phone")
-    history = history_mock
-    entry = MockConfigEntry(
-        version=CONFIG_ENTRY_VERSION,
-        minor_version=CONFIG_ENTRY_MINOR_VERSION,
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={"version": 1, "alerts": []},
-    )
-    entry.add_to_hass(hass)
-    entry.runtime_data = RuntimeData(config=dict(entry.options), history=history)
-
-    await hass.services.async_call(
-        DOMAIN,
-        "send",
-        {
-            "alert_id": "water",
-            "alert_name": "Water alert",
-            "flow_id": "flow-1",
-            "action": "notify.mobile_app_phone",
-            "payload": {},
-        },
-        blocking=True,
-    )
-
-    history.async_record.assert_awaited_once()
-    assert {
-        "args": history.async_record.await_args.args,
-        "kwargs": history.async_record.await_args.kwargs,
-    } == snapshot
 
 
 @pytest.mark.asyncio
@@ -794,38 +741,6 @@ async def test_send_renders_deferred_confirmation_message(
     )
 
     assert [dict(call.data) for call in calls] == snapshot
-
-
-@pytest.mark.asyncio
-async def test_clear_uses_canonical_action_and_clear_message(
-    history_mock,
-    hass: HomeAssistant,
-    snapshot,
-) -> None:
-    await async_setup_services(hass)
-    entry = MockConfigEntry(
-        version=CONFIG_ENTRY_VERSION,
-        minor_version=CONFIG_ENTRY_MINOR_VERSION,
-        domain=DOMAIN,
-        title="HA Notifications",
-        options={"version": 1, "alerts": []},
-    )
-    entry.add_to_hass(hass)
-    history = history_mock
-    entry.runtime_data = RuntimeData(config=dict(entry.options), history=history)
-    calls = async_mock_service(hass, "notify", "mobile_app_phone")
-    await hass.services.async_call(
-        DOMAIN,
-        "clear",
-        {"alert_id": "water", "action": "notify.mobile_app_phone", "payload": {}},
-        blocking=True,
-    )
-    history.async_record.assert_awaited_once()
-    assert {
-        "delivered": [dict(call.data) for call in calls],
-        "history_args": history.async_record.await_args.args,
-        "history_kwargs": history.async_record.await_args.kwargs,
-    } == snapshot
 
 
 @pytest.mark.asyncio

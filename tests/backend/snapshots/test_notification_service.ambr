@@ -14,29 +14,6 @@
     }),
   })
 # ---
-# name: test_clear_uses_canonical_action_and_clear_message
-  dict({
-    'delivered': list([
-      dict({
-        'data': dict({
-          'tag': 'water',
-        }),
-        'message': 'clear_notification',
-      }),
-    ]),
-    'history_args': tuple(
-      'water',
-      'water',
-      'notification_cleared',
-      'Notification cleared',
-      dict({
-        'service': 'notify.mobile_app_phone',
-      }),
-    ),
-    'history_kwargs': dict({
-    }),
-  })
-# ---
 # name: test_command_fires_alert_scoped_event[cancel_run]
   list([
     dict({
@@ -69,30 +46,6 @@
   list([
     "Notification send: action=notify.mobile_app_phone alert_id=None flow_id=None payload={'message': 'Debug notification', 'data': {'priority': 'high', 'ttl': 0, 'actions': []}}",
     'Notification send completed: action=notify.mobile_app_phone',
-  ])
-# ---
-# name: test_delivery_keeps_integration_metadata_out_of_native_payload[clear]
-  list([
-    dict({
-      'data': dict({
-        'priority': 'high',
-        'tag': 'base_alert',
-      }),
-      'message': 'clear_notification',
-      'title': 'Water',
-    }),
-  ])
-# ---
-# name: test_delivery_keeps_integration_metadata_out_of_native_payload[send]
-  list([
-    dict({
-      'data': dict({
-        'priority': 'high',
-        'tag': 'base_alert',
-      }),
-      'message': 'Low water',
-      'title': 'Water',
-    }),
   ])
 # ---
 # name: test_inactive_reports_are_deduplicated_per_explicit_flow[explicit-flow]
@@ -177,6 +130,106 @@
       }),
     }),
   ])
+# ---
+# name: test_managed_delivery_records_history_and_isolates_metadata[clear]
+  dict({
+    'empty-payload': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'tag': 'water',
+          }),
+          'message': 'clear_notification',
+        }),
+      ]),
+      'history_args': tuple(
+        'water',
+        'water',
+        'notification_cleared',
+        'Notification cleared',
+        dict({
+          'service': 'notify.mobile_app_phone',
+        }),
+      ),
+      'history_kwargs': dict({
+      }),
+    }),
+    'integration-metadata': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'priority': 'high',
+            'tag': 'base_alert',
+          }),
+          'message': 'clear_notification',
+          'title': 'Water',
+        }),
+      ]),
+      'history_args': tuple(
+        'base_alert',
+        'Test alert',
+        'notification_cleared',
+        'Notification cleared',
+        dict({
+          'reason': 'native_boundary',
+          'service': 'notify.mobile_app_phone',
+        }),
+      ),
+      'history_kwargs': dict({
+        'flow_id': 'flow-1',
+      }),
+    }),
+  })
+# ---
+# name: test_managed_delivery_records_history_and_isolates_metadata[send]
+  dict({
+    'empty-payload': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'tag': 'water',
+          }),
+        }),
+      ]),
+      'history_args': tuple(
+        'water',
+        'Water alert',
+        'notification_sent',
+        'Notification sent',
+        dict({
+          'service': 'notify.mobile_app_phone',
+        }),
+      ),
+      'history_kwargs': dict({
+        'flow_id': 'flow-1',
+      }),
+    }),
+    'integration-metadata': dict({
+      'delivered': list([
+        dict({
+          'data': dict({
+            'priority': 'high',
+            'tag': 'base_alert',
+          }),
+          'message': 'Low water',
+          'title': 'Water',
+        }),
+      ]),
+      'history_args': tuple(
+        'base_alert',
+        'Test alert',
+        'notification_sent',
+        'Notification sent',
+        dict({
+          'reason': 'native_boundary',
+          'service': 'notify.mobile_app_phone',
+        }),
+      ),
+      'history_kwargs': dict({
+        'flow_id': 'flow-1',
+      }),
+    }),
+  })
 # ---
 # name: test_native_delivery_contract
   dict({
@@ -480,21 +533,6 @@
       'flow_id': 'run-1',
     }),
   })
-# ---
-# name: test_send_nests_mobile_app_actions_in_notify_data
-  list([
-    dict({
-      'data': dict({
-        'actions': list([
-          dict({
-            'action': 'ha_notifications_alert_confirmation_confirm',
-            'title': 'Confirm',
-          }),
-        ]),
-      }),
-      'message': 'Confirm this alert',
-    }),
-  ])
 # ---
 # name: test_send_preserves_dynamic_target_selectors
   list([
@@ -1052,22 +1090,6 @@
         ]),
       }),
       'use_default_tag': True,
-    }),
-  })
-# ---
-# name: test_send_records_managed_alert_history
-  dict({
-    'args': tuple(
-      'water',
-      'Water alert',
-      'notification_sent',
-      'Notification sent',
-      dict({
-        'service': 'notify.mobile_app_phone',
-      }),
-    ),
-    'kwargs': dict({
-      'flow_id': 'flow-1',
     }),
   })
 # ---
