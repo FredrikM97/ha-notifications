@@ -16,6 +16,16 @@ def test_readme_has_only_the_dashboard_card_snippet() -> None:
     assert "Configuration Example" not in _CONTENT
 
 
+def test_readme_documents_manual_legacy_automation_cleanup() -> None:
+    assert "moves its automations to the standard store" not in _CONTENT
+    assert "manually remove the following include line from `configuration.yaml`" in _CONTENT
+    assert "`automation ha_notifications: !include ha_notifications_automations.yaml`" in _CONTENT
+    assert "delete the old file" in _CONTENT
+    assert "**Reload** in the YAML editor" in _CONTENT
+    assert "created through the API" in _CONTENT
+    assert "upgrading-from-the-dedicated-automation-file" not in _CONTENT
+
+
 @pytest.mark.parametrize("target", ["docs/automation-flow.md", "docs/development.md"])
 def test_readme_links_to_existing_documentation(target: str) -> None:
     assert target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", _CONTENT)

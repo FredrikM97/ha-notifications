@@ -18,6 +18,13 @@ through Home Assistant's admin automation API into its standard automation
 store, next to automations created in the UI. Home Assistant's default
 configuration needs no changes; see [setup details](docs/automation-flow.md#standard-automation-store).
 
+When upgrading from a release that used `ha_notifications_automations.yaml`,
+manually remove the following include line from `configuration.yaml` and
+delete the old file:
+
+`automation ha_notifications: !include ha_notifications_automations.yaml`
+
+Then use **Reload** in the YAML editor so the automations are created through the API.
 
 ## Using the Panel
 

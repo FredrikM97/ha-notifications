@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -97,3 +98,80 @@ async def test_migrate_previous_entry_version(hass: HomeAssistant) -> None:
 
     assert entry.version == CONFIG_ENTRY_VERSION
     assert entry.minor_version == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("legacy_file_exists", "legacy_include_exists"),
+    [(True, False), (False, True), (True, True)],
+    ids=["old-file", "include", "both"],
+)
+async def test_migrate_entry_warns_about_legacy_automation_files(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    legacy_file_exists: bool,
+    legacy_include_exists: bool,
+) -> None:
+    legacy_file = Path(hass.config.path("ha_notifications_automations.yaml"))
+    configuration_file = Path(hass.config.path("configuration.yaml"))
+    legacy_contents = "- id: legacy\n"
+    configuration_contents = (
+        "automation ha_notifications: !include ha_notifications_automations.yaml\n"
+        if legacy_include_exists
+        else "automation: !include automations.yaml\n"
+    )
+    if legacy_file_exists:
+        legacy_file.write_text(legacy_contents, encoding="utf-8")
+    configuration_file.write_text(configuration_contents, encoding="utf-8")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        options={"version": 1, "alerts": []},
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    caplog.set_level("WARNING", logger="custom_components.ha_notifications.migration")
+
+    assert await ha_notifications.async_migrate_entry(hass, entry)
+
+    warnings = [
+        record.message
+        for record in caplog.records
+        if record.name == "custom_components.ha_notifications.migration"
+    ]
+    assert len(warnings) == 1
+    assert "remove the `automation ha_notifications: !include" in warnings[0]
+    assert "delete `ha_notifications_automations.yaml`" in warnings[0]
+    assert "Reload in the YAML editor" in warnings[0]
+    assert "through the API" in warnings[0]
+    assert configuration_file.read_text(encoding="utf-8") == configuration_contents
+    assert legacy_file.exists() is legacy_file_exists
+    if legacy_file_exists:
+        assert legacy_file.read_text(encoding="utf-8") == legacy_contents
+
+
+@pytest.mark.asyncio
+async def test_migrate_entry_does_not_warn_without_legacy_automation_files(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    Path(hass.config.path("configuration.yaml")).write_text(
+        "automation: !include automations.yaml\n",
+        encoding="utf-8",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="HA Notifications",
+        options={"version": 1, "alerts": []},
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    caplog.set_level("WARNING", logger="custom_components.ha_notifications.migration")
+
+    assert await ha_notifications.async_migrate_entry(hass, entry)
+
+    assert not [
+        record
+        for record in caplog.records
+        if record.name == "custom_components.ha_notifications.migration"
+    ]
